@@ -1,0 +1,956 @@
+/**
+ * local-adapter.mjs
+ * 从现有 upload-server.mjs 中抽取的真实本地 MinerU 执行逻辑。
+ * 由 ParseTaskWorker 调用，用于长耗时后台处理。
+ */
+
+import JSZip from 'jszip';
+
+/**
+ * MinerU 本地等待超时错误。
+ * 表示 Luceon 本地轮询 MinerU 超时，但并不代表 MinerU 任务本身失败。
+ *
+ * @property {string} mineruTaskId - 对应的 MinerU 内部任务 ID
+ * @property {string} lastKnownStatus - 超时前最后一次查询到的 MinerU 状态
+ */
+export class MineruTimeoutError extends Error {
+  constructor(mineruTaskId, lastKnownStatus, timeoutMs) {
+    super(`本地等待 MinerU 超时 (${Math.round(timeoutMs / 1000)}s)，但 MinerU 任务 ${mineruTaskId} 最后状态为 ${lastKnownStatus}，不代表业务失败`);
+    this.name = 'MineruTimeoutError';
+    this.mineruTaskId = mineruTaskId;
+    this.lastKnownStatus = lastKnownStatus;
+  }
+}
+
+/**
+ * MinerU 仍在处理错误。
+ * 表示 Luceon 等待超时后确认 MinerU 仍在 queued/processing，任务应保持 running 而非 failed。
+ *
+ * @property {string} mineruTaskId - 对应的 MinerU 内部任务 ID
+ * @property {string} mineruStatus - MinerU 当前确认的状态（queued/processing）
+ */
+export class MineruStillProcessingError extends Error {
+  constructor(mineruTaskId, mineruStatus) {
+    super(`MinerU 任务 ${mineruTaskId} 仍在 ${mineruStatus}，Luceon 本地等待已超时但任务未失败`);
+    this.name = 'MineruStillProcessingError';
+    this.mineruTaskId = mineruTaskId;
+    this.mineruStatus = mineruStatus;
+  }
+}
+
+/**
+ * 提交时 MinerU 不可达错误。
+ * 用于区分 "提交失败，可重试" 和普通的解析失败。
+ */
+export class MineruSubmitUnreachableError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'MineruSubmitUnreachableError';
+  }
+}
+
+
+export async function processWithOnlineMinerU({ task, material, fileStream, fileName, mimeType, timeoutMs, minioContext, updateProgress }) {
+  const options = task.optionsSnapshot || {};
+  let onlineEndpoint = options.onlineEndpoint || process.env.MINERU_ONLINE_API_BASE_URL;
+  const token = process.env.MINERU_ONLINE_API_TOKEN;
+  if (!onlineEndpoint) throw new Error('缺少 MINERU_ONLINE_API_BASE_URL (onlineEndpoint)');
+  if (!token) throw new Error('缺少 MINERU_ONLINE_API_TOKEN');
+
+  // docker 内部网络地址重写
+  if (onlineEndpoint.includes('localhost') || onlineEndpoint.includes('127.0.0.1')) {
+    onlineEndpoint = onlineEndpoint.replace(/localhost|127\.0\.0\.1/g, 'host.docker.internal');
+  }
+  onlineEndpoint = onlineEndpoint.replace(/\/+$/, '');
+
+  const backend = String(options.backend || 'pipeline');
+  const maxPages = Number(options.maxPages || 1000);
+  const ocrLanguage = String(options.ocrLanguage || options.language || 'ch');
+  const enableOcr = isEnabledFlag(options.enableOcr);
+  const enableFormula = isEnabledFlag(options.enableFormula);
+  const enableTable = isEnabledFlag(options.enableTable);
+  const parseMethod = String(options.parseMethod || options.parse_method || '').trim();
+  const responseFormatZip = (options.responseFormatZip ?? options.response_format_zip) == null
+    ? true
+    : isEnabledFlag(options.responseFormatZip ?? options.response_format_zip);
+
+  let serverUrl = String(options.serverUrl || options.server_url || options.url || '').trim();
+  if (serverUrl && (serverUrl.includes('localhost') || serverUrl.includes('127.0.0.1'))) {
+    serverUrl = serverUrl.replace(/localhost|127\.0\.0\.1/g, 'host.docker.internal');
+  }
+
+  // 1. Check health
+  // health check is bypassed in adapter, rely on supervisor
+
+
+  await updateProgress({ progress: 10, message: '已连接本地 MinerU，准备提交任务...' });
+
+  const fileSize = material?.fileSize || 0;
+  const submitTimeoutMs = Math.max(timeoutMs, Math.max(120_000, Math.ceil(fileSize / 1024) * 50));
+  const effectiveBackend = (fileSize > 0 && fileSize < 2 * 1024 * 1024 && /hybrid/i.test(backend)) ? 'pipeline' : backend;
+
+  let finalParseMethod = parseMethod || 'auto';
+  if (enableOcr && !parseMethod) finalParseMethod = 'ocr';
+
+  // 2. Submit task via /file-urls/batch
+  const langList = String(ocrLanguage).split(',').map((item) => item.trim()).filter(Boolean);
+  const reqBody = {
+    model_version: process.env.MINERU_ONLINE_MODEL_VERSION || 'vlm',
+    is_dict: true,
+    backend: effectiveBackend,
+    parse_method: finalParseMethod,
+    formula_enable: enableFormula ? 1 : 0,
+    table_enable: enableTable ? 1 : 0,
+    response_format_zip: true,
+    return_md: true,
+    return_middle_json: true,
+    return_model_output: true,
+    return_content_list: true,
+    return_images: true,
+    return_original_file: true,
+    lang_list: langList.length > 0 ? langList : undefined,
+    server_url: serverUrl || undefined,
+    end_page_id: (Number.isFinite(maxPages) && maxPages > 0) ? String(Math.max(0, Math.floor(maxPages) - 1)) : undefined,
+    files: [{ name: fileName }]
+  };
+
+  const batchRes = await fetch(`${onlineEndpoint}/file-urls/batch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify(reqBody),
+    signal: AbortSignal.timeout(15000),
+  }).catch(err => {
+    throw new MineruSubmitUnreachableError(`MinerU 批量获取 URL 失败: ${err.message}`);
+  });
+
+  const batchBody = await batchRes.text().catch(() => '');
+  let batchPayload = null;
+  try { batchPayload = JSON.parse(batchBody); } catch (e) {}
+
+  if (!batchRes.ok) {
+    const errorDetail = batchPayload?.error || batchPayload?.message || batchBody.slice(0, 500);
+    throw new Error(`MinerU 申请上传地址失败: ${batchRes.status} | Body: ${errorDetail}`);
+  }
+
+  const batchId = batchPayload?.data?.batch_id || batchPayload?.batch_id || '';
+  const fileUrlsObj = batchPayload?.data?.file_urls || batchPayload?.file_urls;
+  let uploadUrl = '';
+
+  if (Array.isArray(fileUrlsObj) && fileUrlsObj.length > 0) {
+    if (typeof fileUrlsObj[0] === 'string') {
+      uploadUrl = fileUrlsObj[0];
+    } else {
+      const match = fileUrlsObj.find(f => f.file_name === fileName || f.name === fileName) || fileUrlsObj[0];
+      if (match) uploadUrl = match.upload_url || match.uploadUrl;
+    }
+  } else if (typeof fileUrlsObj === 'object' && fileUrlsObj !== null) {
+    const match = fileUrlsObj[fileName] || Object.values(fileUrlsObj)[0];
+    if (match) uploadUrl = match.upload_url || match.uploadUrl;
+  }
+
+  if (!uploadUrl) throw new Error('MinerU /file-urls/batch 未返回 upload_url');
+  if (!batchId) throw new Error('MinerU /file-urls/batch 未返回 batch_id');
+
+  const mineruTaskId = batchId;
+
+
+  // Convert fileStream to Buffer
+  const chunks = [];
+  for await (const chunk of fileStream) chunks.push(chunk);
+  const fileBuffer = Buffer.concat(chunks);
+
+  await updateProgress({ progress: 15, message: '正在向 MinerU 预签名地址上传文件...' });
+
+  const putRes = await fetch(uploadUrl, {
+    method: 'PUT',
+    body: fileBuffer,
+    // explicitly NO Content-Type to avoid 403 Signature error
+    signal: AbortSignal.timeout(submitTimeoutMs),
+  }).catch(err => {
+    throw new MineruSubmitUnreachableError(`MinerU S3 PUT 上传失败: ${err.message}`);
+  });
+
+  if (!putRes.ok) {
+    const putBody = await putRes.text().catch(() => '');
+    throw new Error(`MinerU S3 PUT 上传失败: ${putRes.status} | Body: ${putBody.slice(0, 500)}`);
+  }
+
+  let markdown = '';
+
+    // P0 Task 1: 拿到 mineruTaskId 后立即更新 metadata
+    const executionProfile = {
+      ...(task.metadata?.mineruExecutionProfile || {}),
+      backendEffective: effectiveBackend,
+      backendRequested: backend,
+      parseMethod: finalParseMethod,
+      enableOcr,
+      enableFormula,
+      enableTable,
+      ocrLanguage,
+      maxPages
+    };
+
+    await updateProgress({
+      progress: 20,
+      message: `任务已提交，内部ID: ${mineruTaskId}`,
+      metadata: {
+        ...(task.metadata || {}),
+        mineruTaskId,
+        mineruStatus: 'submitted',
+        mineruSubmittedAt: new Date().toISOString(),
+        mineruExecutionProfile: executionProfile
+      }
+    });
+
+    // 3. Poll (P0 Task 2: 区分 queued 与 processing)
+    // 如果本地超时但 MinerU 仍在处理，抛出 MineruStillProcessingError 由 task-worker 裁决
+    try {
+      await waitMinerUTask(onlineEndpoint, mineruTaskId, timeoutMs, async (statusPayload) => {
+        const status = String(statusPayload?.status || '').toLowerCase();
+        const queuedAhead = statusPayload?.queued_ahead ?? statusPayload?.queue_ahead ?? 0;
+        const startedAt = statusPayload?.started_at || null;
+
+        let stage = 'mineru-processing';
+        let msg = 'MinerU 正在解析';
+        let progress = 50;
+        let mineruStatus = 'processing';
+
+        const isDone = ['done', 'success', 'completed', 'succeeded', 'finished', 'complete'].includes(status);
+        if (isDone) return; // waitMinerUTask will handle done states
+
+        if (status === 'pending' || status === 'queued' || (!startedAt && status !== 'processing') || queuedAhead > 0) {
+          stage = 'mineru-queued';
+          msg = `MinerU 排队中 (前方 ${queuedAhead} 个任务)`;
+          progress = 20;
+          mineruStatus = 'queued';
+        }
+
+        // Sidecar log parsing
+        let observation = null;
+        if (mineruStatus === 'processing') {
+          try {
+            const { parseLatestMineruProgress } = await import('../lib/ops-mineru-log-parser.mjs');
+            observation = await parseLatestMineruProgress(
+               startedAt || task.metadata?.mineruStartedAt || new Date().toISOString(),
+               task.metadata?.mineruObservedProgress,
+               executionProfile
+            );
+          } catch (e) {
+            // ignore
+          }
+        }
+
+        await updateProgress({
+          stage,
+          state: 'running',
+          progress,
+          message: msg,
+          metadata: {
+            ...(task.metadata || {}),
+            mineruTaskId,
+            mineruStatus,
+            mineruQueuedAhead: queuedAhead,
+            mineruStartedAt: startedAt,
+            mineruLastStatusAt: new Date().toISOString(),
+            mineruExecutionProfile: executionProfile,
+            ...(observation ? { mineruObservedProgress: observation } : {}),
+            ...(statusPayload._synthetic_warn ? { _synthetic_warn: statusPayload._synthetic_warn, _synthetic_warn_msg: statusPayload._synthetic_warn_msg } : {})
+          }
+        });
+      });
+    } catch (pollErr) {
+      if (pollErr instanceof MineruTimeoutError) {
+        // 本地等待超时：查询一次 MinerU 确认最新状态
+        try {
+          const checkRes = await fetch(`${onlineEndpoint}/extract-results/batch/${encodeURIComponent(mineruTaskId)}`, { headers: { 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(5000) });
+          if (checkRes.ok) {
+            const checkData = await checkRes.json();
+            const actualStatus = String(checkData?.status || '').toLowerCase();
+            if (['queued', 'pending', 'processing', 'running'].includes(actualStatus)) {
+              throw new MineruStillProcessingError(mineruTaskId, actualStatus);
+            }
+            if (['done', 'success', 'completed', 'succeeded', 'finished', 'complete'].includes(actualStatus)) {
+              // MinerU 已经完成了，继续执行结果拉取
+              // 不抛异常，跳出 catch 继续后续逻辑
+            } else {
+              // MinerU 返回了明确失败
+              throw new Error(`MinerU API 明确返回 ${actualStatus}: ${checkData?.error || checkData?.message || 'MinerU 任务失败'}`);
+            }
+          } else {
+            throw new MineruStillProcessingError(mineruTaskId, pollErr.lastKnownStatus || 'unknown');
+          }
+        } catch (confirmErr) {
+          if (confirmErr instanceof MineruStillProcessingError) throw confirmErr;
+          if (confirmErr.message?.includes('MinerU API 明确返回')) throw confirmErr;
+          // 网络不可达等：保守处理，保持 running
+          throw new MineruStillProcessingError(mineruTaskId, pollErr.lastKnownStatus || 'unknown');
+        }
+      } else {
+        throw pollErr;
+      }
+    }
+
+    await updateProgress({ progress: 80, message: '解析完成，提取结果...' });
+    const resultRaw = await fetchMinerUResultRaw(onlineEndpoint, mineruTaskId, timeoutMs);
+    let resultPayload = resultRaw.kind === 'json' ? resultRaw.payload : null;
+
+    const materialId = task.materialId || task.id;
+    const parsedPrefix = `parsed/${materialId}/`;
+    const fullMdObjectName = `${parsedPrefix}full.md`;
+    const parsedArtifacts = [];
+    const seen = new Set();
+
+    const pushArtifact = (relativePath, objectName, size, mimeType) => {
+      const key = `${relativePath}::${objectName}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      parsedArtifacts.push({
+        objectName,
+        relativePath,
+        size: typeof size === 'number' ? size : undefined,
+        mimeType: mimeType || undefined,
+      });
+    };
+
+    const pushZipEntry = (zipObjName, entryName, relativePath, size, mimeType) => {
+      const key = `zip::${zipObjName}::${entryName}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      parsedArtifacts.push({
+        source: 'zip-entry',
+        zipObjectName: zipObjName,
+        zipEntryPath: entryName,
+        relativePath,
+        size: typeof size === 'number' ? size : null,
+        mimeType: mimeType || undefined,
+      });
+    };
+
+    const saveObject = async (objectName, buffer, contentType) => {
+      if (typeof minioContext?.saveObject !== 'function') return false;
+      await minioContext.saveObject(objectName, buffer, contentType || 'application/octet-stream');
+      return true;
+    };
+
+    let zipObjectName = null;
+    let hasMineruZip = false;
+    let primary = null;
+
+    if (resultPayload) {
+      const rawJson = Buffer.from(JSON.stringify(resultPayload), 'utf-8');
+      const rawObjectName = `${parsedPrefix}mineru-result.json`;
+      const ok = await saveObject(rawObjectName, rawJson, 'application/json; charset=utf-8');
+      if (ok) pushArtifact('mineru-result.json', rawObjectName, rawJson.length, 'application/json');
+    }
+
+    let zipBuffer = resultRaw.kind === 'zip' ? resultRaw.buffer : null;
+    if (!zipBuffer && resultPayload && responseFormatZip) {
+      zipBuffer = await extractZipBufferFromJsonResult(resultPayload, timeoutMs);
+    }
+
+    if (zipBuffer) {
+      hasMineruZip = true;
+      zipObjectName = `${parsedPrefix}mineru-result.zip`;
+      const ok = await saveObject(zipObjectName, zipBuffer, 'application/zip');
+      if (ok) pushArtifact('mineru-result.zip', zipObjectName, zipBuffer.length, 'application/zip');
+
+      const zip = await JSZip.loadAsync(zipBuffer);
+      const entries = Object.entries(zip.files)
+        .filter(([, entry]) => !entry.dir)
+        .map(([name]) => name);
+
+      const mdCandidates = [];
+      for (const name of entries) {
+        const safeRelativePath = sanitizeRelativePath(name);
+        if (!safeRelativePath) continue;
+        const lower = safeRelativePath.toLowerCase();
+        if (!lower.endsWith('.md')) continue;
+        if (safeRelativePath === 'mineru-result.zip' || safeRelativePath === 'mineru-result.json') continue;
+        mdCandidates.push({ name, relativePath: safeRelativePath });
+      }
+
+      const isFullMd = (rel) => {
+        const lower = String(rel || '').toLowerCase();
+        return lower === 'full.md' || lower.endsWith('/full.md');
+      };
+
+      const pickPrimaryMarkdown = (candidates) => {
+        if (!Array.isArray(candidates) || candidates.length === 0) return null;
+        const full = candidates.find((c) => isFullMd(c.relativePath));
+        if (full) return full;
+        if (candidates.length === 1) return candidates[0];
+
+        const auto = candidates.filter((c) => String(c.relativePath || '').toLowerCase().includes('/auto/'));
+        const pool = auto.length > 0 ? auto : candidates;
+        return pool.slice().sort((a, b) => String(a.relativePath).length - String(b.relativePath).length)[0];
+      };
+
+      primary = pickPrimaryMarkdown(mdCandidates);
+      if (primary && !markdown) {
+        const content = await zip.file(primary.name).async('nodebuffer');
+        markdown = content.toString('utf-8').trim();
+      }
+
+      for (const name of entries) {
+        const safeRelativePath = sanitizeRelativePath(name);
+        if (!safeRelativePath) continue;
+        if (safeRelativePath === 'full.md') continue;
+        if (safeRelativePath === 'mineru-result.zip' || safeRelativePath === 'mineru-result.json') continue;
+
+        const objectName = `${parsedPrefix}${safeRelativePath}`;
+        const contentType = inferContentTypeByExt(safeRelativePath);
+
+        const fileObj = zip.file(name);
+        let size = null;
+        if (fileObj._data && typeof fileObj._data.uncompressedSize === 'number') {
+           size = fileObj._data.uncompressedSize;
+        }
+        pushZipEntry(zipObjectName, name, safeRelativePath, size, contentType);
+      }
+    } else if (resultPayload) {
+      markdown = extractLocalMarkdown(resultPayload);
+      const extra = await extractArtifactsFromJsonResult(resultPayload, timeoutMs);
+      for (const item of extra) {
+        const safeRelativePath = sanitizeRelativePath(item.relativePath);
+        if (!safeRelativePath) continue;
+        if (safeRelativePath === 'full.md') continue;
+        const objectName = `${parsedPrefix}${safeRelativePath}`;
+        const contentType = item.mimeType || inferContentTypeByExt(safeRelativePath);
+        const ok = await saveObject(objectName, item.buffer, contentType);
+        if (ok) pushArtifact(safeRelativePath, objectName, item.buffer.length, contentType);
+      }
+    }
+
+    const realArtifacts2 = parsedArtifacts.filter((a) => {
+      const rp = String(a.relativePath || '');
+      if (rp === 'full.md') return false;
+      if (rp === 'mineru-result.json') return false;
+      if (rp === 'mineru-result.zip') return false;
+      return true;
+    });
+
+    const artifactIncomplete2 = realArtifacts2.length === 0;
+
+    // completed-empty 语义：MinerU 已完成但 Markdown 为空
+    // 不抛异常，返回结构化结果供 task-worker 判断
+    if (!markdown) {
+      return {
+        markdown: '',
+        markdownEmpty: true,
+        mineruTaskId,
+        objectName: fullMdObjectName,
+        parsedPrefix,
+        parsedFilesCount: parsedArtifacts.length,
+        parsedArtifacts,
+        zipObjectName: hasMineruZip ? zipObjectName : null,
+        artifactIncomplete: artifactIncomplete2,
+        artifactStorageMode: hasMineruZip ? 'zip-source' : 'expanded-only',
+        artifactExportModes: ['user', 'mineru-raw', 'diagnostic'],
+        primaryMarkdownPath: primary ? primary.relativePath : undefined
+      };
+    }
+
+    await updateProgress({ stage: 'store', state: 'result-store', progress: 90, message: '正在保存产物到 MinIO...' });
+
+    await minioContext.saveMarkdown(fullMdObjectName, markdown);
+    pushArtifact('full.md', fullMdObjectName, Buffer.byteLength(markdown, 'utf-8'), 'text/markdown');
+
+    return {
+      markdown,
+      mineruTaskId,
+      objectName: fullMdObjectName,
+      parsedPrefix,
+      parsedFilesCount: parsedArtifacts.length,
+      parsedArtifacts,
+      zipObjectName: hasMineruZip ? zipObjectName : null,
+      artifactIncomplete: artifactIncomplete2,
+      artifactStorageMode: hasMineruZip ? 'zip-source' : 'expanded-only',
+      artifactExportModes: ['user', 'mineru-raw', 'diagnostic'],
+      primaryMarkdownPath: primary ? primary.relativePath : undefined
+    };
+
+
+
+  if (!markdown) throw new Error('提取到的 Markdown 内容为空');
+
+  await updateProgress({ stage: 'store', state: 'result-store', progress: 90, message: '正在保存产物到 MinIO...' });
+  const objectName = `parsed/${task.materialId || task.id}/full.md`;
+  await minioContext.saveMarkdown(objectName, markdown);
+
+  return {
+    markdown,
+    mineruTaskId,
+    objectName,
+    parsedPrefix: `parsed/${task.materialId || task.id}/`,
+    parsedFilesCount: 1,
+    parsedArtifacts: [{ objectName, relativePath: 'full.md', size: Buffer.byteLength(markdown, 'utf-8'), mimeType: 'text/markdown' }],
+    zipObjectName: null,
+    artifactIncomplete: true,
+    artifactStorageMode: 'expanded-only',
+    artifactExportModes: ['user', 'mineru-raw', 'diagnostic']
+  };
+}
+
+/**
+ * 从给定的 MinerU 任务 ID 无缝恢复任务执行，不再重复上传文件。
+ *
+ * @param {Object} params 参数对象
+ * @param {Object} params.task 当前执行的 Luceon 任务对象
+ * @param {Object} params.material 当前任务关联的资料对象
+ * @param {string} params.mineruTaskId 要恢复的 MinerU 内部任务 ID
+ * @param {number} params.timeoutMs 轮询与等待超时时间（毫秒）
+ * @param {Object} params.minioContext MinIO 上下文客户端，用于产物存储
+ * @param {Function} params.updateProgress 进度与状态回调函数
+ * @returns {Promise<Object>} 包含 markdown 文本和解析产物元数据的对象
+ */
+export async function resumeWithOnlineMinerU({ task, material, mineruTaskId, timeoutMs, minioContext, updateProgress }) {
+  const options = task.optionsSnapshot || {};
+  let onlineEndpoint = options.onlineEndpoint || process.env.MINERU_ONLINE_API_BASE_URL;
+  const token = process.env.MINERU_ONLINE_API_TOKEN;
+  if (!onlineEndpoint) throw new Error('缺少 MINERU_ONLINE_API_BASE_URL (onlineEndpoint)');
+  if (!token) throw new Error('缺少 MINERU_ONLINE_API_TOKEN');
+
+  // docker 内部网络地址重写
+  if (onlineEndpoint.includes('localhost') || onlineEndpoint.includes('127.0.0.1')) {
+    onlineEndpoint = onlineEndpoint.replace(/localhost|127\.0\.0\.1/g, 'host.docker.internal');
+  }
+  onlineEndpoint = onlineEndpoint.replace(/\/+$/, '');
+
+  const responseFormatZip = (options.responseFormatZip ?? options.response_format_zip) == null
+    ? true
+    : isEnabledFlag(options.responseFormatZip ?? options.response_format_zip);
+
+  // health check is bypassed in adapter, rely on supervisor
+
+
+  await updateProgress({ message: `恢复排队/处理中的任务: ${mineruTaskId}` });
+  let markdown = '';
+
+  await waitMinerUTask(onlineEndpoint, mineruTaskId, timeoutMs, async (statusPayload) => {
+    const status = String(statusPayload?.status || '').toLowerCase();
+    const queuedAhead = statusPayload?.queued_ahead ?? statusPayload?.queue_ahead ?? 0;
+    const startedAt = statusPayload?.started_at || null;
+
+    let stage = 'mineru-processing';
+    let msg = 'MinerU 正在解析';
+    let progress = 50;
+    let mineruStatus = 'processing';
+
+    const isDone = ['done', 'success', 'completed', 'succeeded', 'finished', 'complete'].includes(status);
+    if (isDone) return;
+
+    if (status === 'pending' || status === 'queued' || (!startedAt && status !== 'processing') || queuedAhead > 0) {
+      stage = 'mineru-queued';
+      msg = `MinerU 排队中 (前方 ${queuedAhead} 个任务)`;
+      progress = 20;
+      mineruStatus = 'queued';
+    }
+
+    // Sidecar log parsing
+    let observation = null;
+    if (mineruStatus === 'processing') {
+      try {
+        const { parseLatestMineruProgress } = await import('../lib/ops-mineru-log-parser.mjs');
+        observation = await parseLatestMineruProgress(
+           startedAt || task.metadata?.mineruStartedAt || new Date().toISOString(),
+           task.metadata?.mineruObservedProgress,
+           task.metadata?.mineruExecutionProfile
+        );
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    await updateProgress({
+      stage,
+      state: 'running',
+      progress,
+      message: msg,
+      metadata: {
+        ...(task.metadata || {}),
+        mineruTaskId,
+        mineruStatus,
+        mineruQueuedAhead: queuedAhead,
+        mineruStartedAt: startedAt,
+        mineruLastStatusAt: new Date().toISOString(),
+        ...(observation ? { mineruObservedProgress: observation } : {})
+      }
+    });
+  });
+
+  await updateProgress({ progress: 80, message: '解析完成，提取结果...' });
+  const resultRaw = await fetchMinerUResultRaw(onlineEndpoint, mineruTaskId, timeoutMs);
+  let resultPayload = resultRaw.kind === 'json' ? resultRaw.payload : null;
+
+  const materialId = task.materialId || task.id;
+  const parsedPrefix = `parsed/${materialId}/`;
+  const fullMdObjectName = `${parsedPrefix}full.md`;
+  const parsedArtifacts = [];
+  const seen = new Set();
+
+  const pushArtifact = (relativePath, objectName, size, mimeType) => {
+    const key = `${relativePath}::${objectName}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    parsedArtifacts.push({
+      objectName,
+      relativePath,
+      size: typeof size === 'number' ? size : undefined,
+      mimeType: mimeType || undefined,
+    });
+  };
+
+  const pushZipEntry = (zipObjName, entryName, relativePath, size, mimeType) => {
+    const key = `zip::${zipObjName}::${entryName}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    parsedArtifacts.push({
+      source: 'zip-entry',
+      zipObjectName: zipObjName,
+      zipEntryPath: entryName,
+      relativePath,
+      size: typeof size === 'number' ? size : null,
+      mimeType: mimeType || undefined,
+    });
+  };
+
+  const saveObject = async (objectName, buffer, contentType) => {
+    if (typeof minioContext?.saveObject !== 'function') return false;
+    await minioContext.saveObject(objectName, buffer, contentType || 'application/octet-stream');
+    return true;
+  };
+
+  let zipObjectName = null;
+  let hasMineruZip = false;
+
+  if (resultPayload) {
+    const rawJson = Buffer.from(JSON.stringify(resultPayload), 'utf-8');
+    const rawObjectName = `${parsedPrefix}mineru-result.json`;
+    const ok = await saveObject(rawObjectName, rawJson, 'application/json; charset=utf-8');
+    if (ok) pushArtifact('mineru-result.json', rawObjectName, rawJson.length, 'application/json');
+  }
+
+  let zipBuffer = resultRaw.kind === 'zip' ? resultRaw.buffer : null;
+  if (!zipBuffer && resultPayload && responseFormatZip) {
+    zipBuffer = await extractZipBufferFromJsonResult(resultPayload, timeoutMs);
+  }
+
+  let primary = null;
+  if (zipBuffer) {
+    hasMineruZip = true;
+    zipObjectName = `${parsedPrefix}mineru-result.zip`;
+    const ok = await saveObject(zipObjectName, zipBuffer, 'application/zip');
+    if (ok) pushArtifact('mineru-result.zip', zipObjectName, zipBuffer.length, 'application/zip');
+
+    const zip = await JSZip.loadAsync(zipBuffer);
+    const entries = Object.entries(zip.files)
+      .filter(([, entry]) => !entry.dir)
+      .map(([name]) => name);
+
+    const mdCandidates = [];
+    for (const name of entries) {
+      const safeRelativePath = sanitizeRelativePath(name);
+      if (!safeRelativePath) continue;
+      const lower = safeRelativePath.toLowerCase();
+      if (!lower.endsWith('.md')) continue;
+      if (safeRelativePath === 'mineru-result.zip' || safeRelativePath === 'mineru-result.json') continue;
+      mdCandidates.push({ name, relativePath: safeRelativePath });
+    }
+
+    const isFullMd = (rel) => {
+      const lower = String(rel || '').toLowerCase();
+      return lower === 'full.md' || lower.endsWith('/full.md');
+    };
+
+    const pickPrimaryMarkdown = (candidates) => {
+      if (!Array.isArray(candidates) || candidates.length === 0) return null;
+      const full = candidates.find((c) => isFullMd(c.relativePath));
+      if (full) return full;
+      if (candidates.length === 1) return candidates[0];
+
+      const auto = candidates.filter((c) => String(c.relativePath || '').toLowerCase().includes('/auto/'));
+      const pool = auto.length > 0 ? auto : candidates;
+      return pool.slice().sort((a, b) => String(a.relativePath).length - String(b.relativePath).length)[0];
+    };
+
+    primary = pickPrimaryMarkdown(mdCandidates);
+    if (primary && !markdown) {
+      const content = await zip.file(primary.name).async('nodebuffer');
+      markdown = content.toString('utf-8').trim();
+    }
+
+    for (const name of entries) {
+      const safeRelativePath = sanitizeRelativePath(name);
+      if (!safeRelativePath) continue;
+      if (safeRelativePath === 'full.md') continue;
+      if (safeRelativePath === 'mineru-result.zip' || safeRelativePath === 'mineru-result.json') continue;
+
+      const objectName = `${parsedPrefix}${safeRelativePath}`;
+      const contentType = inferContentTypeByExt(safeRelativePath);
+
+      const fileObj = zip.file(name);
+      let size = null;
+      if (fileObj._data && typeof fileObj._data.uncompressedSize === 'number') {
+         size = fileObj._data.uncompressedSize;
+      }
+      pushZipEntry(zipObjectName, name, safeRelativePath, size, contentType);
+    }
+  } else if (resultPayload) {
+    markdown = extractLocalMarkdown(resultPayload);
+    const extra = await extractArtifactsFromJsonResult(resultPayload, timeoutMs);
+    for (const item of extra) {
+      const safeRelativePath = sanitizeRelativePath(item.relativePath);
+      if (!safeRelativePath) continue;
+      if (safeRelativePath === 'full.md') continue;
+      const objectName = `${parsedPrefix}${safeRelativePath}`;
+      const contentType = item.mimeType || inferContentTypeByExt(safeRelativePath);
+      const ok = await saveObject(objectName, item.buffer, contentType);
+      if (ok) pushArtifact(safeRelativePath, objectName, item.buffer.length, contentType);
+    }
+  }
+
+  const realArtifacts2 = parsedArtifacts.filter((a) => {
+    const rp = String(a.relativePath || '');
+    if (rp === 'full.md') return false;
+    if (rp === 'mineru-result.json') return false;
+    if (rp === 'mineru-result.zip') return false;
+    return true;
+  });
+
+  const artifactIncomplete2 = realArtifacts2.length === 0;
+
+  // completed-empty 语义：MinerU 已完成但 Markdown 为空
+  if (!markdown) {
+    return {
+      markdown: '',
+      markdownEmpty: true,
+      mineruTaskId,
+      objectName: fullMdObjectName,
+      parsedPrefix,
+      parsedFilesCount: parsedArtifacts.length,
+      parsedArtifacts,
+      zipObjectName: hasMineruZip ? zipObjectName : null,
+      artifactIncomplete: artifactIncomplete2,
+      artifactStorageMode: hasMineruZip ? 'zip-source' : 'expanded-only',
+      artifactExportModes: ['user', 'mineru-raw', 'diagnostic'],
+      primaryMarkdownPath: primary ? primary.relativePath : undefined
+    };
+  }
+
+  await updateProgress({ stage: 'store', state: 'result-store', progress: 90, message: '正在保存产物到 MinIO...' });
+
+  await minioContext.saveMarkdown(fullMdObjectName, markdown);
+  pushArtifact('full.md', fullMdObjectName, Buffer.byteLength(markdown, 'utf-8'), 'text/markdown');
+
+  return {
+    markdown,
+    mineruTaskId,
+    objectName: fullMdObjectName,
+    parsedPrefix,
+    parsedFilesCount: parsedArtifacts.length,
+    parsedArtifacts,
+    zipObjectName: hasMineruZip ? zipObjectName : null,
+    artifactIncomplete: artifactIncomplete2,
+    artifactStorageMode: hasMineruZip ? 'zip-source' : 'expanded-only',
+    artifactExportModes: ['user', 'mineru-raw', 'diagnostic'],
+    primaryMarkdownPath: primary ? primary.relativePath : undefined
+  };
+}
+
+// ─── Utils ───────────────────────────────────
+
+function isEnabledFlag(value) {
+  return value === true || value === 'true' || value === '1' || value === 1;
+}
+
+async function checkHealth(endpoint) {
+  const token = process.env.MINERU_ONLINE_API_TOKEN;
+  try {
+    const res = await fetch(`${endpoint}/health`, { headers: { 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(3000) });
+    return res.status === 200;
+  } catch {
+    return false;
+  }
+}
+
+
+async function waitMinerUTask(onlineEndpoint, taskId, timeoutMs, onProgress) {
+  const token = process.env.MINERU_ONLINE_API_TOKEN;
+  const deadline = Date.now() + timeoutMs;
+  let lastKnownStatus = 'unknown';
+  let lastPayload = { status: 'processing' };
+
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`${onlineEndpoint}/extract-results/batch/${encodeURIComponent(taskId)}`, { headers: { 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(10000) });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(`查询状态失败: HTTP ${response.status}`);
+
+      lastPayload = payload;
+      const status = String(payload?.status || payload?.state || payload?.task_status || payload?.data?.status || payload?.data?.state || payload?.data?.extract_result?.[0]?.state || payload?.data?.extract_result?.[0]?.status).toLowerCase();
+      lastKnownStatus = status;
+
+      if (onProgress) await onProgress(payload);
+
+      if (['done', 'success', 'completed', 'succeeded', 'finished', 'complete'].includes(status)) return payload;
+      if (['failed', 'error', 'failure', 'canceled', 'cancelled'].includes(status)) throw new Error(payload?.error || payload?.message || '任务执行失败');
+    } catch (err) {
+      if (err.name === 'AbortError' || err.name === 'TimeoutError' || String(err.message).includes('fetch failed')) {
+        // Option A: Catch aborts and continue, using last known payload
+        if (onProgress) {
+          await onProgress({ ...lastPayload, _synthetic_warn: 'mineru-status-query-timeout', _synthetic_warn_msg: err.message });
+        }
+      } else {
+        throw err;
+      }
+    }
+
+    await new Promise(r => setTimeout(r, 1500));
+  }
+  throw new MineruTimeoutError(taskId, lastKnownStatus, timeoutMs);
+}
+function extractLocalMarkdown(payload) {
+  if (typeof payload === 'string') return payload.trim();
+  if (payload?.results) {
+    const firstKey = Object.keys(payload.results)[0];
+    const md = firstKey ? (payload.results[firstKey]?.md_content || payload.results[firstKey]?.mdcontent || payload.results[firstKey]?.mdContent) : '';
+    if (typeof md === 'string') return md.trim();
+  }
+  const candidates = [payload?.md_content, payload?.markdown, payload?.text, payload?.data?.md_content, payload?.data?.markdown, payload?.data?.text];
+  return (candidates.find(i => typeof i === 'string' && i.trim() !== '') || '').trim();
+}
+
+async function fetchMinerUResultRaw(onlineEndpoint, taskId, timeoutMs) {
+  const token = process.env.MINERU_ONLINE_API_TOKEN;
+  const response = await fetch(`${onlineEndpoint}/extract-results/batch/${encodeURIComponent(taskId)}`, { headers: { 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(timeoutMs) });
+  if (!response.ok) throw new Error(`获取结果失败: HTTP ${response.status}`);
+  const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+  if (contentType.includes('application/json') || contentType.includes('text/json')) {
+    return { kind: 'json', payload: await response.json() };
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  const asText = buffer.slice(0, Math.min(200, buffer.length)).toString('utf-8');
+  if (asText.trim().startsWith('{') || asText.trim().startsWith('[')) {
+    try {
+      return { kind: 'json', payload: JSON.parse(buffer.toString('utf-8')) };
+    } catch {
+      return { kind: 'zip', buffer };
+    }
+  }
+  return { kind: 'zip', buffer };
+}
+
+function inferContentTypeByExt(filePath) {
+  const lower = String(filePath || '').toLowerCase();
+  if (lower.endsWith('.md')) return 'text/markdown; charset=utf-8';
+  if (lower.endsWith('.json')) return 'application/json; charset=utf-8';
+  if (lower.endsWith('.txt')) return 'text/plain; charset=utf-8';
+  if (lower.endsWith('.html')) return 'text/html; charset=utf-8';
+  if (lower.endsWith('.css')) return 'text/css; charset=utf-8';
+  if (lower.endsWith('.js')) return 'application/javascript; charset=utf-8';
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.gif')) return 'image/gif';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.svg')) return 'image/svg+xml';
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.zip')) return 'application/zip';
+  if (lower.endsWith('.xml')) return 'application/xml; charset=utf-8';
+  return 'application/octet-stream';
+}
+
+function sanitizeRelativePath(input) {
+  const raw = String(input || '').replace(/\\/g, '/').replace(/^\/+/, '').trim();
+  if (!raw) return '';
+  const parts = raw.split('/').filter(Boolean);
+  const safe = [];
+  for (const p of parts) {
+    if (p === '.' || p === '') continue;
+    if (p === '..') return '';
+    safe.push(p.replace(/\0/g, ''));
+  }
+  return safe.join('/');
+}
+
+async function extractZipBufferFromJsonResult(payload, timeoutMs) {
+  const token = process.env.MINERU_ONLINE_API_TOKEN;
+  const candidates = [
+    payload?.zip_url, payload?.zipUrl, payload?.result_zip_url, payload?.resultZipUrl, payload?.full_zip_url,
+    payload?.data?.zip_url, payload?.data?.zipUrl, payload?.data?.result_zip_url, payload?.data?.resultZipUrl, payload?.data?.full_zip_url,
+    payload?.data?.extract_result?.[0]?.full_zip_url,
+  ].filter((v) => typeof v === 'string' && v.trim() !== '');
+
+  const url = candidates.find((u) => /^https?:\/\//i.test(u));
+  if (url) {
+    const resp = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(timeoutMs) });
+    if (!resp.ok) return null;
+    return Buffer.from(await resp.arrayBuffer());
+  }
+
+  const base64Candidates = [
+    payload?.zip_base64, payload?.zipBase64, payload?.result_zip_base64, payload?.resultZipBase64,
+    payload?.data?.zip_base64, payload?.data?.zipBase64, payload?.data?.result_zip_base64, payload?.data?.resultZipBase64,
+  ].filter((v) => typeof v === 'string' && v.trim() !== '');
+
+  const b64 = base64Candidates.find((s) => s.length > 100);
+  if (b64) {
+    try {
+      return Buffer.from(b64, 'base64');
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+async function extractArtifactsFromJsonResult(payload, timeoutMs) {
+  const token = process.env.MINERU_ONLINE_API_TOKEN;
+  const result = [];
+  const candidates = [
+    payload?.artifacts,
+    payload?.files,
+    payload?.data?.artifacts,
+    payload?.data?.files,
+    payload?.results?.artifacts,
+    payload?.results?.files,
+    Array.isArray(payload?.results) ? payload.results.flatMap((r) => r?.artifacts || r?.files || []) : null,
+    Array.isArray(payload?.data) ? payload.data.flatMap((r) => r?.artifacts || r?.files || []) : null,
+  ].flat().filter(Boolean);
+
+  const items = Array.isArray(candidates) ? candidates : [];
+
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue;
+    const relativePath = item.relativePath || item.path || item.name || item.filename || item.file_name;
+    if (typeof relativePath !== 'string' || relativePath.trim() === '') continue;
+
+    const mimeType = (item.mimeType || item.mimetype || item.contentType || item['Content-Type'] || '').toString().trim();
+    const base64 = item.base64 || item.content_base64 || item.data_base64 || item.contentBase64 || item.dataBase64;
+    const url = item.url || item.download_url || item.downloadUrl || item.presignedUrl;
+
+    if (typeof base64 === 'string' && base64.trim() !== '') {
+      try {
+        const buffer = Buffer.from(base64, 'base64');
+        result.push({ relativePath, buffer, mimeType: mimeType || null });
+        continue;
+      } catch {
+        continue;
+      }
+    }
+
+    if (typeof url === 'string' && /^https?:\/\//i.test(url)) {
+      try {
+        const resp = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(timeoutMs) });
+        if (!resp.ok) continue;
+        const buffer = Buffer.from(await resp.arrayBuffer());
+        const ct = mimeType || String(resp.headers.get('content-type') || '').trim() || null;
+        result.push({ relativePath, buffer, mimeType: ct });
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  return result;
+}

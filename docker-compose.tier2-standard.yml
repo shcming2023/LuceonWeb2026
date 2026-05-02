@@ -2,7 +2,9 @@ services:
   upload-server:
     environment:
       # Tier 2 Standard 不再部署本地 MinerU，必须接入线上 API
-      - LOCAL_MINERU_ENDPOINT=${MINERU_ONLINE_API_URL:?MINERU_ONLINE_API_URL is required for Tier 2 Standard}
+      - MINERU_ONLINE_API_BASE_URL=${MINERU_ONLINE_API_BASE_URL:?MINERU_ONLINE_API_BASE_URL is required for Tier 2 Standard}
+      - MINERU_ONLINE_API_TOKEN=${MINERU_ONLINE_API_TOKEN:?MINERU_ONLINE_API_TOKEN is required for Tier 2 Standard}
+      - MINERU_ONLINE_MODEL_VERSION=${MINERU_ONLINE_MODEL_VERSION:-vlm}
       # 使用真实的本地 Ollama 容器
       - OLLAMA_API_URL=http://cms-ollama-local:11434
       # Standard 档强制要求可用 AI，禁止降级到 skeleton

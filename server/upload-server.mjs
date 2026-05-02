@@ -311,24 +311,61 @@ async function checkDependencyHealth(minioBucket) {
     }
 
     // 3. MinerU
-    let checkMineruEndpoint = mineruEndpoint;
-    if (process.env.DEPENDENCY_HEALTH_REWRITE_LOCAL_ENDPOINTS !== 'false') {
-      if (mineruEndpoint.includes('localhost') || mineruEndpoint.includes('127.0.0.1')) {
-        checkMineruEndpoint = mineruEndpoint.replace(/localhost|127\.0\.0\.1/g, 'host.docker.internal');
-      }
-    }
-    checkMineruEndpoint = checkMineruEndpoint.replace(/\/+$/, '');
-    result.dependencies.mineru.endpoint = checkMineruEndpoint; // display docker rewritten endpoint
-
-    try {
-      const mineruRes = await fetch(`${checkMineruEndpoint}/health`, { signal: AbortSignal.timeout(3000) });
-      if (mineruRes.ok) {
-        result.dependencies.mineru.ok = true;
+    if (process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') {
+      const onlineUrl = process.env.MINERU_ONLINE_API_BASE_URL;
+      const token = process.env.MINERU_ONLINE_API_TOKEN;
+      if (!onlineUrl || !token) {
+        result.dependencies.mineru.error = 'Missing MINERU_ONLINE_API_BASE_URL or MINERU_ONLINE_API_TOKEN in Standard mode';
       } else {
-        result.dependencies.mineru.error = `HTTP ${mineruRes.status}`;
+        result.dependencies.mineru.endpoint = onlineUrl;
+        try {
+          const dummyRes = await fetch(`${onlineUrl.replace(/\/+$/, '')}/extract-results/batch/dummy-health-check`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+            signal: AbortSignal.timeout(3000)
+          });
+          if (dummyRes.status === 401 || dummyRes.status === 403) {
+             result.dependencies.mineru.error = 'MinerU Online API Token Invalid';
+          } else if (dummyRes.ok) {
+             result.dependencies.mineru.ok = true;
+          } else if (dummyRes.status === 400 || dummyRes.status === 404) {
+             const text = await dummyRes.text().catch(() => '');
+             try {
+                const json = JSON.parse(text);
+                if (json && ('code' in json || 'error' in json || 'msg' in json)) {
+                   result.dependencies.mineru.ok = true;
+                } else {
+                   result.dependencies.mineru.error = `MinerU HTTP ${dummyRes.status}: ${text.slice(0, 100)}`;
+                }
+             } catch (e) {
+                result.dependencies.mineru.error = `MinerU HTTP ${dummyRes.status}: Invalid JSON response`;
+             }
+          } else {
+             result.dependencies.mineru.error = `MinerU HTTP ${dummyRes.status}`;
+          }
+        } catch (e) {
+          result.dependencies.mineru.error = e.cause?.code === 'ECONNREFUSED' ? 'connect ECONNREFUSED' : (e.message || 'connect ECONNREFUSED');
+        }
       }
-    } catch (e) {
-      result.dependencies.mineru.error = e.cause?.code === 'ECONNREFUSED' ? 'connect ECONNREFUSED' : (e.message || 'connect ECONNREFUSED');
+    } else {
+      let checkMineruEndpoint = mineruEndpoint;
+      if (process.env.DEPENDENCY_HEALTH_REWRITE_LOCAL_ENDPOINTS !== 'false') {
+        if (mineruEndpoint.includes('localhost') || mineruEndpoint.includes('127.0.0.1')) {
+          checkMineruEndpoint = mineruEndpoint.replace(/localhost|127\.0\.0\.1/g, 'host.docker.internal');
+        }
+      }
+      checkMineruEndpoint = checkMineruEndpoint.replace(/\/+$/, '');
+      result.dependencies.mineru.endpoint = checkMineruEndpoint; // display docker rewritten endpoint
+
+      try {
+        const mineruRes = await fetch(`${checkMineruEndpoint}/health`, { signal: AbortSignal.timeout(3000) });
+        if (mineruRes.ok) {
+          result.dependencies.mineru.ok = true;
+        } else {
+          result.dependencies.mineru.error = `HTTP ${mineruRes.status}`;
+        }
+      } catch (e) {
+        result.dependencies.mineru.error = e.cause?.code === 'ECONNREFUSED' ? 'connect ECONNREFUSED' : (e.message || 'connect ECONNREFUSED');
+      }
     }
 
     // 4. Ollama
@@ -685,27 +722,45 @@ app.get('/ops/health', async (req, res) => {
 
   // 3. MinerU Check
   try {
-    let localEndpoint = process.env.LOCAL_MINERU_ENDPOINT || 'http://host.docker.internal:8083';
-    // 尝试从设置中读取
-    try {
-      const setResp = await fetch(`${dbBaseUrl}/settings`, { signal: AbortSignal.timeout(1000) });
-      if (setResp.ok) {
-        const settings = await setResp.json();
-        if (settings?.mineruConfig?.localEndpoint) localEndpoint = settings.mineruConfig.localEndpoint;
+    if (process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') {
+      const onlineUrl = process.env.MINERU_ONLINE_API_BASE_URL;
+      const token = process.env.MINERU_ONLINE_API_TOKEN;
+      if (!onlineUrl || !token) {
+        results.mineru = { status: 'error', message: 'Missing MINERU_ONLINE_API_BASE_URL or MINERU_ONLINE_API_TOKEN in Standard mode' };
+      } else {
+        const dummyRes = await fetch(`${onlineUrl.replace(/\/+$/, '')}/extract/task/dummy-health-check`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+          signal: AbortSignal.timeout(3000)
+        });
+        if (dummyRes.status === 401 || dummyRes.status === 403) {
+           results.mineru = { status: 'error', message: 'MinerU Online API Token Invalid' };
+        } else {
+           results.mineru = { status: 'ok', message: 'Online API Connected' };
+        }
       }
-    } catch (ee) { /* use default */ }
-
-    // 重写 localhost 为 host.docker.internal
-    if (localEndpoint.includes('localhost') || localEndpoint.includes('127.0.0.1')) {
-      localEndpoint = localEndpoint.replace(/localhost|127\.0\.0\.1/g, 'host.docker.internal');
-    }
-
-    const mineruRes = await fetch(`${localEndpoint.replace(/\/+$/, '')}/health`, { signal: AbortSignal.timeout(3000) });
-    if (mineruRes.ok) {
-      const data = await mineruRes.json();
-      results.mineru = { status: 'ok', details: data };
     } else {
-      results.mineru = { status: 'warning', message: `HTTP ${mineruRes.status}` };
+      let localEndpoint = process.env.LOCAL_MINERU_ENDPOINT || 'http://host.docker.internal:8083';
+      // 尝试从设置中读取
+      try {
+        const setResp = await fetch(`${dbBaseUrl}/settings`, { signal: AbortSignal.timeout(1000) });
+        if (setResp.ok) {
+          const settings = await setResp.json();
+          if (settings?.mineruConfig?.localEndpoint) localEndpoint = settings.mineruConfig.localEndpoint;
+        }
+      } catch (ee) { /* use default */ }
+
+      // 重写 localhost 为 host.docker.internal
+      if (localEndpoint.includes('localhost') || localEndpoint.includes('127.0.0.1')) {
+        localEndpoint = localEndpoint.replace(/localhost|127\.0\.0\.1/g, 'host.docker.internal');
+      }
+
+      const mineruRes = await fetch(`${localEndpoint.replace(/\/+$/, '')}/health`, { signal: AbortSignal.timeout(3000) });
+      if (mineruRes.ok) {
+        const data = await mineruRes.json();
+        results.mineru = { status: 'ok', details: data };
+      } else {
+        results.mineru = { status: 'warning', message: `HTTP ${mineruRes.status}` };
+      }
     }
   } catch (e) {
     results.mineru = { status: 'error', message: e.message };
@@ -2702,6 +2757,7 @@ app.post('/tasks', upload.single('file'), async (req, res) => {
 
     const optionsSnapshot = {
       localEndpoint: mineruConfig.localEndpoint || 'http://host.docker.internal:8083',
+      onlineEndpoint: process.env.ALLOW_AI_SKELETON_FALLBACK === 'false' ? process.env.MINERU_ONLINE_API_BASE_URL : undefined,
       localTimeout: mineruConfig.localTimeout || 3600,
       ocrLanguage: mineruConfig.localOcrLanguage || mineruConfig.ocrLanguage || 'ch',
       enableOcr: mineruConfig.enableOcr,

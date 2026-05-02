@@ -82,8 +82,8 @@ async function runTest() {
 
       if (taskObj.message?.includes('MinerU') || taskObj.metadata?.mineruExecutionProfile) {
          if (!enteredMinerUPipeline) {
-           console.log(`  ✅ Successfully entered MinerU pipeline!`);
-           enteredMinerUPipeline = true;
+           console.log(`  ✅ Successfully entered MinerU pipeline! Internal Task ID: ${taskObj.metadata?.mineruTaskId || 'Waiting...'}`);
+           if (taskObj.metadata?.mineruTaskId) enteredMinerUPipeline = true;
          }
       }
 

@@ -1,6 +1,6 @@
 /**
  * task-worker.mjs - ParseTask 任务执行器骨架
- * 
+ *
  * 约束要求：
  * 1. 模拟执行需明确标记 "worker skeleton"
  * 2. 内存锁防重复处理
@@ -11,6 +11,7 @@
 import { getAllTasks, updateTask, updateMaterial } from '../tasks/task-client.mjs';
 import { logTaskEvent } from '../logging/task-events.mjs';
 import { processWithLocalMinerU, resumeWithLocalMinerU, MineruStillProcessingError, MineruSubmitUnreachableError } from '../mineru/local-adapter.mjs';
+import { processWithOnlineMinerU, resumeWithOnlineMinerU } from '../mineru/v4-online-adapter.mjs';
 import { createAiMetadataJob } from '../ai/metadata-job-client.mjs';
 import { parseLatestMineruProgress } from '../../lib/ops-mineru-log-parser.mjs';
 
@@ -48,8 +49,9 @@ export class ParseTaskWorker {
       || (typeof options.getFileStream === 'function' ? options : null);
     this.eventBus = options.eventBus || null;
     this.taskClient = options.taskClient || { getAllTasks, updateTask, updateMaterial };
-    this.mineruProcessor = options.mineruProcessor || processWithLocalMinerU;
-    this.mineruResumer = options.mineruResumer || resumeWithLocalMinerU;
+    const isStandardMode = process.env.ALLOW_AI_SKELETON_FALLBACK === 'false';
+    this.mineruProcessor = options.mineruProcessor || (isStandardMode ? processWithOnlineMinerU : processWithLocalMinerU);
+    this.mineruResumer = options.mineruResumer || (isStandardMode ? resumeWithOnlineMinerU : resumeWithLocalMinerU);
     this.pendingTaskPatches = new Map();
     this.pendingMaterialPatches = new Map();
   }
@@ -138,7 +140,7 @@ export class ParseTaskWorker {
     await this.recoverMisjudgedFailedTasks(tasks);
 
     const pendingTasks = tasks.filter(t => t.state === 'pending');
-    
+
     // P0 Patch: ParseTask FIFO 调度收口
     pendingTasks.sort((a, b) => {
       // 1. 已有 mineruTaskId 的恢复接管任务优先
@@ -153,7 +155,7 @@ export class ParseTaskWorker {
       if (aTime !== bTime) {
         return aTime - bTime;
       }
-      
+
       // 3. 时间相同时按 id ASC
       return String(a.id).localeCompare(String(b.id));
     });
@@ -189,7 +191,7 @@ export class ParseTaskWorker {
       let recovered = 0;
       for (const task of tasks) {
         if (task.state !== 'running' && task.state !== 'result-store') continue;
-        
+
         // P0 Patch 2: check if MinerU is still processing before resetting
         const mineruTaskId = task.metadata?.mineruTaskId;
         const localEndpointRaw = task.optionsSnapshot?.localEndpoint;
@@ -308,7 +310,7 @@ export class ParseTaskWorker {
                  metadata: { ...task.metadata, mineruStatus: mineruStatus }
                }, 'worker-failed', 'error');
             }
-            continue; 
+            continue;
           } else if (fetchError) {
              await this.transition(task, {
                state: 'failed',
@@ -455,13 +457,13 @@ export class ParseTaskWorker {
       let failureEngine = null;
       let fallbackEligible = false;
 
-      if (errorSummary.includes('split_with_sizes') || 
-          errorSummary.includes('Image features and image tokens do not match') || 
+      if (errorSummary.includes('split_with_sizes') ||
+          errorSummary.includes('Image features and image tokens do not match') ||
           errorSummary.includes('out of range integral type conversion attempted')) {
         mineruFailureCategory = 'hybrid-vlm-runtime-failure';
         failureEngine = 'hybrid-auto-engine';
         fallbackEligible = true;
-      } else if (errorSummary.includes('MPS backend out of memory') || 
+      } else if (errorSummary.includes('MPS backend out of memory') ||
                  errorSummary.includes('kIOGPUCommandBufferCallbackErrorInnocentVictim')) {
         mineruFailureCategory = 'hybrid-mps-runtime-failure';
         failureEngine = 'hybrid-auto-engine';
@@ -626,7 +628,7 @@ export class ParseTaskWorker {
         updatedAt: new Date().toISOString(),
         metadata: { ...(task.metadata || {}), mineruApiUnreachableCount: count }
       };
-      
+
       if (count >= 3) {
         payload.stage = 'mineru-unreachable';
         payload.message = 'MinerU 服务不可达，需恢复后重新对账';
@@ -720,13 +722,13 @@ export class ParseTaskWorker {
       let failureEngine = null;
       let fallbackEligible = false;
 
-      if (errorSummary.includes('split_with_sizes') || 
-          errorSummary.includes('Image features and image tokens do not match') || 
+      if (errorSummary.includes('split_with_sizes') ||
+          errorSummary.includes('Image features and image tokens do not match') ||
           errorSummary.includes('out of range integral type conversion attempted')) {
         mineruFailureCategory = 'hybrid-vlm-runtime-failure';
         failureEngine = 'hybrid-auto-engine';
         fallbackEligible = true;
-      } else if (errorSummary.includes('MPS backend out of memory') || 
+      } else if (errorSummary.includes('MPS backend out of memory') ||
                  errorSummary.includes('kIOGPUCommandBufferCallbackErrorInnocentVictim')) {
         mineruFailureCategory = 'hybrid-mps-runtime-failure';
         failureEngine = 'hybrid-auto-engine';
@@ -940,13 +942,13 @@ export class ParseTaskWorker {
         let failureEngine = null;
         let fallbackEligible = false;
 
-        if (errorSummary.includes('split_with_sizes') || 
-            errorSummary.includes('Image features and image tokens do not match') || 
+        if (errorSummary.includes('split_with_sizes') ||
+            errorSummary.includes('Image features and image tokens do not match') ||
             errorSummary.includes('out of range integral type conversion attempted')) {
           mineruFailureCategory = 'hybrid-vlm-runtime-failure';
           failureEngine = 'hybrid-auto-engine';
           fallbackEligible = true;
-        } else if (errorSummary.includes('MPS backend out of memory') || 
+        } else if (errorSummary.includes('MPS backend out of memory') ||
                    errorSummary.includes('kIOGPUCommandBufferCallbackErrorInnocentVictim')) {
           mineruFailureCategory = 'hybrid-mps-runtime-failure';
           failureEngine = 'hybrid-auto-engine';
@@ -1089,16 +1091,16 @@ export class ParseTaskWorker {
       const resp = await fetch(`${DB_BASE_URL}/materials`);
       if (!resp.ok) return;
       const materials = await resp.json();
-      
-      const candidates = materials.filter(m => 
-        m.mineruStatus === 'completed' && 
+
+      const candidates = materials.filter(m =>
+        m.mineruStatus === 'completed' &&
         m.metadata?.mineruStatus === 'processing'
       );
-      
+
       for (const m of candidates) {
         let processingStage = 'mineru-completed';
         let processingMsg = 'MinerU 解析完成，等待 AI 元数据识别';
-        
+
         if (m.aiStatus === 'analyzed') {
            if (m.status === 'reviewing') {
               processingStage = 'review';
@@ -1108,7 +1110,7 @@ export class ParseTaskWorker {
               processingMsg = 'AI 识别完成';
            }
         }
-        
+
         await this.updateMaterialWithRetry(m.id, {
           metadata: {
             ...(m.metadata || {}),
@@ -1117,7 +1119,7 @@ export class ParseTaskWorker {
             processingMsg
           }
         }, { enqueueOnFailure: true });
-        
+
         console.log(`[task-worker] cleanupStaleMineruStatus: Material ${m.id} residual metadata.mineruStatus fixed`);
       }
     } catch (e) {
@@ -1153,16 +1155,16 @@ export class ParseTaskWorker {
         const objectName = materialInfo.metadata?.objectName;
         if (!objectName) throw new Error('任务缺少真实的文件对象信息 (objectName)');
         if (!this.minioContext) throw new Error('Worker 缺少存储上下文 (MinIO 客户端未注入)');
-        
+
         await this.transition(task, {
           stage: 'process',
           state: 'running',
           progress: 5,
           message: '正在拉取文件并连接本地 MinerU...'
         }, 'worker-picked');
-        
+
         const fileStream = await this.minioContext.getFileStream(objectName);
-        
+
         let markdownObjectName = null;
         let mineruTaskId = null;
         let parsedPrefix = `parsed/${task.materialId}/`;
@@ -1213,7 +1215,7 @@ export class ParseTaskWorker {
             updateProgress: async (updateInfo) => {
               const eventName = updateInfo.stage === 'store' ? 'stage-changed' : 'progress-update';
               await this.transition(task, updateInfo, eventName);
-              
+
               // P0 Task 3: 同步 Material 状态
               if (task.materialId && (updateInfo.stage || updateInfo.message || updateInfo.metadata)) {
                 await this.updateMaterialWithRetry(task.materialId, {
@@ -1500,7 +1502,7 @@ export class ParseTaskWorker {
 
     try {
       const materialInfo = task.optionsSnapshot?.material || {};
-      
+
       const mineruResult = await this.mineruResumer({
         task,
         material: materialInfo,
@@ -1510,7 +1512,7 @@ export class ParseTaskWorker {
         updateProgress: async (updateInfo) => {
           const eventName = updateInfo.stage === 'store' ? 'stage-changed' : 'progress-update';
           await this.transition(task, updateInfo, eventName);
-          
+
           if (task.materialId && (updateInfo.stage || updateInfo.message || updateInfo.metadata)) {
             await this.updateMaterialWithRetry(task.materialId, {
               metadata: {
