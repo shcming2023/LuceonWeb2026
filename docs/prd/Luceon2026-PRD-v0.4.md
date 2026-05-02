@@ -114,6 +114,17 @@ Luceon2026 v0.4 继承该范式，但做以下本地化裁剪：
 - 2026-05-02 本地二级 UAT 已验证 Markdown 上传链路：前端点按正常、Markdown 上传成功、原始文件写入 `eduassets`、ParseTask 创建、Markdown 直通产物写入 `eduassets-parsed`、AI skeleton fallback 闭环、任务进入 `review-pending`，一致性审计返回 `ok=true` 且 `findings=[]`。
 - Tier 2 Lite 明确不验证真实 PDF MinerU 解析质量、不验证真实大模型推理质量、不作为稳定版标签依据；涉及真实大体积 PDF、真实历史数据、真实模型或公网/宿主机资源时，仍需由 Lucia 视里程碑级别决定是否转交 luceonHMM 执行第三级真实验收。
 
+#### 4.1.2 本地第二级 UAT Standard 档决策（2026-05-02 待实现验收）
+
+以下内容是 **Director 已确认、Lucia 已采纳** 的本地第二级 Standard 档架构决策；它用于指导 lucode 后续 amend 修订与 Lucia 复验，当前不得表述为已稳定验收通过。
+
+- Tier 2 Standard 目标是比 Tier 2 Lite 更贴近真实业务链路，但不要求本地开发机承载重型 MinerU 容器。
+- MinerU 在 Tier 2 Standard 中改为接入线上 API，使用项目已开发的线上 MinerU 接入能力；本地不再部署 `mineru:latest`、不再要求本地构建 20GB+ 镜像，也不以 mock 冒充真实 PDF 解析。
+- Standard 档必须通过环境变量注入线上 MinerU API 地址与必要凭据；仓库不得提交真实 token、个人密钥或本地私有路径。
+- 缺少线上 MinerU API 配置、API 不可达或健康检查不符合预期时，Standard 预检与 smoke 测试必须硬失败，不得降级为 warning 或假绿。
+- Ollama 在 Tier 2 Standard 中必须本地真实运行，模型固定为 `qwen3.5:0.8b`。模型不存在时允许自动 pull；pull 失败、Ollama 不可达或模型不可用时必须硬失败。
+- Tier 2 Standard 仍复用本地 MinIO 自动建桶、业务服务、DB、前端/Nginx 与自动化回归测试；Lite 档的 mock / skeleton fallback 策略不得被 Standard 改动破坏。
+
 ### 4.2 统一任务入口与前端路由
 
 - `POST /tasks`（`upload-server.mjs`）已实现：接收 multipart 上传，统一完成
@@ -553,6 +564,18 @@ v0.4 要求把 `AiMetadataJob.state` 的终态命名统一为 `confirmed | revie
 7. **一致性审计**：上传链路完成后，`GET /__proxy/upload/audit/consistency` 应返回 `ok=true`，且不产生新增 unexpected findings。
 8. **自动化回归要求**：下一步 P0 开发任务 `P0-markdown-upload-regression` 必须将上述 Markdown 上传主链路沉淀为可重复执行的 smoke test，并纳入后续 Lucia 二级验收默认检查项。
 
+### 12.4 本地第二级 UAT Standard 验收（线上 MinerU + 本地 Ollama）
+
+本节定义 Tier 2 Standard 的目标验收口径。该档位用于验证真实 PDF 解析入口、真实小模型 AI 连通性和更接近生产的依赖编排；它不替代 luceonHMM 的第三级真实大数据/压力验收。
+
+1. **MinerU 接入方式**：Standard 档使用线上 MinerU API，不在本地启动 MinerU 容器。线上 API 地址与凭据必须来自环境变量；缺少配置时，`tier2:standard:check` 必须以非 0 退出并明确说明阻塞原因。
+2. **Ollama 模型要求**：本地 Ollama 容器必须可达，且 `qwen3.5:0.8b` 必须存在或可被自动拉取。Ollama 不可达、模型不可用或 pull 失败均视为 Standard 环境未就绪。
+3. **依赖健康**：Standard 预检必须同时确认 CMS、MinIO、线上 MinerU API、Ollama、后端 dependency-health 均满足要求；任一关键项失败，不得打印通过结论。
+4. **Markdown 回归**：Standard 档不得破坏 `P0-markdown-upload-regression` 中已固化的 Markdown 上传、MinIO 落盘、任务创建、AI Job 和一致性审计闭环。
+5. **PDF 解析入口**：上传小型 PDF 后，任务必须真实进入 MinerU pipeline；若轮询结束仍未观察到 MinerU 执行痕迹，smoke test 必须失败，并输出最后一次任务状态、message 与 metadata 摘要。
+6. **状态约束**：Standard 不允许使用 MinerU mock 或 skeleton fallback 来证明 PDF 解析链路成功；Lite 档可继续保留 mock 和 AI skeleton fallback 以服务快速回归。
+7. **放行状态**：截至 2026-05-02，本节为已确定验收契约，代码实现仍待 `P1-local-tier2-standard-online-mineru-ollama-amend` 完成 amend 后由 Lucia 复验。
+
 ## 13. 风险、回退与发布策略
 
 ### 13.1 主要风险
@@ -608,6 +631,11 @@ v0.4 要求把 `AiMetadataJob.state` 的终态命名统一为 `confirmed | revie
 
 ## 16. 变更记录
 
+- **v0.4-tier2-standard-online-mineru-2026-05-02（2026-05-02）**：确定 Tier 2 Standard 改为线上 MinerU API + 本地 Ollama 小模型。
+  - 背景：本地真实 MinerU 容器方案被验证为对普通开发机过重，涉及 20GB+ 镜像构建、GPU/WSL2 等宿主机条件，且当前交付版本存在依赖失败假绿风险。
+  - 确定需求：Tier 2 Standard 不再本地部署 MinerU；MinerU 通过线上 API 接入，缺少 API 配置或 API 不可达必须硬失败；本地 Ollama 必须真实运行并使用 `qwen3.5:0.8b`；Lite 档 mock/fallback 行为保持不变。
+  - 待验证策略：lucode 需完成 `P1-local-tier2-standard-online-mineru-ollama-amend`，修正 Standard 预检硬失败、PDF pipeline 断言、行尾空格、越界文件提交等问题。Lucia 在 amend 通过后再执行第二级 Standard UAT。
+  - 影响范围：第 4 章 Baseline Facts、第 12 章 UAT 验收基线、后续 Standard 环境任务书与 Director 本地手工验收流程。
 - **v0.4-local-tier2-uat-2026-05-02（2026-05-02）**：固化本地第二级 UAT 基线与 Tier 2 Lite 环境契约。
   - 背景：Lucia 与 Director 完成本地 Docker 二级 UAT 底座建设和手动验收，确认该环境可作为后续日常开发补丁的本地沙盒验收基础。
   - 确定需求：`npm.cmd run local:check` 为 Windows 本地预检入口；`docker-compose.tier2-lite.yml` 与 `docker-compose.override.yml` 共同组成本地轻量沙盒入口；Tier 2 Lite 必须提供 MinIO 自动建桶、MinerU mock `/health`、Markdown 上传直通解析、AI skeleton fallback 和一致性审计闭环。
