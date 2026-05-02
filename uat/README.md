@@ -307,6 +307,9 @@ curl -sS http://127.0.0.1:8080/__proxy/upload/audit/consistency
 1. **轻量预检 (Tier 2 Lite)**：不强制拉取大体积模型和镜像。
    - 运行：`npm.cmd run local:check`
    - 配置检查：`npm.cmd run uat:docker:config`
+   - **特性说明**：
+     - **MinIO 自动建桶**：首次启动时 `cms-minio-init` 服务会自动创建并配置 `eduassets` 与 `eduassets-parsed` 桶，重复启动幂等。
+     - **MinerU Mock**：内置轻量 Python 服务，提供 `/health` (HTTP 200) 健康检查支持，以满足依赖就绪前置条件。
 2. **完整 Docker UAT**：本地或远端的完整测试沙盒，执行全部流程。
    - 运行：`docker compose up -d` 然后执行冒烟测试。
 3. **手工浏览器验收**：在本地浏览器中通过 8080 端口和 19001 端口进行业务数据手工验收。

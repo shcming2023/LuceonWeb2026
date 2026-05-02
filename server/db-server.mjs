@@ -52,7 +52,7 @@ app.use(cors(ALLOWED_CORS_ORIGINS.length > 0 ? {
   },
   credentials: true,
 } : undefined));
-app.use(express.json({ limit: '20mb' }));
+app.use(express.json({ limit: '20mb', strict: false }));
 
 function redactSensitive(value) {
   if (Array.isArray(value)) return value.map(redactSensitive);
@@ -364,6 +364,15 @@ app.use((req, res, next) => {
  * 不做字段级验证（避免破坏前端灵活性），仅拒绝明显非法的请求体。
  */
 function requireBody(req, res, next) {
+  // ���� /settings/:key ���ջ����������� (primitive values)
+  if (req.path.startsWith('/settings/')) {
+    if (req.body === undefined) {
+      res.status(400).json({ error: '�����岻��Ϊ��' });
+      return;
+    }
+    return next();
+  }
+
   if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
     res.status(400).json({ error: '请求体必须是 JSON 对象' });
     return;
