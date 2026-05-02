@@ -279,22 +279,30 @@ async function checkDependencyHealth(minioBucket) {
 
     // 2. Load configs
     let mineruEndpoint = process.env.LOCAL_MINERU_ENDPOINT || 'http://host.docker.internal:8083';
-    let ollamaEndpoint = null;
-    let aiEnabled = false;
+    let ollamaEndpoint = process.env.OLLAMA_API_URL || null;
+    let aiEnabled = !!ollamaEndpoint || false;
 
     try {
-      const setResp = await fetch(`${DB_BASE_URL}/settings`);
-      if (setResp.ok) {
-        const allSettings = await setResp.json();
-        const mSet = allSettings?.mineruConfig || {};
-        if (mSet.localEndpoint) mineruEndpoint = mSet.localEndpoint;
+      if (process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') {
+        // Standard Tier 2 mode: strictly enforce env configs, skip DB settings for AI/MinerU
+        aiEnabled = true;
+        if (!ollamaEndpoint) ollamaEndpoint = 'http://cms-ollama-local:11434';
+      } else {
+        const setResp = await fetch(`${DB_BASE_URL}/settings`);
+        if (setResp.ok) {
+          const allSettings = await setResp.json();
+          const mSet = allSettings?.mineruConfig || {};
+          if (mSet.localEndpoint && !process.env.LOCAL_MINERU_ENDPOINT) mineruEndpoint = mSet.localEndpoint;
 
-        const aiSet = allSettings?.aiConfig || {};
-        aiEnabled = aiSet.enabled === true || (aiSet.enabled !== false && Array.isArray(aiSet.providers) && aiSet.providers.some(p => p.enabled !== false));
-        if (aiEnabled && Array.isArray(aiSet.providers)) {
-          const ollamaProvider = aiSet.providers.find(p => p.enabled !== false && (p.providerId === 'ollama' || (p.apiEndpoint && p.apiEndpoint.includes('11434'))));
-          if (ollamaProvider && ollamaProvider.apiEndpoint) {
-            ollamaEndpoint = ollamaProvider.apiEndpoint;
+          const aiSet = allSettings?.aiConfig || {};
+          if (!aiEnabled) {
+            aiEnabled = aiSet.enabled === true || (aiSet.enabled !== false && Array.isArray(aiSet.providers) && aiSet.providers.some(p => p.enabled !== false));
+          }
+          if (aiEnabled && Array.isArray(aiSet.providers) && !process.env.OLLAMA_API_URL) {
+            const ollamaProvider = aiSet.providers.find(p => p.enabled !== false && (p.providerId === 'ollama' || (p.apiEndpoint && p.apiEndpoint.includes('11434'))));
+            if (ollamaProvider && ollamaProvider.apiEndpoint) {
+              ollamaEndpoint = ollamaProvider.apiEndpoint;
+            }
           }
         }
       }
@@ -334,12 +342,24 @@ async function checkDependencyHealth(minioBucket) {
          }
        }
        result.dependencies.ollama.endpoint = checkOllamaEndpoint;
-       
+
        try {
          const base = checkOllamaEndpoint.replace(/\/v1\/?$/, '');
          const ollamaRes = await fetch(`${base}/api/tags`, { signal: AbortSignal.timeout(3000) });
          if (ollamaRes.ok) {
-           result.dependencies.ollama.ok = true;
+           const data = await ollamaRes.json();
+           const modelNames = (data.models || []).map(m => m.name);
+           const targetModel = process.env.ALLOW_AI_SKELETON_FALLBACK === 'false'
+             ? (process.env.OLLAMA_TIER2_MODEL || 'qwen3.5:0.8b')
+             : (process.env.OLLAMA_TIER2_MODEL || 'qwen3.5:9b');
+           const hasTarget = modelNames.some(n => n.includes(targetModel));
+
+           if (!hasTarget && process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') {
+             result.dependencies.ollama.error = `Missing required Standard model: ${targetModel}`;
+             result.dependencies.ollama.ok = false;
+           } else {
+             result.dependencies.ollama.ok = true;
+           }
          } else {
            result.dependencies.ollama.error = `HTTP ${ollamaRes.status}`;
          }
@@ -400,7 +420,7 @@ app.post('/ops/dependency-repair', async (req, res) => {
       body: JSON.stringify({ action }),
       signal: AbortSignal.timeout(15000)
     });
-    
+
     if (sRes.ok) {
       res.json(await sRes.json());
     } else {
@@ -621,7 +641,7 @@ app.get('/health', (_req, res) => {
 app.get('/ops/health', async (req, res) => {
   const dbBaseUrl = process.env.DB_BASE_URL || 'http://localhost:8789';
   const start = Date.now();
-  
+
   const results = {
     frontend: { status: 'ok', version: '2026.04.23-UAT' },
     uploadServer: { status: 'ok', version: '0.7.0' },
@@ -693,14 +713,18 @@ app.get('/ops/health', async (req, res) => {
 
   // 4. Ollama Check
   try {
-    const setResp = await fetch(`${dbBaseUrl}/settings`, { signal: AbortSignal.timeout(1000) });
-    let ollamaUrl = 'http://host.docker.internal:11434';
-    if (setResp.ok) {
-      const settings = await setResp.json();
-      const aiConfig = settings.aiConfig || {};
-      if (aiConfig.ollamaBaseUrl) ollamaUrl = aiConfig.ollamaBaseUrl;
+    let ollamaUrl = process.env.OLLAMA_API_URL || 'http://host.docker.internal:11434';
+    if (process.env.ALLOW_AI_SKELETON_FALLBACK !== 'false') {
+      try {
+        const setResp = await fetch(`${dbBaseUrl}/settings`, { signal: AbortSignal.timeout(1000) });
+        if (setResp.ok) {
+          const settings = await setResp.json();
+          const aiConfig = settings.aiConfig || {};
+          if (aiConfig.ollamaBaseUrl && !process.env.OLLAMA_API_URL) ollamaUrl = aiConfig.ollamaBaseUrl;
+        }
+      } catch (e) {}
     }
-    
+
     // 重写
     if (ollamaUrl.includes('localhost') || ollamaUrl.includes('127.0.0.1')) {
       ollamaUrl = ollamaUrl.replace(/localhost|127\.0\.0\.1/g, 'host.docker.internal');
@@ -710,11 +734,14 @@ app.get('/ops/health', async (req, res) => {
     if (ollamaRes.ok) {
       const data = await ollamaRes.json();
       const modelNames = (data.models || []).map(m => m.name);
-      const hasTarget = modelNames.some(n => n.includes('qwen3.5:9b'));
-      results.ollama = { 
-        status: hasTarget ? 'ok' : 'warning', 
-        message: hasTarget ? 'Ready' : 'qwen3.5:9b missing',
-        details: { models: modelNames } 
+      const targetModel = process.env.ALLOW_AI_SKELETON_FALLBACK === 'false'
+        ? (process.env.OLLAMA_TIER2_MODEL || 'qwen3.5:0.8b')
+        : (process.env.OLLAMA_TIER2_MODEL || 'qwen3.5:9b');
+      const hasTarget = modelNames.some(n => n.includes(targetModel));
+      results.ollama = {
+        status: hasTarget ? 'ok' : 'warning',
+        message: hasTarget ? 'Ready' : `${targetModel} missing`,
+        details: { models: modelNames }
       };
     } else {
       results.ollama = { status: 'warning', message: `HTTP ${ollamaRes.status}` };
@@ -787,7 +814,7 @@ app.get('/ops/mineru/active-task', async (req, res) => {
     );
 
     // 5. 需要主动接管的任务（MinerU API 已 completed 但仍需我们接管，或漂移，或卡在 failed 的可自愈任务）
-    const takeoverRequiredTasks = tasks.filter(t => 
+    const takeoverRequiredTasks = tasks.filter(t =>
       t.engine === 'local-mineru' &&
       t.state !== 'canceled' &&
       !t.metadata?.canceledAt &&
@@ -2528,16 +2555,16 @@ app.post('/tasks', upload.single('file'), async (req, res) => {
     const health = await checkDependencyHealth();
     if (health.blocking) {
       if (req.file) cleanupTempFile(req.file);
-      const blockingDep = Object.keys(health.dependencies).find(k => 
-        health.dependencies[k].ok === false && 
-        health.dependencies[k].requiredFor?.includes('parse') && 
+      const blockingDep = Object.keys(health.dependencies).find(k =>
+        health.dependencies[k].ok === false &&
+        health.dependencies[k].requiredFor?.includes('parse') &&
         !health.dependencies[k].skipped
       );
-      
+
       let message = '核心依赖不健康，无法执行解析';
       if (blockingDep === 'mineru') message = 'MinerU API 未启动，请先启动本地解析服务';
       else if (blockingDep === 'minio') message = 'MinIO 存储未就绪，无法上传文件';
-      
+
       return res.status(503).json({
         ok: false,
         code: 'DEPENDENCY_UNHEALTHY',
@@ -2547,8 +2574,8 @@ app.post('/tasks', upload.single('file'), async (req, res) => {
       });
     }
 
-    const aiStatusInitial = (health.dependencies.ollama && health.dependencies.ollama.ok === false && !health.dependencies.ollama.skipped) 
-      ? 'ai-unavailable' 
+    const aiStatusInitial = (health.dependencies.ollama && health.dependencies.ollama.ok === false && !health.dependencies.ollama.skipped)
+      ? 'ai-unavailable'
       : 'pending';
 
     // 0. 幂等检查：防止同一素材重复创建活跃任务
@@ -2557,15 +2584,15 @@ app.post('/tasks', upload.single('file'), async (req, res) => {
       if (allTasksResp.ok) {
         const allTasks = await allTasksResp.json();
         const activeStates = new Set(['pending', 'running', 'ai-pending', 'ai-running', 'review-pending']);
-        const existingActiveTask = allTasks.find(t => 
-          String(t.materialId) === materialId && 
+        const existingActiveTask = allTasks.find(t =>
+          String(t.materialId) === materialId &&
           activeStates.has(t.state)
         );
 
         if (existingActiveTask) {
           // 清理已上传的临时文件（由 multer 生成）
           if (req.file) cleanupTempFile(req.file);
-          
+
           return res.status(409).json({
             ok: false,
             code: 'TASK_ALREADY_ACTIVE',
@@ -2582,7 +2609,7 @@ app.post('/tasks', upload.single('file'), async (req, res) => {
     if (aborted) return;
     const taskId = `task-${Date.now()}`;
     abortCtx.taskId = taskId;
-    
+
     // 1. 上传文件到 MinIO
     const bucket = getMinioBucket();
     // 统一 objectName 命名规则：originals/{materialId}/source.{ext} (Requirement 6)
@@ -2633,7 +2660,7 @@ app.post('/tasks', upload.single('file'), async (req, res) => {
         processingMsg: aiStatusInitial === 'ai-unavailable' ? '解析可继续，AI 元数据服务不可用' : '解析任务已创建',
       }
     };
-    
+
     const dbMatBody = JSON.stringify(material);
     const dbMatResp = await fetch(`${DB_BASE_URL}/materials`, {
       method: 'POST',
@@ -2659,7 +2686,7 @@ app.post('/tasks', upload.single('file'), async (req, res) => {
     let dbBackend = mineruConfig.localBackend || mineruConfig.backend || 'pipeline';
     let requestedBackend = req.body.backend || dbBackend;
     let backendEffectiveReason = 'resolved-by-local-adapter';
-    
+
     // P0: 运行时配置收口
     // 如果没有在 API 中显式请求 hybrid（即 req.body.backend 为空），
     // 且 DB 中的默认值是 hybrid-auto-engine，则不得回退到 DB 旧的 hybrid 默认
@@ -2719,7 +2746,7 @@ app.post('/tasks', upload.single('file'), async (req, res) => {
       metadata: { mineruExecutionProfile },
       createdAt: new Date().toISOString()
     };
-    
+
     const dbTaskBody = JSON.stringify(parseTask);
     const dbTaskResp = await fetch(`${DB_BASE_URL}/tasks`, {
       method: 'POST',
@@ -2727,7 +2754,7 @@ app.post('/tasks', upload.single('file'), async (req, res) => {
       body: dbTaskBody
     });
     const dbTaskResult = await dbTaskResp.json().catch(() => null);
-    
+
     if (!dbTaskResp.ok) {
       if (dbTaskResp.status === 409 && dbTaskResult?.error === 'TASK_ALREADY_ACTIVE') {
         // [P0] 并发穿透补位：DB 返回冲突，说明并发请求中另一个已成功创建任务
@@ -3152,7 +3179,7 @@ app.post('/ai/test', async (req, res) => {
 // ─── 统一级联删除逻辑 ─────────────────────────────────────
 async function handleCascadeDelete(materialIds, force = false, dryRun = true) {
   const dbBaseUrl = process.env.DB_BASE_URL || 'http://localhost:8789';
-  
+
   const summary = { materials: 0, assetDetails: 0, tasks: 0, aiJobs: 0, taskEvents: 0, originalObjects: 0, parsedObjects: 0, runningTasks: 0 };
   const items = [];
   const runningTaskIds = [];
@@ -3163,7 +3190,7 @@ async function handleCascadeDelete(materialIds, force = false, dryRun = true) {
     const res = await fetch(`${dbBaseUrl}/materials/${encodeURIComponent(mid)}`);
     if (res.ok) materials.push(await res.json());
   }
-  
+
   // 2. 获取关联的数据
   const [tasksResp, jobsResp] = await Promise.all([
     fetch(`${dbBaseUrl}/tasks`).then(r => r.json()).catch(() => []),
@@ -3173,7 +3200,7 @@ async function handleCascadeDelete(materialIds, force = false, dryRun = true) {
   const relatedTasks = (Array.isArray(tasksResp) ? tasksResp : []).filter(t => materialIds.some(mid => String(t.materialId) === String(mid)));
   const taskIds = new Set(relatedTasks.map(t => String(t.id)));
   const relatedJobs = (Array.isArray(jobsResp) ? jobsResp : []).filter(j => taskIds.has(String(j.parseTaskId)));
-  
+
   for (const t of relatedTasks) {
     if (['running', 'mineru-processing', 'ai-running'].includes(t.state)) {
       summary.runningTasks++;
@@ -3201,21 +3228,21 @@ async function handleCascadeDelete(materialIds, force = false, dryRun = true) {
   // 3. MinIO 对象统计/清理
   const objectsToRemoveFromRaw = [];
   const objectsToRemoveFromParsed = [];
-  
+
   if (getStorageBackend() === 'minio') {
     const minio = getMinioClient();
     const rawBucket = getMinioBucket();
     const parsedBucket = getParsedBucket();
-    
+
     for (const mat of materials) {
       if (mat?.metadata?.objectName) objectsToRemoveFromRaw.push(mat.metadata.objectName);
-      
+
       const parsedObjs = await listAllObjects(parsedBucket, `parsed/${mat.id}/`).catch(() => []);
       objectsToRemoveFromParsed.push(...parsedObjs.map(o => o.name));
       const origObjs = await listAllObjects(rawBucket, `originals/${mat.id}/`).catch(() => []);
       objectsToRemoveFromRaw.push(...origObjs.map(o => o.name));
     }
-    
+
     summary.originalObjects = objectsToRemoveFromRaw.length;
     summary.parsedObjects = objectsToRemoveFromParsed.length;
 
@@ -3283,7 +3310,7 @@ app.post('/delete/materials', async (req, res) => {
     const isDryRun = !!dryRun;
     const isForce = !!force;
     if (mode !== 'cascade') return res.status(400).json({ error: 'only mode="cascade" is supported' });
-    
+
     const result = await handleCascadeDelete(materialIds, isForce, isDryRun);
     res.json(result);
   } catch (err) {
@@ -3604,7 +3631,7 @@ export async function parsedZipHandler(req, res) {
     res.status(400).json({ error: '缺少 materialId' });
     return;
   }
-  
+
   const validModes = ['user', 'mineru-raw', 'diagnostic'];
   if (!validModes.includes(mode)) {
     res.status(400).json({ error: `非法的导出模式: ${mode}` });
@@ -3615,7 +3642,7 @@ export async function parsedZipHandler(req, res) {
     const parsedBucket = getParsedBucket();
     const prefix = `parsed/${materialId}/`;
 
-    const objects = _testHooks.mockListAllObjects 
+    const objects = _testHooks.mockListAllObjects
        ? await _testHooks.mockListAllObjects(parsedBucket, prefix)
        : await listAllObjects(parsedBucket, prefix);
     if (!objects || objects.length === 0) {
@@ -3706,7 +3733,7 @@ export async function parsedZipHandler(req, res) {
           zip.file('mineru-result.zip', stream);
           addedToZip.add('mineru-result.zip');
         }
-        
+
         const zipStream = await client.getObject(parsedBucket, mineruZipObj.name);
         const zipBuffer = await new Promise((resolve, reject) => {
           const chunks = [];
@@ -3715,7 +3742,7 @@ export async function parsedZipHandler(req, res) {
           zipStream.on('error', reject);
         });
         const innerZip = await JSZip.loadAsync(zipBuffer);
-        
+
         if (mode === 'user' && !dynamicPrimaryMarkdownPath) {
           const rootFullMdObj = objects.find(o => o.name === `${prefix}full.md`);
           if (rootFullMdObj) {
@@ -3727,14 +3754,14 @@ export async function parsedZipHandler(req, res) {
                 fullMdStream.on('end', () => resolve(Buffer.concat(chunks)));
                 fullMdStream.on('error', reject);
               });
-              
+
               const mdCandidates = [];
               for (const [name, entry] of Object.entries(innerZip.files)) {
                 if (entry.dir) continue;
                 if (!name.toLowerCase().endsWith('.md')) continue;
                 mdCandidates.push(name);
               }
-              
+
               let guessedPrimary = mdCandidates.find(c => c.toLowerCase() === 'full.md' || c.toLowerCase().endsWith('/full.md'));
               if (!guessedPrimary && mdCandidates.length > 0) {
                  const auto = mdCandidates.filter((c) => c.toLowerCase().includes('/auto/'));
@@ -3766,28 +3793,28 @@ export async function parsedZipHandler(req, res) {
 
     for (const obj of objects) {
       const relativePath = obj.name.slice(prefix.length);
-      
+
       if (relativePath === 'mineru-result.zip') continue; // handled above
-      
+
       if (mode === 'user' && primaryMarkdownPath && relativePath === primaryMarkdownPath) continue;
       if (mode === 'user' && addedToZip.has(relativePath)) continue; // legacy mixed dedup
-      
+
       if (mode === 'user' && relativePath === 'full.md' && rootFullMdBuffer) {
         zip.file(relativePath, rootFullMdBuffer);
         addedToZip.add(relativePath);
         continue;
       }
-      
+
       const stream = await client.getObject(parsedBucket, obj.name);
       zip.file(relativePath, stream);
       addedToZip.add(relativePath);
     }
-    
+
     res.setHeader('X-Parsed-Files-Count', String(addedToZip.size));
 
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="parsed-${materialId}.zip"`);
-    
+
     // 生成流并导向响应，streamFiles: true 让 JSZip 避免一次性缓冲
     zip.generateNodeStream({ streamFiles: true, compression: 'DEFLATE' })
       .pipe(res)
@@ -3936,7 +3963,7 @@ export async function dryRunHandler(req, res) {
   const { materialIds } = req.body || {};
   try {
     const parsedBucket = getParsedBucket();
-    
+
     let targetMaterialIds = Array.isArray(materialIds) ? materialIds : [];
     if (targetMaterialIds.length === 0) {
       const matResp = await fetch(`${DB_BASE_URL}/materials`);
@@ -3963,10 +3990,10 @@ export async function dryRunHandler(req, res) {
 
     for (const materialId of targetMaterialIds) {
       const prefix = `parsed/${materialId}/`;
-      const objects = _testHooks.mockListAllObjects 
+      const objects = _testHooks.mockListAllObjects
          ? await _testHooks.mockListAllObjects(parsedBucket, prefix)
          : await listAllObjects(parsedBucket, prefix);
-      
+
       if (!objects || objects.length === 0) {
         result.items.push({
            materialId,
@@ -3988,7 +4015,7 @@ export async function dryRunHandler(req, res) {
       const hasZip = objects.some(o => o.name === `${prefix}mineru-result.zip`);
       const hasFullMd = objects.some(o => o.name === `${prefix}full.md`);
       const expandedObjects = objects.filter(o => o.name !== `${prefix}mineru-result.zip` && o.name !== `${prefix}full.md` && o.name !== `${prefix}artifact-manifest.json`);
-      
+
       let status = 'legacy-mixed';
       let zipEntryCount = 0;
       let fullMdDuplicatesZipMd = false;
@@ -4007,7 +4034,7 @@ export async function dryRunHandler(req, res) {
       } else {
          status = 'legacy-mixed';
          result.summary.legacyMixed++;
-         
+
          const client = getMinioClient();
          const zipStream = await client.getObject(parsedBucket, `${prefix}mineru-result.zip`);
          const zipBuffer = await new Promise((resolve, reject) => {
@@ -4023,7 +4050,7 @@ export async function dryRunHandler(req, res) {
              .map(([name]) => name)
          );
          zipEntryCount = zipEntries.size;
-         
+
          let missingInZip = [];
          for (const exp of expandedObjects) {
              const rel = exp.name.slice(prefix.length);
@@ -4031,24 +4058,24 @@ export async function dryRunHandler(req, res) {
                  missingInZip.push(rel);
              }
          }
-         
+
          if (missingInZip.length > 0) {
              safeToMigrate = false;
              reasons.push(`Found ${missingInZip.length} expanded objects missing in zip (e.g. ${missingInZip.slice(0, 3).join(', ')})`);
          } else {
              safeToMigrate = true;
          }
-         
+
          candidateRemovableObjects = expandedObjects.map(o => o.name);
          estimatedRemovableBytes = expandedObjects.reduce((acc, obj) => acc + (obj.size || 0), 0);
-         fullMdDuplicatesZipMd = true; 
-         
+         fullMdDuplicatesZipMd = true;
+
          if (safeToMigrate) {
            result.summary.estimatedRemovableObjects += candidateRemovableObjects.length;
            result.summary.estimatedRemovableBytes += estimatedRemovableBytes;
          }
       }
-      
+
       result.items.push({
          materialId,
          status,
@@ -4436,7 +4463,7 @@ async function listAllObjects(bucket, prefix) {
   const client = getMinioClient();
   const objects = [];
   let continuationToken = '';
-  
+
   // P0 Patch 2.1: 手动使用内部 listObjectsV2Query 分页，限制每次 maxKeys=500
   // 绕开 fast-xml-parser 默认 1000 个 entities 的解析上限，彻底解决 Entity expansion limit exceeded
   do {
@@ -4618,7 +4645,7 @@ const aiWorker = new AiMetadataWorker({
   onComplete: async (job, update) => {
     try {
       console.log(`[upload-server] AI Job completed, backfilling results: ${job.id}`);
-      
+
       // 1. 获取关联的 Material ID
       const materialId = job.materialId;
       if (!materialId) {
@@ -4637,7 +4664,7 @@ const aiWorker = new AiMetadataWorker({
         let status = 'processing';
         let mineruStatus = 'completed'; // AI 能跑说明 MinerU 肯定完了
         let aiStatus = 'analyzed';
-        
+
         if (update.state === 'confirmed') {
           status = 'completed';
           aiStatus = 'analyzed';
@@ -4724,7 +4751,7 @@ const server = app.listen(port, async () => {
   if (getStorageBackend() === 'minio') {
     console.log(`[upload-server] MinIO: ${minioState.endpoint}:${minioState.port}`);
   }
-  
+
   // 启动 ParseTask Worker
   worker.start();
   // 启动 AI Metadata Worker
@@ -4735,7 +4762,7 @@ const server = app.listen(port, async () => {
 
 async function gracefulShutdown(signal) {
   console.log(`[upload-server] Received ${signal}, shutting down...`);
-  
+
   // 停止 Worker
   if (worker) worker.stop();
   if (aiWorker) aiWorker.stop();

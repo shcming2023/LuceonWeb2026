@@ -19,7 +19,8 @@
     "test:smoke": "bash uat/smoke-test.sh",
     "test:server": "node server/tests/worker-smoke.mjs",
     "test:e2e": "cd uat && npx playwright test",
-    "test:local-mineru": "node server/test-local-mineru.mjs"
+    "test:local-mineru": "node server/test-local-mineru.mjs",
+    "tier2:standard:check": "node scripts/tier2-standard-check.mjs"
   },
   "dependencies": {
     "@popperjs/core": "2.11.8",

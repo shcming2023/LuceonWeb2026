@@ -1,6 +1,6 @@
 # EduAsset CMS — UAT 测试指南
 
-**默认目标环境：** `http://localhost:8080`（可通过环境变量覆盖）  
+**默认目标环境：** `http://localhost:8080`（可通过环境变量覆盖）
 **MinIO 控制台：** `http://localhost:19001` (Docker 本地模式)
 
 ---
@@ -51,6 +51,8 @@ bash uat/smoke-test.sh
 ```
 
 > **提示：** 如果只想要验证 API 链路且不打算让电脑跑大模型，请追加 `-f docker-compose.tier2-lite.yml` 来启动轻量 Mock 档位。
+>
+> **提示：** 要使用接近生产的真实验证流程，请追加 `-f docker-compose.tier2-standard.yml`。启动 Standard 档前必须在环境变量中配置 `MINERU_ONLINE_API_URL` 接入线上 MinerU 服务，且本地需存在 `qwen3.5:0.8b` 模型。
 
 ---
 

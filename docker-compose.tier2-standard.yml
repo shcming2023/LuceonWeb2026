@@ -1,0 +1,50 @@
+services:
+  upload-server:
+    environment:
+      # Tier 2 Standard 不再部署本地 MinerU，必须接入线上 API
+      - LOCAL_MINERU_ENDPOINT=${MINERU_ONLINE_API_URL:?MINERU_ONLINE_API_URL is required for Tier 2 Standard}
+      # 使用真实的本地 Ollama 容器
+      - OLLAMA_API_URL=http://cms-ollama-local:11434
+      # Standard 档强制要求可用 AI，禁止降级到 skeleton
+      - ALLOW_LOCAL_AI_ENDPOINT=true
+      - ALLOW_AI_SKELETON_FALLBACK=false
+      # Ollama 模型可以通过环境变量覆盖，默认使用极小模型
+      - OLLAMA_TIER2_MODEL=${OLLAMA_TIER2_MODEL:-qwen3.5:0.8b}
+
+
+  ollama:
+    # 复用本地真实 Ollama 容器
+    image: ollama/ollama:latest
+    container_name: cms-ollama-local
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO 建桶初始化容器（与 Lite 保持一致）
+  minio-init:
+    image: minio/mc
+    container_name: cms-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      echo 'Waiting for MinIO to be fully ready...';
+      sleep 2;
+      mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      mc mb myminio/eduassets --ignore-existing;
+      mc mb myminio/eduassets-parsed --ignore-existing;
+      mc anonymous set download myminio/eduassets;
+      mc anonymous set download myminio/eduassets-parsed;
+      echo 'MinIO buckets initialized successfully.';
+      "
+
+volumes:
+  ollama-data:
+    name: cms-ollama-data
