@@ -101,6 +101,19 @@ Luceon2026 v0.4 继承该范式，但做以下本地化裁剪：
 - 持久化由 `db-server` 提供：内存 `dbCache` + 防抖落盘 + 备份文件恢复，具备优雅停机与数据不丢失的保证。
 - v0.7.0 里程碑在 Mac Mini（`192.168.31.33:8081`）完成 Docker 部署端到端验证。
 
+#### 4.1.1 本地第二级 UAT 基线（2026-05-02 已验证）
+
+以下内容是 **Lucia + Director 本地第二级 UAT 环境契约**，用于后续日常开发补丁的本地沙盒验收；它不是生产部署契约，也不替代 luceonHMM 在真实 Mac mini 上执行的第三级真实验收。
+
+- Windows 本地预检入口为 `npm.cmd run local:check`。该命令用于检查 Node/npm/npx、Docker daemon、Docker Compose、关键端口与 Compose 配置合法性。
+- 本地轻量沙盒入口为 `docker compose -f docker-compose.yml -f docker-compose.tier2-lite.yml -f docker-compose.override.yml up -d --build`。
+- Tier 2 Lite 档位包含 `cms-frontend`、`upload-server`、`db-server`、MinIO、Ollama 轻量服务、MinerU mock 与 `minio-init`。
+- `minio-init` 在本地沙盒首次启动时幂等创建 `eduassets` 与 `eduassets-parsed`，不得删除 bucket、volume 或已有对象。
+- MinerU mock 必须提供 `/health` HTTP 200，以满足依赖健康检查；该 mock 只用于验证链路连通性，不代表真实 MinerU 解析能力。
+- Ollama 在 Tier 2 Lite 中不强制拉取模型；缺少模型时允许 AI Metadata Worker 走 skeleton fallback，并将任务推进到 `review-pending`，不得阻塞 Markdown 上传、MinIO 落盘或 Markdown 直通解析。
+- 2026-05-02 本地二级 UAT 已验证 Markdown 上传链路：前端点按正常、Markdown 上传成功、原始文件写入 `eduassets`、ParseTask 创建、Markdown 直通产物写入 `eduassets-parsed`、AI skeleton fallback 闭环、任务进入 `review-pending`，一致性审计返回 `ok=true` 且 `findings=[]`。
+- Tier 2 Lite 明确不验证真实 PDF MinerU 解析质量、不验证真实大模型推理质量、不作为稳定版标签依据；涉及真实大体积 PDF、真实历史数据、真实模型或公网/宿主机资源时，仍需由 Lucia 视里程碑级别决定是否转交 luceonHMM 执行第三级真实验收。
+
 ### 4.2 统一任务入口与前端路由
 
 - `POST /tasks`（`upload-server.mjs`）已实现：接收 multipart 上传，统一完成
@@ -527,6 +540,19 @@ v0.4 要求把 `AiMetadataJob.state` 的终态命名统一为 `confirmed | revie
 - `AiMetadataWorker` 每轮扫描耗时 < 2s（空载）。
 - 一次完整 PDF 任务（20 MB 以内）端到端 P95 < 180s（依赖本地 MinerU 性能）。
 
+### 12.3 本地第二级 UAT 基线验收（Tier 2 Lite）
+
+本节定义日常开发补丁进入 Lucia 验收时的本地二级轻量回归基线。该基线服务于快速验证主链路可用性，不验证真实 PDF 解析质量和真实 AI 推理质量。
+
+1. **预检**：Windows 宿主机执行 `npm.cmd run local:check`，Docker daemon、Docker Compose、Compose config 与关键端口检查均应输出可解释结果。若沙盒已启动，端口占用可作为"已有服务运行"提示，不直接判失败。
+2. **启动**：执行 `docker compose -f docker-compose.yml -f docker-compose.tier2-lite.yml -f docker-compose.override.yml up -d --build` 后，`cms-frontend`、`upload-server`、`db-server`、MinIO、MinerU mock 与 Ollama 容器应处于可访问状态；`minio-init` 可正常退出 0。
+3. **依赖健康**：`GET /__proxy/upload/ops/dependency-health` 中 `dependencies.minio.ok=true`、`dependencies.mineru.ok=true`、`blocking=false`。`dependencies.ollama.ok=false` 且缺模型时不阻塞 parse/upload。
+4. **前端手动检查**：Director 在 `http://127.0.0.1:8080/cms/` 点按主要页面与导航，确认页面可加载、路由可切换、无明显前端崩溃。
+5. **Markdown 上传主链路**：上传一个小型 Markdown 文件后，应创建 Material 与 ParseTask；原始文件写入 `eduassets/originals/{materialId}/...`；Markdown 直通产物 `full.md` 与 `artifact-manifest.json` 写入 `eduassets-parsed/parsed/{materialId}/...`。
+6. **AI 降级闭环**：Tier 2 Lite 缺少本地模型时，AI Metadata Worker 允许记录 provider 失败事件并生成 skeleton fallback；最终任务状态应进入 `review-pending`，Material 进入可人工复核状态。
+7. **一致性审计**：上传链路完成后，`GET /__proxy/upload/audit/consistency` 应返回 `ok=true`，且不产生新增 unexpected findings。
+8. **自动化回归要求**：下一步 P0 开发任务 `P0-markdown-upload-regression` 必须将上述 Markdown 上传主链路沉淀为可重复执行的 smoke test，并纳入后续 Lucia 二级验收默认检查项。
+
 ## 13. 风险、回退与发布策略
 
 ### 13.1 主要风险
@@ -582,6 +608,12 @@ v0.4 要求把 `AiMetadataJob.state` 的终态命名统一为 `confirmed | revie
 
 ## 16. 变更记录
 
+- **v0.4-local-tier2-uat-2026-05-02（2026-05-02）**：固化本地第二级 UAT 基线与 Tier 2 Lite 环境契约。
+  - 背景：Lucia 与 Director 完成本地 Docker 二级 UAT 底座建设和手动验收，确认该环境可作为后续日常开发补丁的本地沙盒验收基础。
+  - 确定需求：`npm.cmd run local:check` 为 Windows 本地预检入口；`docker-compose.tier2-lite.yml` 与 `docker-compose.override.yml` 共同组成本地轻量沙盒入口；Tier 2 Lite 必须提供 MinIO 自动建桶、MinerU mock `/health`、Markdown 上传直通解析、AI skeleton fallback 和一致性审计闭环。
+  - 调试策略：Lite 档位不验证真实 PDF MinerU 解析质量、不验证真实大模型推理质量；Ollama 缺模型时允许 skeleton fallback，且不得阻塞 Markdown 上传与解析链路。
+  - 影响范围：第 4 章 Baseline Facts、第 12 章 UAT 验收基线、后续 `P0-markdown-upload-regression` 与 `P0-task-state-observability` 开发任务。
+  - 关联证据：2026-05-02 本地二级 UAT 已完成前端点按、Markdown 上传、MinIO 落盘、ParseTask 创建、Markdown parsed artifact 写入、AI 降级闭环与 consistency audit `ok=true` 验收；本事项不触发 luceonHMM 第三级真实验收。
 - **v0.4-patch-1.2-2026-05-02（2026-05-02）**：增加 Legacy 数据动态启发式去重策略。
   - 背景：真实环境验收时发现，缺乏 `primaryMarkdownPath` 的遗留数据在 `mode=user` 下载包中仍会包含重复的内部 Markdown 和外部 `full.md`。
   - 确定需求：对于 `mode=user` 导出，当 Manifest 缺失或无指针时，自动推断内部主 Markdown，并与外部 `full.md` 针对文件长度和内容校验（Buffer Equality）。若一致则剔除内部副本。此策略作为兼容历史数据的确定性需求。
