@@ -7,8 +7,8 @@ import type { Material } from '../../store/types';
 const LANGUAGE_OPTIONS = ['中文', '英文', '双语', '其他'];
 const GRADE_OPTIONS = ['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9', 'G10', 'G11', 'G12', '通用'];
 const SUBJECT_OPTIONS = ['语文', '英语', '数学', '物理', '化学', '生物', '历史', '地理', '政治', '科学', '综合', '其他'];
-const COUNTRY_OPTIONS = ['中国', '英国', '美国', '新加�?, '澳大利亚', '加拿�?, '其他'];
-const MATERIAL_TYPE_OPTIONS = ['课本', '讲义', '练习�?, '试卷', '答案', '教案', '课件', '大纲', '其他'];
+const COUNTRY_OPTIONS = ['中国', '英国', '美国', '新加坡', '澳大利亚', '加拿大', '其他'];
+const MATERIAL_TYPE_OPTIONS = ['课本', '讲义', '练习册', '试卷', '答案', '教案', '课件', '大纲', '其他'];
 
 function MetaSelect({
   label,
@@ -29,7 +29,7 @@ function MetaSelect({
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >
-        <option value="">�?/option>
+        <option value="">—</option>
         {options.map((opt) => (
           <option key={opt} value={opt}>{opt}</option>
         ))}
@@ -75,21 +75,21 @@ export function MetadataTab({
 
   const fileInfo = useMemo(() => {
     return {
-      fileName: material?.metadata?.fileName || material?.title || '�?,
-      format: material?.metadata?.format || material?.type || '�?,
-      size: material?.size || '�?,
-      pages: String(material?.metadata?.pages ?? '�?),
-      provider: material?.metadata?.provider === 'minio' ? 'MinIO' : material?.metadata?.provider || '�?,
+      fileName: material?.metadata?.fileName || material?.title || '—',
+      format: material?.metadata?.format || material?.type || '—',
+      size: material?.size || '—',
+      pages: String(material?.metadata?.pages ?? '—'),
+      provider: material?.metadata?.provider === 'minio' ? 'MinIO' : material?.metadata?.provider || '—',
     };
   }, [material]);
 
-  const aiProvider = material?.metadata?.aiClassificationProvider || '�?;
-  const aiModelUsed = material?.metadata?.aiClassificationModel || '�?;
+  const aiProvider = material?.metadata?.aiClassificationProvider || '—';
+  const aiModelUsed = material?.metadata?.aiClassificationModel || '—';
 
   const handleSaveTags = () => {
     dispatch({ type: 'UPDATE_MATERIAL_TAGS', payload: { id: materialId as any, tags: localTags } });
     setEditingTags(false);
-    toast.success('标签已保�?);
+    toast.success('标签已保存');
   };
 
   const addTag = () => {
@@ -110,7 +110,7 @@ export function MetadataTab({
   const fallbackReason =
     material?.metadata?.aiClassificationDegradedReason ||
     material?.metadata?.aiClassificationV02?.governance?.human_review_reason ||
-    'AI Provider 返回异常，系统已降级�?skeleton 占位结果';
+    'AI Provider 返回异常，系统已降级为 skeleton 占位结果';
 
   const hasGovernance = !!material?.metadata?.aiClassificationV02?.governance;
 
@@ -140,13 +140,13 @@ export function MetadataTab({
         <div className={`p-3 rounded-lg border text-xs ${isAiSkeletonFallback ? 'bg-red-50 border-red-100' : 'bg-slate-50 border-slate-200'}`}>
           <dl className="grid grid-cols-2 gap-y-2 gap-x-4">
             <div className="contents">
-              <dt className="text-slate-500">是否需要复�?/dt>
+              <dt className="text-slate-500">是否需要复核</dt>
               <dd className="font-semibold text-slate-800">
                 {!hasGovernance ? <span className="text-slate-400">尚未识别</span> :
                   material.metadata.aiClassificationV02.governance.human_review_required ? (
-                  <span className="text-red-600 flex items-center gap-1"><AlertTriangle size={12}/> 需�?/span>
+                  <span className="text-red-600 flex items-center gap-1"><AlertTriangle size={12}/> 需要</span>
                 ) : (
-                  <span className="text-green-600 flex items-center gap-1"><CheckCircle2 size={12}/> �?/span>
+                  <span className="text-green-600 flex items-center gap-1"><CheckCircle2 size={12}/> 否</span>
                 )}
               </dd>
             </div>
@@ -155,15 +155,15 @@ export function MetadataTab({
               <div className="contents">
                 <dt className="text-slate-500">复核原因</dt>
                 <dd className="text-red-600 break-words" title={material.metadata.aiClassificationV02.governance.human_review_reason}>
-                  {material.metadata.aiClassificationV02.governance.human_review_reason || '�?}
+                  {material.metadata.aiClassificationV02.governance.human_review_reason || '—'}
                 </dd>
               </div>
             )}
 
             <div className="contents">
-              <dt className="text-slate-500">置信�?/dt>
+              <dt className="text-slate-500">置信度</dt>
               <dd className="font-semibold flex items-center">
-                {!hasGovernance ? '�? :
+                {!hasGovernance ? '—' :
                  material.metadata.aiClassificationV02.governance.confidence === 'high' ? <span className="text-green-600">High</span> :
                  material.metadata.aiClassificationV02.governance.confidence === 'medium' ? <span className="text-amber-600">Medium</span> :
                  <span className="text-red-600">{material.metadata.aiClassificationV02.governance.confidence || 'Low'}</span>}
@@ -181,12 +181,13 @@ export function MetadataTab({
         </div>
       </section>
 
-      {/* 2. 当前保存�?*/}
+      {/* 2. 当前保存值 */}
       <section className="space-y-3 pb-4 border-b border-gray-100">
         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1">
-          <Database size={14} className="text-green-500" /> 当前保存�?        </h3>
+          <Database size={14} className="text-green-500" /> 当前保存值
+        </h3>
 
-        {/* 标签�?*/}
+        {/* 标签区 */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <label className="text-xs text-gray-400">当前标签</label>
@@ -210,7 +211,7 @@ export function MetadataTab({
           </div>
           {editingTags && (
             <div className="flex gap-2 mt-1.5">
-              <input value={tagInput} onChange={(e) => setTagInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTag()} placeholder="输入新标�?.." className="flex-1 text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-300" />
+              <input value={tagInput} onChange={(e) => setTagInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addTag()} placeholder="输入新标签..." className="flex-1 text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-300" />
               <button onClick={addTag} className="text-xs px-2 py-1 bg-blue-600 text-white rounded" type="button">添加</button>
             </div>
           )}
@@ -234,10 +235,11 @@ export function MetadataTab({
         )}
       </section>
 
-      {/* 3. AI 建议与证�?*/}
+      {/* 3. AI 建议与证据 */}
       <section className="space-y-3 pb-4 border-b border-gray-100">
         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1">
-          <Search size={14} className="text-purple-500" /> AI 建议与证�?        </h3>
+          <Search size={14} className="text-purple-500" /> AI 建议与证据
+        </h3>
 
         {!material?.metadata?.aiClassificationV02 ? (
           <div className="text-xs text-gray-400 bg-gray-50 p-3 rounded-lg border border-gray-100 text-center">
@@ -253,7 +255,7 @@ export function MetadataTab({
                   const controlled = material.metadata.aiClassificationV02.controlled_classification?.[facet];
                   const raw = material.metadata.aiClassificationV02.primary_facets?.[facet];
                   const rawLabel = raw?.zh || raw?.en || raw;
-                  const displayValue = controlled ? controlled.zh : (rawLabel ? <span className="text-amber-600 italic" title={String(rawLabel)}>待复�? {String(rawLabel)}</span> : '�?);
+                  const displayValue = controlled ? controlled.zh : (rawLabel ? <span className="text-amber-600 italic" title={String(rawLabel)}>待复核: {String(rawLabel)}</span> : '—');
                   const labelMap: Record<string, string> = { domain: 'Domain', collection: 'Collection', curriculum: 'Curriculum', stage: 'Stage', level: 'Level', subject: 'Subject', resource_type: 'Resource Type', component_role: 'Role' };
                   return (
                     <div key={facet} className="contents">
@@ -299,7 +301,7 @@ export function MetadataTab({
               {!(material.metadata.aiClassificationV02.normalized_tags?.topic_tags?.length > 0) &&
                !(material.metadata.aiClassificationV02.normalized_tags?.skill_tags?.length > 0) &&
                !(material.metadata.aiClassificationV02.proposed_new_tags?.length > 0) && (
-                 <div className="text-slate-400 text-[10px]">无推荐标�?/div>
+                 <div className="text-slate-400 text-[10px]">无推荐标签</div>
                )}
             </div>
 
@@ -335,7 +337,7 @@ export function MetadataTab({
                     </div>
                   ))}
                   {material.metadata.aiClassificationV02.evidence.length > 5 && (
-                    <div className="text-[10px] text-slate-400 text-center">...及其�?{material.metadata.aiClassificationV02.evidence.length - 5} 条证�?/div>
+                    <div className="text-[10px] text-slate-400 text-center">...及其他 {material.metadata.aiClassificationV02.evidence.length - 5} 条证据</div>
                   )}
                 </div>
               </div>
@@ -344,17 +346,17 @@ export function MetadataTab({
         )}
       </section>
 
-      {/* 4. 技术详�?(折叠) */}
+      {/* 4. 技术详情 (折叠) */}
       <section className="space-y-3 pb-4">
         <details className="group">
           <summary className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1 cursor-pointer hover:text-gray-700 select-none">
-            <Info size={14} className="text-gray-400 group-hover:text-gray-600" /> 技术详�?(Technical Details)
+            <Info size={14} className="text-gray-400 group-hover:text-gray-600" /> 技术详情 (Technical Details)
           </summary>
           <div className="mt-3 p-3 rounded-lg border border-slate-200 bg-slate-50 space-y-4 text-xs">
 
-            {/* 基础文件与存储信�?*/}
+            {/* 基础文件与存储信息 */}
             <div>
-              <h4 className="font-semibold text-slate-600 mb-1.5 border-b border-slate-200 pb-1">文件与存储信�?/h4>
+              <h4 className="font-semibold text-slate-600 mb-1.5 border-b border-slate-200 pb-1">文件与存储信息</h4>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
                 <div className="contents"><dt className="text-slate-400">File Name</dt><dd className="text-slate-700 break-all">{fileInfo.fileName}</dd></div>
                 <div className="contents"><dt className="text-slate-400">Format</dt><dd className="text-slate-700">{fileInfo.format}</dd></div>
@@ -363,10 +365,10 @@ export function MetadataTab({
                 <div className="contents"><dt className="text-slate-400">Provider</dt><dd className="text-slate-700">{fileInfo.provider}</dd></div>
                 {material?.metadata?.aiClassificationV02 && (
                   <>
-                    <div className="contents"><dt className="text-slate-400">Source Raw Object</dt><dd className="text-slate-700 break-all font-mono">{material.metadata.aiClassificationV02.source?.raw_object_name || '�?}</dd></div>
-                    <div className="contents"><dt className="text-slate-400">Parsed Prefix</dt><dd className="text-slate-700 break-all font-mono">{material.metadata.aiClassificationV02.source?.parsed_prefix || '�?}</dd></div>
-                    <div className="contents"><dt className="text-slate-400">MD Object</dt><dd className="text-slate-700 break-all font-mono">{material.metadata.aiClassificationV02.source?.markdown_object_name || '�?}</dd></div>
-                    <div className="contents"><dt className="text-slate-400">Input Hash</dt><dd className="text-slate-700 break-all font-mono">{material.metadata.aiClassificationInputHash || '�?}</dd></div>
+                    <div className="contents"><dt className="text-slate-400">Source Raw Object</dt><dd className="text-slate-700 break-all font-mono">{material.metadata.aiClassificationV02.source?.raw_object_name || '—'}</dd></div>
+                    <div className="contents"><dt className="text-slate-400">Parsed Prefix</dt><dd className="text-slate-700 break-all font-mono">{material.metadata.aiClassificationV02.source?.parsed_prefix || '—'}</dd></div>
+                    <div className="contents"><dt className="text-slate-400">MD Object</dt><dd className="text-slate-700 break-all font-mono">{material.metadata.aiClassificationV02.source?.markdown_object_name || '—'}</dd></div>
+                    <div className="contents"><dt className="text-slate-400">Input Hash</dt><dd className="text-slate-700 break-all font-mono">{material.metadata.aiClassificationInputHash || '—'}</dd></div>
                   </>
                 )}
               </dl>
@@ -377,13 +379,13 @@ export function MetadataTab({
               <div>
                  <h4 className="font-semibold text-slate-600 mb-1.5 border-b border-slate-200 pb-1">Descriptive Metadata</h4>
                  <dl className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
-                    <div className="contents"><dt className="text-slate-400">Series</dt><dd className="text-slate-700">{material.metadata.aiClassificationV02.descriptive_metadata.series_name || '�?}</dd></div>
-                    <div className="contents"><dt className="text-slate-400">Edition</dt><dd className="text-slate-700">{material.metadata.aiClassificationV02.descriptive_metadata.edition || '�?}</dd></div>
-                    <div className="contents"><dt className="text-slate-400">Year</dt><dd className="text-slate-700">{material.metadata.aiClassificationV02.descriptive_metadata.year || '�?}</dd></div>
-                    <div className="contents"><dt className="text-slate-400">Publisher</dt><dd className="text-slate-700">{material.metadata.aiClassificationV02.descriptive_metadata.publisher || '�?}</dd></div>
-                    <div className="contents"><dt className="text-slate-400">Language</dt><dd className="text-slate-700">{material.metadata.aiClassificationV02.descriptive_metadata.language || '�?}</dd></div>
-                    <div className="contents"><dt className="text-slate-400">Exam Board</dt><dd className="text-slate-700">{material.metadata.aiClassificationV02.descriptive_metadata.exam_board || '�?}</dd></div>
-                    <div className="contents"><dt className="text-slate-400">Paper Code</dt><dd className="text-slate-700">{material.metadata.aiClassificationV02.descriptive_metadata.paper_code || '�?}</dd></div>
+                    <div className="contents"><dt className="text-slate-400">Series</dt><dd className="text-slate-700">{material.metadata.aiClassificationV02.descriptive_metadata.series_name || '—'}</dd></div>
+                    <div className="contents"><dt className="text-slate-400">Edition</dt><dd className="text-slate-700">{material.metadata.aiClassificationV02.descriptive_metadata.edition || '—'}</dd></div>
+                    <div className="contents"><dt className="text-slate-400">Year</dt><dd className="text-slate-700">{material.metadata.aiClassificationV02.descriptive_metadata.year || '—'}</dd></div>
+                    <div className="contents"><dt className="text-slate-400">Publisher</dt><dd className="text-slate-700">{material.metadata.aiClassificationV02.descriptive_metadata.publisher || '—'}</dd></div>
+                    <div className="contents"><dt className="text-slate-400">Language</dt><dd className="text-slate-700">{material.metadata.aiClassificationV02.descriptive_metadata.language || '—'}</dd></div>
+                    <div className="contents"><dt className="text-slate-400">Exam Board</dt><dd className="text-slate-700">{material.metadata.aiClassificationV02.descriptive_metadata.exam_board || '—'}</dd></div>
+                    <div className="contents"><dt className="text-slate-400">Paper Code</dt><dd className="text-slate-700">{material.metadata.aiClassificationV02.descriptive_metadata.paper_code || '—'}</dd></div>
                  </dl>
               </div>
             )}
@@ -393,10 +395,10 @@ export function MetadataTab({
               <div>
                 <h4 className="font-semibold text-slate-600 mb-1.5 border-b border-slate-200 pb-1">Governance Signals</h4>
                 <dl className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
-                   <div className="contents"><dt className="text-slate-400">Quality</dt><dd className="text-slate-700">{material.metadata.aiClassificationV02.governance_signals.quality?.join(', ') || '�?}</dd></div>
-                   <div className="contents"><dt className="text-slate-400">Relationship</dt><dd className="text-slate-700">{material.metadata.aiClassificationV02.governance_signals.relationship?.join(', ') || '�?}</dd></div>
-                   <div className="contents"><dt className="text-slate-400">Retention</dt><dd className="text-slate-700">{material.metadata.aiClassificationV02.governance_signals.retention?.join(', ') || '�?}</dd></div>
-                   <div className="contents"><dt className="text-slate-400">Risk</dt><dd className="text-slate-700">{(material.metadata.aiClassificationV02.governance_signals.risk && material.metadata.aiClassificationV02.governance_signals.risk.length > 0) ? material.metadata.aiClassificationV02.governance_signals.risk.join(', ') : '�?}</dd></div>
+                   <div className="contents"><dt className="text-slate-400">Quality</dt><dd className="text-slate-700">{material.metadata.aiClassificationV02.governance_signals.quality?.join(', ') || '—'}</dd></div>
+                   <div className="contents"><dt className="text-slate-400">Relationship</dt><dd className="text-slate-700">{material.metadata.aiClassificationV02.governance_signals.relationship?.join(', ') || '—'}</dd></div>
+                   <div className="contents"><dt className="text-slate-400">Retention</dt><dd className="text-slate-700">{material.metadata.aiClassificationV02.governance_signals.retention?.join(', ') || '—'}</dd></div>
+                   <div className="contents"><dt className="text-slate-400">Risk</dt><dd className="text-slate-700">{(material.metadata.aiClassificationV02.governance_signals.risk && material.metadata.aiClassificationV02.governance_signals.risk.length > 0) ? material.metadata.aiClassificationV02.governance_signals.risk.join(', ') : '—'}</dd></div>
                    {material.metadata.aiClassificationV02.governance?.risk_flags?.length > 0 && (
                      <div className="contents">
                        <dt className="text-slate-400">Risk Flags</dt><dd className="text-red-600">{material.metadata.aiClassificationV02.governance.risk_flags.join(', ')}</dd>
@@ -448,9 +450,9 @@ export function MetadataTab({
                      <div key={idx} className="bg-white p-2 rounded border border-slate-200 text-[10px] space-y-1">
                        <div className="flex justify-between"><span className="font-semibold text-slate-600">{p.phase}</span><span className="font-mono text-slate-700">{p.trace.objectName.split('/').pop()?.replace('.txt', '')}</span></div>
                        {p.trace.contentLength && <div className="flex justify-between"><span className="text-slate-500">长度</span><span className="text-slate-700">{p.trace.contentLength} 字符</span></div>}
-                       <div className="flex justify-between"><span className="text-slate-500">Hash (�?2�?</span><span className="font-mono text-slate-700">{p.trace.contentHash?.slice(0, 12) || '�?}</span></div>
-                       {p.trace.containsThinkTag !== undefined && <div className="flex justify-between"><span className="text-slate-500">�?Think 标签</span><span className={p.trace.containsThinkTag ? "text-amber-600 font-semibold" : "text-slate-700"}>{p.trace.containsThinkTag ? '�? : '�?}</span></div>}
-                       {p.trace.looksTruncated !== undefined && <div className="flex justify-between"><span className="text-slate-500">疑似截断</span><span className={p.trace.looksTruncated ? "text-red-600 font-semibold" : "text-slate-700"}>{p.trace.looksTruncated ? '�? : '�?}</span></div>}
+                       <div className="flex justify-between"><span className="text-slate-500">Hash (前12位)</span><span className="font-mono text-slate-700">{p.trace.contentHash?.slice(0, 12) || '—'}</span></div>
+                       {p.trace.containsThinkTag !== undefined && <div className="flex justify-between"><span className="text-slate-500">含 Think 标签</span><span className={p.trace.containsThinkTag ? "text-amber-600 font-semibold" : "text-slate-700"}>{p.trace.containsThinkTag ? '是' : '否'}</span></div>}
+                       {p.trace.looksTruncated !== undefined && <div className="flex justify-between"><span className="text-slate-500">疑似截断</span><span className={p.trace.looksTruncated ? "text-red-600 font-semibold" : "text-slate-700"}>{p.trace.looksTruncated ? '是' : '否'}</span></div>}
                        <div className="flex flex-col gap-0.5 pt-1 mt-1 border-t border-slate-100"><span className="text-slate-500">存储路径</span><span className="font-mono text-[9px] text-slate-600 break-all">{p.trace.objectName}</span></div>
                        {p.trace.parseErrorMessage && <div className="flex flex-col gap-0.5 pt-1 mt-1 border-t border-slate-100"><span className="text-slate-500">解析异常</span><span className="font-mono text-[9px] text-red-600">{p.trace.parseErrorMessage}</span></div>}
                        {p.trace.timeoutKind && <div className="flex flex-col gap-0.5 pt-1 mt-1 border-t border-slate-100"><span className="text-slate-500">超时诊断</span><span className="font-mono text-[9px] text-red-600">{p.trace.timeoutKind} ({p.trace.durationMs}ms)</span></div>}
@@ -460,9 +462,9 @@ export function MetadataTab({
               </div>
             )}
 
-            {/* 处理时间�?*/}
+            {/* 处理时间线 */}
             <div>
-              <h4 className="font-semibold text-slate-600 mb-1.5 border-b border-slate-200 pb-1">处理时间�?/h4>
+              <h4 className="font-semibold text-slate-600 mb-1.5 border-b border-slate-200 pb-1">处理时间线</h4>
               <dl className="text-[11px] space-y-1 text-slate-600">
                 {material?.uploadedAt && <div>上传：{new Date(material.uploadedAt).toLocaleString('zh-CN')}</div>}
                 {material?.metadata?.parsedAt && <div>MinerU 解析：{new Date(material.metadata.parsedAt).toLocaleString('zh-CN')}</div>}
