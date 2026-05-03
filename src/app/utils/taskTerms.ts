@@ -25,13 +25,6 @@ export const TASK_STATUS_TERMS = {
   canceled: '已取消',
 };
 
-export function getTaskActionLabel(action: keyof typeof TASK_ACTION_TERMS): string {
-  return TASK_ACTION_TERMS[action] || action;
-}
-
-export function getTaskActionTooltip(action: keyof typeof TASK_ACTION_TOOLTIPS): string {
-  return TASK_ACTION_TOOLTIPS[action] || action;
-}
 
 export function getTaskStatusLabel(state: string | undefined): string {
   if (!state) return '未知';
