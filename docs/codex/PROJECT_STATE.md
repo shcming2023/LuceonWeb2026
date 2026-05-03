@@ -42,6 +42,27 @@ The current active engineering focus is:
 
 Current accepted validation result:
 
+- `P2-operator-main-workflow-polish-bundle`: `PASS`
+- luceonhmm final status: `PASS_CANDIDATE`
+- Lucia final judgment: `PASS`
+- Validated implementation HEAD: `c60152d72fe8dae545a2c18c3f425b6f0620ecf4`
+- Scope: local real runtime UAT, task `task-1777849339744`, material `mat-1777849339732`, focused Operator polish checks for MetadataTab tags, completed actions, completed list wording, and overview next-action label.
+- Confirmed behavior:
+  - MetadataTab tag save immediate sync passed.
+  - read-only chip updates immediately after save without refresh.
+  - re-entering edit mode preserves the saved draft tags.
+  - delete tag -> save -> read-only chip disappears immediately without refresh.
+  - refresh UI matches API `Material.tags`.
+  - `metadata.tags` was not polluted.
+  - completed task detail no longer shows misleading `审核通过` main button.
+  - completed task list row no longer shows review action.
+  - completed list row no longer shows `需审计`; it shows `待同步` where relevant.
+  - overview label now shows `下一步动作`.
+  - browser console error/warn empty.
+  - consistency audit: `findingsCount=0`, `blockingFindings=0`.
+- Scope limits: this task does not claim L3 readiness, production readiness, full-site UI review, all task states validation, all error paths validation, or upload file-picker / upload modal validation.
+- Non-blocking polish still pending: `待同步` is clearer than `需审计`, but may still benefit from a tooltip explaining it is a task/material/AI job/artifact status mapping hint, not a failure or audit rejection. Potential follow-up: `P3-task-list-pending-sync-tooltip-polish`.
+
 - `P1-operator-main-workflow-usability-review`: `PASS`
 - luceonhmm final status: `PASS_CANDIDATE`
 - Lucia final judgment: `PASS`
@@ -61,7 +82,7 @@ Current accepted validation result:
   - consistency audit: `findingsCount=0`, `blockingFindings=0`.
   - browser console error/warn empty.
 - Scope limits: this task does not claim L3 readiness, production readiness, full-site UI review, complete browser file-picker / upload modal validation, all task states validation, or all error paths validation.
-- Non-blocking polish still pending: MetadataTab tag save immediate chip/draft sync still needs repair; `审核通过` button remains visible in `completed` state and may mislead; completed list row `需审计` wording is semantically vague; overview fields `待复核` / next action are not generic enough after completion.
+- Follow-up polish status: MetadataTab tag save immediate chip/draft sync, completed `审核通过` action visibility, completed-list `需审计` wording, and completed overview next-action label were later resolved by `P2-operator-main-workflow-polish-bundle`.
 
 - `P1-metadatatab-expanded-tag-interaction-validation`: `PASS`
 - luceonhmm final status: `PASS_CANDIDATE`
@@ -228,7 +249,8 @@ No current blocker remains for the accepted local real runtime UAT scope of `P1-
 Current follow-up:
 
 - Operator main workflow pending scope: no L3 or production-readiness claim; no full-site UI review; complete browser file-picker / upload modal behavior, all task states, and all error paths remain unvalidated.
-- Operator main workflow non-blocking polish: MetadataTab tag save immediate chip/draft sync; `审核通过` visibility in `completed`; completed-list `需审计` wording; completed overview `待复核` / next-action generality.
+- Operator main workflow polish follow-up: MetadataTab tag save immediate chip/draft sync, `审核通过` visibility in `completed`, completed-list `需审计` wording, and completed overview next-action label were resolved by `P2-operator-main-workflow-polish-bundle`.
+- Operator main workflow remaining non-blocking polish: `待同步` is clearer than `需审计`, but may still benefit from a tooltip explaining it is a task/material/AI job/artifact status mapping hint, not a failure or audit rejection. Potential follow-up: `P3-task-list-pending-sync-tooltip-polish`.
 - Latest UI/Metadata/Task Detail review pending scope: no L3 or production-readiness claim; no full-site UI review; other task states beyond the current `review-pending` sample are not validated.
 - Latest UI/Metadata/Task Detail tag follow-up: tag deletion, multi-tag editing, duplicate-tag handling, refresh persistence, and success toast observation were validated by `P1-metadatatab-expanded-tag-interaction-validation`.
 - Latest UI/Metadata/Task Detail pending scope: concurrent editing and failure-toast/error-path behavior remain unvalidated.
