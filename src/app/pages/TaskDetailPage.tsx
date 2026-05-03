@@ -1035,8 +1035,6 @@ export function TaskDetailPage() {
                 })()}
               </div>
             )}
-              </div>
-            </details>
 
             {/* AI Job */}
             <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-5">
@@ -1079,6 +1077,9 @@ export function TaskDetailPage() {
                 </div>
               )}
             </div>
+
+              </div>
+            </details>
 
             {/* 配置快照 */}
             {task.optionsSnapshot && Object.keys(task.optionsSnapshot).length > 0 && (

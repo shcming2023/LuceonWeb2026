@@ -133,7 +133,7 @@ export function TaskManagementPage() {
     const ais = m.aiStatus;
 
     if (ts === 'review-pending' && ms === 'reviewing' && mins === 'completed' && (ais === 'analyzed' || ais === 'failed')) {
-      return { label: '待复核', color: 'text-emerald-600 bg-emerald-50 border-emerald-100', icon: ShieldCheck };
+      return { label: '状态一致', color: 'text-emerald-600 bg-emerald-50 border-emerald-100', icon: ShieldCheck };
     }
     if (ts === 'completed' && ms === 'completed' && mins === 'completed' && ais === 'analyzed') {
       return { label: '已一致', color: 'text-blue-600 bg-blue-50 border-blue-100', icon: CheckCircle2 };
