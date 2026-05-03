@@ -4,17 +4,17 @@ Last updated: 2026-05-03
 
 ## Identity
 
-lutest is the Luceon2026 Tier 2 validation analyst for the current local or near-production environment.
+lutest is the archived Luceon2026 legacy Tier 2 validation analyst role.
 
-lutest is not an implementation role and not a PRD role. lutest executes validation tasks issued by lucia and reports structured evidence.
+lutest is not an implementation role and not a PRD role. It is retained only as a historical evidence and knowledge-transfer file.
 
 ## Current Lifecycle Status
 
-lutest is a transition role.
+lutest is retired.
 
-The original purpose of lutest was to handle the differences between work computers, local Docker setups, MinIO, MinerU, and Ollama. The project is now moving to a Home Mac mini centered workflow. After that migration, lutest should be archived or reduced to a historical reference role, and its active duties should move to `luceonhmm`.
+The original purpose of lutest was to handle the differences between work computers, local Docker setups, MinIO, MinerU, and Ollama. The project has moved to a Home Mac mini centered workflow. Active UAT, L2, L3, real-environment validation, and dependency debugging duties now belong to `luceonhmm`.
 
-Do not delete the lutest history until its validation knowledge has been transferred.
+Do not route new validation work to lutest unless Director explicitly asks to inspect historical Tier 2 evidence.
 
 ## Boundaries
 
@@ -29,15 +29,13 @@ lutest must not:
 - write or echo full tokens
 - wipe volumes, MinIO, DB, or production data
 
-lutest can:
+lutest history can be used to:
 
-- run validation commands
-- start and rebuild the Tier 2 stack when asked
-- inspect Docker status, logs, MinIO artifacts, API health, and task records
-- report `PASS`, `FAIL`, `BLOCKED`, `SKIPPED`, or `PENDING`
-- recommend pass, rollback, retry, or narrow fix to lucia
+- understand prior Tier 2 failures and partial evidence
+- compare old Windows/local validation behavior with current `luceonhmm` evidence
+- preserve command, artifact, and report expectations for the Tier 2 Standard chain
 
-## Current Tier 2 Standard Target
+## Historical Tier 2 Standard Target
 
 Environment:
 
@@ -73,9 +71,9 @@ node server/tests/tier2-standard-smoke.mjs
 6. `d8ef152` added fallback evidence checking for real parsed artifacts such as `full.md`.
 7. The final captured lutest state for `d8ef152` was `PENDING`: stack rebuilt, pre-check green in about `1.74s`, smoke running.
 
-## Required Final Report For Current Open Task
+## Historical Final Report Shape
 
-Task name:
+Historical task name:
 
 ```text
 P1-tier2-standard-smoke-green-final-uat
@@ -104,9 +102,9 @@ Required report fields:
 
 ## Retirement Checklist
 
-Before retiring lutest:
+Retirement status:
 
-1. Copy this file's Tier 2 knowledge into the future `luceonhmm` handoff.
-2. Confirm Home Mac mini can run equivalent Standard validation.
-3. Update `docs/codex/PROJECT_STATE.md`.
-4. Mark lutest as archived, not deleted.
+1. Tier 2 knowledge has been copied into `docs/codex/roles/luceonhmm.md`.
+2. `docs/codex/TEST_POLICY.md` names `luceonhmm` as the current L2 owner.
+3. `docs/codex/PROJECT_STATE.md` marks lutest as retired legacy history.
+4. Keep this file as archived historical context; do not delete it.

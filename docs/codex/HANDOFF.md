@@ -35,6 +35,17 @@ luceon-prod
 
 ## Threads To Recreate Or Continue
 
+### cota
+
+Read:
+
+- `AGENTS.md`
+- `docs/codex/roles/cota.md`
+- `docs/codex/PROJECT_STATE.md`
+- `docs/codex/HANDOFF.md`
+
+Use cota as Director's cross-project Codex collaboration advisor. cota helps Director optimize role boundaries, task routing, task brief quality, report discipline, and cross-agent communication for Luceon2026 and for transferred collaboration models such as XxwlAs2026/cosh. cota does not replace lucia or shana, does not assign work directly to execution agents, and does not make implementation, validation, PRD, release, or deployment judgments.
+
 ### lucia
 
 Read:
@@ -44,6 +55,16 @@ Read:
 - `docs/codex/PROJECT_STATE.md`
 
 Use lucia for architecture control, task writing, review, and final judgment. Lucia must not take over code implementation, PRD maintenance, or Tier 2 execution.
+
+### lucode
+
+Read:
+
+- `AGENTS.md`
+- `docs/codex/roles/lucode.md`
+- `docs/codex/TASK_BRIEF_TEMPLATE.md`
+
+Use lucode for implementation and code revision only. lucode runs Antigravity in `/workspace/ops/Luceon2026` with host/IDE working copy reference `D:\Users\moonp\OneDrive\Mac\项目开发\Luceon2026`, synchronizes through GitHub, and must follow lucia-approved task briefs.
 
 ### luplan
 
@@ -57,19 +78,57 @@ Read:
 
 Use luplan for PRD, changelog, decision, and project-state maintenance only.
 
-### lutest
+### luceonhmm
 
 Read:
 
 - `AGENTS.md`
-- `docs/codex/roles/lutest.md`
+- `docs/codex/roles/luceonhmm.md`
 - `docs/codex/TEST_POLICY.md`
+- `docs/codex/PROJECT_STATE.md`
 
-lutest is a transition role. Once the Mac mini becomes the only Codex host, move its remaining validation knowledge into `luceonhmm` and archive lutest.
+Use luceonhmm for UAT deployment, L2/L3 validation, production-like runtime analysis, dependency debugging, rollback support, and evidence capture.
 
-### luceonhmm
+Current accepted UAT fact:
 
-Create on the Mac mini when ready. It will own staging, production validation, deployment, rollback, and evidence capture.
+- `P1-latest-ui-metadata-task-detail-interaction-review`: `PASS`
+- luceonhmm reported `PASS_CANDIDATE`; Lucia accepted final status as `PASS`.
+- Scope: latest UI/code baseline `origin/main@cb6f2376b5146e53c7c83cba62d36bac2236e7e3`, real local runtime stack, review-pending task `task-1777788279069`, material `mat-1777788279055`, `/cms/tasks`, task detail overview, MetadataTab, classification/tag display, and current tag persistence state.
+- Validated facts: task list and detail consistently use `待复核`; overview answers state, stage, artifact, and next action; MetadataTab shows 审核摘要, 当前保存值, AI 建议与证据, and folded 技术详情 (`Technical Details`); provider/model is `ollama/qwen3.5:9b`; `[object Object]` regression is absent; `Material.tags=["uat-tag-persistence"]`; `metadata.tags` remains AI/parse tag source; dependency-health `blocking=false`; consistency audit `ok=true findingsCount=0`; browser console error/warn empty.
+- Pending: no L3 or production-readiness claim, no full-site UI review, no validation for other task states, tag deletion, multi-tag editing, duplicate-tag handling, concurrent edits, or toast stability.
+- Non-blocking polish: task list row repeats `待复核` as both state and consistency diagnosis; overview still shows some AI job/model technical detail after the summary.
+
+- `P0-metadata-tab-review-architecture-first-pass`: `PASS`
+- Scope: MetadataTab 信息架构首轮收口，仅覆盖真实 `review-pending` 样本。
+- Validated HEAD: `372f060450a387da7122064520ecc6a682198dda`; later tag persistence HEAD: `cb6f2376b5146e53c7c83cba62d36bac2236e7e3`.
+- Validated structure: 审核摘要; 当前保存值; AI 建议与证据; 技术详情 (`Technical Details`) 默认折叠.
+- Actual provider/model displayed from result facts: `ollama` / `qwen3.5:9b`.
+- `[object Object]` controlled-classification leak fixed and rerun passed.
+
+- `P1-fix-metadata-current-tags-persistence-contract`: `PASS`
+- Scope: `review-pending` task single-tag add + refresh persistence path.
+- Validated HEAD: `cb6f2376b5146e53c7c83cba62d36bac2236e7e3`.
+- Evidence: task `task-1777788279069`, material `mat-1777788279055`, test tag `uat-tag-persistence`, backend `Material.tags=["uat-tag-persistence"]`, consistency audit `ok=true findingsCount=0`, dependency-health `blocking=false`.
+- Contract: `metadata.tags` remains the AI/parse tag source and is not the Operator current-tags fact source.
+- Pending: other task states, tag deletion, multi-tag editing, duplicate-tag handling, concurrent edits, and toast stability are not validated.
+
+- `P1-uat-verify-disable-ai-skeleton-local9b-after-decouple`: `PASS`
+- Lucia accepted final status as `PASS`.
+- Scope: strict no-skeleton local real runtime UAT with local `qwen3.5:9b`, not the retired online MinerU v4 Standard.
+- HEAD: `3714590bb2fe351bfc018cd369a08c5491c98628`
+- Required local runtime env: `DISABLE_AI_SKELETON_FALLBACK=true`, `OLLAMA_TIER2_MODEL=qwen3.5:9b`
+- Must not require: `MINERU_ONLINE_API_BASE_URL`, `MINERU_ONLINE_API_TOKEN`
+- Key evidence: task `task-1777788279069`, material `mat-1777788279055`, MinerU task `ebfbd78e-5304-4748-a6e6-c527f3b9b7c6`, AI job `ai-job-1777788288960-12c7`, AI `ollama/qwen3.5:9b`, consistency audit `ok=true findingsCount=0`.
+- Director browser verification: pending for this specific run.
+
+- `P1-real-runtime-uat-local-mineru-minio-ollama9b`: `PASS`
+- luceonhmm reported `PASS_CANDIDATE`; Lucia accepted final status as `PASS`.
+- Scope: local real runtime UAT only, not the retired online MinerU v4 Standard.
+- Key evidence: `concmdeMac-mini.local`, HEAD `d0af4837b6d13605cf5245d275031e0a6a13f895`, runtime `http://127.0.0.1:8081/cms/`, compose `docker-compose.yml` + `docker-compose.override.yml`, task `task-1777784999485`, material `mat-1777784999468`, local MinerU task `8c8216c8-6f92-45ea-b76a-c719fcb9e326`, MinIO artifacts `artifact-manifest.json`, `full.md`, `mineru-result.zip`, AI `ollama/qwen3.5:9b`, consistency audit `ok=true findingsCount=0`, Director browser verification completed.
+
+### lutest
+
+lutest is retired. Do not recreate or route new work to the lutest thread unless Director explicitly asks to inspect historical Tier 2 evidence.
 
 ## Before Leaving The Windows Machine
 
@@ -98,4 +157,4 @@ npm run build
 npm run local:check
 ```
 
-Then run the Tier 2 Standard command set with real MinerU env values.
+Then read `docs/codex/TEST_POLICY.md`. The current local real runtime UAT baseline `P1-real-runtime-uat-local-mineru-minio-ollama9b` is recorded as `PASS`, and the strict no-skeleton local9b configuration baseline `P1-uat-verify-disable-ai-skeleton-local9b-after-decouple` is recorded as `PASS`. New threads should preserve those facts and rerun the baseline only when assigned or when relevant code/runtime changes require it. Do not start by chasing the retired online MinerU v4 token gate unless Lucia or Director explicitly assigns a compatibility-only online validation task.

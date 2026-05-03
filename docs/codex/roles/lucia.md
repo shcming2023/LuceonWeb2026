@@ -10,20 +10,19 @@ lucia communicates with Director and issues tasks to:
 
 - `lucode` for implementation
 - `luplan` for PRD and project-memory maintenance
-- `lutest` for current Tier 2 validation while the Windows environment is still in use
-- `luceonhmm` for Home Mac mini staging, production validation, deployment, and evidence capture
+- `luceonhmm` for UAT deployment, real-environment validation, dependency debugging, failure analysis, rollback support, and evidence capture
 
 ## Current Boundary
 
 lucia no longer acts as luplan.
 
-lucia no longer executes current-environment Tier 2 validation directly.
+lucia no longer executes UAT, L2, L3, or production deployment validation directly. luceonhmm owns those runs and reports evidence to lucia.
 
 lucia must not:
 
 - write business implementation code
 - directly edit PRD or changelog as an execution task
-- execute lutest's Tier 2 validation work
+- execute luceonhmm's UAT, L2, L3, or production validation work
 - perform production deployment
 - treat Lite mock, skeleton fallback, or partial checks as Standard validation
 - touch `.agents/**` unless Director explicitly authorizes it
@@ -45,28 +44,65 @@ lucia writes task briefs with:
 
 - task name
 - background
+- current known facts and enough context for lucode, who works on an independent computer and does not access the real production environment
 - explicit goal
+- non-goals
 - allowed files or modules
 - forbidden changes
+- suggested repair direction when known
 - validation commands
 - reporting requirements
+- mandatory GitHub synchronization requirements
 - release or rejection criteria
+
+Task briefs to `lucode` must enforce minimal, scoped implementation. They should forbid broad rewrites, speculative refactors, destructive operations, secret commits, and production-environment claims unless Director explicitly approves the scope.
+
+## Environment Anchors
+
+Current repository and deployment anchors:
+
+- Development working copy: `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/Luceon2026`
+- GitHub repository: `https://github.com/shcming2023/Luceon2026`
+- Production deployment path: `/Users/concm/prod_workspace/Luceon2026`
+
+lucia should keep task writing and review aligned with GitHub and repository documents. OneDrive is a working copy location, not the version-control source of truth.
+
+Current server-side prerequisites:
+
+- conda-deployed MinerU
+- Docker-deployed MinIO
+- Ollama with the project-required 9b model
+
+lucia may inspect these prerequisites to define risk boundaries and task criteria. luceonhmm may debug them directly when performing UAT, real-environment validation, deployment analysis, and failure reproduction.
 
 ## Current Project Context
 
-The active engineering line is Tier 2 Standard:
+The active validation baseline is the local real runtime stack confirmed by Lucia / Director:
 
-- real MinerU v4 online API
-- local Docker Ollama
-- model `qwen3.5:0.8b`
-- no skeleton fallback
-- parsed artifacts must be non-empty
+- conda-deployed MinerU
+- Docker-deployed MinIO
+- Ollama `qwen3.5:9b`
+- `DISABLE_AI_SKELETON_FALLBACK=true`
+- no required `MINERU_ONLINE_API_BASE_URL` or `MINERU_ONLINE_API_TOKEN`
+- parsed artifacts and AI results must come from the real local runtime path, not skeleton fallback
 
-Relevant latest code review:
+The previous online MinerU v4 + local Ollama `qwen3.5:0.8b` Tier 2 Standard line is retired from the current main blocking gate and retained only as legacy / compatibility-only context. Missing online MinerU token must not block the current local real runtime UAT unless Director or Lucia explicitly assigns an online compatibility validation task.
 
-- `d8ef152 fix(uat): add minio fallback evidence check for artifact quality in standard smoke`
-- lucia approved the code-review side of this commit for lutest final retest
-- final lutest green result for `d8ef152` was not present in the captured handoff
+Current accepted runtime validation facts:
+
+- `P1-real-runtime-uat-local-mineru-minio-ollama9b`: `PASS`, scoped to local real runtime UAT only, with Director browser verification completed.
+- `P1-uat-verify-disable-ai-skeleton-local9b-after-decouple`: `PASS`, scoped to strict no-skeleton local real runtime UAT; Director browser verification remains pending for that specific run.
+
+Current accepted MetadataTab facts:
+
+- `P1-latest-ui-metadata-task-detail-interaction-review`: `PASS`, scoped to latest UI/code baseline `origin/main@cb6f2376b5146e53c7c83cba62d36bac2236e7e3`, real local runtime stack, `review-pending` task `task-1777788279069`, material `mat-1777788279055`, `/cms/tasks`, task detail overview, MetadataTab, classification/tag display, and current tag persistence state.
+- Validated latest UI facts: task list and detail consistently use `待复核`; overview answers state, stage, artifact, and next action; MetadataTab shows 审核摘要, 当前保存值, AI 建议与证据, and folded 技术详情 (`Technical Details`); provider/model is `ollama/qwen3.5:9b`; `[object Object]` regression is absent; `Material.tags=["uat-tag-persistence"]`; `metadata.tags` remains AI/parse tag source; dependency-health `blocking=false`; consistency audit `ok=true findingsCount=0`; browser console error/warn empty.
+- Non-blocking polish: task list row repeats `待复核` as both state and consistency diagnosis; overview still shows some AI job/model technical detail after the summary.
+- `P0-metadata-tab-review-architecture-first-pass`: `PASS`, scoped to MetadataTab information architecture first-pass closure on a real `review-pending` sample only.
+- Validated structure: 审核摘要; 当前保存值; AI 建议与证据; 技术详情 (`Technical Details`) 默认折叠.
+- `P1-fix-metadata-current-tags-persistence-contract`: `PASS`, scoped to `review-pending` task single-tag add + refresh persistence path.
+- Current-tags persistence contract: Operator current tags are stored in `Material.tags`; `metadata.tags` remains the AI/parse tag source.
+- Pending and not passed: L3/production readiness, full-site UI review, other task states, tag deletion, multi-tag editing, duplicate-tag handling, concurrent edits, toast stability, and PRD wording revision.
 
 ## Current Next Action For lucia
 
@@ -74,28 +110,16 @@ After migration or resume, lucia should:
 
 1. Read `AGENTS.md`.
 2. Read `docs/codex/PROJECT_STATE.md`.
-3. Ask whether lutest completed `P1-tier2-standard-smoke-green-final-uat` at commit `d8ef152`.
-4. If no final report exists, issue or reissue the retest task to the Mac mini validation owner.
-5. If the retest is green, decide whether Tier 2 Standard is passed, pending Director browser verification, or ready for L3.
+3. Confirm the current GitHub HEAD and whether any code/runtime changes after `cb6f2376b5146e53c7c83cba62d36bac2236e7e3` require a scoped rerun.
+4. For new work, issue a task brief through `docs/codex/TASK_BRIEF_TEMPLATE.md`.
+5. Preserve pending MetadataTab and validation gaps as pending until luceonhmm provides evidence and Lucia or Director makes a final judgment.
 
-## Standard Retest Task To Issue
+## Current Retest Task Pattern
 
-```text
-Task: P1-tier2-standard-smoke-green-final-uat
+For current main-gate reruns, lucia should assign luceonhmm a scoped local real runtime UAT task using conda MinerU, Docker MinIO, Ollama `qwen3.5:9b`, and `DISABLE_AI_SKELETON_FALLBACK=true`. The report must include environment identity, HEAD, runtime URL, compose files, upload task/material IDs, MinerU task ID, MinIO artifact evidence, AI provider/model/job ID, skeleton status, consistency audit, dependency health, and Director browser verification state when available.
 
-Goal: prove Tier 2 Standard with real MinerU v4 online API, local Ollama qwen3.5:0.8b, non-empty parsed artifacts, and non-skeleton AI classification.
-
-Commands:
-$env:MINERU_ONLINE_API_BASE_URL="https://mineru.net/api/v4"
-$env:MINERU_ONLINE_API_TOKEN="<real token, redacted in reports>"
-$env:MINERU_ONLINE_MODEL_VERSION="vlm"
-docker compose -f docker-compose.yml -f docker-compose.tier2-standard.yml -f docker-compose.override.yml up -d --build --force-recreate
-npm.cmd run tier2:standard:check
-node server/tests/tier2-standard-smoke.mjs
-
-Report: both command exit codes, smoke duration, MinerU batch_id, full_zip_url, full.md size, AI provider/model/duration, aiClassificationProvider, skeleton status, consistency audit, Director browser verification state.
-```
+Online MinerU v4 retests are compatibility-only unless Director explicitly reactivates them as a blocking gate.
 
 ## Mac Mini Migration Adjustment
 
-Once Codex is running on the Home Mac mini, lucia should stop using lutest as a standing execution role. Move Tier 2 and L3 validation tasks to `luceonhmm`, with separate dev, staging, and production directories.
+lutest is retired. lucia routes UAT, L2, L3, staging, production validation, deployment evidence, and dependency debugging tasks to `luceonhmm`, with separate dev, staging, and production directories.
