@@ -10,6 +10,7 @@ import { MarkdownTab } from '../components/PreviewTabPanel';
 import { MetadataTab } from '../components/MetadataTab';
 import { PDFPreviewPanel } from '../components/PDFPreviewPanel';
 import { renderMarkdown } from '../utils/markdown';
+import { TASK_ACTION_TERMS, TASK_ACTION_TOOLTIPS, getTaskStatusLabel } from '../utils/taskTerms';
 
 /**
  * ParseTask 详情数据结构
@@ -379,7 +380,7 @@ export function TaskDetailPage() {
       });
       const payload = await res.json().catch(() => ({} as any));
       if (!res.ok) throw new Error(payload?.error || `HTTP ${res.status}`);
-      const verb = { retry: '已重试', reparse: '已重新解析', 're-ai': '已重新 AI', cancel: '已取消' }[action];
+      const verb = `已${TASK_ACTION_TERMS[action]}`;
       toast.success(verb, { description: payload?.newTaskId ? `新任务 ${payload.newTaskId}` : undefined });
       if (action === 'retry' && payload?.newTaskId) {
         navigate(`/tasks/${encodeURIComponent(payload.newTaskId)}`);
@@ -528,41 +529,41 @@ export function TaskDetailPage() {
             onClick={() => callAction('retry')}
             disabled={!canRetry}
             className="flex items-center gap-2 px-3 py-2 bg-white border border-amber-200 text-amber-700 rounded-lg text-sm font-medium hover:bg-amber-50 disabled:opacity-40 transition-colors"
-            title={canRetry ? '重试：克隆新任务重跑' : (resourceStatus.materialExists ? '需要原始文件才能重试' : '原始资料已删除，无法重试')}
+            title={canRetry ? `${TASK_ACTION_TERMS.retry}：${TASK_ACTION_TOOLTIPS.retry}` : (resourceStatus.materialExists ? '需要原始文件才能重试' : '原始资料已删除，无法重试')}
           >
-            <RotateCw className="w-4 h-4" /> 重试
+            <RotateCw className="w-4 h-4" /> {TASK_ACTION_TERMS.retry}
           </button>
           <button
             onClick={() => callAction('reparse')}
             disabled={!canReparse}
             className="flex items-center gap-2 px-3 py-2 bg-white border border-indigo-200 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-50 disabled:opacity-40 transition-colors"
-            title={canReparse ? '重新解析：仅重跑解析阶段' : (resourceStatus.materialExists ? '需要原始文件才能重新解析' : '原始资料已删除，无法重新解析')}
+            title={canReparse ? `${TASK_ACTION_TERMS.reparse}：${TASK_ACTION_TOOLTIPS.reparse}` : (resourceStatus.materialExists ? '需要原始文件才能重新解析' : '原始资料已删除，无法重新解析')}
           >
-            <RefreshCw className="w-4 h-4" /> 重新解析
+            <RefreshCw className="w-4 h-4" /> {TASK_ACTION_TERMS.reparse}
           </button>
           <button
             onClick={() => callAction('re-ai')}
             disabled={!canReAi}
             className="flex items-center gap-2 px-3 py-2 bg-white border border-violet-200 text-violet-700 rounded-lg text-sm font-medium hover:bg-violet-50 disabled:opacity-40 transition-colors"
-            title={canReAi ? '重新 AI：仅重跑 AI 元数据阶段' : (resourceStatus.materialExists ? '需要 Markdown 产物才能重跑 AI' : '原始资料已删除，无法重跑 AI')}
+            title={canReAi ? `${TASK_ACTION_TERMS['re-ai']}：${TASK_ACTION_TOOLTIPS['re-ai']}` : (resourceStatus.materialExists ? '需要 Markdown 产物才能重跑 AI' : '原始资料已删除，无法重跑 AI')}
           >
-            <Sparkles className="w-4 h-4" /> 重新 AI
+            <Sparkles className="w-4 h-4" /> {TASK_ACTION_TERMS['re-ai']}
           </button>
           <button
             onClick={() => {
               const mineruTaskId = task.metadata?.mineruTaskId;
-              const msg = mineruTaskId 
+              const msg = mineruTaskId
                 ? '该任务已提交至 MinerU，取消操作【仅停止 Luceon 侧跟踪】，若 MinerU 已在外部环境执行，需通过运维清障确认。\n\n确定要取消吗？'
                 : '确定要取消该任务吗？';
               if (window.confirm(msg)) callAction('cancel');
             }}
             disabled={!canCancel}
             className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 disabled:opacity-40 transition-colors"
-            title="取消：取消该任务"
+            title={`${TASK_ACTION_TERMS.cancel}：${TASK_ACTION_TOOLTIPS.cancel}`}
           >
-            <XCircle className="w-4 h-4" /> 取消
+            <XCircle className="w-4 h-4" /> {TASK_ACTION_TERMS.cancel}
           </button>
-          
+
           {/* W2-2: Review 按钮 */}
           <button
             onClick={handleReview}
@@ -632,7 +633,7 @@ export function TaskDetailPage() {
                   <p className="text-xs text-slate-400 mb-1.5 uppercase font-semibold tracking-wider">当前状态</p>
                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full ${stateStyle.badgeClass}`}>
                     <stateStyle.Icon className={`w-3.5 h-3.5 ${stateStyle.animate ? 'animate-spin' : ''}`} />
-                    {task.state === 'review-pending' ? '待复核' : (task.state === 'completed' ? '已完成' : (task.state || 'pending'))}
+                    {getTaskStatusLabel(task.state)}
                   </span>
                 </div>
                 {/* 阶段 */}
@@ -772,7 +773,7 @@ export function TaskDetailPage() {
                     <dd className="text-slate-800">{task.metadata.mineruLastStatusAt ? new Date(String(task.metadata.mineruLastStatusAt)).toLocaleString() : '—'}</dd>
                   </div>
                 </dl>
-                
+
                 {/* MinerU 执行画像 */}
                 {task.metadata?.mineruExecutionProfile && (
                   <div className="mt-4 pt-4 border-t border-slate-100">
@@ -807,7 +808,7 @@ export function TaskDetailPage() {
                     </dl>
                   </div>
                 )}
-                
+
                 {/* MinerU 当前日志语义 */}
                 {task.metadata?.mineruObservedProgress && (() => {
                   const obs = task.metadata.mineruObservedProgress as any;
@@ -844,7 +845,7 @@ export function TaskDetailPage() {
                                 </p>
                               </div>
                             </div>
-                            
+
                             {obs.logSource && (
                               <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-xs border-t border-amber-100/50 pt-2">
                                 <div className="col-span-2">
@@ -927,7 +928,7 @@ export function TaskDetailPage() {
                             ) : null}
                           </>
                         )}
-                        
+
                         {/* Hybrid 窗口 */}
                         {(obs.window || obs.latestWindow) && (() => {
                           const w = obs.window || obs.latestWindow;
@@ -940,7 +941,7 @@ export function TaskDetailPage() {
                             </div>
                           );
                         })()}
-                        
+
                         {/* 文档页数 */}
                         {obs.document && obs.document.totalPages != null && (
                           <div className="flex justify-between items-center">
@@ -1131,7 +1132,7 @@ export function TaskDetailPage() {
                 isDirty={isMetaDirty}
                 onSaveMeta={handleReview} // 使用 handleReview 作为元数据页面的保存/审核逻辑
               />
-              
+
               {/* W2-2: 元数据页内的额外提交审核按钮 */}
               {task.state === 'review-pending' && isMetaDirty && (
                 <div className="mt-6 flex justify-end pt-4 border-t border-slate-100">
@@ -1164,7 +1165,12 @@ export function TaskDetailPage() {
               const filteredEvents = events.filter(evt => {
                 if (eventFilter === 'all') return true;
                 if (eventFilter === 'error') return evt.level === 'error' || evt.level === 'warn';
-                const isKey = ['task-created', 'task-completed', 'task-failed', 'retry-requested', 'reparse-requested', 're-ai-requested', 'cancel-requested', 'review-submitted'].includes(evt.event || '');
+                const isKey = [
+                  'task-created', 'task-completed', 'task-failed',
+                  'mineru-started', 'mineru-completed',
+                  'ai-provider-request-started', 'ai-provider-request-succeeded', 'ai-provider-request-failed',
+                  'retry-requested', 'reparse-requested', 're-ai-requested', 'cancel-requested', 'review-submitted'
+                ].includes(evt.event || '');
                 if (eventFilter === 'key') return isKey || evt.level === 'error' || evt.level === 'warn';
                 if (eventFilter === 'system') return !isKey && evt.level !== 'error' && evt.level !== 'warn';
                 return true;

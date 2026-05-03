@@ -1,4 +1,5 @@
 import type { Material } from '../../store/types';
+import { TASK_STATUS_TERMS } from './taskTerms';
 
 /**
  * ParseTask 接口定义（对齐后端 db-server.mjs）
@@ -31,7 +32,7 @@ export function deriveTaskBucket(state: string | undefined, stage?: string): Tas
   if (!state) return 'unknown';
 
   if (state === 'running' && stage === 'mineru-queued') return 'queued';
-  
+
   switch (state) {
     case 'uploading':
     case 'pending':
@@ -106,18 +107,7 @@ export interface MaterialTaskView {
   driftReason?: string;
 }
 
-const STATE_LABELS: Record<string, string> = {
-  uploading: '上传中',
-  pending: '等待中',
-  running: '解析中',
-  'result-store': '产物落库',
-  'ai-pending': '等待 AI',
-  'ai-running': 'AI 分析中',
-  'review-pending': '待复核',
-  completed: '已完成',
-  failed: '失败',
-  canceled: '已取消',
-};
+const STATE_LABELS: Record<string, string> = TASK_STATUS_TERMS;
 
 export function deriveMaterialTaskView(
   material: Material | undefined,
@@ -141,7 +131,7 @@ export function deriveMaterialTaskView(
   const tasksLoaded = options?.tasksLoaded ?? true; // 默认认为已加载完成，除非显式传入 false
   const currentTask = deriveCurrentTask(material.id, tasks);
   const bucket = deriveTaskBucket(currentTask?.state, currentTask?.stage);
-  
+
   // 基础信息
   const view: MaterialTaskView = {
     materialId: String(material.id),
