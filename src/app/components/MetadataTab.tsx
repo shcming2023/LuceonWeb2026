@@ -102,10 +102,23 @@ export function MetadataTab({
   const aiProvider = material?.metadata?.aiClassificationProvider || '—';
   const aiModelUsed = material?.metadata?.aiClassificationModel || '—';
 
-  const handleSaveTags = () => {
-    dispatch({ type: 'UPDATE_MATERIAL_TAGS', payload: { id: materialId as any, tags: localTags } });
-    setEditingTags(false);
-    toast.success('标签已保存');
+  const handleSaveTags = async () => {
+    try {
+      const res = await fetch(`/__proxy/db/materials/${encodeURIComponent(String(materialId))}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tags: localTags, updateTime: Date.now() }),
+      });
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status} ${errText}`);
+      }
+      dispatch({ type: 'UPDATE_MATERIAL_TAGS', payload: { id: materialId as any, tags: localTags } });
+      setEditingTags(false);
+      toast.success('标签已保存');
+    } catch (err: any) {
+      toast.error(`标签保存失败: ${err.message}`);
+    }
   };
 
   const addTag = () => {
