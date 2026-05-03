@@ -68,7 +68,7 @@ function zhLabelForState(state: string | undefined): string {
     case 'result-store': return '产物落库';
     case 'ai-pending': return '等待中';
     case 'ai-running': return 'AI 分析中';
-    case 'review-pending': return '解析完成，待人工复核';
+    case 'review-pending': return '待复核';
     case 'completed': return '已完成';
     case 'failed': return '失败';
     case 'canceled': return '已取消';
@@ -78,7 +78,7 @@ function zhLabelForState(state: string | undefined): string {
 
 function getTaskMainLabel(t: any): string {
   if (t.state === 'completed') return '已完成';
-  if (t.state === 'review-pending') return '解析完成，待人工复核';
+  if (t.state === 'review-pending') return '待复核';
   if (t.state === 'failed') {
     if (t.metadata?.mineruTaskId && t.metadata?.mineruStatus === 'completed' && !t.metadata?.parsedFilesCount) {
       return 'MinerU 已完成，结果待接管';
@@ -225,7 +225,7 @@ export function TaskManagementPage() {
       });
       const payload = await res.json().catch(() => ({} as any));
       if (!res.ok) throw new Error(payload?.error || `HTTP ${res.status}`);
-      const verb = { retry: '已重试', reparse: '已重新解析', 're-ai': '已触发 Re-AI', cancel: '已取消' }[action];
+      const verb = { retry: '已重试', reparse: '已重新解析', 're-ai': '已重新 AI', cancel: '已取消' }[action];
       toast.success(`${verb}`, { description: payload?.newTaskId ? `新任务：${payload.newTaskId}` : undefined });
       fetchTasks();
     } catch (err) {
@@ -711,7 +711,7 @@ export function TaskManagementPage() {
                             onClick={() => callAction(t, 'retry')}
                             disabled={!canRetry}
                             className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all disabled:opacity-30"
-                            title="Retry（克隆新任务）"
+                            title="重试：克隆新任务重跑"
                           >
                             <RotateCw size={16} />
                           </button>
@@ -719,7 +719,7 @@ export function TaskManagementPage() {
                             onClick={() => callAction(t, 'reparse')}
                             disabled={!canReparse}
                             className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all disabled:opacity-30"
-                            title="Reparse（重跑解析）"
+                            title="重新解析：仅重跑解析阶段"
                           >
                             <RefreshCw size={16} />
                           </button>
@@ -727,7 +727,7 @@ export function TaskManagementPage() {
                             onClick={() => callAction(t, 're-ai')}
                             disabled={!canReAi}
                             className="p-1.5 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all disabled:opacity-30"
-                            title="Re-AI（重跑 AI）"
+                            title="重新 AI：仅重跑 AI 元数据阶段"
                           >
                             <Sparkles size={16} />
                           </button>
@@ -741,7 +741,7 @@ export function TaskManagementPage() {
                             }}
                             disabled={!canCancel}
                             className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-all disabled:opacity-30"
-                            title="Cancel"
+                            title="取消：取消该任务"
                           >
                             <XCircle size={16} />
                           </button>

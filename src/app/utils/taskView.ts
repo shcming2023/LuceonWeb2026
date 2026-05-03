@@ -113,7 +113,7 @@ const STATE_LABELS: Record<string, string> = {
   'result-store': '产物落库',
   'ai-pending': '等待 AI',
   'ai-running': 'AI 分析中',
-  'review-pending': '解析完成，待人工复核',
+  'review-pending': '待复核',
   completed: '已完成',
   failed: '失败',
   canceled: '已取消',

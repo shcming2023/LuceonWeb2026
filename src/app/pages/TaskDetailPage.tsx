@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, RefreshCw, FileText, Clock, AlertTriangle, CheckCircle2, Loader2, XCircle,
   ChevronDown, ChevronRight, Brain, RotateCw, Sparkles, ShieldCheck,
-  LayoutDashboard, File, Download, Database
+  LayoutDashboard, File, Download, Database, Eye
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { MarkdownTab } from '../components/PreviewTabPanel';
@@ -154,6 +154,7 @@ export function TaskDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [optionsExpanded, setOptionsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'markdown' | 'pdf' | 'metadata' | 'events'>('overview');
+  const [eventFilter, setEventFilter] = useState<'all' | 'key' | 'error' | 'system'>('all');
   const hasLoadedOnceRef = useRef(false);
 
   // ── Markdown 预览相关状态 ──────────────────────────────────
@@ -378,7 +379,7 @@ export function TaskDetailPage() {
       });
       const payload = await res.json().catch(() => ({} as any));
       if (!res.ok) throw new Error(payload?.error || `HTTP ${res.status}`);
-      const verb = { retry: '已重试', reparse: '已重新解析', 're-ai': '已触发 Re-AI', cancel: '已取消' }[action];
+      const verb = { retry: '已重试', reparse: '已重新解析', 're-ai': '已重新 AI', cancel: '已取消' }[action];
       toast.success(verb, { description: payload?.newTaskId ? `新任务 ${payload.newTaskId}` : undefined });
       if (action === 'retry' && payload?.newTaskId) {
         navigate(`/tasks/${encodeURIComponent(payload.newTaskId)}`);
@@ -527,25 +528,25 @@ export function TaskDetailPage() {
             onClick={() => callAction('retry')}
             disabled={!canRetry}
             className="flex items-center gap-2 px-3 py-2 bg-white border border-amber-200 text-amber-700 rounded-lg text-sm font-medium hover:bg-amber-50 disabled:opacity-40 transition-colors"
-            title={canRetry ? 'Retry：克隆新任务重跑' : (resourceStatus.materialExists ? '需要原始文件才能重试' : '原始资料已删除，无法重试')}
+            title={canRetry ? '重试：克隆新任务重跑' : (resourceStatus.materialExists ? '需要原始文件才能重试' : '原始资料已删除，无法重试')}
           >
-            <RotateCw className="w-4 h-4" /> Retry
+            <RotateCw className="w-4 h-4" /> 重试
           </button>
           <button
             onClick={() => callAction('reparse')}
             disabled={!canReparse}
             className="flex items-center gap-2 px-3 py-2 bg-white border border-indigo-200 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-50 disabled:opacity-40 transition-colors"
-            title={canReparse ? 'Reparse：仅重跑解析阶段' : (resourceStatus.materialExists ? '需要原始文件才能重新解析' : '原始资料已删除，无法重新解析')}
+            title={canReparse ? '重新解析：仅重跑解析阶段' : (resourceStatus.materialExists ? '需要原始文件才能重新解析' : '原始资料已删除，无法重新解析')}
           >
-            <RefreshCw className="w-4 h-4" /> Reparse
+            <RefreshCw className="w-4 h-4" /> 重新解析
           </button>
           <button
             onClick={() => callAction('re-ai')}
             disabled={!canReAi}
             className="flex items-center gap-2 px-3 py-2 bg-white border border-violet-200 text-violet-700 rounded-lg text-sm font-medium hover:bg-violet-50 disabled:opacity-40 transition-colors"
-            title={canReAi ? 'Re-AI：仅重跑 AI 元数据阶段' : (resourceStatus.materialExists ? '需要 Markdown 产物才能重跑 AI' : '原始资料已删除，无法重跑 AI')}
+            title={canReAi ? '重新 AI：仅重跑 AI 元数据阶段' : (resourceStatus.materialExists ? '需要 Markdown 产物才能重跑 AI' : '原始资料已删除，无法重跑 AI')}
           >
-            <Sparkles className="w-4 h-4" /> Re-AI
+            <Sparkles className="w-4 h-4" /> 重新 AI
           </button>
           <button
             onClick={() => {
@@ -557,9 +558,9 @@ export function TaskDetailPage() {
             }}
             disabled={!canCancel}
             className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 disabled:opacity-40 transition-colors"
-            title="Cancel"
+            title="取消：取消该任务"
           >
-            <XCircle className="w-4 h-4" /> Cancel
+            <XCircle className="w-4 h-4" /> 取消
           </button>
           
           {/* W2-2: Review 按钮 */}
@@ -628,36 +629,32 @@ export function TaskDetailPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
                 {/* 状态 */}
                 <div>
-                  <p className="text-xs text-slate-400 mb-1.5 uppercase font-semibold tracking-wider">状态</p>
+                  <p className="text-xs text-slate-400 mb-1.5 uppercase font-semibold tracking-wider">当前状态</p>
                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full ${stateStyle.badgeClass}`}>
                     <stateStyle.Icon className={`w-3.5 h-3.5 ${stateStyle.animate ? 'animate-spin' : ''}`} />
-                    {task.state || 'pending'}
+                    {task.state === 'review-pending' ? '待复核' : (task.state === 'completed' ? '已完成' : (task.state || 'pending'))}
                   </span>
                 </div>
                 {/* 阶段 */}
                 <div>
-                  <p className="text-xs text-slate-400 mb-1.5 uppercase font-semibold tracking-wider">阶段</p>
+                  <p className="text-xs text-slate-400 mb-1.5 uppercase font-semibold tracking-wider">当前阶段</p>
                   <p className="text-sm font-medium text-slate-800">{task.stage || '—'}</p>
                 </div>
-                {/* 引擎 */}
+                {/* 已产物 */}
                 <div>
-                  <p className="text-xs text-slate-400 mb-1.5 uppercase font-semibold tracking-wider">引擎</p>
+                  <p className="text-xs text-slate-400 mb-1.5 uppercase font-semibold tracking-wider">已产物</p>
                   <span className="inline-flex items-center px-2 py-1 rounded bg-slate-100 text-slate-600 text-xs font-medium">
-                    {task.engine || 'pipeline'}
+                    {resourceStatus.markdownExists ? '已生成 (Markdown)' : (resourceStatus.originalExists ? '原始文件就绪' : '无')}
                   </span>
                 </div>
-                {/* 进度 */}
+                {/* 下一步动作 */}
                 <div>
-                  <p className="text-xs text-slate-400 mb-1.5 uppercase font-semibold tracking-wider">进度</p>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${task.state === 'failed' ? 'bg-red-400' : 'bg-blue-500'}`}
-                        style={{ width: `${task.progress || 0}%` }}
-                      />
-                    </div>
-                    <span className="text-xs font-medium text-slate-600 w-8 text-right">{task.progress || 0}%</span>
-                  </div>
+                  <p className="text-xs text-slate-400 mb-1.5 uppercase font-semibold tracking-wider">待审核/下一步动作</p>
+                  <p className="text-sm font-medium text-slate-800">
+                    {task.state === 'review-pending' ? '需人工审核' :
+                     task.state === 'completed' ? '无需动作' :
+                     ['failed', 'canceled'].includes(task.state || '') ? '需排查或重试' : '等待系统处理'}
+                  </p>
                 </div>
               </div>
 
@@ -677,6 +674,19 @@ export function TaskDetailPage() {
                 </div>
               )}
             </div>
+
+            {/* 诊断信息折叠区 */}
+            <details className="group bg-slate-50 border border-slate-200 rounded-lg shadow-sm">
+              <summary className="px-5 py-4 cursor-pointer font-semibold text-slate-700 hover:text-slate-900 list-none flex items-center justify-between select-none">
+                <div className="flex items-center gap-2">
+                  <Eye className="w-4 h-4 text-slate-400" />
+                  内部诊断信息 (状态一致性、MinerU 画像、日志观测)
+                </div>
+                <div className="w-5 h-5 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 group-open:rotate-180 transition-transform">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+              </summary>
+              <div className="p-5 pt-0 border-t border-slate-200 space-y-6 mt-4">
 
             {/* 状态诊断矩阵 */}
             <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
@@ -1024,6 +1034,8 @@ export function TaskDetailPage() {
                 })()}
               </div>
             )}
+              </div>
+            </details>
 
             {/* AI Job */}
             <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-5">
@@ -1137,33 +1149,52 @@ export function TaskDetailPage() {
 
         {activeTab === 'events' && (
           <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-5 h-full overflow-y-auto">
-            <h2 className="text-sm font-semibold text-slate-800 mb-4">事件时间线</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-slate-800">事件时间线</h2>
+              <div className="flex gap-2">
+                <button onClick={() => setEventFilter('all')} className={`px-3 py-1 text-xs rounded-full border ${eventFilter === 'all' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>全部</button>
+                <button onClick={() => setEventFilter('key')} className={`px-3 py-1 text-xs rounded-full border ${eventFilter === 'key' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>关键动作</button>
+                <button onClick={() => setEventFilter('error')} className={`px-3 py-1 text-xs rounded-full border ${eventFilter === 'error' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>错误/警告</button>
+                <button onClick={() => setEventFilter('system')} className={`px-3 py-1 text-xs rounded-full border ${eventFilter === 'system' ? 'bg-slate-200 text-slate-800 border-slate-300' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>系统细节</button>
+              </div>
+            </div>
             {events.length === 0 ? (
               <p className="text-sm text-slate-400 text-center py-6">暂无事件记录</p>
-            ) : (
-              <div className="relative pl-6 space-y-0">
-                <div className="absolute left-[9px] top-2 bottom-2 w-px bg-slate-200" />
-                {events.map((evt, idx) => {
-                  const evtStyle = getEventStyle(evt.level);
-                  return (
-                    <div key={evt.id || idx} className="relative pb-5 last:pb-0">
-                      <div className={`absolute -left-6 top-1.5 w-[10px] h-[10px] rounded-full ring-2 ring-white ${evtStyle.dotClass}`} />
-                      <div className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-semibold text-slate-800">{evt.event || '—'}</span>
-                          {evt.level === 'error' && <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-600 rounded font-medium">ERROR</span>}
-                          {evt.level === 'warn' && <span className="text-[10px] px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded font-medium">WARN</span>}
+            ) : (() => {
+              const filteredEvents = events.filter(evt => {
+                if (eventFilter === 'all') return true;
+                if (eventFilter === 'error') return evt.level === 'error' || evt.level === 'warn';
+                const isKey = ['task-created', 'task-completed', 'task-failed', 'retry-requested', 'reparse-requested', 're-ai-requested', 'cancel-requested', 'review-submitted'].includes(evt.event || '');
+                if (eventFilter === 'key') return isKey || evt.level === 'error' || evt.level === 'warn';
+                if (eventFilter === 'system') return !isKey && evt.level !== 'error' && evt.level !== 'warn';
+                return true;
+              });
+              if (filteredEvents.length === 0) return <p className="text-sm text-slate-400 text-center py-6">当前过滤条件下无事件记录</p>;
+              return (
+                <div className="relative pl-6 space-y-0">
+                  <div className="absolute left-[9px] top-2 bottom-2 w-px bg-slate-200" />
+                  {filteredEvents.map((evt, idx) => {
+                    const evtStyle = getEventStyle(evt.level);
+                    return (
+                      <div key={evt.id || idx} className="relative pb-5 last:pb-0">
+                        <div className={`absolute -left-6 top-1.5 w-[10px] h-[10px] rounded-full ring-2 ring-white ${evtStyle.dotClass}`} />
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-slate-800">{evt.event || '—'}</span>
+                            {evt.level === 'error' && <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-600 rounded font-medium">ERROR</span>}
+                            {evt.level === 'warn' && <span className="text-[10px] px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded font-medium">WARN</span>}
+                          </div>
+                          <p className={`text-xs ${evtStyle.textClass} break-words`}>{evt.message || ''}</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            {evt.createdAt ? new Date(evt.createdAt).toLocaleString() : '—'}
+                          </p>
                         </div>
-                        <p className={`text-xs ${evtStyle.textClass} break-words`}>{evt.message || ''}</p>
-                        <p className="text-[10px] text-slate-400 mt-0.5">
-                          {evt.createdAt ? new Date(evt.createdAt).toLocaleString() : '—'}
-                        </p>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>
