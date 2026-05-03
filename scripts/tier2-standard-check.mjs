@@ -2,6 +2,7 @@ import { execSync } from 'child_process';
 import http from 'http';
 
 console.log('=== Luceon2026 Tier 2 Standard Pre-check ===');
+console.log('NOTE: This is only a pre-check for container environment health, NOT the e2e smoke test.');
 
 try {
   execSync('docker info', { stdio: 'ignore' });
@@ -22,6 +23,7 @@ try {
 const checkEndpoint = (url, name) => {
   return new Promise((resolve) => {
     const req = http.get(url, (res) => {
+      res.resume(); // Consume data to free up memory
       resolve(res.statusCode === 200 || res.statusCode === 401 || res.statusCode === 403 || res.statusCode === 404);
     });
     req.on('error', () => resolve(false));
@@ -83,7 +85,7 @@ const runChecks = async () => {
     process.exit(1);
   }
 
-  console.log('\n✅ Pre-check completed.');
+  console.log('\n✅ Pre-check completed successfully. Containers and models are healthy.');
 };
 
 runChecks();

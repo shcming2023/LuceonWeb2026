@@ -73,15 +73,17 @@ async function runTest() {
   let enteredMinerUPipeline = false;
   let aiCompleted = false;
   let lastTaskObj = null;
+  const startTime = Date.now();
 
-  // Extended polling to accommodate 5-minute timeout window
-  while (pollAttempts < 100) {
+  // Extended polling to accommodate 12-minute timeout window (MinerU + AI cold start)
+  while (pollAttempts < 240) {
     const taskRes = await fetch(`${BASE_URL}/__proxy/db/tasks/${pdfTaskId}`);
     if (taskRes.ok) {
       const taskObj = await taskRes.json();
       lastTaskObj = taskObj;
       pdfState = taskObj.state;
-      console.log(`  PDF Task state: ${pdfState} (progress: ${taskObj.progress}%) - msg: ${taskObj.message}`);
+      const elapsedSeconds = Math.round((Date.now() - startTime) / 1000);
+      console.log(`  PDF Task state: ${pdfState} (progress: ${taskObj.progress}%) - msg: ${taskObj.message} - elapsed: ${elapsedSeconds}s`);
 
       if (taskObj.message?.includes('MinerU') || taskObj.metadata?.mineruExecutionProfile) {
          if (!enteredMinerUPipeline) {
@@ -90,11 +92,15 @@ async function runTest() {
          }
       }
 
-      if (pdfState === 'confirmed' || pdfState === 'review-pending' || pdfState === 'failed') {
+      if (pdfState === 'failed') {
+         break;
+      }
+      if (pdfState === 'confirmed' || pdfState === 'review-pending') {
          if (taskObj.metadata?.aiClassificationProvider) {
             aiCompleted = true;
+            break;
          }
-         break;
+         console.log(`  [Wait] State is ${pdfState} but aiClassificationProvider is not yet populated...`);
       }
     }
     await sleep(3000);
