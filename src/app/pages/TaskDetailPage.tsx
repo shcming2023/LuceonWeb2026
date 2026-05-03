@@ -650,7 +650,7 @@ export function TaskDetailPage() {
                 </div>
                 {/* 下一步动作 */}
                 <div>
-                  <p className="text-xs text-slate-400 mb-1.5 uppercase font-semibold tracking-wider">待审核/下一步动作</p>
+                  <p className="text-xs text-slate-400 mb-1.5 uppercase font-semibold tracking-wider">待复核/下一步动作</p>
                   <p className="text-sm font-medium text-slate-800">
                     {task.state === 'review-pending' ? '需人工审核' :
                      task.state === 'completed' ? '无需动作' :

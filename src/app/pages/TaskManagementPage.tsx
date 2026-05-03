@@ -40,7 +40,7 @@ const BUCKET_LABELS: Record<BucketKey, string> = {
   all: '全部',
   queued: '等待中',
   processing: '处理中',
-  reviewing: '待审核',
+  reviewing: '待复核',
   completed: '已完成',
   failed: '已失败',
   canceled: '已取消',
