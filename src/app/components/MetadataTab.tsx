@@ -47,6 +47,22 @@ type MetaForm = {
   summary: string;
 };
 
+function formatFacetValue(val: any): string {
+  if (!val) return '—';
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    return trimmed || '—';
+  }
+  if (typeof val === 'object') {
+    if (val.zh && typeof val.zh === 'string' && val.zh.trim()) return val.zh.trim();
+    if (val.en && typeof val.en === 'string' && val.en.trim()) return val.en.trim();
+    if (val.value && typeof val.value === 'string' && val.value.trim()) return val.value.trim();
+    if (val.label && typeof val.label === 'string' && val.label.trim()) return val.label.trim();
+    return '—';
+  }
+  return String(val);
+}
+
 export function MetadataTab({
   materialId,
   material,
@@ -254,8 +270,17 @@ export function MetadataTab({
                 {['domain', 'collection', 'curriculum', 'stage', 'level', 'subject', 'resource_type', 'component_role'].map(facet => {
                   const controlled = material.metadata.aiClassificationV02.controlled_classification?.[facet];
                   const raw = material.metadata.aiClassificationV02.primary_facets?.[facet];
-                  const rawLabel = raw?.zh || raw?.en || raw;
-                  const displayValue = controlled ? controlled.zh : (rawLabel ? <span className="text-amber-600 italic" title={String(rawLabel)}>待复核: {String(rawLabel)}</span> : '—');
+                  const controlledStr = formatFacetValue(controlled);
+                  const rawStr = formatFacetValue(raw);
+
+                  let displayValue;
+                  if (controlledStr !== '—') {
+                    displayValue = controlledStr;
+                  } else if (rawStr !== '—') {
+                    displayValue = <span className="text-amber-600 italic" title={rawStr}>待复核: {rawStr}</span>;
+                  } else {
+                    displayValue = '—';
+                  }
                   const labelMap: Record<string, string> = { domain: 'Domain', collection: 'Collection', curriculum: 'Curriculum', stage: 'Stage', level: 'Level', subject: 'Subject', resource_type: 'Resource Type', component_role: 'Role' };
                   return (
                     <div key={facet} className="contents">
