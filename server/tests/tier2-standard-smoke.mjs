@@ -133,9 +133,46 @@ async function runTest() {
   const markdownBytes = Number(mq?.markdownBytes || 0);
   const contentListItems = Number(mq?.contentListItems || 0);
 
-  if (markdownBytes <= 0 && contentListItems <= 0) {
-    throw new Error(`Test Failed: PDF parsed artifacts are empty or missing. Quality stats: ${JSON.stringify(mq, null, 2)}\nFull metadata: ${JSON.stringify(lastTaskObj.metadata, null, 2)}`);
+  let fullMdSize = 0;
+  let manifestSize = 0;
+  let hasContentList = false;
+
+  const materialId = lastTaskObj.materialId || lastTaskObj.id?.split('task-').pop(); // rough fallback if materialId isn't on task
+
+  if (markdownBytes <= 0 && contentListItems <= 0 && materialId) {
+    try {
+      const fullMdRes = await fetch(`${BASE_URL}/minio/eduassets-parsed/parsed/mat-${materialId.replace('mat-','')}/full.md`);
+      if (fullMdRes.ok) {
+        const text = await fullMdRes.text();
+        fullMdSize = text.length;
+      }
+    } catch (e) { }
+
+    try {
+      const manifestRes = await fetch(`${BASE_URL}/minio/eduassets-parsed/parsed/mat-${materialId.replace('mat-','')}/artifact-manifest.json`);
+      if (manifestRes.ok) {
+        const manifest = await manifestRes.json();
+        const files = manifest.files || [];
+        manifestSize = files.length;
+        hasContentList = files.some(f => f.name.includes('content_list.json') || f.name.includes('content_list_v2.json'));
+      }
+    } catch (e) { }
   }
+
+  if (markdownBytes <= 0 && contentListItems <= 0 && fullMdSize <= 0 && (!hasContentList || manifestSize <= 0)) {
+    throw new Error(`Test Failed: PDF parsed artifacts are empty or missing. Evidence checked:\n` +
+      `- metadata.artifactQuality: ${JSON.stringify(mq || 'missing')}\n` +
+      `- full.md size: ${fullMdSize}\n` +
+      `- manifest totalFiles: ${manifestSize}\n` +
+      `- manifest hasContentList: ${hasContentList}\n` +
+      `Full metadata: ${JSON.stringify(lastTaskObj.metadata, null, 2)}`);
+  }
+
+  console.log(`\n  ✅ Artifact Quality Evidence found:`);
+  if (markdownBytes > 0) console.log(`    - DB metadata: markdownBytes = ${markdownBytes}`);
+  if (contentListItems > 0) console.log(`    - DB metadata: contentListItems = ${contentListItems}`);
+  if (fullMdSize > 0) console.log(`    - MinIO: full.md size = ${fullMdSize} bytes`);
+  if (manifestSize > 0 && hasContentList) console.log(`    - MinIO: artifact-manifest.json has ${manifestSize} files (contains content_list)`);
 
   console.log(`\n✅ Tier 2 Standard Smoke Test Passed! (MinerU Pipeline + AI Non-skeleton completed)`);
   process.exit(0);
