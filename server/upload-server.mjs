@@ -386,13 +386,12 @@ async function checkDependencyHealth(minioBucket) {
          if (ollamaRes.ok) {
            const data = await ollamaRes.json();
            const modelNames = (data.models || []).map(m => m.name);
-           const isNoSkeletonStrict = process.env.DISABLE_AI_SKELETON_FALLBACK === 'true' || process.env.ALLOW_AI_SKELETON_FALLBACK === 'false';
-           const targetModel = isNoSkeletonStrict
+           const targetModel = process.env.ALLOW_AI_SKELETON_FALLBACK === 'false'
              ? (process.env.OLLAMA_TIER2_MODEL || 'qwen3.5:0.8b')
              : (process.env.OLLAMA_TIER2_MODEL || 'qwen3.5:9b');
            const hasTarget = modelNames.some(n => n.includes(targetModel));
 
-           if (!hasTarget && isNoSkeletonStrict) {
+           if (!hasTarget && process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') {
              result.dependencies.ollama.error = `Missing required Standard model: ${targetModel}`;
              result.dependencies.ollama.ok = false;
            } else {
@@ -770,8 +769,7 @@ app.get('/ops/health', async (req, res) => {
   // 4. Ollama Check
   try {
     let ollamaUrl = process.env.OLLAMA_API_URL || 'http://host.docker.internal:11434';
-    const isNoSkeletonStrict = process.env.DISABLE_AI_SKELETON_FALLBACK === 'true' || process.env.ALLOW_AI_SKELETON_FALLBACK === 'false';
-    if (!isNoSkeletonStrict) {
+    if (process.env.ALLOW_AI_SKELETON_FALLBACK !== 'false') {
       try {
         const setResp = await fetch(`${dbBaseUrl}/settings`, { signal: AbortSignal.timeout(1000) });
         if (setResp.ok) {
@@ -791,7 +789,7 @@ app.get('/ops/health', async (req, res) => {
     if (ollamaRes.ok) {
       const data = await ollamaRes.json();
       const modelNames = (data.models || []).map(m => m.name);
-      const targetModel = isNoSkeletonStrict
+      const targetModel = process.env.ALLOW_AI_SKELETON_FALLBACK === 'false'
         ? (process.env.OLLAMA_TIER2_MODEL || 'qwen3.5:0.8b')
         : (process.env.OLLAMA_TIER2_MODEL || 'qwen3.5:9b');
       const hasTarget = modelNames.some(n => n.includes(targetModel));

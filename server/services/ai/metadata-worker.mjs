@@ -338,7 +338,7 @@ export class AiMetadataWorker {
       let aiSettings = {};
       let providerId = 'ollama';
 
-      if (process.env.DISABLE_AI_SKELETON_FALLBACK === 'true' || process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') {
+      if (process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') {
         // Standard Tier 2 Mode: STRICTLY consume environment variables and ignore DB
         providerId = 'ollama';
         aiSettings = {
@@ -1005,7 +1005,7 @@ export class AiMetadataWorker {
     this.defaultTimeoutMs = timeoutMs; // 保存用于 stale job 判断
 
     // In Standard mode, the model configuration MUST come strictly from env vars
-    const model = (process.env.DISABLE_AI_SKELETON_FALLBACK === 'true' || process.env.ALLOW_AI_SKELETON_FALLBACK === 'false')
+    const model = process.env.ALLOW_AI_SKELETON_FALLBACK === 'false'
       ? (process.env.OLLAMA_TIER2_MODEL || 'qwen3.5:0.8b')
       : (aiSettings.ollamaModel || aiSettings.model || process.env.OLLAMA_TIER2_MODEL || 'qwen3.5:9b');
 
