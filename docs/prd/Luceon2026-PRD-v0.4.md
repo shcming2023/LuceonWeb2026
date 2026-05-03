@@ -235,12 +235,12 @@ review-pending → ai-pending      （Re-AI 触发）
 | :--- | :--- |
 | 等待中 | `pending`, `ai-pending` |
 | 处理中 | `running`, `result-store`, `ai-running` |
-| 待审核 | `review-pending` |
+| 待复核 | `review-pending` |
 | 已完成 | `completed` |
 | 已失败 | `failed` |
 | 已取消 | `canceled` |
 
-前端可以基于上表做筛选，但禁止把 `review-pending` 或 `ai-pending` 计入"已完成"桶（v0.2 代码中存在这种误判，v0.4 要求修复）。
+前端可以基于上表做筛选。`review-pending` 的 Operator-facing display bucket 必须显示为"待复核"，不得显示为"待审核"或归入"已完成"桶；`ai-pending` 也不得计入"已完成"桶（v0.2 代码中存在这种误判，v0.4 要求修复）。
 
 ## 7. 数据模型与对象命名约定
 
@@ -256,6 +256,7 @@ review-pending → ai-pending      （Re-AI 触发）
   status: 'processing' | 'analyzed' | 'failed' | 'idle',
   mineruStatus?: 'pending' | 'running' | 'done' | 'failed',
   aiStatus?: 'pending' | 'running' | 'analyzed' | 'failed',
+  tags?: string[],                       // Operator current tags / 人工当前标签事实源
   metadata: {
     provider: 'minio',
     bucket: string,
@@ -298,6 +299,8 @@ review-pending → ai-pending      （Re-AI 触发）
 - `id` 一律按字符串处理。后端不再对 `materials` 做数字排序，改为按 `updateTime DESC` 排序。
 - `metadata.objectName` 与 `metadata.markdownObjectName` 必须使用 `originals/{id}/…` 与 `parsed/{id}/…` 前缀，禁止使用 `originals/{taskId}/…` 以保证"同一资料的产物收敛在同一前缀下"。
 - `metadata.archiveStatus` 只能保存归档摘要、状态、校验值和 manifest 指针，禁止把 parsed 文件完整清单写入 DB。完整清单必须写在归档侧 `manifest.json` 中，避免再次引发 DB 大 payload/OOM。
+- `Material.tags` 是 Operator current tags / 人工当前标签的后端事实源。人工在审核界面看到、添加、保存后的当前标签必须以 `Material.tags` 为准。
+- `metadata.tags` 只表示 AI/解析阶段给出的标签来源，不等同于人工当前标签，也不得作为 Operator current tags 的事实源覆盖 `Material.tags`。
 - v0.4 当前把 MinIO 视为解析与预览主事实源。HDD / offsite 归档在未完成恢复演练前，只能作为旁路备份，不得驱逐 MinIO 热区对象。
 
 ### 7.2 ParseTask
@@ -461,7 +464,7 @@ v0.4 要求把 `AiMetadataJob.state` 的终态命名统一为 `confirmed | revie
    - **操作区**：按状态动态呈现 `重试 / 重新解析 / 重新 AI / 取消 / 审核通过 / 保存元数据 / 下载 ZIP` 按钮。
    - **Tab 1 Markdown**：从 `/presign` 取 `markdownObjectName` 渲染只读 Markdown。
    - **Tab 2 原件预览**：PDF 使用 `/proxy-file` 嵌入预览（Range 支持已具备）。
-   - **Tab 3 AI 元数据**：以表单呈现 `result` 字段；`review-pending` 时可编辑并提交至 `/tasks/:id/review`。
+   - **Tab 3 AI 元数据 / MetadataTab**：以表单呈现 `result` 字段；`review-pending` 时可编辑并提交至 `/tasks/:id/review`。默认信息架构必须按"审核摘要 → 当前保存值 → AI 建议与证据 → 技术详情"组织，其中技术详情（`Technical Details`）默认折叠。
    - **Tab 4 事件日志**：按时间倒序展示 `taskEvents`，支持级别过滤。
 2. **任务管理页 (`/tasks`)**：
    - 支持按状态筛选、搜索、失败聚合。
@@ -636,6 +639,11 @@ v0.4 要求把 `AiMetadataJob.state` 的终态命名统一为 `confirmed | revie
   - 确定需求：Tier 2 Standard 不再本地部署 MinerU；MinerU 通过线上 API 接入，缺少 API 配置或 API 不可达必须硬失败；本地 Ollama 必须真实运行并使用 `qwen3.5:0.8b`；Lite 档 mock/fallback 行为保持不变。
   - 待验证策略：lucode 需完成 `P1-local-tier2-standard-online-mineru-ollama-amend`，修正 Standard 预检硬失败、PDF pipeline 断言、行尾空格、越界文件提交等问题。Lucia 在 amend 通过后再执行第二级 Standard UAT。
   - 影响范围：第 4 章 Baseline Facts、第 12 章 UAT 验收基线、后续 Standard 环境任务书与 Director 本地手工验收流程。
+- **v0.4-review-pending-tags-contract-2026-05-03（2026-05-03）**：补齐 `review-pending` 展示术语与当前标签事实源契约。
+  - 背景：MetadataTab 首轮信息架构、current-tags persistence contract、latest UI/Metadata/Task Detail interaction review 已在真实本地运行栈中复验，并由 Lucia 判定 `PASS`。
+  - 确定需求：`review-pending` 的 Operator-facing 展示桶统一为"待复核"，不得归入"已完成"；`Material.tags` 是人工当前标签事实源；`metadata.tags` 保持为 AI/解析标签来源；MetadataTab 默认信息架构为"审核摘要、当前保存值、AI 建议与证据、技术详情默认折叠"。
+  - 待验证边界：其他 task states、tag deletion、multi-tag editing、duplicate-tag handling、concurrent edits、toast stability、full-site UI review 与 L3 readiness 均未在本条中声明完成。
+  - 影响范围：第 6.3 节前端展示桶、第 7.1 节 Material 数据模型、第 10.3 节任务详情页与 MetadataTab。
 - **v0.4-local-tier2-uat-2026-05-02（2026-05-02）**：固化本地第二级 UAT 基线与 Tier 2 Lite 环境契约。
   - 背景：Lucia 与 Director 完成本地 Docker 二级 UAT 底座建设和手动验收，确认该环境可作为后续日常开发补丁的本地沙盒验收基础。
   - 确定需求：`npm.cmd run local:check` 为 Windows 本地预检入口；`docker-compose.tier2-lite.yml` 与 `docker-compose.override.yml` 共同组成本地轻量沙盒入口；Tier 2 Lite 必须提供 MinIO 自动建桶、MinerU mock `/health`、Markdown 上传直通解析、AI skeleton fallback 和一致性审计闭环。
