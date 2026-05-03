@@ -54,7 +54,7 @@ export class AiMetadataWorker {
     const hasContext = typeof this.minioContext?.getFileStream === 'function';
     console.log(`[ai-worker] Initialized. Context: ${hasContext ? 'OK' : 'MISSING'}, Callback: ${this.onComplete ? 'YES' : 'NO'}`);
     // 默认超时时间，用于 stale running job 判断
-    this.defaultTimeoutMs = process.env.ALLOW_AI_SKELETON_FALLBACK === 'false' ? 300000 : 120000;
+    this.defaultTimeoutMs = (process.env.DISABLE_AI_SKELETON_FALLBACK === 'true' || process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') ? 300000 : 120000;
   }
 
   start() {
@@ -338,13 +338,13 @@ export class AiMetadataWorker {
       let aiSettings = {};
       let providerId = 'ollama';
 
-      if (process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') {
+      if (process.env.DISABLE_AI_SKELETON_FALLBACK === 'true' || process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') {
         // Standard Tier 2 Mode: STRICTLY consume environment variables and ignore DB
         providerId = 'ollama';
         aiSettings = {
           baseUrl: process.env.OLLAMA_API_URL || 'http://cms-ollama-local:11434',
           model: process.env.OLLAMA_TIER2_MODEL || 'qwen3.5:0.8b',
-          timeoutMs: process.env.ALLOW_AI_SKELETON_FALLBACK === 'false' ? 300000 : 120000,
+          timeoutMs: (process.env.DISABLE_AI_SKELETON_FALLBACK === 'true' || process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') ? 300000 : 120000,
           ollamaTwoPassJsonRepair: true,
           temperature: 0.1
         };
@@ -763,7 +763,7 @@ export class AiMetadataWorker {
           }
         }
 
-        if (process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') {
+        if (process.env.DISABLE_AI_SKELETON_FALLBACK === 'true' || process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') {
           throw new Error(`[Standard 契约拦截] 不允许降级到骨架模型: ${aiClassificationDegradedReason}`);
         }
         resultV02 = getDefaultV02Skeleton(sourceMeta, 'low', aiClassificationDegradedReason);
@@ -781,7 +781,7 @@ export class AiMetadataWorker {
           aiClassificationErrorSource = 'ai-metadata-fallback';
         }
 
-        if (aiClassificationDegraded && process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') {
+        if (aiClassificationDegraded && (process.env.DISABLE_AI_SKELETON_FALLBACK === 'true' || process.env.ALLOW_AI_SKELETON_FALLBACK === 'false')) {
           throw new Error(`[Standard 契约拦截] 不允许降级到骨架模型: ${aiClassificationDegradedReason}`);
         }
       }
@@ -892,7 +892,7 @@ export class AiMetadataWorker {
    * 降级执行：返回模拟结果
    */
   async degradeToSkeleton(job, reason, prebuiltSourceMeta = null) {
-    if (process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') {
+    if (process.env.DISABLE_AI_SKELETON_FALLBACK === 'true' || process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') {
       throw new Error(`[Standard 契约拦截] 不允许降级到骨架模型: ${reason}`);
     }
     console.warn(`[ai-worker] Degrading job ${job.id}: ${reason}`);
@@ -1000,12 +1000,12 @@ export class AiMetadataWorker {
 
     // 优先使用配置的地址，否则尝试 host.docker.internal，最后兜底 Mac mini 默认 IP
     let url = aiSettings.ollamaBaseUrl || aiSettings.baseUrl || aiSettings.apiEndpoint || HOST_DOCKER_OLLAMA;
-    const baseTimeout = process.env.ALLOW_AI_SKELETON_FALLBACK === 'false' ? 300000 : 120000;
+    const baseTimeout = (process.env.DISABLE_AI_SKELETON_FALLBACK === 'true' || process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') ? 300000 : 120000;
     const timeoutMs = aiSettings.timeoutMs || baseTimeout;
     this.defaultTimeoutMs = timeoutMs; // 保存用于 stale job 判断
 
     // In Standard mode, the model configuration MUST come strictly from env vars
-    const model = process.env.ALLOW_AI_SKELETON_FALLBACK === 'false'
+    const model = (process.env.DISABLE_AI_SKELETON_FALLBACK === 'true' || process.env.ALLOW_AI_SKELETON_FALLBACK === 'false')
       ? (process.env.OLLAMA_TIER2_MODEL || 'qwen3.5:0.8b')
       : (aiSettings.ollamaModel || aiSettings.model || process.env.OLLAMA_TIER2_MODEL || 'qwen3.5:9b');
 
@@ -1056,7 +1056,7 @@ export class AiMetadataWorker {
    */
   normalizeTimeout(val) {
     const n = Number(val);
-    const baseTimeout = process.env.ALLOW_AI_SKELETON_FALLBACK === 'false' ? 300000 : 120000;
+    const baseTimeout = (process.env.DISABLE_AI_SKELETON_FALLBACK === 'true' || process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') ? 300000 : 120000;
     if (!n || isNaN(n)) return baseTimeout;
     if (n <= 3600) return n * 1000; // 秒转毫秒
     return n;
