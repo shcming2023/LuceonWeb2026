@@ -41,6 +41,28 @@ Current main L2/UAT target:
 
 Current accepted result:
 
+- `P1-metadatatab-expanded-tag-interaction-validation`: `PASS`
+- Lucia final judgment: `PASS`
+- Evidence source: luceonhmm reported `PASS_CANDIDATE`, then Lucia accepted it as `PASS`.
+- Validated HEAD: `8601eab2dd784f7d808f4bc9257b3b5c47909f9a`
+- Scope: real local runtime stack, task `task-1777788279069`, material `mat-1777788279055`, MetadataTab current-tags expanded interaction.
+- Confirmed behavior:
+  - multi-tag add passed.
+  - tag deletion passed.
+  - duplicate tag handling passed.
+  - refresh persistence passed.
+  - toast success was observed.
+  - `Material.tags` remains the Operator current tags fact source.
+  - `metadata.tags` remains the AI/parse tag source and was not polluted.
+  - internal diagnostics title includes `AI 任务`.
+  - dependency-health `blocking=false`.
+  - consistency audit `findingsCount=0`, `blockingFindings=0`.
+  - browser console error/warn empty.
+- Final `Material.tags`: `["uat-tag-persistence","uat-tag-multi-a","uat-tag-multi-b"]`
+- `metadata.tags` remained: `["PDF","OCR","Pipeline","表格识别","公式识别","含解析产物"]`
+- Pending scope: no L3/production-readiness claim, no full-site UI review, no validation for other task states, concurrent editing, or failure-toast/error-path behavior.
+- Non-blocking polish: after save success, current-page chips may not immediately sync to the final state, but refresh stabilizes the state. Potential follow-up: `P2-metadatatab-tags-immediate-chip-sync-polish`.
+
 - `P1-ui-clarity-polish-after-review-pass`: `PASS`
 - Lucia final judgment: `PASS`
 - Evidence source: luceonhmm reported `PASS_CANDIDATE`, then Lucia accepted it as `PASS`.
@@ -56,7 +78,7 @@ Current accepted result:
   - consistency audit `ok=true`, `findingsCount=0`.
   - browser console error/warn empty.
 - Pending scope: no MetadataTab full revalidation claim, no products/library/settings review claim, no multi-task-state UI validation claim, and no L3/production-readiness claim.
-- Non-blocking polish: internal diagnostics title currently says `内部诊断信息 (状态一致性、MinerU 画像、日志观测)`; because AI job info now also lives there, the title can later be clarified to include `AI 任务`.
+- Follow-up polish status: internal diagnostics title clarity was later resolved by `P1-metadatatab-expanded-tag-interaction-validation`; the title now includes `AI 任务`.
 
 - `P1-latest-ui-metadata-task-detail-interaction-review`: `PASS`
 - Lucia final judgment: `PASS`
@@ -73,7 +95,7 @@ Current accepted result:
   - dependency-health `blocking=false`.
   - consistency audit `ok=true`, `findingsCount=0`.
   - browser console error/warn empty.
-- Pending scope: no L3/production-readiness claim, no full-site UI review, no validation for other task states, tag deletion, multi-tag editing, duplicate-tag handling, concurrent edits, or toast stability.
+- Pending scope: no L3/production-readiness claim, no full-site UI review, no validation for other task states, concurrent editing, or failure-toast/error-path behavior. Tag deletion, multi-tag editing, duplicate-tag handling, refresh persistence, and success toast observation were later covered by `P1-metadatatab-expanded-tag-interaction-validation`.
 - Follow-up polish status: duplicate `待复核` in the task-list row and default main-summary AI job/model exposure were later resolved by `P1-ui-clarity-polish-after-review-pass`.
 
 - `P0-metadata-tab-review-architecture-first-pass`: `PASS`
@@ -94,7 +116,7 @@ Current accepted result:
 - `metadata.tags` remains the AI/parse tag source and is not the Operator current-tags fact source.
 - Consistency audit: `ok=true`, `findingsCount=0`
 - Dependency-health: `blocking=false`
-- Pending scope: other task states, tag deletion, multi-tag editing, duplicate-tag handling, concurrent edits, and toast stability are not validated.
+- Pending scope: other task states, concurrent editing, and failure-toast/error-path behavior are not validated.
 
 - `P1-uat-verify-disable-ai-skeleton-local9b-after-decouple`: `PASS`
 - Lucia final judgment: `PASS`

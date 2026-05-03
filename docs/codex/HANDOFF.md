@@ -91,19 +91,29 @@ Use luceonhmm for UAT deployment, L2/L3 validation, production-like runtime anal
 
 Current accepted UAT fact:
 
+- `P1-metadatatab-expanded-tag-interaction-validation`: `PASS`
+- luceonhmm reported `PASS_CANDIDATE`; Lucia accepted final status as `PASS`.
+- Validated HEAD: `8601eab2dd784f7d808f4bc9257b3b5c47909f9a`.
+- Scope: real local runtime stack, task `task-1777788279069`, material `mat-1777788279055`, MetadataTab current-tags expanded interaction.
+- Confirmed behavior: multi-tag add passed; tag deletion passed; duplicate tag handling passed; refresh persistence passed; toast success was observed; `Material.tags` remains Operator current tags fact source; `metadata.tags` remains AI/parse tag source and was not polluted; internal diagnostics title includes `AI 任务`; dependency-health `blocking=false`; consistency audit `findingsCount=0 blockingFindings=0`; browser console error/warn empty.
+- Final `Material.tags`: `["uat-tag-persistence","uat-tag-multi-a","uat-tag-multi-b"]`
+- `metadata.tags` remained: `["PDF","OCR","Pipeline","表格识别","公式识别","含解析产物"]`
+- Pending: no L3 or production-readiness claim, no full-site UI review, no validation for other task states, concurrent editing, or failure-toast/error-path behavior.
+- Non-blocking polish: after save success, current-page chips may not immediately sync to the final state, but refresh stabilizes the state. Potential follow-up: `P2-metadatatab-tags-immediate-chip-sync-polish`.
+
 - `P1-ui-clarity-polish-after-review-pass`: `PASS`
 - luceonhmm reported `PASS_CANDIDATE`; Lucia accepted final status as `PASS`.
 - Validated HEAD: `87543399673308f2b8ff2febf145c85b3e342f75`.
 - Scope: `/cms/tasks`, review-pending task detail overview, internal diagnostics folded area, task `task-1777788279069`, material `mat-1777788279055`.
 - Validated behavior: task list main status remains `待复核`; same-row diagnostics badge now shows `状态一致` with no duplicate second `待复核`; overview shows current state, current stage, generated artifact, and next action; AI Job / model technical info no longer appears in the main summary by default; AI metadata job/model remains available after expanding internal diagnostics; dependency-health `blocking=false`; consistency audit `ok=true findingsCount=0`; browser console error/warn empty.
 - Pending: no MetadataTab full revalidation claim, no products/library/settings review claim, no multi-task-state UI validation claim, and no L3/production-readiness claim.
-- Non-blocking polish: internal diagnostics title currently says `内部诊断信息 (状态一致性、MinerU 画像、日志观测)`; because AI job info now also lives there, the title can later be clarified to include `AI 任务`.
+- Follow-up polish status: internal diagnostics title clarity was later resolved by `P1-metadatatab-expanded-tag-interaction-validation`; the title now includes `AI 任务`.
 
 - `P1-latest-ui-metadata-task-detail-interaction-review`: `PASS`
 - luceonhmm reported `PASS_CANDIDATE`; Lucia accepted final status as `PASS`.
 - Scope: latest UI/code baseline `origin/main@cb6f2376b5146e53c7c83cba62d36bac2236e7e3`, real local runtime stack, review-pending task `task-1777788279069`, material `mat-1777788279055`, `/cms/tasks`, task detail overview, MetadataTab, classification/tag display, and current tag persistence state.
 - Validated facts: task list and detail consistently use `待复核`; overview answers state, stage, artifact, and next action; MetadataTab shows 审核摘要, 当前保存值, AI 建议与证据, and folded 技术详情 (`Technical Details`); provider/model is `ollama/qwen3.5:9b`; `[object Object]` regression is absent; `Material.tags=["uat-tag-persistence"]`; `metadata.tags` remains AI/parse tag source; dependency-health `blocking=false`; consistency audit `ok=true findingsCount=0`; browser console error/warn empty.
-- Pending: no L3 or production-readiness claim, no full-site UI review, no validation for other task states, tag deletion, multi-tag editing, duplicate-tag handling, concurrent edits, or toast stability.
+- Pending: no L3 or production-readiness claim, no full-site UI review, no validation for other task states, concurrent editing, or failure-toast/error-path behavior. Tag deletion, multi-tag editing, duplicate-tag handling, refresh persistence, and success toast observation were later covered by `P1-metadatatab-expanded-tag-interaction-validation`.
 - Follow-up polish status: duplicate `待复核` in the task-list row and default main-summary AI job/model exposure were later resolved by `P1-ui-clarity-polish-after-review-pass`.
 
 - `P0-metadata-tab-review-architecture-first-pass`: `PASS`
@@ -118,7 +128,7 @@ Current accepted UAT fact:
 - Validated HEAD: `cb6f2376b5146e53c7c83cba62d36bac2236e7e3`.
 - Evidence: task `task-1777788279069`, material `mat-1777788279055`, test tag `uat-tag-persistence`, backend `Material.tags=["uat-tag-persistence"]`, consistency audit `ok=true findingsCount=0`, dependency-health `blocking=false`.
 - Contract: `metadata.tags` remains the AI/parse tag source and is not the Operator current-tags fact source.
-- Pending: other task states, tag deletion, multi-tag editing, duplicate-tag handling, concurrent edits, and toast stability are not validated.
+- Pending: other task states, concurrent editing, and failure-toast/error-path behavior are not validated.
 
 - `P1-uat-verify-disable-ai-skeleton-local9b-after-decouple`: `PASS`
 - Lucia accepted final status as `PASS`.
