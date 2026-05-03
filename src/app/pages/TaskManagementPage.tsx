@@ -125,7 +125,7 @@ export function TaskManagementPage() {
 
   const diagnoseStatus = (t: ParseTask) => {
     const m = materials.find(mat => String(mat.id) === String(t.materialId));
-    if (!m) return { label: '无关联', color: 'text-amber-600 bg-amber-50 border-amber-100', icon: AlertTriangle };
+    if (!m) return { label: '无关联', color: 'text-amber-600 bg-amber-50 border-amber-100', icon: AlertTriangle, tooltip: '该任务未关联任何资料' };
 
     const ts = t.state;
     const ms = m.status;
@@ -133,19 +133,19 @@ export function TaskManagementPage() {
     const ais = m.aiStatus;
 
     if (ts === 'review-pending' && ms === 'reviewing' && mins === 'completed' && (ais === 'analyzed' || ais === 'failed')) {
-      return { label: '状态一致', color: 'text-emerald-600 bg-emerald-50 border-emerald-100', icon: ShieldCheck };
+      return { label: '状态一致', color: 'text-emerald-600 bg-emerald-50 border-emerald-100', icon: ShieldCheck, tooltip: '四方状态一致性诊断通过' };
     }
     if (ts === 'completed' && ms === 'completed' && mins === 'completed' && ais === 'analyzed') {
-      return { label: '已一致', color: 'text-blue-600 bg-blue-50 border-blue-100', icon: CheckCircle2 };
+      return { label: '已一致', color: 'text-blue-600 bg-blue-50 border-blue-100', icon: CheckCircle2, tooltip: '四方状态一致性通过' };
     }
     const processingStates = ['uploading', 'pending', 'running', 'result-store', 'ai-pending', 'ai-running'];
     if (processingStates.includes(ts || '')) {
-      return { label: '流转中', color: 'text-slate-400 bg-slate-50 border-slate-100', icon: Clock };
+      return { label: '流转中', color: 'text-slate-400 bg-slate-50 border-slate-100', icon: Clock, tooltip: '任务流转中' };
     }
     if (ts === 'failed' || ts === 'canceled') {
-      return { label: '已终止', color: 'text-slate-400 bg-slate-50 border-slate-100', icon: XCircle };
+      return { label: '已终止', color: 'text-slate-400 bg-slate-50 border-slate-100', icon: XCircle, tooltip: '任务已终止' };
     }
-    return { label: '待同步', color: 'text-amber-600 bg-amber-50 border-amber-100', icon: AlertTriangle };
+    return { label: '待同步', color: 'text-amber-600 bg-amber-50 border-amber-100', icon: AlertTriangle, tooltip: '状态映射待同步：任务、资料、AI 任务或产物状态暂未完全对齐；不代表审核失败。' };
   };
 
   const patchTaskInState = async (id: string) => {
@@ -642,7 +642,7 @@ export function TaskManagementPage() {
                               const diag = diagnoseStatus(t);
                               const DiagIcon = diag.icon;
                               return (
-                                <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-bold ${diag.color}`} title="四方状态一致性诊断">
+                                <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-bold ${diag.color}`} title={diag.tooltip || "四方状态一致性诊断"}>
                                   <DiagIcon size={10} />
                                   {diag.label}
                                 </div>
