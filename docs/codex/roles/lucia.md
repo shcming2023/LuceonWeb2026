@@ -95,6 +95,9 @@ Current accepted runtime validation facts:
 
 Current accepted MetadataTab facts:
 
+- `P1-operator-main-workflow-usability-review`: `PASS`, scoped to local real runtime UAT, Operator main workflow, task `task-1777849339744`, and material `mat-1777849339732` at HEAD `1849beacef6d755859c45e7704ddd467dc3b03aa`.
+- Confirmed Operator workflow behavior: real PDF upload created the task successfully; local MinerU completed; MinIO raw and parsed artifacts were available; Ollama provider/model was `ollama/qwen3.5:9b`; `review-pending` -> `completed/done` can complete; `Material.tags` saved successfully; `metadata.tags` was not polluted; ZIP download succeeded; event log explains MinerU, MinIO, AI, and review stages; dependency-health `blocking=false`; consistency audit `findingsCount=0 blockingFindings=0`; browser console error/warn empty.
+- Non-blocking polish: MetadataTab tag save immediate chip/draft sync still needs repair; `审核通过` button remains visible in `completed` state and may mislead; completed list row `需审计` wording is semantically vague; overview fields `待复核` / next action are not generic enough after completion.
 - `P1-metadatatab-expanded-tag-interaction-validation`: `PASS`, scoped to real local runtime stack, MetadataTab current-tags expanded interaction, task `task-1777788279069`, and material `mat-1777788279055` at HEAD `8601eab2dd784f7d808f4bc9257b3b5c47909f9a`.
 - Confirmed expanded tag behavior: multi-tag add, tag deletion, duplicate tag handling, refresh persistence, and success toast observation passed; `Material.tags` remains the Operator current tags fact source; `metadata.tags` remains the AI/parse tag source and was not polluted; internal diagnostics title includes `AI 任务`; dependency-health `blocking=false`; consistency audit `findingsCount=0 blockingFindings=0`; browser console error/warn empty.
 - Final `Material.tags`: `["uat-tag-persistence","uat-tag-multi-a","uat-tag-multi-b"]`; `metadata.tags` remained `["PDF","OCR","Pipeline","表格识别","公式识别","含解析产物"]`.
@@ -109,7 +112,7 @@ Current accepted MetadataTab facts:
 - Validated structure: 审核摘要; 当前保存值; AI 建议与证据; 技术详情 (`Technical Details`) 默认折叠.
 - `P1-fix-metadata-current-tags-persistence-contract`: `PASS`, scoped to `review-pending` task single-tag add + refresh persistence path.
 - Current-tags persistence contract: Operator current tags are stored in `Material.tags`; `metadata.tags` remains the AI/parse tag source.
-- Pending and not passed: L3/production readiness, full-site UI review, products/library/settings review, multi-task-state UI validation, other task states, concurrent editing, failure-toast/error-path behavior, immediate chip sync polish, and broader PRD wording revision.
+- Pending and not passed: L3/production readiness, full-site UI review, complete browser file-picker / upload modal validation, products/library/settings review, multi-task-state UI validation, other task states, concurrent editing, failure-toast/error-path behavior, all-error-path validation, immediate chip sync polish, completed-state action wording polish, and broader PRD wording revision.
 
 ## Current Next Action For lucia
 
