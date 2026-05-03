@@ -42,6 +42,23 @@ The current active engineering focus is:
 
 Current accepted validation result:
 
+- `P1-ui-clarity-polish-after-review-pass`: `PASS`
+- luceonhmm final status: `PASS_CANDIDATE`
+- Lucia final judgment: `PASS`
+- Validated HEAD: `87543399673308f2b8ff2febf145c85b3e342f75`
+- Scope: `/cms/tasks`, review-pending task detail overview, internal diagnostics folded area, task `task-1777788279069`, material `mat-1777788279055`.
+- Validated behavior:
+  - task list main status remains `待复核`.
+  - same-row diagnostics badge now shows `状态一致`, with no duplicate second `待复核`.
+  - overview shows current state, current stage, generated artifact, and next action.
+  - AI Job / model technical info no longer appears in the main summary by default.
+  - AI metadata job/model remains available after expanding internal diagnostics.
+  - dependency-health: `blocking=false`.
+  - consistency audit: `ok=true`, `findingsCount=0`.
+  - browser console error/warn empty.
+- Scope limits: this task does not claim MetadataTab full revalidation, products/library/settings review, multi-task-state UI validation, L3 readiness, or production readiness.
+- Non-blocking polish still pending: internal diagnostics title currently says `内部诊断信息 (状态一致性、MinerU 画像、日志观测)`; because AI job info now also lives there, the title can later be clarified to include `AI 任务`.
+
 - `P1-latest-ui-metadata-task-detail-interaction-review`: `PASS`
 - luceonhmm final status: `PASS_CANDIDATE`
 - Lucia final judgment: `PASS`
@@ -57,7 +74,7 @@ Current accepted validation result:
   - dependency-health: `blocking=false`.
   - consistency audit: `ok=true`, `findingsCount=0`.
   - browser console error/warn empty.
-- Non-blocking polish still pending: task list row repeats `待复核` as both state and consistency diagnosis; overview still shows some AI job/model technical detail after the summary.
+- Follow-up polish status: duplicate `待复核` in the task-list row and default main-summary AI job/model exposure were later resolved by `P1-ui-clarity-polish-after-review-pass`.
 - Scope limits: this is not an L3 or production-readiness claim, not a full-site UI review, and does not validate other task states, tag deletion, multi-tag editing, duplicate-tag handling, concurrent edits, or toast stability.
 
 - `P0-metadata-tab-review-architecture-first-pass`: `PASS`
@@ -169,7 +186,7 @@ Current follow-up:
 
 - Latest UI/Metadata/Task Detail review pending scope: no L3 or production-readiness claim; no full-site UI review; other task states beyond the current `review-pending` sample are not validated.
 - Latest UI/Metadata/Task Detail tag pending scope: tag deletion, multi-tag editing, duplicate-tag handling, concurrent edits, and toast stability are not validated.
-- Latest UI/Metadata/Task Detail non-blocking polish: task list row repeats `待复核` as both state and consistency diagnosis; overview still shows some AI job/model technical detail after the summary.
+- Latest UI/Metadata/Task Detail non-blocking polish: duplicate `待复核` in the task-list row and default main-summary AI job/model exposure were resolved by `P1-ui-clarity-polish-after-review-pass`; remaining polish is internal diagnostics title clarity, because AI job info now also lives there.
 - Director browser verification is pending for the specific `P1-uat-verify-disable-ai-skeleton-local9b-after-decouple` run.
 - This pending browser verification does not change Lucia's recorded PASS for the strict no-skeleton local9b UAT configuration baseline.
 - MetadataTab pending scope: other task states beyond the single `review-pending` sample are not validated.

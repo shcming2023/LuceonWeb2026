@@ -95,14 +95,17 @@ Current accepted runtime validation facts:
 
 Current accepted MetadataTab facts:
 
+- `P1-ui-clarity-polish-after-review-pass`: `PASS`, scoped to `/cms/tasks`, review-pending task detail overview, internal diagnostics folded area, task `task-1777788279069`, and material `mat-1777788279055` at HEAD `87543399673308f2b8ff2febf145c85b3e342f75`.
+- Validated UI clarity facts: task list main status remains `待复核`; same-row diagnostics badge now shows `状态一致` with no duplicate second `待复核`; overview shows current state, current stage, generated artifact, and next action; AI Job / model technical info no longer appears in the main summary by default; AI metadata job/model remains available after expanding internal diagnostics; dependency-health `blocking=false`; consistency audit `ok=true findingsCount=0`; browser console error/warn empty.
+- Non-blocking polish: internal diagnostics title currently says `内部诊断信息 (状态一致性、MinerU 画像、日志观测)` and can later be clarified to include `AI 任务`.
 - `P1-latest-ui-metadata-task-detail-interaction-review`: `PASS`, scoped to latest UI/code baseline `origin/main@cb6f2376b5146e53c7c83cba62d36bac2236e7e3`, real local runtime stack, `review-pending` task `task-1777788279069`, material `mat-1777788279055`, `/cms/tasks`, task detail overview, MetadataTab, classification/tag display, and current tag persistence state.
 - Validated latest UI facts: task list and detail consistently use `待复核`; overview answers state, stage, artifact, and next action; MetadataTab shows 审核摘要, 当前保存值, AI 建议与证据, and folded 技术详情 (`Technical Details`); provider/model is `ollama/qwen3.5:9b`; `[object Object]` regression is absent; `Material.tags=["uat-tag-persistence"]`; `metadata.tags` remains AI/parse tag source; dependency-health `blocking=false`; consistency audit `ok=true findingsCount=0`; browser console error/warn empty.
-- Non-blocking polish: task list row repeats `待复核` as both state and consistency diagnosis; overview still shows some AI job/model technical detail after the summary.
+- Follow-up polish status: duplicate `待复核` in the task-list row and default main-summary AI job/model exposure were later resolved by `P1-ui-clarity-polish-after-review-pass`.
 - `P0-metadata-tab-review-architecture-first-pass`: `PASS`, scoped to MetadataTab information architecture first-pass closure on a real `review-pending` sample only.
 - Validated structure: 审核摘要; 当前保存值; AI 建议与证据; 技术详情 (`Technical Details`) 默认折叠.
 - `P1-fix-metadata-current-tags-persistence-contract`: `PASS`, scoped to `review-pending` task single-tag add + refresh persistence path.
 - Current-tags persistence contract: Operator current tags are stored in `Material.tags`; `metadata.tags` remains the AI/parse tag source.
-- Pending and not passed: L3/production readiness, full-site UI review, other task states, tag deletion, multi-tag editing, duplicate-tag handling, concurrent edits, toast stability, and PRD wording revision.
+- Pending and not passed: L3/production readiness, full-site UI review, products/library/settings review, multi-task-state UI validation, other task states, tag deletion, multi-tag editing, duplicate-tag handling, concurrent edits, toast stability, and broader PRD wording revision.
 
 ## Current Next Action For lucia
 
