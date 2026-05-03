@@ -87,7 +87,7 @@ export function MetadataTab({
     setLocalTags(material?.tags ?? []);
   }, [material?.tags]);
 
-  const tags = editingTags ? localTags : (material?.tags ?? []);
+  const tags = localTags;
 
   const fileInfo = useMemo(() => {
     return {
@@ -107,17 +107,21 @@ export function MetadataTab({
       const res = await fetch(`/__proxy/db/materials/${encodeURIComponent(String(materialId))}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tags: localTags, updateTime: Date.now() }),
+        body: JSON.stringify({ tags: localTags }),
       });
       if (!res.ok) {
-        const errText = await res.text().catch(() => '');
-        throw new Error(`HTTP ${res.status} ${errText}`);
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP ${res.status}`);
       }
-      dispatch({ type: 'UPDATE_MATERIAL_TAGS', payload: { id: materialId as any, tags: localTags } });
+      const data = await res.json();
+      const finalTags = Array.isArray(data.data?.tags) ? data.data.tags : Array.isArray(data.tags) ? data.tags : localTags;
+
+      setLocalTags(finalTags);
+      dispatch({ type: 'UPDATE_MATERIAL_TAGS', payload: { id: materialId as any, tags: finalTags } });
       setEditingTags(false);
       toast.success('标签已保存');
-    } catch (err: any) {
-      toast.error(`标签保存失败: ${err.message}`);
+    } catch (err) {
+      toast.error('保存标签失败', { description: err instanceof Error ? err.message : String(err) });
     }
   };
 
