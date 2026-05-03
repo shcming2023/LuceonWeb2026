@@ -681,7 +681,7 @@ export function TaskDetailPage() {
               <summary className="px-5 py-4 cursor-pointer font-semibold text-slate-700 hover:text-slate-900 list-none flex items-center justify-between select-none">
                 <div className="flex items-center gap-2">
                   <Eye className="w-4 h-4 text-slate-400" />
-                  内部诊断信息 (状态一致性、MinerU 画像、日志观测)
+                  内部诊断信息 (状态一致性、MinerU 画像、AI 任务、日志观测)
                 </div>
                 <div className="w-5 h-5 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 group-open:rotate-180 transition-transform">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
