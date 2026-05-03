@@ -27,6 +27,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - cms-network
 
   # MinIO 建桶初始化容器（与 Lite 保持一致）
   minio-init:

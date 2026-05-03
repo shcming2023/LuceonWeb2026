@@ -45,10 +45,9 @@ async function runTest() {
   // 3. Small PDF Upload (Triggering MinerU pipeline)
   console.log(`\n[3] Uploading Small PDF (Smoke Test)...`);
 
-  // Generating a highly minimal dummy PDF file buffer using base64
-  // Minimal PDF 1.0 (empty page)
-  const emptyPdfB64 = "JVBERi0xLjAKMSAwIG9iaiA8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFI+PiBlbmRvYmogMiAwIG9iaiA8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PiBlbmRvYmogMyAwIG9iaiA8PC9UeXBlL1BhZ2UvUGFyZW50IDIgMCBSL01lZGlhQm94WzAgMCA2MTIgNzkyXT4+IGVuZG9iagp4cmVmCjAgNAowMDAwMDAwMDAwIDY1NTM1IGYKMDAwMDAwMDAxMCAwMDAwMCBuCjAwMDAwMDAwNTMgMDAwMDAgbgowMDAwMDAwMTAyIDAwMDAwIG4KdHJhaWxlciA8PC9TaXplIDQvUm9vdCAxIDAgUj4+CnN0YXJ0eHJlZgoxNDkKJSVFT0Y=";
-  const pdfBuffer = Buffer.from(emptyPdfB64, 'base64');
+  // Generating a highly minimal PDF file buffer using base64 containing the text "Hello World"
+  const helloWorldPdfB64 = "JVBERi0xLjQKMSAwIG9iaiA8PC9UeXBlIC9DYXRhbG9nIC9QYWdlcyAyIDAgUiA+PiBlbmRvYmogMiAwIG9iaiA8PC9UeXBlIC9QYWdlcyAvS2lkcyBbMyAwIFJdIC9Db3VudCAxID4+IGVuZG9iaiAzIDAgb2JqIDw8L1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCAyMDAgMjAwXSAvQ29udGVudHMgNCAwIFIgL1Jlc291cmNlcyA8PC9Gb250IDw8L0YxIDUgMCBSPj4+PiA+PiBlbmRvYmogNCAwIG9iaiA8PC9MZW5ndGggNDM+PiBzdHJlYW0gQlQvRjEgMjQgVGYgMTAgMTAwIFRkIChIZWxsbyBXb3JsZCkgVGoKRVQKZW5kc3RyZWFtIGVuZG9iaiA1IDAgb2JqIDw8L1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+IGVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYKMDAwMDAwMDAwOSAwMDAwMCBuCjAwMDAwMDAwNTYgMDAwMDAgbgowMDAwMDAwMTExIDAwMDAwIG4KMDAwMDAwMDIxMiAwMDAwMCBuCjAwMDAwMDAzMDUgMDAwMDAgbgp0cmFpbGVyIDw8L1NpemUgNiAvUm9vdCAxIDAgUj4+CnN0YXJ0eHJlZgozOTMKJSVFT0Y=";
+  const pdfBuffer = Buffer.from(helloWorldPdfB64, 'base64');
 
   const pdfFilename = `tier2-std-pdf-${timestamp}.pdf`;
   const pdfFormData = new FormData();
