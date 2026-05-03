@@ -54,7 +54,7 @@ export class AiMetadataWorker {
     const hasContext = typeof this.minioContext?.getFileStream === 'function';
     console.log(`[ai-worker] Initialized. Context: ${hasContext ? 'OK' : 'MISSING'}, Callback: ${this.onComplete ? 'YES' : 'NO'}`);
     // 默认超时时间，用于 stale running job 判断
-    this.defaultTimeoutMs = 120000; // 120 秒
+    this.defaultTimeoutMs = process.env.ALLOW_AI_SKELETON_FALLBACK === 'false' ? 300000 : 120000;
   }
 
   start() {
@@ -344,7 +344,7 @@ export class AiMetadataWorker {
         aiSettings = {
           baseUrl: process.env.OLLAMA_API_URL || 'http://cms-ollama-local:11434',
           model: process.env.OLLAMA_TIER2_MODEL || 'qwen3.5:0.8b',
-          timeoutMs: 120000,
+          timeoutMs: process.env.ALLOW_AI_SKELETON_FALLBACK === 'false' ? 300000 : 120000,
           ollamaTwoPassJsonRepair: true,
           temperature: 0.1
         };
@@ -1000,7 +1000,8 @@ export class AiMetadataWorker {
 
     // 优先使用配置的地址，否则尝试 host.docker.internal，最后兜底 Mac mini 默认 IP
     let url = aiSettings.ollamaBaseUrl || aiSettings.baseUrl || aiSettings.apiEndpoint || HOST_DOCKER_OLLAMA;
-    const timeoutMs = aiSettings.timeoutMs || 120000;
+    const baseTimeout = process.env.ALLOW_AI_SKELETON_FALLBACK === 'false' ? 300000 : 120000;
+    const timeoutMs = aiSettings.timeoutMs || baseTimeout;
     this.defaultTimeoutMs = timeoutMs; // 保存用于 stale job 判断
 
     // In Standard mode, the model configuration MUST come strictly from env vars
@@ -1055,7 +1056,8 @@ export class AiMetadataWorker {
    */
   normalizeTimeout(val) {
     const n = Number(val);
-    if (!n || isNaN(n)) return 120000;
+    const baseTimeout = process.env.ALLOW_AI_SKELETON_FALLBACK === 'false' ? 300000 : 120000;
+    if (!n || isNaN(n)) return baseTimeout;
     if (n <= 3600) return n * 1000; // 秒转毫秒
     return n;
   }

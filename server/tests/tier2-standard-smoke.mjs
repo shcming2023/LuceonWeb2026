@@ -1,3 +1,6 @@
+import fs from 'fs';
+import path from 'path';
+
 const BASE_URL = process.env.BASE_URL || 'http://127.0.0.1:8080';
 
 async function sleep(ms) {
@@ -45,9 +48,9 @@ async function runTest() {
   // 3. Small PDF Upload (Triggering MinerU pipeline)
   console.log(`\n[3] Uploading Small PDF (Smoke Test)...`);
 
-  // Generating a highly minimal PDF file buffer using base64 containing the text "Hello World"
-  const helloWorldPdfB64 = "JVBERi0xLjQKMSAwIG9iaiA8PC9UeXBlIC9DYXRhbG9nIC9QYWdlcyAyIDAgUiA+PiBlbmRvYmogMiAwIG9iaiA8PC9UeXBlIC9QYWdlcyAvS2lkcyBbMyAwIFJdIC9Db3VudCAxID4+IGVuZG9iaiAzIDAgb2JqIDw8L1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCAyMDAgMjAwXSAvQ29udGVudHMgNCAwIFIgL1Jlc291cmNlcyA8PC9Gb250IDw8L0YxIDUgMCBSPj4+PiA+PiBlbmRvYmogNCAwIG9iaiA8PC9MZW5ndGggNDM+PiBzdHJlYW0gQlQvRjEgMjQgVGYgMTAgMTAwIFRkIChIZWxsbyBXb3JsZCkgVGoKRVQKZW5kc3RyZWFtIGVuZG9iaiA1IDAgb2JqIDw8L1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+IGVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYKMDAwMDAwMDAwOSAwMDAwMCBuCjAwMDAwMDAwNTYgMDAwMDAgbgowMDAwMDAwMTExIDAwMDAwIG4KMDAwMDAwMDIxMiAwMDAwMCBuCjAwMDAwMDAzMDUgMDAwMDAgbgp0cmFpbGVyIDw8L1NpemUgNiAvUm9vdCAxIDAgUj4+CnN0YXJ0eHJlZgozOTMKJSVFT0Y=";
-  const pdfBuffer = Buffer.from(helloWorldPdfB64, 'base64');
+  // Load the newly generated sample PDF fixture that contains structured text
+  const fixturePath = path.resolve(process.cwd(), 'server', 'tests', 'fixtures', 'sample.pdf');
+  const pdfBuffer = fs.readFileSync(fixturePath);
 
   const pdfFilename = `tier2-std-pdf-${timestamp}.pdf`;
   const pdfFormData = new FormData();
@@ -71,7 +74,8 @@ async function runTest() {
   let aiCompleted = false;
   let lastTaskObj = null;
 
-  while (pollAttempts < 30) {
+  // Extended polling to accommodate 5-minute timeout window
+  while (pollAttempts < 100) {
     const taskRes = await fetch(`${BASE_URL}/__proxy/db/tasks/${pdfTaskId}`);
     if (taskRes.ok) {
       const taskObj = await taskRes.json();
@@ -117,6 +121,14 @@ async function runTest() {
 
   if (lastTaskObj.metadata?.aiClassificationProvider === 'skeleton') {
     throw new Error(`Test Failed: AI fallback to skeleton detected. Last task info: ${JSON.stringify(summary, null, 2)}`);
+  }
+
+  const mq = lastTaskObj.metadata?.artifactQuality;
+  const markdownBytes = Number(mq?.markdownBytes || 0);
+  const contentListItems = Number(mq?.contentListItems || 0);
+
+  if (markdownBytes <= 0 && contentListItems <= 0) {
+    throw new Error(`Test Failed: PDF parsed artifacts are empty or missing. Quality stats: ${JSON.stringify(mq, null, 2)}\nFull metadata: ${JSON.stringify(lastTaskObj.metadata, null, 2)}`);
   }
 
   console.log(`\n✅ Tier 2 Standard Smoke Test Passed! (MinerU Pipeline + AI Non-skeleton completed)`);
