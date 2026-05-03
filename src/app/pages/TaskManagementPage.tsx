@@ -125,7 +125,7 @@ export function TaskManagementPage() {
 
   const diagnoseStatus = (t: ParseTask) => {
     const m = materials.find(mat => String(mat.id) === String(t.materialId));
-    if (!m) return { label: '需审计', color: 'text-amber-600 bg-amber-50 border-amber-100', icon: AlertTriangle };
+    if (!m) return { label: '无关联', color: 'text-amber-600 bg-amber-50 border-amber-100', icon: AlertTriangle };
 
     const ts = t.state;
     const ms = m.status;
@@ -145,7 +145,7 @@ export function TaskManagementPage() {
     if (ts === 'failed' || ts === 'canceled') {
       return { label: '已终止', color: 'text-slate-400 bg-slate-50 border-slate-100', icon: XCircle };
     }
-    return { label: '需审计', color: 'text-amber-600 bg-amber-50 border-amber-100', icon: AlertTriangle };
+    return { label: '待同步', color: 'text-amber-600 bg-amber-50 border-amber-100', icon: AlertTriangle };
   };
 
   const patchTaskInState = async (id: string) => {
@@ -736,8 +736,8 @@ export function TaskManagementPage() {
                           </button>
                           <button
                             onClick={() => navigate(`/tasks/${encodeURIComponent(t.id)}#review`)}
-                            disabled={t.state !== 'review-pending' && t.state !== 'completed'}
-                            className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all disabled:opacity-30"
+                            disabled={t.state !== 'review-pending'}
+                            className={`p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all disabled:opacity-30 ${t.state === 'completed' ? 'hidden' : ''}`}
                             title="审核"
                           >
                             <ShieldCheck size={16} />

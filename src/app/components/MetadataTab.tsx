@@ -82,12 +82,14 @@ export function MetadataTab({
   const [tagInput, setTagInput] = useState('');
   const [editingTags, setEditingTags] = useState(false);
   const [localTags, setLocalTags] = useState<string[]>(material?.tags ?? []);
+  const [savedTags, setSavedTags] = useState<string[] | null>(null);
 
   useEffect(() => {
     setLocalTags(material?.tags ?? []);
+    setSavedTags(null);
   }, [material?.tags]);
 
-  const tags = editingTags ? localTags : (material?.tags ?? []);
+  const tags = editingTags ? localTags : (savedTags ?? material?.tags ?? []);
 
   const fileInfo = useMemo(() => {
     return {
@@ -114,6 +116,7 @@ export function MetadataTab({
         throw new Error(`HTTP ${res.status} ${errText}`);
       }
       dispatch({ type: 'UPDATE_MATERIAL_TAGS', payload: { id: materialId as any, tags: localTags } });
+      setSavedTags([...localTags]);
       setEditingTags(false);
       toast.success('标签已保存');
     } catch (err: any) {
@@ -221,7 +224,7 @@ export function MetadataTab({
           <div className="flex items-center justify-between">
             <label className="text-xs text-gray-400">当前标签</label>
             {!editingTags ? (
-              <button onClick={() => { setEditingTags(true); setLocalTags(material?.tags ?? []); }} className="text-xs text-blue-600" type="button">编辑</button>
+              <button onClick={() => { setEditingTags(true); setLocalTags(savedTags ?? material?.tags ?? []); }} className="text-xs text-blue-600" type="button">编辑</button>
             ) : (
               <div className="flex gap-2">
                 <button onClick={() => setEditingTags(false)} className="text-xs text-gray-400" type="button">取消</button>
@@ -236,7 +239,7 @@ export function MetadataTab({
                 {editingTags && <button onClick={() => removeTag(tag)} className="text-blue-400 hover:text-red-500 text-[10px]" type="button">×</button>}
               </span>
             ))}
-            {!editingTags && (material?.tags?.length ?? 0) === 0 && <span className="text-xs text-gray-300">暂无标签</span>}
+            {!editingTags && tags.length === 0 && <span className="text-xs text-gray-300">暂无标签</span>}
           </div>
           {editingTags && (
             <div className="flex gap-2 mt-1.5">

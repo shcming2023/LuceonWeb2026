@@ -183,15 +183,15 @@ export function deriveMaterialTaskView(
     // 无任务但素材处于 processing
     if (material.status === 'processing') {
       view.hasStateDrift = true;
-      view.driftReason = '暂无关联任务 / 需审计';
-      // 强制把显示状态改为需审计，避免显示“正在解析”
-      view.displayStatus = '暂无关联任务 / 需审计';
+      view.driftReason = '暂无关联任务 / 无关联';
+      // 强制把显示状态改为无关联，避免显示“正在解析”
+      view.displayStatus = '暂无关联任务 / 无关联';
     } else if (material.metadata?.mineruStatus === 'processing') {
       view.hasStateDrift = true;
-      view.driftReason = '暂无关联任务 / 需审计';
-      view.displayStatus = '暂无关联任务 / 需审计';
+      view.driftReason = '暂无关联任务 / 无关联';
+      view.displayStatus = '暂无关联任务 / 无关联';
     } else {
-      view.displayStatus = '暂无关联任务 / 需审计';
+      view.displayStatus = '暂无关联任务 / 无关联';
     }
   }
 

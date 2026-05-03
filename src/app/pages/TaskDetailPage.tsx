@@ -567,8 +567,8 @@ export function TaskDetailPage() {
           {/* W2-2: Review 按钮 */}
           <button
             onClick={handleReview}
-            disabled={!['review-pending', 'completed'].includes(String(task.state))}
-            className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-40 transition-colors"
+            disabled={String(task.state) !== 'review-pending'}
+            className={`flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-40 transition-colors ${String(task.state) === 'completed' ? 'hidden' : ''}`}
             title="审核通过：确认元数据并完成任务"
           >
             <ShieldCheck className="w-4 h-4" /> 审核通过
@@ -650,7 +650,7 @@ export function TaskDetailPage() {
                 </div>
                 {/* 下一步动作 */}
                 <div>
-                  <p className="text-xs text-slate-400 mb-1.5 uppercase font-semibold tracking-wider">待复核/下一步动作</p>
+                  <p className="text-xs text-slate-400 mb-1.5 uppercase font-semibold tracking-wider">下一步动作</p>
                   <p className="text-sm font-medium text-slate-800">
                     {task.state === 'review-pending' ? '需人工审核' :
                      task.state === 'completed' ? '无需动作' :
@@ -702,7 +702,7 @@ export function TaskDetailPage() {
                   if (isHealthy) return <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 uppercase">HEALTHY</span>;
                   if (isReviewing) return <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 uppercase">READY FOR REVIEW</span>;
                   if (['failed', 'canceled'].includes(String(task.state))) return <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 uppercase">STOPPED</span>;
-                  return <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 uppercase animate-pulse">NEEDS AUDIT</span>;
+                  return <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 uppercase animate-pulse">PENDING SYNC</span>;
                 })()}
               </div>
               <div className="p-5 grid grid-cols-2 md:grid-cols-4 gap-4">
