@@ -1,6 +1,6 @@
 # Luceon2026 Validation Policy
 
-Last updated: 2026-05-03
+Last updated: 2026-05-05
 
 ## Validation Levels
 
@@ -286,6 +286,44 @@ Target owner: `luceonhmm`
 Purpose: validate the actual staging or production environment on the Home Mac mini.
 
 Only L3 can be treated as production truth. L1 and L2 can support a release decision, but they do not replace L3.
+
+Current accepted L3 result:
+
+- `P0-l3-home-mac-mini-staging-real-runtime-e2e-validation`: `PASS`
+- Lucia final judgment: `PASS`
+- Evidence source: luceonhmm reported `PASS_CANDIDATE`, then Lucia accepted it as `PASS`.
+- Scope: Home Mac mini staging / production-like independent environment.
+- Staging path: `/Users/concm/staging/Luceon2026`
+- Staging URL: `http://127.0.0.1:18081/cms/tasks`
+- Evidence directory: `/Users/concm/ops/evidence/luceon2026/l3-20260505-064229/`
+- HEAD: `d522fdad98eaec4c149a719df335b02595121741`
+- compose project: `luceon2026-staging`
+- compose files used: `docker-compose.yml`, `docker-compose.staging.local.yml`
+- Explicitly not used: `docker-compose.override.yml`, `docker-compose.tier2-standard.yml`
+- Runtime: local conda MinerU, Docker MinIO, host Ollama `qwen3.5:9b`, `DISABLE_AI_SKELETON_FALLBACK=true`, `OLLAMA_TIER2_MODEL=qwen3.5:9b`, `STORAGE_BACKEND=minio`.
+- Key IDs: task `task-1777934728573`, material `3969562638063124`, AI job `ai-job-1777934731633-3e49`, MinerU task `6276827e-8b3e-4d2f-bad0-b8a8cbccf4ad`, uploaded file `l3-staging-e2e-1777934728043.pdf`.
+- ZIP sha256: `d7e6e51a55d058d5b368ff7435dfc7aa6bf5681ddb7de1f3bf7a41ad03fe7cfb`
+- Confirmed L3 E2E behavior:
+  - frontend upload input via Playwright `setInputFiles`.
+  - task/material created.
+  - local MinerU task completed.
+  - MinIO raw/parsed/AI raw artifacts available.
+  - AI provider/model: `ollama` / `qwen3.5:9b`.
+  - provider/model was not `skeleton`.
+  - task reached `review-pending`.
+  - MetadataTab four-layer structure validated.
+  - `Material.tags` updated.
+  - `metadata.tags` unchanged.
+  - review approval completed.
+  - task reached `completed` / `done`.
+  - ZIP downloaded with size/hash evidence.
+  - browser console had no business error/warn.
+  - dependency-health `blocking=false`.
+  - consistency audit `findingsCount=0`, `blockingFindings=0`.
+- Pending scope: no production release readiness, no full-site completion, no all-error-path coverage, no concurrent upload coverage, no large PDF / long-run stability coverage, no permissions/security coverage, no online MinerU v4 compatibility, no folder upload coverage, no settings/products/library full coverage, and no rollback/backup rehearsal completion.
+- Non-blocking follow-ups:
+  - `P3-task-detail-toast-overlay-toolbar-polish`: toast can overlay the task detail toolbar and block a normal Playwright click on `下载 ZIP`.
+  - `P2-completed-material-status-consistency-review`: after review approval, task is `completed/done` but `Material.status` remains `reviewing`; consistency audit currently does not flag it.
 
 ## Result Vocabulary
 
