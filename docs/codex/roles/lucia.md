@@ -95,9 +95,19 @@ Current accepted runtime validation facts:
 
 Current accepted MetadataTab facts:
 
+- `P2-upload-entry-testability-enhancement`: `PASS`, scoped to local real runtime UAT and `/cms/tasks` upload file input testability.
+- luceonhmm reported `PASS_CANDIDATE`; Lucia accepted final status as `PASS`.
+- Validated branch HEAD: `042c6508e8357fa07c6a0bb12ec48fc09129e8cc`; main merged HEAD: `042c6508e8357fa07c6a0bb12ec48fc09129e8cc`.
+- Confirmed upload-entry testability behavior: `data-testid` upload contract present; Playwright `setInputFiles` works on `task-upload-file-input`; real PDF creates task/material through the frontend input path; task appears in task list; task detail opens; local MinerU completed; MinIO parsed artifacts available; Ollama provider/model `ollama/qwen3.5:9b`; final state `review-pending`; browser console clean; dependency-health `blocking=false`; consistency audit `findingsCount=0 blockingFindings=0`.
+- Scope limits: no folder input validation, no error-path validation, no concurrent upload validation, no large-file upload validation, and no L3 or production-readiness claim. The raw object list API `rawTotal=0` observation remains non-blocking and unpromoted unless separately assigned.
+- `P3-task-list-pending-sync-tooltip-polish`: `PASS`, scoped to local real runtime UAT task-list `待同步` tooltip polish.
+- luceonhmm reported `PASS_CANDIDATE`; Lucia accepted final status as `PASS`.
+- Validated branch HEAD: `3962fb1d7834a4b13683503d740fb9ea7edb28c1`; main merged HEAD: `3962fb1d7834a4b13683503d740fb9ea7edb28c1`.
+- Confirmed tooltip behavior: tooltip text is `状态映射待同步：任务、资料、AI 任务或产物状态暂未完全对齐；不代表审核失败。`; `状态一致` title did not regress; page did not show `需审计`; browser console clean; dependency-health `blocking=false`; consistency audit `findingsCount=0 blockingFindings=0`.
+- Scope limits: no L3 or production-readiness claim, no full-site UI review, no full badge state matrix validation, and no upload modal / file picker validation.
 - `P2-operator-main-workflow-polish-bundle`: `PASS`, scoped to local real runtime UAT, task `task-1777849339744`, material `mat-1777849339732`, and focused Operator polish checks for MetadataTab tags, completed actions, completed list wording, and overview next-action label at implementation HEAD `c60152d72fe8dae545a2c18c3f425b6f0620ecf4`.
 - Confirmed Operator polish behavior: MetadataTab tag save immediate sync passed; read-only chip updates immediately after save without refresh; re-entering edit mode preserves saved draft tags; delete tag -> save -> read-only chip disappears immediately without refresh; refresh UI matches API `Material.tags`; `metadata.tags` was not polluted; completed task detail no longer shows misleading `审核通过` main button; completed task list row no longer shows review action; completed list row no longer shows `需审计` and shows `待同步` where relevant; overview label now shows `下一步动作`; browser console error/warn empty; consistency audit `findingsCount=0 blockingFindings=0`.
-- Non-blocking polish: `待同步` is clearer than `需审计`, but may still benefit from a tooltip explaining it is a task/material/AI job/artifact status mapping hint, not a failure or audit rejection. Potential follow-up: `P3-task-list-pending-sync-tooltip-polish`.
+- Follow-up polish status: `待同步` tooltip clarity was later resolved by `P3-task-list-pending-sync-tooltip-polish`.
 - `P1-operator-main-workflow-usability-review`: `PASS`, scoped to local real runtime UAT, Operator main workflow, task `task-1777849339744`, and material `mat-1777849339732` at HEAD `1849beacef6d755859c45e7704ddd467dc3b03aa`.
 - Confirmed Operator workflow behavior: real PDF upload created the task successfully; local MinerU completed; MinIO raw and parsed artifacts were available; Ollama provider/model was `ollama/qwen3.5:9b`; `review-pending` -> `completed/done` can complete; `Material.tags` saved successfully; `metadata.tags` was not polluted; ZIP download succeeded; event log explains MinerU, MinIO, AI, and review stages; dependency-health `blocking=false`; consistency audit `findingsCount=0 blockingFindings=0`; browser console error/warn empty.
 - Follow-up polish status: MetadataTab tag save immediate chip/draft sync, completed `审核通过` action visibility, completed-list `需审计` wording, and completed overview next-action label were later resolved by `P2-operator-main-workflow-polish-bundle`.
@@ -115,7 +125,7 @@ Current accepted MetadataTab facts:
 - Validated structure: 审核摘要; 当前保存值; AI 建议与证据; 技术详情 (`Technical Details`) 默认折叠.
 - `P1-fix-metadata-current-tags-persistence-contract`: `PASS`, scoped to `review-pending` task single-tag add + refresh persistence path.
 - Current-tags persistence contract: Operator current tags are stored in `Material.tags`; `metadata.tags` remains the AI/parse tag source.
-- Pending and not passed: L3/production readiness, full-site UI review, complete browser file-picker / upload modal validation, products/library/settings review, multi-task-state UI validation, other task states, concurrent editing, failure-toast/error-path behavior, all-error-path validation, `待同步` tooltip polish, and broader PRD wording revision.
+- Pending and not passed: L3/production readiness, full-site UI review, complete browser file-picker / upload modal validation, products/library/settings review, multi-task-state UI validation, other task states, concurrent editing, failure-toast/error-path behavior, all-error-path validation, and broader PRD wording revision.
 
 ## Current Next Action For lucia
 

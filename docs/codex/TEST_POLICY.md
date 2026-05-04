@@ -41,6 +41,42 @@ Current main L2/UAT target:
 
 Current accepted result:
 
+- `P2-upload-entry-testability-enhancement`: `PASS`
+- Lucia final judgment: `PASS`
+- Evidence source: luceonhmm reported `PASS_CANDIDATE`, then Lucia accepted it as `PASS`.
+- Validated branch HEAD: `042c6508e8357fa07c6a0bb12ec48fc09129e8cc`
+- Main merged HEAD: `042c6508e8357fa07c6a0bb12ec48fc09129e8cc`
+- Scope: local real runtime UAT, `/cms/tasks` upload file input testability.
+- Confirmed behavior:
+  - `data-testid` upload contract present.
+  - Playwright `setInputFiles` works on `task-upload-file-input`.
+  - real PDF creates task/material through the frontend input path.
+  - task appears in task list.
+  - task detail opens.
+  - local MinerU completed.
+  - MinIO parsed artifacts available.
+  - Ollama provider/model: `ollama` / `qwen3.5:9b`.
+  - final state: `review-pending`.
+  - browser console clean.
+  - dependency-health `blocking=false`.
+  - consistency audit `findingsCount=0`, `blockingFindings=0`.
+- Pending scope: no folder input validation, no error-path validation, no concurrent upload validation, no large-file upload validation, and no L3/production-readiness claim. The raw object list API `rawTotal=0` observation remains non-blocking and unpromoted unless separately assigned.
+
+- `P3-task-list-pending-sync-tooltip-polish`: `PASS`
+- Lucia final judgment: `PASS`
+- Evidence source: luceonhmm reported `PASS_CANDIDATE`, then Lucia accepted it as `PASS`.
+- Validated branch HEAD: `3962fb1d7834a4b13683503d740fb9ea7edb28c1`
+- Main merged HEAD: `3962fb1d7834a4b13683503d740fb9ea7edb28c1`
+- Scope: local real runtime UAT, task list `待同步` tooltip polish.
+- Confirmed behavior:
+  - Tooltip text: `状态映射待同步：任务、资料、AI 任务或产物状态暂未完全对齐；不代表审核失败。`
+  - `状态一致` title did not regress.
+  - Page did not show `需审计`.
+  - browser console clean.
+  - dependency-health `blocking=false`.
+  - consistency audit `findingsCount=0`, `blockingFindings=0`.
+- Pending scope: no L3/production-readiness claim, no full-site UI review, no full badge state matrix validation, and no upload modal / file picker validation.
+
 - `P2-operator-main-workflow-polish-bundle`: `PASS`
 - Lucia final judgment: `PASS`
 - Evidence source: luceonhmm reported `PASS_CANDIDATE`, then Lucia accepted it as `PASS`.
@@ -60,7 +96,7 @@ Current accepted result:
   - browser console error/warn empty.
   - consistency audit `findingsCount=0`, `blockingFindings=0`.
 - Pending scope: no L3/production-readiness claim, no full-site UI review, no all-task-state validation, no all-error-path validation, and no upload file-picker / upload modal validation.
-- Non-blocking polish: `待同步` is clearer than `需审计`, but may still benefit from a tooltip explaining it is a task/material/AI job/artifact status mapping hint, not a failure or audit rejection. Potential follow-up: `P3-task-list-pending-sync-tooltip-polish`.
+- Follow-up polish status: `待同步` tooltip clarity was later resolved by `P3-task-list-pending-sync-tooltip-polish`.
 
 - `P1-operator-main-workflow-usability-review`: `PASS`
 - Lucia final judgment: `PASS`
