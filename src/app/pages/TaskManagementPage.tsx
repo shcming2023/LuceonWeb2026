@@ -448,6 +448,7 @@ export function TaskManagementPage() {
             type="file"
             multiple
             className="hidden"
+            data-testid="task-upload-file-input"
             onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ''; void upload(files); }}
             accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.md"
           />
@@ -456,6 +457,7 @@ export function TaskManagementPage() {
             type="file"
             multiple
             className="hidden"
+            data-testid="task-upload-folder-input"
             onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ''; void upload(files); }}
             accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.md"
           />
@@ -464,6 +466,7 @@ export function TaskManagementPage() {
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
               className="flex items-center gap-2 px-4 py-2 hover:bg-blue-500 transition-colors disabled:opacity-60"
+              data-testid="task-upload-file-button"
             >
               <Upload className="w-4 h-4" /> 上传文件
             </button>
@@ -476,6 +479,7 @@ export function TaskManagementPage() {
               }}
               disabled={uploading}
               className="flex items-center gap-2 px-3 py-2 hover:bg-blue-500 transition-colors disabled:opacity-60"
+              data-testid="task-upload-folder-button"
             >
               <FolderPlus className="w-4 h-4" /> 文件夹
             </button>
