@@ -27,9 +27,9 @@ async function run() {
     }
   });
 
-  await new Promise((resolve) => mockMineruServer.listen(0, '127.0.0.2', resolve));
+  await new Promise((resolve) => mockMineruServer.listen(0, '127.0.0.1', resolve));
   const port = mockMineruServer.address().port;
-  const localEndpoint = `http://127.0.0.2:${port}`;
+  const localEndpoint = `http://127.0.0.1:${port}`;
 
   console.log(`Mock MinerU API running on ${localEndpoint}`);
 
@@ -71,9 +71,20 @@ async function run() {
     }
   };
 
+  // Override fetch to bypass host.docker.internal replacement in test
+  const originalFetch = global.fetch;
+  global.fetch = async (url, options) => {
+    if (typeof url === 'string' && url.includes('host.docker.internal')) {
+      url = url.replace('host.docker.internal', '127.0.0.1');
+    }
+    return originalFetch(url, options);
+  };
+
   // Execute recoverMisjudgedFailedTasks
   console.log('Running recoverMisjudgedFailedTasks...');
   await worker.recoverMisjudgedFailedTasks([task1, task2]);
+
+  global.fetch = originalFetch;
 
   mockMineruServer.close();
 
