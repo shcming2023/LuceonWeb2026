@@ -348,7 +348,7 @@ async function cancelTask(task) {
   // Check if task can be canceled
   const isCancellable = ['pending', 'running', 'ai-pending', 'ai-running', 'review-pending', 'result-store'].includes(task.state) ||
                         ['mineru-queued', 'mineru-processing', 'submit-failed-retryable', 'result-fetching'].includes(task.stage);
-                        
+
   if (!isCancellable) {
     if (!(task.state === 'failed' && task.stage === 'submit-failed-retryable')) {
       throw new Error(`Task state ${task.state} (stage: ${task.stage}) cannot be canceled directly`);
@@ -463,6 +463,8 @@ async function reviewTask(task, body) {
   if (task.materialId) {
     try {
       await dbPatch(`/materials/${encodeURIComponent(task.materialId)}`, {
+        status: 'completed',
+        mineruStatus: 'completed',
         aiStatus: 'analyzed',
         updateTime: Date.now(),
         metadata: {
@@ -470,6 +472,8 @@ async function reviewTask(task, body) {
           aiJobId: task.aiJobId,
           reviewedAt: new Date().toISOString(),
           reviewer: body?.reviewer || 'operator',
+          processingStage: 'done',
+          processingMsg: '人工审核确认',
         },
       });
     } catch (e) {
@@ -538,16 +542,16 @@ export function registerTaskActionRoutes(app, deps = {}) {
     }
     res.status(status).json(body);
   }
-  
+
   // batch retry (MUST be before :id routes)
   app.post('/tasks/batch/retry', async (req, res) => {
     try {
       if (safeDeps.checkDependencyHealth) {
         const health = await safeDeps.checkDependencyHealth();
         if (health.blocking) {
-          const blockingDep = Object.keys(health.dependencies).find(k => 
-            health.dependencies[k].ok === false && 
-            health.dependencies[k].requiredFor?.includes('parse') && 
+          const blockingDep = Object.keys(health.dependencies).find(k =>
+            health.dependencies[k].ok === false &&
+            health.dependencies[k].requiredFor?.includes('parse') &&
             !health.dependencies[k].skipped
           );
           return res.status(503).json({
@@ -591,9 +595,9 @@ export function registerTaskActionRoutes(app, deps = {}) {
       if (safeDeps.checkDependencyHealth) {
         const health = await safeDeps.checkDependencyHealth();
         if (health.blocking) {
-          const blockingDep = Object.keys(health.dependencies).find(k => 
-            health.dependencies[k].ok === false && 
-            health.dependencies[k].requiredFor?.includes('parse') && 
+          const blockingDep = Object.keys(health.dependencies).find(k =>
+            health.dependencies[k].ok === false &&
+            health.dependencies[k].requiredFor?.includes('parse') &&
             !health.dependencies[k].skipped
           );
           return res.status(503).json({
@@ -621,9 +625,9 @@ export function registerTaskActionRoutes(app, deps = {}) {
       if (safeDeps.checkDependencyHealth) {
         const health = await safeDeps.checkDependencyHealth();
         if (health.blocking) {
-          const blockingDep = Object.keys(health.dependencies).find(k => 
-            health.dependencies[k].ok === false && 
-            health.dependencies[k].requiredFor?.includes('parse') && 
+          const blockingDep = Object.keys(health.dependencies).find(k =>
+            health.dependencies[k].ok === false &&
+            health.dependencies[k].requiredFor?.includes('parse') &&
             !health.dependencies[k].skipped
           );
           return res.status(503).json({
@@ -668,7 +672,7 @@ export function registerTaskActionRoutes(app, deps = {}) {
         const isCancellable = ['pending', 'running', 'ai-pending', 'ai-running', 'review-pending', 'result-store'].includes(task.state) ||
                               ['mineru-queued', 'mineru-processing', 'submit-failed-retryable', 'result-fetching'].includes(task.stage) ||
                               (task.state === 'failed' && task.stage === 'submit-failed-retryable');
-        
+
         let materialHasParsedFiles = false;
         if (task.materialId) {
           try {
@@ -768,7 +772,7 @@ export function registerTaskActionRoutes(app, deps = {}) {
   app.post('/ops/reset-test-env', async (req, res) => {
     try {
       const { dryRun, force } = req.body || {};
-      
+
       function toCollectionArray(value) {
         if (Array.isArray(value)) return value;
         if (value && typeof value === 'object') return Object.values(value);
@@ -865,7 +869,7 @@ export function registerTaskActionRoutes(app, deps = {}) {
           try { await cancelTask(t); } catch (e) { /* ignore */ }
         }
       }
-      
+
       const deleteCollection = async (collName, items) => {
         const ids = items.map(i => i.id).filter(Boolean);
         if (ids.length === 0) return { ok: true, deleted: 0 };
@@ -909,7 +913,7 @@ export function registerTaskActionRoutes(app, deps = {}) {
         if (minioClient) {
           const rawBucket = deps.getMinioBucket ? deps.getMinioBucket() : 'eduassets';
           const parsedBucket = deps.getParsedBucket ? deps.getParsedBucket() : 'eduassets-parsed';
-          
+
           if (minioOriginalObjects.length > 0) {
             await minioClient.removeObjects(rawBucket, minioOriginalObjects).catch(() => null);
           }

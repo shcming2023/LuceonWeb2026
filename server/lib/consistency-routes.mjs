@@ -257,6 +257,38 @@ export function registerConsistencyRoutes(app, deps) {
       }
     }
 
+    // 2.1) ParseTask.state === "completed" 但 Material.status 不是 "completed"
+    for (const t of tasksById.values()) {
+      if (t?.state !== 'completed' || !t?.materialId) continue;
+      const m = materialsById.get(String(t.materialId));
+      if (!m) continue; // 孤儿情况已在 2) 中处理
+
+      if (m.status !== 'completed' || m.mineruStatus !== 'completed' || m.aiStatus !== 'analyzed') {
+        findings.push({
+          kind: 'completed-task-material-status-mismatch',
+          severity: 'warn',
+          targetType: 'Material',
+          targetId: m.id,
+          message: `ParseTask ${t.id} 已完成，但关联的 Material ${m.id} 状态不一致 (status: ${m.status}, mineruStatus: ${m.mineruStatus}, aiStatus: ${m.aiStatus})`,
+          suggestion: '更新 Material 状态为 completed / mineruStatus=completed / aiStatus=analyzed',
+          repair: {
+            method: 'PATCH',
+            path: `/materials/${encodeURIComponent(m.id)}`,
+            body: {
+              status: 'completed',
+              mineruStatus: 'completed',
+              aiStatus: 'analyzed',
+              metadata: {
+                ...(m.metadata || {}),
+                processingStage: 'done',
+                processingMsg: '人工审核确认 (通过一致性修复)'
+              }
+            }
+          }
+        });
+      }
+    }
+
     // 3) AiMetadataJob.parseTaskId 必须对应 ParseTask.id
     for (const j of aiJobsById.values()) {
       if (!j?.parseTaskId) continue;
