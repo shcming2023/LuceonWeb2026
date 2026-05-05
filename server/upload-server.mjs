@@ -395,7 +395,39 @@ async function checkDependencyHealth(minioBucket) {
              result.dependencies.ollama.error = `Missing required Standard model: ${targetModel}`;
              result.dependencies.ollama.ok = false;
            } else {
-             result.dependencies.ollama.ok = true;
+             // 5. Lightweight smoke test to ensure actual generation works, not just tags
+             const smokeStart = Date.now();
+             try {
+               const smokeRes = await fetch(`${base}/api/chat`, {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify({
+                   model: targetModel,
+                   messages: [{ role: 'user', content: 'hello' }],
+                   stream: false,
+                   options: { num_predict: 2 } // Extremely low token budget for healthcheck
+                 }),
+                 signal: AbortSignal.timeout(5000)
+               });
+
+               result.dependencies.ollama.durationMs = Date.now() - smokeStart;
+               result.dependencies.ollama.model = targetModel;
+
+               if (smokeRes.ok) {
+                 result.dependencies.ollama.chatOk = true;
+                 result.dependencies.ollama.ok = true;
+               } else {
+                 result.dependencies.ollama.chatOk = false;
+                 result.dependencies.ollama.error = `Smoke test HTTP ${smokeRes.status}`;
+                 result.dependencies.ollama.ok = false;
+               }
+             } catch (se) {
+               result.dependencies.ollama.chatOk = false;
+               result.dependencies.ollama.durationMs = Date.now() - smokeStart;
+               result.dependencies.ollama.model = targetModel;
+               result.dependencies.ollama.error = `Smoke test failed: ${se.message}`;
+               result.dependencies.ollama.ok = false;
+             }
            }
          } else {
            result.dependencies.ollama.error = `HTTP ${ollamaRes.status}`;

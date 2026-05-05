@@ -32,12 +32,13 @@ async function runTest() {
   const dummyApp = express();
   let mineruOk = false;
   let ollamaOk = false;
+  let ollamaChatOk = true;
 
   // DB Server settings mock
   dummyApp.get('/settings', (req, res) => {
     res.json({
       mineruConfig: { localEndpoint: 'http://127.0.0.1:18083' },
-      aiConfig: { enabled: true, providers: [{ enabled: true, priority: 1, apiEndpoint: 'http://127.0.0.1:11434' }] }
+      aiConfig: { enabled: true, providers: [{ providerId: 'ollama', enabled: true, priority: 1, apiEndpoint: 'http://127.0.0.1:11434' }] }
     });
   });
 
@@ -55,7 +56,11 @@ async function runTest() {
 
   // Ollama Mock
   dummyApp.get('/ollama/api/tags', (req, res) => {
-    if (ollamaOk) res.json({ models: [] });
+    if (ollamaOk) res.json({ models: [{name: 'qwen3.5:9b'}] });
+    else res.sendStatus(503);
+  });
+  dummyApp.post('/ollama/api/chat', (req, res) => {
+    if (ollamaOk && ollamaChatOk) res.json({ message: { content: 'mock' } });
     else res.sendStatus(503);
   });
 
@@ -82,7 +87,7 @@ async function runTest() {
   dbApp.get('/settings', (req, res) => {
     res.json({
       mineruConfig: { localEndpoint: `http://127.0.0.1:${dummyPort}/mineru` },
-      aiConfig: { enabled: true, providers: [{ enabled: true, priority: 1, apiEndpoint: `http://127.0.0.1:${dummyPort}/ollama` }] }
+      aiConfig: { enabled: true, providers: [{ providerId: 'ollama', enabled: true, priority: 1, apiEndpoint: `http://127.0.0.1:${dummyPort}/ollama` }] }
     });
   });
   dbApp.get('/tasks', (req, res) => res.json([]));
@@ -188,6 +193,16 @@ async function runTest() {
       console.error('Test 4 failed payload:', await taskRes.text());
     }
     assertEqual(taskRes.status, 200, 'POST /tasks should succeed even if ollama is down');
+
+    // Test 5: ollama tags ok but chat fails
+    mineruOk = true;
+    ollamaOk = true;
+    ollamaChatOk = false;
+    let resChatDown = await fetch(`${uploadBase}/ops/dependency-health`);
+    let dataChatDown = await resChatDown.json();
+    assertEqual(dataChatDown.dependencies.ollama.ok, false, 'ollama.ok should be false when chat fails');
+    assertEqual(dataChatDown.dependencies.ollama.chatOk, false, 'ollama.chatOk should be false');
+    assertEqual(dataChatDown.dependencies.ollama.error.includes('Smoke test HTTP 503'), true, 'Should include smoke test error');
 
   } finally {
     child.kill();
