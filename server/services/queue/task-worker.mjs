@@ -808,9 +808,15 @@ export class ParseTaskWorker {
    * @returns {Promise<void>}
    */
   async recoverMisjudgedFailedTasks(tasks) {
-    const failedWithMineruId = tasks.filter(t =>
-      t.state === 'failed' && t.metadata?.mineruTaskId && t.engine === 'local-mineru'
-    );
+    const failedWithMineruId = tasks.filter(t => {
+      if (t.state !== 'failed') return false;
+      if (!t.metadata?.mineruTaskId) return false;
+      if (t.engine !== 'local-mineru') return false;
+      // P1 Patch: Do not automatically recover tasks that failed during AI provider invocation.
+      // This prevents infinite loops of creating new AI jobs when the AI provider repeatedly fails.
+      if (t.stage === 'ai') return false;
+      return true;
+    });
     if (failedWithMineruId.length === 0) return;
 
     for (const task of failedWithMineruId) {
