@@ -1,164 +1,125 @@
-# Luceon2026 Task Brief Template
+# Luceon2026 Lucia -> Lucode Task Brief Template
 
-Last updated: 2026-05-03
+Last updated: 2026-05-07
 
-Use this template when Lucia assigns work to `lucode`, `luceonhmm`, or `luplan`. The task brief is the execution contract. Do not broaden work beyond the signed scope.
+Use this template when Lucia assigns development or testing work to Lucode. The task brief is the execution contract. Lucode must not broaden work beyond the signed scope.
 
-Luceon2026 uses Lucia-centered coordination. Autonomous task queues are not active. Execution agents must receive a Lucia task brief, execute only the signed scope, and report back to Lucia using the corresponding report format. They do not automatically write task results into a queue or durable project facts.
+Every task brief and completion report must be one standalone copyable text block.
 
-Only facts confirmed by Lucia or Director may be promoted by `luplan` into `docs/codex/PROJECT_STATE.md`, `docs/codex/HANDOFF.md`, PRD, changelog, role handoffs, or durable project memory.
-
-## lucode Implementation Task
+## Lucia Task Brief
 
 ```text
 Task:
 
 Assignee:
-lucode
+Lucode
 
-Workspace:
-/workspace/ops/Luceon2026
+Issued by:
+Lucia
 
-Host/IDE working copy reference:
-D:\Users\moonp\OneDrive\Mac\项目开发\Luceon2026
+Project:
+Luceon2026
+
+Development workspace:
+/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/3.Luceon2026
+
+Production deployment path:
+/Users/concm/prod_workspace/Luceon2026
 
 GitHub:
 https://github.com/shcming2023/Luceon2026
 
-Task issued by:
-Lucia
+Required reading before execution:
+- AGENTS.md
+- docs/codex/TEAM_CONTRACT.md
+- docs/codex/roles/lucode.md
+- docs/codex/PROJECT_STATE.md
+- docs/codex/HANDOFF.md
+- docs/prd/Luceon2026-PRD-v0.4.md
 
 Background:
 
 Current known facts:
 
 PRD / contract reference:
-docs/prd/Luceon2026-PRD-v0.4.md
 
-Problem to fix:
-
-Goal:
+Objective:
 
 Non-goals:
 
-Allowed files or modules:
+Allowed files, modules, or operations:
 
 Forbidden changes:
-- Do not start implementation from vague oral instructions or self-created tasks.
-- Do not perform broad rewrites or disaster-prone refactors.
+- Do not start from vague oral instructions or self-created tasks.
+- Do not broaden scope beyond this task brief.
+- Do not perform broad rewrites or framework-level refactors unless explicitly assigned.
 - Do not change unrelated files.
-- Do not edit PRD facts, project-state facts, role contracts, or release judgments unless the task explicitly says so.
+- Do not change PRD truth, project ledger facts, role contracts, or release judgments unless explicitly assigned.
 - Do not commit secrets, tokens, local private credentials, or machine-only artifacts.
-- Do not claim UAT, L2, L3, production, or real-environment validation without luceonhmm evidence.
-- Do not run destructive data, MinIO, DB, Docker volume, or production cleanup commands.
+- Do not run destructive production, MinIO, DB, Docker volume, or data cleanup commands without explicit Director approval.
+- Do not restore deprecated heuristic chapter-preprocessing logic as a main path.
+- Do not configure silent degradation for required parsing, preprocessing, or AI recognition paths.
+- Do not claim UAT, L2, L3, production readiness, or release readiness without the evidence required below.
 
-Suggested repair direction:
+Suggested direction:
 
-Required local checks:
+Required checks:
+
+Required evidence:
 
 GitHub sync requirements:
-- Before starting: cd /workspace/ops/Luceon2026; git status --short --branch; git fetch origin; git pull --ff-only origin main.
+- Before starting: cd /Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/3.Luceon2026; git status --short --branch; git fetch origin; git pull --ff-only origin main.
 - Before reporting: git status --short --branch; git log -1 --oneline.
-- Push the branch or commit to GitHub when the task requires remote review.
+- Commit and push to GitHub if repository files are changed and this task requires remote synchronization.
 
 Completion report must include:
 - confirmation that work was based on this Lucia task brief
 - branch and HEAD
 - files changed
-- summary of implementation
-- commands run and exit codes
-- skipped checks and reasons
-- risks or blockers
-- whether any remaining validation must be routed to luceonhmm
+- implementation or testing summary
+- commands run with exit codes
+- checks skipped and reasons
+- runtime or test evidence when applicable
+- risks, blockers, or residual technical debt
+- GitHub sync status
+- whether Lucia review, Director decision, or additional validation is required
+
+Acceptance criteria:
 ```
 
-## luceonhmm Validation Task
+## Lucode Completion Report
 
 ```text
 Task:
 
 Assignee:
-luceonhmm
+Lucode
 
-Target path:
-/Users/concm/prod_workspace/Luceon2026
-
-Background:
-
-Exact validation target:
-
-Environment prerequisites:
-
-Task issued by:
+Report to:
 Lucia
 
-Allowed operations:
+Confirmation:
+This work was executed based on Lucia's task brief dated [date].
 
-Forbidden operations:
-- Do not write business implementation code.
-- Do not modify PRD or project facts unless explicitly assigned.
-- Do not use Lite mock, skeleton fallback, or partial checks as Tier 2 Standard or L3 proof.
-- Do not report unjudged evidence as final PASS; report evidence or PASS_CANDIDATE for Lucia judgment.
-- Do not echo full secrets or tokens.
-- Do not run docker compose down -v, delete Docker volumes, wipe MinIO, wipe DB data, or clean staging/production data without explicit Director approval.
+Branch and HEAD:
 
-Commands or manual checks:
+Files changed:
 
-Required evidence:
-- confirmation that work was based on this Lucia task brief
-- machine and OS
-- cwd, branch, HEAD, dirty state
-- deployment mode
-- command exit codes and durations
-- service health
-- original error text if failed
-- API/log evidence
-- task/material/batch/object identifiers when applicable
-- MinIO/object-storage evidence
-- DB or consistency-audit evidence
-- real MinerU status
-- real Ollama status and effective model
-- skeleton fallback status
-- Director browser verification state when required
+Implementation or testing summary:
 
-Completion report status:
-PASS_CANDIDATE | FAIL | BLOCKED | PENDING | INCONCLUSIVE
-```
+Commands run and exit codes:
 
-## luplan Documentation Task
+Checks skipped and reasons:
 
-```text
-Task:
+Evidence:
 
-Assignee:
-luplan
+Risks, blockers, or residual technical debt:
 
-Background:
+GitHub sync status:
 
-Source documents to read:
+Required Lucia review:
 
-Task issued by:
-Lucia
+Required Director decision:
 
-Facts to promote:
-
-Facts to keep pending:
-
-Files allowed to edit:
-
-Forbidden changes:
-- Do not edit business implementation code.
-- Do not treat failed or pending validation as passed.
-- Do not promote unreviewed reports, pending validation, or compatibility-only results as confirmed project facts.
-- Do not create a competing current PRD.
-- Do not write secrets or tokens.
-- Do not edit .agents/** unless Director explicitly authorizes it.
-
-Required output:
-- confirmation that work was based on this Lucia task brief
-- files changed
-- confirmed requirements promoted
-- pending strategies left unpromoted
-- evidence source
-- impact on lucia, lucode, or luceonhmm
+Additional validation required:
 ```

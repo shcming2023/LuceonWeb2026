@@ -7,7 +7,7 @@
 - Lucia 角色定义：[docs/codex/roles/lucia.md](/Users/concm/prod_workspace/Luceon2026/docs/codex/roles/lucia.md)
 - PRD v0.4：[docs/prd/Luceon2026-PRD-v0.4.md](/Users/concm/prod_workspace/Luceon2026/docs/prd/Luceon2026-PRD-v0.4.md)
 - PRD 唯一性索引：[docs/prd/README.md](/Users/concm/prod_workspace/Luceon2026/docs/prd/README.md)
-- luplan PRD 维护规程：[docs/prd/luplan-prd-maintenance.md](/Users/concm/prod_workspace/Luceon2026/docs/prd/luplan-prd-maintenance.md)
+- Lucia PRD 维护规程：[docs/prd/lucia-prd-maintenance.md](/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/3.Luceon2026/docs/prd/lucia-prd-maintenance.md)
 - UAT 测试指南：[uat/README.md](/Users/concm/prod_workspace/Luceon2026/uat/README.md)
 
 ## 一、项目规划

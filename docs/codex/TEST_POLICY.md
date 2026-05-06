@@ -1,12 +1,12 @@
 # Luceon2026 Validation Policy
 
-Last updated: 2026-05-05
+Last updated: 2026-05-07
 
 ## Validation Levels
 
 ### L1: Fast Code Gate
 
-Owner in the target model: `lucia`
+Execution owner: `Lucode`; review owner: `Lucia`
 
 Purpose: determine whether the code is obviously broken before deeper environment validation.
 
@@ -23,9 +23,7 @@ L1 must not be reported as L2, UAT, or production validation.
 
 ### L2: Tier 2 Near-Production Validation
 
-Current owner: `luceonhmm`
-
-Legacy owner: `lutest` is retired and must not receive new validation work.
+Execution owner: `Lucode` when assigned by Lucia; review owner: `Lucia`.
 
 Purpose: validate real integration behavior in a near-production local or staging environment.
 
@@ -43,7 +41,7 @@ Current accepted result:
 
 - `P2-upload-entry-testability-enhancement`: `PASS`
 - Lucia final judgment: `PASS`
-- Evidence source: luceonhmm reported `PASS_CANDIDATE`, then Lucia accepted it as `PASS`.
+- Evidence source: historical validation report recorded `PASS_CANDIDATE`, then Lucia accepted it as `PASS`.
 - Validated branch HEAD: `042c6508e8357fa07c6a0bb12ec48fc09129e8cc`
 - Main merged HEAD: `042c6508e8357fa07c6a0bb12ec48fc09129e8cc`
 - Scope: local real runtime UAT, `/cms/tasks` upload file input testability.
@@ -64,7 +62,7 @@ Current accepted result:
 
 - `P3-task-list-pending-sync-tooltip-polish`: `PASS`
 - Lucia final judgment: `PASS`
-- Evidence source: luceonhmm reported `PASS_CANDIDATE`, then Lucia accepted it as `PASS`.
+- Evidence source: historical validation report recorded `PASS_CANDIDATE`, then Lucia accepted it as `PASS`.
 - Validated branch HEAD: `3962fb1d7834a4b13683503d740fb9ea7edb28c1`
 - Main merged HEAD: `3962fb1d7834a4b13683503d740fb9ea7edb28c1`
 - Scope: local real runtime UAT, task list `待同步` tooltip polish.
@@ -79,7 +77,7 @@ Current accepted result:
 
 - `P2-operator-main-workflow-polish-bundle`: `PASS`
 - Lucia final judgment: `PASS`
-- Evidence source: luceonhmm reported `PASS_CANDIDATE`, then Lucia accepted it as `PASS`.
+- Evidence source: historical validation report recorded `PASS_CANDIDATE`, then Lucia accepted it as `PASS`.
 - Validated implementation HEAD: `c60152d72fe8dae545a2c18c3f425b6f0620ecf4`
 - Scope: local real runtime UAT, task `task-1777849339744`, material `mat-1777849339732`, focused Operator polish checks for MetadataTab tags, completed actions, completed list wording, and overview next-action label.
 - Confirmed behavior:
@@ -100,7 +98,7 @@ Current accepted result:
 
 - `P1-operator-main-workflow-usability-review`: `PASS`
 - Lucia final judgment: `PASS`
-- Evidence source: luceonhmm reported `PASS_CANDIDATE`, then Lucia accepted it as `PASS`.
+- Evidence source: historical validation report recorded `PASS_CANDIDATE`, then Lucia accepted it as `PASS`.
 - Validated HEAD: `1849beacef6d755859c45e7704ddd467dc3b03aa`
 - Scope: local real runtime UAT, task `task-1777849339744`, material `mat-1777849339732`, Operator main workflow: upload real PDF, task list, task detail, MetadataTab, tag save, review approval, ZIP download, and event log.
 - Confirmed behavior:
@@ -121,7 +119,7 @@ Current accepted result:
 
 - `P1-metadatatab-expanded-tag-interaction-validation`: `PASS`
 - Lucia final judgment: `PASS`
-- Evidence source: luceonhmm reported `PASS_CANDIDATE`, then Lucia accepted it as `PASS`.
+- Evidence source: historical validation report recorded `PASS_CANDIDATE`, then Lucia accepted it as `PASS`.
 - Validated HEAD: `8601eab2dd784f7d808f4bc9257b3b5c47909f9a`
 - Scope: real local runtime stack, task `task-1777788279069`, material `mat-1777788279055`, MetadataTab current-tags expanded interaction.
 - Confirmed behavior:
@@ -143,7 +141,7 @@ Current accepted result:
 
 - `P1-ui-clarity-polish-after-review-pass`: `PASS`
 - Lucia final judgment: `PASS`
-- Evidence source: luceonhmm reported `PASS_CANDIDATE`, then Lucia accepted it as `PASS`.
+- Evidence source: historical validation report recorded `PASS_CANDIDATE`, then Lucia accepted it as `PASS`.
 - Validated HEAD: `87543399673308f2b8ff2febf145c85b3e342f75`
 - Scope: `/cms/tasks`, review-pending task detail overview, internal diagnostics folded area, task `task-1777788279069`, material `mat-1777788279055`.
 - Validated behavior:
@@ -160,7 +158,7 @@ Current accepted result:
 
 - `P1-latest-ui-metadata-task-detail-interaction-review`: `PASS`
 - Lucia final judgment: `PASS`
-- Evidence source: luceonhmm reported `PASS_CANDIDATE`, then Lucia accepted it as `PASS`.
+- Evidence source: historical validation report recorded `PASS_CANDIDATE`, then Lucia accepted it as `PASS`.
 - Scope: latest UI/code baseline `origin/main@cb6f2376b5146e53c7c83cba62d36bac2236e7e3`, real local runtime stack, review-pending task `task-1777788279069`, material `mat-1777788279055`, `/cms/tasks`, task detail overview, MetadataTab, classification/tag display, and current tag persistence state.
 - Validated facts:
   - task list and detail use `待复核` consistently.
@@ -218,7 +216,7 @@ Current accepted result:
 - `P1-real-runtime-uat-local-mineru-minio-ollama9b`: `PASS`
 - Lucia final judgment: `PASS`
 - Scope: local real runtime UAT only; this does not prove the retired online MinerU v4 Standard path.
-- Evidence source: luceonhmm reported `PASS_CANDIDATE`, then Lucia accepted it as `PASS`.
+- Evidence source: historical validation report recorded `PASS_CANDIDATE`, then Lucia accepted it as `PASS`.
 
 The previous online MinerU v4 Standard target is retired from the current main validation path and is retained only as legacy / compatibility-only context:
 
@@ -226,7 +224,7 @@ The previous online MinerU v4 Standard target is retired from the current main v
 - missing `MINERU_ONLINE_API_TOKEN` no longer blocks the current main UAT.
 - do not report the retired online target as passed unless a future compatibility task explicitly requires and proves it.
 
-Current UAT command set is task-specific. luceonhmm must start from the real runtime path, confirm the effective dependency chain, then run the task's assigned checks without destructive cleanup.
+Current UAT command set is task-specific. Lucode must start from the real runtime path assigned by Lucia, confirm the effective dependency chain, then run the assigned checks without destructive cleanup.
 
 Required report fields:
 
@@ -281,7 +279,7 @@ Accepted strict no-skeleton local9b evidence for the 2026-05-03 PASS:
 
 ### L3: Home Mac Mini Production Truth
 
-Target owner: `luceonhmm`
+Execution owner: `Lucode` when assigned by Lucia; acceptance owner: `Lucia` and Director
 
 Purpose: validate the actual staging or production environment on the Home Mac mini.
 
@@ -291,7 +289,7 @@ Current accepted L3 result:
 
 - `P0-l3-home-mac-mini-staging-real-runtime-e2e-validation`: `PASS`
 - Lucia final judgment: `PASS`
-- Evidence source: luceonhmm reported `PASS_CANDIDATE`, then Lucia accepted it as `PASS`.
+- Evidence source: historical validation report recorded `PASS_CANDIDATE`, then Lucia accepted it as `PASS`.
 - Scope: Home Mac mini staging / production-like independent environment.
 - Staging path: `/Users/concm/staging/Luceon2026`
 - Staging URL: `http://127.0.0.1:18081/cms/tasks`

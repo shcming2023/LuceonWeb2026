@@ -1,6 +1,6 @@
 # Luceon2026 Project State
 
-Last updated: 2026-05-06
+Last updated: 2026-05-07
 
 ## 1. Current Repository Baseline
 
@@ -61,6 +61,14 @@ Completed on 2026-05-06:
 - Removed explicit skip markers from active UAT suites.
 - Repaired stale comments, mojibake text, and misleading pending-comment wording found during governance scans.
 
+Team contract updated on 2026-05-07:
+
+- Active collaboration roles are Director, Lucia, and Lucode.
+- Lucia is the product研发总监 and Director's senior advisor; Lucia owns PRD, project ledger, handoff, role contract, task brief, and report-review responsibilities.
+- Lucode is the development and testing manager; Lucode executes only Lucia task briefs and reports completion in a standard copyable format.
+- Historical role files are retired and not active project roles.
+- Current role truth is stored in `docs/codex/TEAM_CONTRACT.md`, `docs/codex/roles/lucia.md`, `docs/codex/roles/lucode.md`, and `docs/codex/TASK_BRIEF_TEMPLATE.md`.
+
 ## 4. Validation Ledger
 
 Commands run in this governance pass:
@@ -114,7 +122,8 @@ Runtime evidence from the final pipeline run:
 | `scripts/` | Local checks, test runner wrappers, and Tier 2 pre-check scripts |
 | `uat/` | Playwright UAT suites and shell smoke test |
 | `docs/prd/` | Active PRD source |
-| `docs/codex/` | Project state, handoff, role, validation policy, repository structure, and historical project records |
+| `docs/codex/` | Team contract, project state, handoff, role, validation policy, repository structure, and historical project records |
+| `docs/codex/roles/` | Active Lucia and Lucode role contracts only |
 | `docs/deploy/` | Deployment documentation and environment migration notes |
 | `docs/reviews/` | Current review index and phase acceptance summary only |
 | `archive/phase1-governance-2026-05-06/` | Historical plan and review archive for traceability |

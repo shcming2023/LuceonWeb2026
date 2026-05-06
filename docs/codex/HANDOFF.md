@@ -1,16 +1,18 @@
 # Codex Handoff
 
-Last updated: 2026-05-06
+Last updated: 2026-05-07
 
 ## Current Entry Point
 
 Read these files first:
 
 1. `docs/codex/PROJECT_STATE.md`
-2. `docs/reviews/PHASE1_ACCEPTANCE_SUMMARY.md`
-3. `docs/codex/REPOSITORY_STRUCTURE.md`
-4. `docs/codex/TEST_POLICY.md`
-5. `docs/prd/Luceon2026-PRD-v0.4.md`
+2. `docs/codex/TEAM_CONTRACT.md`
+3. `docs/codex/roles/lucia.md` or `docs/codex/roles/lucode.md`
+4. `docs/reviews/PHASE1_ACCEPTANCE_SUMMARY.md`
+5. `docs/codex/REPOSITORY_STRUCTURE.md`
+6. `docs/codex/TEST_POLICY.md`
+7. `docs/prd/Luceon2026-PRD-v0.4.md`
 
 Current active development workspace:
 
@@ -54,12 +56,8 @@ BASE_URL=http://localhost:8081 npx pnpm@10.4.1 --dir uat exec playwright test te
 
 ## Role Boundary
 
-- `lucia`: architecture control, task writing, review, validation criteria, and final judgment.
-- `lucode`: implementation and code revision from lucia-approved task briefs.
-- `luplan`: PRD, changelog, decision, and project-state maintenance.
-- `luceonhmm`: UAT deployment, L2/L3 validation, production-like runtime analysis, rollback support, and evidence capture.
-- `cota`: Director-side collaboration advisor.
-- `lutest`: retired historical role.
+- `Lucia`: product研发总监, Director's senior advisor, PRD and project-documentation owner, task brief author, report reviewer, and project-ledger maintainer.
+- `Lucode`: development and testing manager, scoped implementation executor, test executor, completion reporter, and GitHub synchronization owner for assigned repository changes.
 
 ## Known Open Boundaries
 
@@ -79,3 +77,17 @@ npx pnpm@10.4.1 run tier2:standard:check
 ```
 
 Use `docs/codex/PROJECT_STATE.md` as the current ledger. Do not promote historical archive files back into active truth without new validation evidence.
+
+## 2026-05-07 Team Contract Update
+
+The active collaboration team has been reset to the Director, Lucia, and Lucode model.
+
+- `Lucia`: product研发总监 and Director's senior advisor. Lucia owns goal discussion, implementation route analysis, PRD maintenance, project ledger maintenance, task brief writing, report review, and accepted-fact recording.
+- `Lucode`: development and testing manager. Lucode executes only Lucia task briefs, performs scoped implementation and testing, reports evidence, and synchronizes repository changes when required.
+
+Historical role files are not active. Current role truth is stored in:
+
+- `docs/codex/TEAM_CONTRACT.md`
+- `docs/codex/roles/lucia.md`
+- `docs/codex/roles/lucode.md`
+- `docs/codex/TASK_BRIEF_TEMPLATE.md`
