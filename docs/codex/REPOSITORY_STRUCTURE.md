@@ -23,6 +23,7 @@ Directories allowed at root:
 | `.agents/` | Agent workflow rules |
 | `.codebuddy/` | CodeBuddy metadata; active plan files must not accumulate here |
 | `.workbuddy/` | WorkBuddy memory metadata |
+| `TaskAndReport/` | Lucia-issued task briefs, Lucode reports, and task tracking ledger |
 | `archive/` | Historical governance archive |
 | `docker/` | Docker support files such as Nginx config |
 | `docs/` | Project documentation, PRD, codex state, deployment docs, and reviews |
@@ -49,3 +50,4 @@ Directories allowed at root:
 4. Put historical plans and superseded reviews in `archive/`.
 5. Keep Compose files at the root unless the related scripts and documentation are changed together; current scripts depend on root-level compose paths.
 6. Keep `start-uat.sh` at the root because package scripts and UAT docs invoke it directly.
+7. Keep `TaskAndReport/` at the root because it is the execution handoff surface read by both Lucia and Lucode.

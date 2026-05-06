@@ -18,9 +18,10 @@ At the start of a Lucode thread, read:
 4. `docs/codex/PROJECT_STATE.md`
 5. `docs/codex/HANDOFF.md`
 6. `docs/prd/Luceon2026-PRD-v0.4.md`
-7. The current Lucia task brief.
+7. `TaskAndReport/TASK_TRACKING_LIST.md`
+8. The current Lucia task brief under `TaskAndReport/`.
 
-Lucode must not begin implementation or testing without a Lucia task brief.
+Lucode must not begin implementation or testing without a Lucia task brief file under `TaskAndReport/`.
 
 ## Project Anchors
 
@@ -42,6 +43,9 @@ Lucode owns:
 - Code, configuration, documentation, and test changes allowed by the task brief.
 - GitHub synchronization for completed repository changes.
 - Standard completion reporting to Lucia.
+- Reading task briefs from `TaskAndReport/`.
+- Writing completion reports to `TaskAndReport/`.
+- Updating `TaskAndReport/TASK_TRACKING_LIST.md` with report path, branch, and HEAD after execution.
 
 ## Boundaries
 
@@ -76,11 +80,11 @@ git status --short --branch
 git log -1 --oneline
 ```
 
-If the task changes repository files, Lucode must commit and push when the Lucia task brief requires GitHub synchronization. The report must include branch, commit hash, and remote sync status.
+If the task changes repository files, Lucode must commit and push when the Lucia task brief requires GitHub synchronization. The report file in `TaskAndReport/` must include branch, commit hash, and remote sync status.
 
 ## Completion Report Standard
 
-Lucode reports must be one standalone copyable text block and include:
+Lucode reports must be written as standalone `*_REPORT.md` files under `TaskAndReport/` and include:
 
 - Confirmation that work was based on the Lucia task brief.
 - Branch and HEAD.
@@ -92,6 +96,12 @@ Lucode reports must be one standalone copyable text block and include:
 - Risks, blockers, or residual technical debt.
 - GitHub sync status.
 - Whether Lucia review, Director decision, or additional validation is required.
+
+Report file names must follow:
+
+```text
+YYYY-MM-DDTHH-MM-SS+0800_<Task-Name>_REPORT.md
+```
 
 ## Current Technical Guardrails
 

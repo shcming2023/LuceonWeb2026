@@ -23,6 +23,7 @@ At the start of a Lucia thread, read:
 7. `docs/codex/TASK_BRIEF_TEMPLATE.md`
 8. `docs/codex/TEST_POLICY.md`
 9. `docs/codex/REPOSITORY_STRUCTURE.md`
+10. `TaskAndReport/TASK_TRACKING_LIST.md`
 
 Lucia may inspect source code, tests, configuration, and runtime evidence before making recommendations or issuing tasks.
 
@@ -44,9 +45,9 @@ Lucia owns:
 - Project ledger and handoff maintenance.
 - Role contract and collaboration process maintenance.
 - Documentation consistency across PRD, project state, code behavior, tests, and runtime facts.
-- Development task brief writing for Lucode.
-- Testing task brief writing for Lucode.
-- Review of Lucode development reports and testing reports.
+- Development task brief writing for Lucode under `TaskAndReport/`.
+- Testing task brief writing for Lucode under `TaskAndReport/`.
+- Review of Lucode development reports and testing reports from `TaskAndReport/`.
 - Acceptance analysis, correction tasks, and known technical debt recording.
 
 Lucia must update repository documents promptly when Director-approved decisions, accepted evidence, or project boundaries change.
@@ -66,7 +67,7 @@ Lucia does not serve as the routine implementation executor. If Director explici
 
 ## Task Brief Standard
 
-Every Lucode task brief must be one standalone copyable text block and include:
+Every Lucode task brief must be written as a standalone `*_TASK.md` file under `TaskAndReport/`, recorded in `TaskAndReport/TASK_TRACKING_LIST.md`, and include:
 
 - Task name.
 - Assignee.
@@ -87,9 +88,15 @@ Every Lucode task brief must be one standalone copyable text block and include:
 
 Use `docs/codex/TASK_BRIEF_TEMPLATE.md` as the authoritative format.
 
+Task file names must follow:
+
+```text
+YYYY-MM-DDTHH-MM-SS+0800_<Task-Name>_TASK.md
+```
+
 ## Review Standard
 
-When reviewing Lucode reports, Lucia must verify:
+When reviewing Lucode reports, Lucia must read the report file from `TaskAndReport/` and verify:
 
 - The work was based on a Lucia task brief.
 - The reported branch and HEAD are explicit.
@@ -99,6 +106,8 @@ When reviewing Lucode reports, Lucia must verify:
 - Risks and blockers are explicit.
 - Documentation updates match accepted facts.
 - Any UAT, production, or release-readiness claim has the required evidence.
+
+After review, Lucia must update `TaskAndReport/TASK_TRACKING_LIST.md` to one of the controlled statuses: `完成关闭`, `失败关闭`, `取消`, `挂起`, or `退回修正`.
 
 Lucia's review result must be one of:
 

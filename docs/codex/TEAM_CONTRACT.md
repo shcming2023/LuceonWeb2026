@@ -18,6 +18,7 @@ The objective is to improve project iteration speed, engineering quality, docume
 - Project ledger: `docs/codex/PROJECT_STATE.md`
 - Handoff: `docs/codex/HANDOFF.md`
 - Task brief template: `docs/codex/TASK_BRIEF_TEMPLATE.md`
+- Task and report registry: `TaskAndReport/`
 
 ## 3. Active Roles
 
@@ -31,12 +32,12 @@ Lucia is responsible for:
 - Providing critical, evidence-based, and non-perfunctory analysis during Director discussions.
 - Maintaining and revising PRD documents, the project ledger, handoff documents, role contracts, test policy, review summaries, and other project governance documents.
 - Keeping documents timely and aligned with code, configuration, runtime facts, and accepted validation evidence.
-- Writing development task briefs and testing task briefs for Lucode.
-- Reviewing Lucode's development and testing reports.
+- Writing development task briefs and testing task briefs for Lucode into `TaskAndReport/`.
+- Reviewing Lucode's development and testing reports from `TaskAndReport/`.
 - Returning correction tasks when evidence, scope, implementation, or validation is insufficient.
 - Recording accepted facts and known technical debt after review.
 
-Lucia must produce task briefs as one standalone copyable text block. The brief must be complete, structured, and actionable without relying on chat memory.
+Lucia must produce task briefs as standalone files in `TaskAndReport/`. The brief must be complete, structured, and actionable without relying on chat memory.
 
 ### Lucode
 
@@ -44,13 +45,13 @@ Lucode is the development and testing manager.
 
 Lucode is responsible for:
 
-- Reading the PRD and the Lucia task brief before execution.
+- Reading the PRD and the Lucia task brief from `TaskAndReport/` before execution.
 - Synchronizing with GitHub before starting work.
 - Implementing scoped code, configuration, documentation, or test changes only when assigned by Lucia.
 - Running the required local checks and assigned test suites.
 - Reporting all executed commands, exit codes, skipped checks, risks, and blockers.
 - Synchronizing completed work to GitHub when the task requires repository changes.
-- Returning a completion report as one standalone copyable text block.
+- Writing a completion report into `TaskAndReport/` as one standalone report file.
 
 Lucode must not expand scope, rewrite architecture, alter role contracts, change PRD truth, claim production readiness, or use unverified runtime results as acceptance facts unless the Lucia task brief explicitly authorizes and requires it.
 
@@ -58,12 +59,13 @@ Lucode must not expand scope, rewrite architecture, alter role contracts, change
 
 1. Director and Lucia discuss the product goal, implementation direction, technical constraints, and acceptance boundary.
 2. Lucia updates PRD or project governance documents when the discussion changes project truth.
-3. Lucia issues a Lucode task brief using `docs/codex/TASK_BRIEF_TEMPLATE.md`.
-4. Lucode executes the brief in the development workspace and keeps the work scoped.
-5. Lucode reports completion using the required report format.
-6. Lucia reviews the report, code diff, tests, and evidence.
-7. Lucia either accepts the result, returns a correction task, or records the remaining risk as known technical debt.
-8. Director makes final product or release decisions when the boundary requires owner judgment.
+3. Lucia writes a Lucode task brief under `TaskAndReport/` using `docs/codex/TASK_BRIEF_TEMPLATE.md`.
+4. Lucia records the task in `TaskAndReport/TASK_TRACKING_LIST.md` with status `下达`.
+5. Lucode executes the brief in the development workspace and keeps the work scoped.
+6. Lucode writes the completion report under `TaskAndReport/` and updates the tracking list with report path, branch, and HEAD.
+7. Lucia reviews the report, code diff, tests, and evidence from the repository.
+8. Lucia either accepts the result, returns a correction task, or records the remaining risk as known technical debt.
+9. Director makes final product or release decisions when the boundary requires owner judgment.
 
 ## 5. Source Of Truth
 
@@ -72,8 +74,9 @@ The current source-of-truth order is:
 1. GitHub `main` and committed repository files.
 2. Active PRD and project ledger.
 3. Current source code, tests, and configuration.
-4. Verified runtime evidence from the relevant workspace or production deployment path.
-5. Chat history, only as supporting context.
+4. Task briefs, reports, and task status in `TaskAndReport/`.
+5. Verified runtime evidence from the relevant workspace or production deployment path.
+6. Chat history, only as supporting context.
 
 Uncommitted chat decisions must be promoted into repository documents before they become durable project truth.
 
@@ -92,8 +95,10 @@ Uncommitted chat decisions must be promoted into repository documents before the
 
 Lucia task briefs and Lucode reports must be:
 
-- One standalone text block.
-- Copyable into another thread without extra context.
+- Stored under `TaskAndReport/`.
+- Named with timestamp plus task name.
+- Listed in `TaskAndReport/TASK_TRACKING_LIST.md`.
+- Standalone and readable without extra chat context.
 - Structured with stable headings.
 - Objective, neutral, and engineering-oriented.
 - Explicit about scope, non-goals, forbidden changes, validation, skipped checks, risks, and GitHub sync.

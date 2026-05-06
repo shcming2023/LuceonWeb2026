@@ -68,6 +68,8 @@ Team contract updated on 2026-05-07:
 - Lucode is the development and testing manager; Lucode executes only Lucia task briefs and reports completion in a standard copyable format.
 - Historical role files are retired and not active project roles.
 - Current role truth is stored in `docs/codex/TEAM_CONTRACT.md`, `docs/codex/roles/lucia.md`, `docs/codex/roles/lucode.md`, and `docs/codex/TASK_BRIEF_TEMPLATE.md`.
+- Task briefs and reports are stored in `TaskAndReport/` and tracked in `TaskAndReport/TASK_TRACKING_LIST.md`.
+- First registered task: `TASK-20260507-063238-P0-MinerU-Submit-Path-Health-Probe`, status `下达`.
 
 ## 4. Validation Ledger
 
@@ -126,6 +128,7 @@ Runtime evidence from the final pipeline run:
 | `docs/codex/roles/` | Active Lucia and Lucode role contracts only |
 | `docs/deploy/` | Deployment documentation and environment migration notes |
 | `docs/reviews/` | Current review index and phase acceptance summary only |
+| `TaskAndReport/` | Lucia-issued task briefs, Lucode reports, and task tracking ledger |
 | `archive/phase1-governance-2026-05-06/` | Historical plan and review archive for traceability |
 
 ## 7. Boundary For Future Work

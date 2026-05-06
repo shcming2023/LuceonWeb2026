@@ -4,7 +4,7 @@ Last updated: 2026-05-07
 
 Use this template when Lucia assigns development or testing work to Lucode. The task brief is the execution contract. Lucode must not broaden work beyond the signed scope.
 
-Every task brief and completion report must be one standalone copyable text block.
+Every task brief and completion report must be stored under `TaskAndReport/` and recorded in `TaskAndReport/TASK_TRACKING_LIST.md`.
 
 ## Lucia Task Brief
 
@@ -29,6 +29,9 @@ Production deployment path:
 GitHub:
 https://github.com/shcming2023/Luceon2026
 
+TaskAndReport record:
+TaskAndReport/YYYY-MM-DDTHH-MM-SS+0800_<Task-Name>_TASK.md
+
 Required reading before execution:
 - AGENTS.md
 - docs/codex/TEAM_CONTRACT.md
@@ -36,6 +39,7 @@ Required reading before execution:
 - docs/codex/PROJECT_STATE.md
 - docs/codex/HANDOFF.md
 - docs/prd/Luceon2026-PRD-v0.4.md
+- TaskAndReport/TASK_TRACKING_LIST.md
 
 Background:
 
@@ -72,6 +76,11 @@ GitHub sync requirements:
 - Before reporting: git status --short --branch; git log -1 --oneline.
 - Commit and push to GitHub if repository files are changed and this task requires remote synchronization.
 
+Completion report storage requirements:
+- Write the completion report into TaskAndReport/ using this naming rule: YYYY-MM-DDTHH-MM-SS+0800_<Task-Name>_REPORT.md.
+- Update TaskAndReport/TASK_TRACKING_LIST.md with report path, branch, HEAD, and current status.
+- Do not rely on Director chat relay for completion reporting.
+
 Completion report must include:
 - confirmation that work was based on this Lucia task brief
 - branch and HEAD
@@ -97,6 +106,9 @@ Lucode
 
 Report to:
 Lucia
+
+Report file:
+TaskAndReport/YYYY-MM-DDTHH-MM-SS+0800_<Task-Name>_REPORT.md
 
 Confirmation:
 This work was executed based on Lucia's task brief dated [date].

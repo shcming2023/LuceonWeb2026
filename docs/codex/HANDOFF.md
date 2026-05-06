@@ -13,6 +13,7 @@ Read these files first:
 5. `docs/codex/REPOSITORY_STRUCTURE.md`
 6. `docs/codex/TEST_POLICY.md`
 7. `docs/prd/Luceon2026-PRD-v0.4.md`
+8. `TaskAndReport/TASK_TRACKING_LIST.md`
 
 Current active development workspace:
 
@@ -91,3 +92,16 @@ Historical role files are not active. Current role truth is stored in:
 - `docs/codex/roles/lucia.md`
 - `docs/codex/roles/lucode.md`
 - `docs/codex/TASK_BRIEF_TEMPLATE.md`
+
+## 2026-05-07 TaskAndReport Handoff Update
+
+Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`, not through Director chat relay.
+
+- Task ledger: `TaskAndReport/TASK_TRACKING_LIST.md`
+- Task brief naming: `YYYY-MM-DDTHH-MM-SS+0800_<Task-Name>_TASK.md`
+- Report naming: `YYYY-MM-DDTHH-MM-SS+0800_<Task-Name>_REPORT.md`
+- Controlled statuses: `下达`, `完成关闭`, `失败关闭`, `取消`, `挂起`, `退回修正`
+
+Current issued task:
+
+- `TASK-20260507-063238-P0-MinerU-Submit-Path-Health-Probe`

@@ -11,6 +11,7 @@ This repository is the durable operating record for Luceon2026. Chat history can
 - GitHub repository: `https://github.com/shcming2023/Luceon2026`
 - Active branch: `main`
 - Package manager: `npx pnpm@10.4.1`
+- Task and report registry: `TaskAndReport/`
 
 Before material project work, synchronize with GitHub and inspect the current repository state:
 
@@ -39,10 +40,10 @@ Historical role files are retired and are not active project roles. Current role
 1. Director discusses goals, priorities, risks, and acceptance boundaries with Lucia.
 2. Lucia reviews the PRD, codebase, project state, and relevant runtime evidence before forming a recommendation.
 3. Lucia maintains PRD, project ledger, handoff, role, review, and governance documents when the project state changes.
-4. Lucia issues implementation or testing task briefs to Lucode as a single copyable text block.
-5. Lucode executes only the Lucia task brief, using the PRD and repository state as constraints.
-6. Lucode reports completion as a single copyable text block with branch, HEAD, files changed, commands, results, skipped checks, risks, and blockers.
-7. Lucia reviews Lucode's report, inspects the diff and evidence, then records the accepted facts or returns a correction task.
+4. Lucia writes implementation or testing task briefs into `TaskAndReport/` and updates `TaskAndReport/TASK_TRACKING_LIST.md`.
+5. Lucode reads assigned task briefs from `TaskAndReport/`, then executes only the Lucia task brief using the PRD and repository state as constraints.
+6. Lucode writes completion reports into `TaskAndReport/` and updates the tracking list with report path, branch, HEAD, and status.
+7. Lucia reads Lucode reports from `TaskAndReport/`, inspects the diff and evidence, then records the accepted facts or returns a correction task.
 
 ## Role Boundaries
 
@@ -72,6 +73,7 @@ Every new role thread must read these files before acting:
 6. `docs/prd/Luceon2026-PRD-v0.4.md`
 7. `docs/codex/TEST_POLICY.md`
 8. `docs/codex/REPOSITORY_STRUCTURE.md`
+9. `TaskAndReport/TASK_TRACKING_LIST.md`
 
 ## Safety Rules
 
