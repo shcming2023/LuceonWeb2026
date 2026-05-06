@@ -51,4 +51,21 @@ Use these status values in `TASK_TRACKING_LIST.md`:
 5. Lucode updates the task row with report path and GitHub branch/HEAD when available.
 6. Lucia reads the report file from this folder, reviews the evidence, and updates status.
 
+## Check Task Shortcut
+
+When Director says `Lucia, check task`, Lucia must:
+
+1. Read `TaskAndReport/TASK_TRACKING_LIST.md`.
+2. Check for new or updated `*_REPORT.md` files that have not received a Lucia review.
+3. If a report exists, review it according to `docs/codex/roles/lucia.md`, write a `*_LUCIA_REVIEW.md` file when needed, and update the task status.
+4. If no new report or Lucia action is found, state that no new task/report is available and wait for the next instruction.
+
+When Director says `Lucode, check task`, Lucode must:
+
+1. Read `TaskAndReport/TASK_TRACKING_LIST.md`.
+2. Find tasks in status `下达` or `退回修正` that are assigned to Lucode and do not have a completed accepted closure.
+3. Read the matching `*_TASK.md` file and execute according to the task brief.
+4. Write the `*_REPORT.md` file and update the tracking list after execution.
+5. If no actionable task is found, state that no new task is available and wait for the next instruction.
+
 Do not store secrets, API tokens, raw credentials, generated build outputs, UAT screenshots, large artifacts, or machine-only files in this folder.

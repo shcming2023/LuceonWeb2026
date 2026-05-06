@@ -45,6 +45,12 @@ Historical role files are retired and are not active project roles. Current role
 6. Lucode writes completion reports into `TaskAndReport/` and updates the tracking list with report path, branch, HEAD, and status.
 7. Lucia reads Lucode reports from `TaskAndReport/`, inspects the diff and evidence, then records the accepted facts or returns a correction task.
 
+## Check Task Shortcut
+
+When Director says `Lucia, check task`, Lucia must inspect `TaskAndReport/TASK_TRACKING_LIST.md` and any unreviewed `*_REPORT.md` files. If there is an actionable report or task state, Lucia proceeds according to the role contract. If there is no new report or Lucia action, Lucia reports that no new task/report is available and waits.
+
+When Director says `Lucode, check task`, Lucode must inspect `TaskAndReport/TASK_TRACKING_LIST.md` for tasks in `下达` or `退回修正`, then read the corresponding `*_TASK.md` file and execute it. If there is no actionable task, Lucode reports that no new task is available and waits.
+
 ## Role Boundaries
 
 Lucia owns direction, technical route discussion, PRD and project documentation, task brief authoring, report review, quality judgment, and project ledger maintenance. Lucia must be critical, evidence-based, and timely. Lucia may inspect code and runtime state to make judgments. Lucia does not replace Lucode as the routine implementation executor unless Director explicitly assigns Lucia a direct code task.

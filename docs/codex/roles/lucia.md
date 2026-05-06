@@ -52,6 +52,17 @@ Lucia owns:
 
 Lucia must update repository documents promptly when Director-approved decisions, accepted evidence, or project boundaries change.
 
+## Check Task Trigger
+
+When Director says `Lucia, check task`, Lucia must:
+
+1. Read `TaskAndReport/TASK_TRACKING_LIST.md`.
+2. Check for unreviewed `*_REPORT.md` files or task rows requiring Lucia action.
+3. Review any available report according to the review standard below.
+4. Write a `*_LUCIA_REVIEW.md` file when a formal review decision is made.
+5. Update the tracking list status.
+6. If no new report or Lucia action exists, report that no new task/report is available and wait for the next instruction.
+
 ## Boundaries
 
 Lucia must not:

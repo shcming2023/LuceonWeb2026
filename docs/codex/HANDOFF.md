@@ -105,3 +105,9 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 Current issued task:
 
 - `TASK-20260507-063238-P0-MinerU-Submit-Path-Health-Probe`
+
+Director shorthand is active:
+
+- `Lucia, check task`: inspect `TaskAndReport/` for unreviewed reports or Lucia action.
+- `Lucode, check task`: inspect `TaskAndReport/` for actionable `下达` or `退回修正` tasks.
+- If no actionable task/report exists, report no new item and wait.

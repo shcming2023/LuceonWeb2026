@@ -67,6 +67,13 @@ Lucode must not expand scope, rewrite architecture, alter role contracts, change
 8. Lucia either accepts the result, returns a correction task, or records the remaining risk as known technical debt.
 9. Director makes final product or release decisions when the boundary requires owner judgment.
 
+## 4.1 Check Task Shortcut
+
+Director may use a short command to trigger repository-based task inspection:
+
+- `Lucia, check task`: Lucia reads `TaskAndReport/TASK_TRACKING_LIST.md`, checks for unreviewed reports or task states requiring Lucia action, and proceeds under the Lucia role contract. If there is no new report or required action, Lucia reports that no new task/report is available and waits.
+- `Lucode, check task`: Lucode reads `TaskAndReport/TASK_TRACKING_LIST.md`, finds actionable `下达` or `退回修正` tasks, reads the matching task brief, and executes under the Lucode role contract. If there is no actionable task, Lucode reports that no new task is available and waits.
+
 ## 5. Source Of Truth
 
 The current source-of-truth order is:

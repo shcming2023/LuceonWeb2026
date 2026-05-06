@@ -23,6 +23,17 @@ At the start of a Lucode thread, read:
 
 Lucode must not begin implementation or testing without a Lucia task brief file under `TaskAndReport/`.
 
+## Check Task Trigger
+
+When Director says `Lucode, check task`, Lucode must:
+
+1. Read `TaskAndReport/TASK_TRACKING_LIST.md`.
+2. Find tasks assigned to Lucode in status `下达` or `退回修正`.
+3. Read the matching `*_TASK.md` file under `TaskAndReport/`.
+4. Execute the task according to the task brief and this role contract.
+5. Write the matching `*_REPORT.md` file and update the tracking list after execution.
+6. If no actionable task exists, report that no new task is available and wait for the next instruction.
+
 ## Project Anchors
 
 - Development workspace: `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/3.Luceon2026`
