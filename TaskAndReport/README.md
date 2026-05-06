@@ -13,6 +13,7 @@ This folder provides traceable project execution records. Lucia no longer relies
 - `TASK_TRACKING_LIST.md`: ordered task ledger and status list.
 - `*_TASK.md`: Lucia task brief files.
 - `*_REPORT.md`: Lucode completion report files.
+- `*_LUCIA_REVIEW.md`: Lucia review records when a report is accepted, rejected, or returned for correction.
 
 ## File Naming Rule
 
@@ -21,6 +22,7 @@ Use timestamp plus task name:
 ```text
 YYYY-MM-DDTHH-MM-SS+0800_<Task-Name>_TASK.md
 YYYY-MM-DDTHH-MM-SS+0800_<Task-Name>_REPORT.md
+YYYY-MM-DDTHH-MM-SS+0800_<Task-Name>_LUCIA_REVIEW.md
 ```
 
 Task names must use ASCII-safe hyphenated words. Example:
