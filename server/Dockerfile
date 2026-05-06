@@ -18,7 +18,7 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # 安装 pnpm 并仅安装生产依赖
-RUN corepack enable && corepack prepare pnpm@latest --activate \
+RUN corepack enable && corepack prepare pnpm@10.4.1 --activate \
   && pnpm install --no-frozen-lockfile --prod
 
 # 复制服务端源码（整目录，自动包含 lib/ 等子目录）

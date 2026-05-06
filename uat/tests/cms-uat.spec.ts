@@ -6,7 +6,7 @@ import { test, expect, type Page, type APIRequestContext } from '@playwright/tes
  * 覆盖范围：
  *   1. 页面加载与 SPA 路由
  *   2. 后端服务健康检查（via Nginx 代理）
- *   3. DB API 基础功能（资产列表、设置读写）
+ *   3. DB API 基础功能（资产列表、设置与密钥读写）
  *   4. 文件上传流程（含 MinIO presigned URL 局域网可访问性验证）
  *   5. MinIO Nginx 代理可达性
  *   6. 数据持久化（写入后重新加载验证）
@@ -19,6 +19,7 @@ import { test, expect, type Page, type APIRequestContext } from '@playwright/tes
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8081';
 const PUBLIC_HOST = process.env.PUBLIC_HOST || '';
+const UPLOAD_TIMEOUT_MS = 45_000;
 
 // ── 辅助函数 ──────────────────────────────────────────────────
 
@@ -33,9 +34,6 @@ async function waitForAppReady(page: Page) {
 /** 测试数据命名空间前缀，用于识别需要清理的 UAT 数据 */
 const UAT_PREFIX = 'uat_';
 
-/** 追踪当前测试创建的设置 key，用于 afterAll 清理 */
-const createdSettingKeys: string[] = [];
-
 /** 追踪当前测试创建的 secrets key，用于 afterAll 清理 */
 const createdSecretKeys: string[] = [];
 
@@ -45,7 +43,7 @@ const createdSecretKeys: string[] = [];
  * @param collection - 集合名（'settings' 或 'secrets'）
  * @param keys - 需要删除的 key 列表
  */
-async function cleanupKeys(request: APIRequestContext, collection: 'settings' | 'secrets', keys: string[]) {
+async function cleanupKeys(request: APIRequestContext, collection: 'secrets', keys: string[]) {
   if (keys.length === 0) return;
   try {
     const resp = await request.get(`${BASE_URL}/__proxy/db/${collection}`);
@@ -71,7 +69,6 @@ async function cleanupKeys(request: APIRequestContext, collection: 'settings' | 
 // ── 全局 afterAll：清理 UAT 测试数据 ──────────────────────────
 
 test.afterAll(async ({ request }) => {
-  await cleanupKeys(request, 'settings', createdSettingKeys);
   await cleanupKeys(request, 'secrets', createdSecretKeys);
 });
 
@@ -91,12 +88,10 @@ test.describe('【1】页面加载与 SPA 路由', () => {
     expect(title).toBeTruthy();
   });
 
-  test('/cms/source-materials 原始资料库页面可访问', async ({ page }) => {
+  test('/cms/source-materials 作为 legacy 入口重定向到任务管理', async ({ page }) => {
     await page.goto(`${BASE_URL}/cms/source-materials`);
     await waitForAppReady(page);
-    await expect(page.locator('body')).not.toContainText('500');
-    await expect(page.locator('body')).not.toContainText('502');
-    await expect(page.locator('body')).not.toContainText('504');
+    await expect(page.getByRole('heading', { name: /任务管理/ })).toBeVisible();
   });
 
   test('/cms/products 成品库页面可访问', async ({ page }) => {
@@ -157,10 +152,16 @@ test.describe('【3】db-server REST API', () => {
   test('数据持久化：写入后重新读取一致', async ({ request }) => {
     const testKey = `${UAT_PREFIX}test_${Date.now()}`;
     const testValue = `test_value_${Math.random().toString(36).slice(2)}`;
-    createdSettingKeys.push(testKey);
 
-    const putResp = await request.put(`${BASE_URL}/__proxy/db/settings`, {
-      data: { [testKey]: testValue },
+    const beforeResp = await request.get(`${BASE_URL}/__proxy/db/settings`);
+    expect(beforeResp.status()).toBe(200);
+    const beforeSettings = await beforeResp.json() as { uiPreferences?: Record<string, unknown> };
+    const beforeUiPreferences = beforeSettings.uiPreferences && typeof beforeSettings.uiPreferences === 'object'
+      ? beforeSettings.uiPreferences
+      : {};
+
+    const putResp = await request.put(`${BASE_URL}/__proxy/db/settings/uiPreferences`, {
+      data: { ...beforeUiPreferences, [testKey]: testValue },
       headers: { 'Content-Type': 'application/json' },
     });
     expect(putResp.status()).toBeLessThan(300);
@@ -168,11 +169,17 @@ test.describe('【3】db-server REST API', () => {
     const getResp = await request.get(`${BASE_URL}/__proxy/db/settings`);
     expect(getResp.status()).toBe(200);
     const settings = await getResp.json() as Record<string, unknown>;
-    expect(settings[testKey]).toBe(testValue);
+    expect((settings.uiPreferences as Record<string, unknown>)?.[testKey]).toBe(testValue);
+
+    const restoreResp = await request.put(`${BASE_URL}/__proxy/db/settings/uiPreferences`, {
+      data: beforeUiPreferences,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(restoreResp.status()).toBeLessThan(300);
   });
 
   test('secrets 持久化：写入后重新读取一致', async ({ request }) => {
-    const testKey = `${UAT_PREFIX}secret_${Date.now()}`;
+    const testKey = `aiProvider_${UAT_PREFIX}${Date.now()}_apiKey`;
     const testValue = `secret_${Math.random().toString(36).slice(2)}`;
     createdSecretKeys.push(testKey);
 
@@ -231,52 +238,47 @@ test.describe('【4】MinIO Nginx 反向代理', () => {
   });
 
   test('presigned URL 使用公网地址（非内部容器地址）', async ({ request }) => {
-    const listResp = await request.get(`${BASE_URL}/__proxy/upload/list?prefix=originals`);
-    if (listResp.status() !== 200) {
-      test.skip();
-      return;
-    }
+    const uploadResp = await request.post(`${BASE_URL}/__proxy/upload/upload`, {
+      multipart: {
+        file: {
+          name: 'uat-presigned-seed.md',
+          mimeType: 'text/markdown',
+          buffer: Buffer.from(`# Presigned Seed\n\n${Date.now()}`),
+        },
+      },
+      timeout: UPLOAD_TIMEOUT_MS,
+    });
+    expect(uploadResp.status()).toBe(200);
 
-    const body = await listResp.json() as { objects?: Array<{ presignedUrl: string }> };
-    const objects = body.objects || [];
+    const body = await uploadResp.json() as { url?: string; provider?: string };
+    expect(body.provider).toBe('minio');
+    expect(body.url).toBeTruthy();
 
-    if (objects.length === 0) {
-      test.skip();
-      return;
-    }
+    const url = body.url!;
+    expect(url).not.toMatch(/minio:\d+/);
+    expect(url).not.toMatch(/localhost:\d+/);
 
-    // 验证 presigned URL 不包含内部容器地址
-    for (const obj of objects.slice(0, 3)) {
-      const url = obj.presignedUrl;
-      expect(url).not.toMatch(/minio:\d+/);
-      expect(url).not.toMatch(/localhost:\d+/);
-
-      // 若配置了 PUBLIC_HOST，则验证 URL 包含该主机名；否则仅验证不含内部地址
-      if (PUBLIC_HOST) {
-        expect(url).toContain(PUBLIC_HOST);
-      }
+    if (PUBLIC_HOST) {
+      expect(url).toContain(PUBLIC_HOST);
     }
   });
 });
 
 // ── 测试组 5：文件上传流程 ────────────────────────────────────
 
-test.describe('【5】文件上传流程', () => {
+  test.describe('【5】文件上传流程', () => {
   test('upload-server /tasks 接受小型测试文件并创建任务', async ({ request }) => {
-    const minimalPng = Buffer.from(
-      '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489' +
-      '0000000a49444154789c6260000000020001e221bc330000000049454e44ae426082',
-      'hex',
-    );
+    const content = Buffer.from(`# UAT upload\n\n${Date.now()}`);
 
     const response = await request.post(`${BASE_URL}/__proxy/upload/tasks`, {
       multipart: {
         file: {
-          name: 'uat-test.png',
-          mimeType: 'image/png',
-          buffer: minimalPng,
+          name: 'uat-test.md',
+          mimeType: 'text/markdown',
+          buffer: content,
         },
       },
+      timeout: UPLOAD_TIMEOUT_MS,
     });
 
     const status = response.status();
@@ -295,28 +297,27 @@ test.describe('【5】文件上传流程', () => {
   });
 
   test('上传后 presigned URL 在局域网可直接访问（HTTP GET）', async ({ request }) => {
-    const content = Buffer.from(`UAT test file ${Date.now()}`);
+    const content = Buffer.from(`# UAT check\n\n${Date.now()}`);
 
-    const uploadResp = await request.post(`${BASE_URL}/__proxy/upload/tasks`, {
+    const uploadResp = await request.post(`${BASE_URL}/__proxy/upload/upload`, {
       multipart: {
         file: {
-          name: 'uat-check.txt',
-          mimeType: 'text/plain',
+          name: 'uat-check.md',
+          mimeType: 'text/markdown',
           buffer: content,
         },
       },
+      timeout: UPLOAD_TIMEOUT_MS,
     });
 
     expect(uploadResp.status()).toBe(200);
 
     const body = await uploadResp.json() as { url?: string; provider?: string };
-    if (body.provider !== 'minio' || !body.url) {
-      test.skip();
-      return;
-    }
+    expect(body.provider).toBe('minio');
+    expect(body.url).toBeTruthy();
 
     // 直接 GET presigned URL，验证文件可访问
-    const fileResp = await request.get(body.url);
+    const fileResp = await request.get(body.url!);
     expect(fileResp.status()).toBe(200);
   });
 });
@@ -329,10 +330,11 @@ test.describe('【6】页面导航交互（冒烟）', () => {
     await waitForAppReady(page);
 
     const routes = [
-      '/cms/workspace',
+      '/cms/tasks',
       '/cms/source-materials',
-      '/cms/products',
-      '/cms/metadata',
+      '/cms/library',
+      '/cms/audit',
+      '/cms/ops/health',
       '/cms/settings',
     ];
 

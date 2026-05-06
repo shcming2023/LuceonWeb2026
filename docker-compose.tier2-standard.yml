@@ -1,54 +1,31 @@
 services:
   upload-server:
     environment:
-      # Tier 2 Standard 不再部署本地 MinerU，必须接入线上 API
-      - MINERU_ONLINE_API_BASE_URL=${MINERU_ONLINE_API_BASE_URL:?MINERU_ONLINE_API_BASE_URL is required for Tier 2 Standard}
-      - MINERU_ONLINE_API_TOKEN=${MINERU_ONLINE_API_TOKEN:?MINERU_ONLINE_API_TOKEN is required for Tier 2 Standard}
-      - MINERU_ONLINE_MODEL_VERSION=${MINERU_ONLINE_MODEL_VERSION:-vlm}
-      # 使用真实的本地 Ollama 容器
-      - OLLAMA_API_URL=http://cms-ollama-local:11434
-      # Standard 档强制要求可用 AI，禁止降级到 skeleton
+      # Tier 2 Standard uses the current phase-one local real runtime.
+      # MinerU and Ollama run on the host; containers access them through host.docker.internal.
+      - LOCAL_MINERU_ENDPOINT=${LOCAL_MINERU_ENDPOINT:-http://host.docker.internal:8083}
+      - OLLAMA_API_URL=${OLLAMA_API_URL:-http://host.docker.internal:11434}
+      - OLLAMA_TIER2_MODEL=${OLLAMA_TIER2_MODEL:-qwen3.5:9b}
       - ALLOW_LOCAL_AI_ENDPOINT=true
+      - DISABLE_AI_SKELETON_FALLBACK=true
       - ALLOW_AI_SKELETON_FALLBACK=false
-      # Ollama 模型可以通过环境变量覆盖，默认使用极小模型
-      - OLLAMA_TIER2_MODEL=${OLLAMA_TIER2_MODEL:-qwen3.5:0.8b}
 
-
-  ollama:
-    # 复用本地真实 Ollama 容器
-    image: ollama/ollama:latest
-    container_name: cms-ollama-local
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama-data:/root/.ollama
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - cms-network
-
-  # MinIO 建桶初始化容器（与 Lite 保持一致）
   minio-init:
-    image: minio/mc
+    image: minio/mc:latest
     container_name: cms-minio-init
     depends_on:
       minio:
         condition: service_healthy
+    networks:
+      - cms-network
     entrypoint: >
       /bin/sh -c "
       echo 'Waiting for MinIO to be fully ready...';
       sleep 2;
-      mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      mc alias set myminio http://minio:9000 $${MINIO_ACCESS_KEY:-minioadmin} $${MINIO_SECRET_KEY:-minioadmin};
       mc mb myminio/eduassets --ignore-existing;
       mc mb myminio/eduassets-parsed --ignore-existing;
       mc anonymous set download myminio/eduassets;
       mc anonymous set download myminio/eduassets-parsed;
       echo 'MinIO buckets initialized successfully.';
       "
-
-volumes:
-  ollama-data:
-    name: cms-ollama-data

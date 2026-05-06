@@ -57,8 +57,8 @@
 - **MinerU API Key 配置说明更新**：文档中补充了 MinerU API Key 的正确配置方式（系统设置页面配置，不带 `Bearer ` 前缀）。
 
 #### 文档更新
-- **DEPLOY.md**：新增 MinerU API Key 配置注意事项，明确配置方式与常见错误排查。
-- **说明文档.md**：阶段十新增"部署验证里程碑"记录，标记 Docker 部署首次测试通过。
+- **docs/deploy/DEPLOY.md**：新增 MinerU API Key 配置注意事项，明确配置方式与常见错误排查。
+- **docs/codex/PROJECT_HISTORY.md**：阶段十新增"部署验证里程碑"记录，标记 Docker 部署首次测试通过。
 
 #### 验证环境
 - 宿主机：Mac Mini（`192.168.31.33`）

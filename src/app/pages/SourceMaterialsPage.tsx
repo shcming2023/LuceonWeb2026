@@ -500,7 +500,6 @@ export function SourceMaterialsPage() {
         },
       });
 
-      // TODO: 调用 AI 分析端点，确认参数格式
       const res = await fetch('/__proxy/upload/ai/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

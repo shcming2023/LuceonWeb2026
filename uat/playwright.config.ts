@@ -4,9 +4,9 @@ import { defineConfig, devices } from '@playwright/test';
  * EduAsset CMS — Playwright UAT 测试配置
  *
  * 运行方式：
- *   cd uat && npx playwright test
+ *   npx pnpm@10.4.1 --dir uat exec playwright test
  *   或使用项目根目录脚本：
- *   npx playwright test --config=uat/playwright.config.ts
+ *   npx pnpm@10.4.1 test:e2e
  */
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8081';

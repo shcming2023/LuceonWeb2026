@@ -13,10 +13,10 @@ Purpose: determine whether the code is obviously broken before deeper environmen
 Typical commands:
 
 ```bash
-npx tsc --noEmit
-npm run build
-npm run local:check
-npm run test:smoke
+npx pnpm@10.4.1 exec tsc --noEmit
+npx pnpm@10.4.1 run build
+npx pnpm@10.4.1 run local:check
+npx pnpm@10.4.1 run test:smoke
 ```
 
 L1 must not be reported as L2, UAT, or production validation.

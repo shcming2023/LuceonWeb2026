@@ -94,10 +94,10 @@ The previous online MinerU v4 + local Ollama `qwen3.5:0.8b` Tier 2 Standard line
 L1 is the fast code gate. It should be runnable on any development host and may include:
 
 ```bash
-npx tsc --noEmit
-npm run build
-npm run local:check
-npm run test:smoke
+npx pnpm@10.4.1 exec tsc --noEmit
+npx pnpm@10.4.1 run build
+npx pnpm@10.4.1 run local:check
+npx pnpm@10.4.1 run test:smoke
 ```
 
 L2 is near-production validation. The current main L2/UAT baseline is the local real runtime stack:

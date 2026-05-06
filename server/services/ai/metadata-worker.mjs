@@ -21,6 +21,10 @@ import { buildEvidencePack } from './metadata-evidence-pack.mjs';
 import { getDefaultV02Skeleton, validateAndNormalizeV02, generateV02Prompt, generateV02DraftPrompt, generateV02RepairPrompt } from './metadata-standard-v0.2.mjs';
 
 const POLL_INTERVAL_MS = 10000;
+const STRICT_NO_SKELETON =
+  process.env.DISABLE_AI_SKELETON_FALLBACK === 'true' ||
+  process.env.ALLOW_AI_SKELETON_FALLBACK === 'false';
+const REQUIRED_OLLAMA_MODEL = process.env.OLLAMA_TIER2_MODEL || 'qwen3.5:9b';
 
 // 内存队列锁
 const processingMap = new Set();
@@ -54,7 +58,7 @@ export class AiMetadataWorker {
     const hasContext = typeof this.minioContext?.getFileStream === 'function';
     console.log(`[ai-worker] Initialized. Context: ${hasContext ? 'OK' : 'MISSING'}, Callback: ${this.onComplete ? 'YES' : 'NO'}`);
     // 默认超时时间，用于 stale running job 判断
-    this.defaultTimeoutMs = (process.env.DISABLE_AI_SKELETON_FALLBACK === 'true' || process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') ? 300000 : 120000;
+    this.defaultTimeoutMs = STRICT_NO_SKELETON ? 300000 : 120000;
   }
 
   start() {
@@ -329,22 +333,22 @@ export class AiMetadataWorker {
       // 优先读取 aiConfig，兼容旧的 ai
       const rawAiConfig = settings.aiConfig || settings.ai || {};
 
-      // 降级检查：未启用 AI
+      // 非严格模式下，控制台关闭 AI 时可生成待复核占位结果；严格模式会 fail fast。
       if (rawAiConfig.aiEnabled === false) {
-        return await this.degradeToSkeleton(job, 'AI 功能已从控制台关闭，降级为骨架模拟', sourceMeta);
+        return await this.degradeToSkeleton(job, 'AI 功能已从控制台关闭，非严格模式将生成待复核骨架结果', sourceMeta);
       }
 
       // 3. 确定 Provider 配置 (优先选择 providers 数组中启用且优先级最高的)
       let aiSettings = {};
       let providerId = 'ollama';
 
-      if (process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') {
-        // Standard Tier 2 Mode: STRICTLY consume environment variables and ignore DB
+      if (STRICT_NO_SKELETON) {
+        // Strict runtime mode: consume environment variables and do not use DB fallback providers.
         providerId = 'ollama';
         aiSettings = {
-          baseUrl: process.env.OLLAMA_API_URL || 'http://cms-ollama-local:11434',
-          model: process.env.OLLAMA_TIER2_MODEL || 'qwen3.5:0.8b',
-          timeoutMs: (process.env.DISABLE_AI_SKELETON_FALLBACK === 'true' || process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') ? 300000 : 120000,
+          baseUrl: process.env.OLLAMA_API_URL || 'http://host.docker.internal:11434',
+          model: REQUIRED_OLLAMA_MODEL,
+          timeoutMs: STRICT_NO_SKELETON ? 300000 : 120000,
           ollamaTwoPassJsonRepair: true,
           temperature: 0.1
         };
@@ -380,7 +384,7 @@ export class AiMetadataWorker {
       const markdownObjectName = parseTask?.metadata?.markdownObjectName || job.inputMarkdownObjectName;
 
       if (!markdownObjectName || !this.minioContext) {
-        return await this.degradeToSkeleton(job, '未找到 Markdown 产物或存储上下文不可用，降级为骨架模拟', sourceMeta);
+        return await this.degradeToSkeleton(job, '未找到 Markdown 产物或存储上下文不可用，非严格模式将生成待复核骨架结果', sourceMeta);
       }
 
       let markdownContent = '';
@@ -388,7 +392,7 @@ export class AiMetadataWorker {
         const stream = await this.minioContext.getFileStream(markdownObjectName);
         markdownContent = await this.streamToString(stream);
       } catch (err) {
-        return await this.degradeToSkeleton(job, `拉取 Markdown 内容失败: ${err.message}，降级为骨架模拟`, sourceMeta);
+        return await this.degradeToSkeleton(job, `拉取 Markdown 内容失败: ${err.message}，非严格模式将生成待复核骨架结果`, sourceMeta);
       }
 
       if (!markdownContent.trim()) {
@@ -526,8 +530,9 @@ export class AiMetadataWorker {
           payload: errorPayload
         });
 
-        // 如果所有 provider 都失败，尝试降级到模拟
-        const skeletonReason = `AI Provider 调用全部失败: ${err.message}，自动降级为模拟结果完成链路`;
+        const skeletonReason = STRICT_NO_SKELETON
+          ? `AI Provider 调用全部失败: ${err.message}；严格模式禁止骨架兜底`
+          : `AI Provider 调用全部失败: ${err.message}，自动降级为模拟结果完成链路`;
         const degradedResult = await this.degradeToSkeleton(job, skeletonReason, sourceMeta);
         if (degradedResult && degradedResult.result) {
             degradedResult.result.aiClassificationRawTrace = rawTrace;
@@ -763,8 +768,8 @@ export class AiMetadataWorker {
           }
         }
 
-        if (process.env.DISABLE_AI_SKELETON_FALLBACK === 'true' || process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') {
-          throw new Error(`[Standard 契约拦截] 不允许降级到骨架模型: ${aiClassificationDegradedReason}`);
+        if (STRICT_NO_SKELETON) {
+          throw new Error(`[AI 严格模式拦截] 不允许降级到骨架模型: ${aiClassificationDegradedReason}`);
         }
         resultV02 = getDefaultV02Skeleton(sourceMeta, 'low', aiClassificationDegradedReason);
       } else {
@@ -781,8 +786,8 @@ export class AiMetadataWorker {
           aiClassificationErrorSource = 'ai-metadata-fallback';
         }
 
-        if (aiClassificationDegraded && (process.env.DISABLE_AI_SKELETON_FALLBACK === 'true' || process.env.ALLOW_AI_SKELETON_FALLBACK === 'false')) {
-          throw new Error(`[Standard 契约拦截] 不允许降级到骨架模型: ${aiClassificationDegradedReason}`);
+        if (aiClassificationDegraded && STRICT_NO_SKELETON) {
+          throw new Error(`[AI 严格模式拦截] 不允许降级到骨架模型: ${aiClassificationDegradedReason}`);
         }
       }
 
@@ -889,11 +894,11 @@ export class AiMetadataWorker {
   }
 
   /**
-   * 降级执行：返回模拟结果
+   * 非严格模式兜底：返回待复核骨架结果
    */
   async degradeToSkeleton(job, reason, prebuiltSourceMeta = null) {
-    if (process.env.DISABLE_AI_SKELETON_FALLBACK === 'true' || process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') {
-      throw new Error(`[Standard 契约拦截] 不允许降级到骨架模型: ${reason}`);
+    if (STRICT_NO_SKELETON) {
+      throw new Error(`[AI 严格模式拦截] 不允许降级到骨架模型: ${reason}`);
     }
     console.warn(`[ai-worker] Degrading job ${job.id}: ${reason}`);
 
@@ -1000,14 +1005,13 @@ export class AiMetadataWorker {
 
     // 优先使用配置的地址，否则尝试 host.docker.internal，最后兜底 Mac mini 默认 IP
     let url = aiSettings.ollamaBaseUrl || aiSettings.baseUrl || aiSettings.apiEndpoint || HOST_DOCKER_OLLAMA;
-    const baseTimeout = (process.env.DISABLE_AI_SKELETON_FALLBACK === 'true' || process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') ? 300000 : 120000;
+    const baseTimeout = STRICT_NO_SKELETON ? 300000 : 120000;
     const timeoutMs = aiSettings.timeoutMs || baseTimeout;
     this.defaultTimeoutMs = timeoutMs; // 保存用于 stale job 判断
 
-    // In Standard mode, the model configuration MUST come strictly from env vars
-    const model = process.env.ALLOW_AI_SKELETON_FALLBACK === 'false'
-      ? (process.env.OLLAMA_TIER2_MODEL || 'qwen3.5:0.8b')
-      : (aiSettings.ollamaModel || aiSettings.model || process.env.OLLAMA_TIER2_MODEL || 'qwen3.5:9b');
+    const model = STRICT_NO_SKELETON
+      ? REQUIRED_OLLAMA_MODEL
+      : (aiSettings.ollamaModel || aiSettings.model || REQUIRED_OLLAMA_MODEL);
 
     // 路由逻辑变更 (TASK-24)：
     // 如果配置包含了 /v1/chat/completions，则使用 OpenAiCompatibleProvider
@@ -1056,7 +1060,7 @@ export class AiMetadataWorker {
    */
   normalizeTimeout(val) {
     const n = Number(val);
-    const baseTimeout = (process.env.DISABLE_AI_SKELETON_FALLBACK === 'true' || process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') ? 300000 : 120000;
+    const baseTimeout = STRICT_NO_SKELETON ? 300000 : 120000;
     if (!n || isNaN(n)) return baseTimeout;
     if (n <= 3600) return n * 1000; // 秒转毫秒
     return n;

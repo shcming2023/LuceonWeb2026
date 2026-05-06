@@ -364,10 +364,10 @@ app.use((req, res, next) => {
  * 不做字段级验证（避免破坏前端灵活性），仅拒绝明显非法的请求体。
  */
 function requireBody(req, res, next) {
-  // ���� /settings/:key ���ջ����������� (primitive values)
+  // /settings/:key 接受对象、数组或原始 JSON 值。
   if (req.path.startsWith('/settings/')) {
     if (req.body === undefined) {
-      res.status(400).json({ error: '�����岻��Ϊ��' });
+      res.status(400).json({ error: '请求体不能为空' });
       return;
     }
     return next();

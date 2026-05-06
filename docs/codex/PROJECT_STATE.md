@@ -1,358 +1,127 @@
 # Luceon2026 Project State
 
-Last updated: 2026-05-05
+Last updated: 2026-05-06
 
-## Current Migration Decision
+## 1. Current Repository Baseline
 
-The project is moving from multi-computer local Codex development to a single primary Codex environment on the Home Mac mini.
-
-Current Windows working copy:
-
-- Path: `D:\Users\moonp\OneDrive\Mac\项目开发\Luceon2026`
+- Active workspace: `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/3.Luceon2026`
 - Branch: `main`
-- Current local HEAD before this documentation handoff: `d8ef152 fix(uat): add minio fallback evidence check for artifact quality in standard smoke`
-- Local branch status before this documentation handoff: ahead of `origin/main` by 10 commits
+- Remote sync baseline before this governance pass: `origin/main` at `22857e9d83f7598e508f4b2827480c2ec166b96d`
+- Package manager: `npx pnpm@10.4.1`
+- Root lockfile: `pnpm-lock.yaml`
+- Removed lockfile class: root `package-lock.json` and UAT-local `package-lock.json`
+- Production release readiness: not claimed by this record.
 
-Target Mac mini mode:
+## 2. Phase 1 Mainline Architecture Snapshot
 
-- Codex threads live on the Mac mini.
-- Work computers connect by remote desktop.
-- GitHub remains the durable source for code and project memory.
-- Dev, staging, and production directories are separated on the Mac mini.
+The current first-phase mainline is the local real runtime path:
 
-Current role model:
+1. Operator uploads a document through `/cms/tasks`.
+2. `server/upload-server.mjs` stores the raw object in MinIO and creates a `Material` plus a `ParseTask`.
+3. `server/services/queue/task-worker.mjs` processes `local-mineru` tasks.
+4. Local conda MinerU FastAPI parses PDF inputs; Markdown inputs bypass MinerU and write canonical `full.md`.
+5. Parsed artifacts are stored in MinIO under `parsed/{materialId}/`, with `artifact-manifest.json` as the durable large-artifact index.
+6. `server/services/ai/metadata-worker.mjs` creates and processes AI metadata jobs through host Ollama `qwen3.5:9b`.
+7. High-confidence or accepted results reach `completed`; low-confidence AI results reach `review-pending` and are shown to the operator as `待复核`.
 
-- `lucia`: architecture control, task writing, code-delivery review, validation criteria, and final judgment.
-- `lucode`: implementation and code revision from Antigravity workspace `/workspace/ops/Luceon2026`, with host/IDE working copy reference `D:\Users\moonp\OneDrive\Mac\项目开发\Luceon2026`, synchronized through GitHub and scoped by lucia-approved task briefs.
-- `luplan`: PRD, decision, changelog, project-state, and handoff maintenance.
-- `luceonhmm`: UAT deployment, L2/L3 validation, production-like runtime analysis, dependency debugging, rollback support, and evidence capture.
-- `cota`: Director-side cross-project Codex collaboration advisor for multi-agent coordination quality, role-boundary review, task-routing advice, Director-voice suggestions to lucia, and XxwlAs2026/cosh setup guidance.
-- `lutest`: retired legacy role. Do not route new validation work there.
+Current runtime dependencies:
 
-## Current Engineering Focus
+| Dependency | Current mainline |
+| --- | --- |
+| Frontend | React/Vite SPA under `/cms`; `/cms/tasks` is the main workbench |
+| Upload/API | Express upload server behind `/__proxy/upload` |
+| Data API | Express JSON DB server behind `/__proxy/db` |
+| Storage | Docker MinIO with raw and parsed buckets |
+| Parser | Local conda MinerU FastAPI, default `http://host.docker.internal:8083` in containers |
+| AI | Host Ollama, required model `qwen3.5:9b` |
+| Strict AI mode | `DISABLE_AI_SKELETON_FALLBACK=true`, `ALLOW_AI_SKELETON_FALLBACK=false` |
+| Online MinerU | Compatibility-only; not part of the current main gate unless explicitly assigned |
 
-The current active engineering focus is:
+## 3. Governance Closure Summary
 
-- `P1-real-runtime-uat-local-mineru-minio-ollama9b`
-- MinerU: local Conda-deployed MinerU, verified through the effective Luceon runtime path.
-- MinIO: Docker-deployed MinIO, verified through raw and parsed object evidence.
-- Ollama: Ollama-deployed project-required 9B model, verified through effective AI metadata evidence.
-- Skeleton fallback: must not be used as proof of real AI recognition.
-- Director approved this policy shift on 2026-05-03: stop tracking missing `MINERU_ONLINE_API_TOKEN` as the main blocker and move the current main gate to the real local runtime dependency chain.
+Completed on 2026-05-06:
 
-Current accepted validation result:
+- Archived 27 historical `.codebuddy/plans/` files to `archive/phase1-governance-2026-05-06/codebuddy-plans/`.
+- Archived 15 historical `docs/reviews/` files to `archive/phase1-governance-2026-05-06/docs-reviews/`.
+- Added archive manifest: `archive/phase1-governance-2026-05-06/MANIFEST.md`.
+- Replaced active review sprawl with `docs/reviews/README.md` and `docs/reviews/PHASE1_ACCEPTANCE_SUMMARY.md`.
+- Removed obsolete online MinerU v4 batch parsing script: `scripts/test-mineru-v4-batch-parsing.mjs`.
+- Renamed `src/store/mockData.ts` to `src/store/seedData.ts`.
+- Removed dependency-supervisor test-only mock execution path.
+- Removed non-`local-mineru` simulated worker-success path from the runtime worker; unsupported parse engines now fail fast.
+- Decoupled strict AI skeleton fallback flags from MinerU online mode selection.
+- Rewrote Tier 2 Standard configuration toward local MinerU + MinIO + host Ollama `qwen3.5:9b`.
+- Removed unused npm dependency groups from `package.json` and regenerated `pnpm-lock.yaml`.
+- Added `uat` to the pnpm workspace and removed local lockfile drift.
+- Moved deployment documentation to `docs/deploy/DEPLOY.md`.
+- Moved long-form historical project notes to `docs/codex/PROJECT_HISTORY.md`.
+- Removed unreferenced root theme artifact `default_shadcn_theme.css`.
+- Added root-directory policy: `docs/codex/REPOSITORY_STRUCTURE.md`.
+- Aligned UAT route semantics: `/cms/tasks` is the main route; `/cms/source-materials` and `/cms/workspace` are legacy redirects.
+- Removed explicit skip markers from active UAT suites.
+- Repaired stale comments, mojibake text, and misleading pending-comment wording found during governance scans.
 
-- `P0-l3-home-mac-mini-staging-real-runtime-e2e-validation`: `PASS`
-- luceonhmm final status: `PASS_CANDIDATE`
-- Lucia final judgment: `PASS`
-- Scope: Home Mac mini staging / production-like independent environment.
-- Staging path: `/Users/concm/staging/Luceon2026`
-- Staging URL: `http://127.0.0.1:18081/cms/tasks`
-- Evidence directory: `/Users/concm/ops/evidence/luceon2026/l3-20260505-064229/`
-- HEAD: `d522fdad98eaec4c149a719df335b02595121741`
-- compose project: `luceon2026-staging`
-- compose files used: `docker-compose.yml`, `docker-compose.staging.local.yml`
-- Explicitly not used: `docker-compose.override.yml`, `docker-compose.tier2-standard.yml`
-- Runtime: local conda MinerU, Docker MinIO, host Ollama `qwen3.5:9b`, `DISABLE_AI_SKELETON_FALLBACK=true`, `OLLAMA_TIER2_MODEL=qwen3.5:9b`, `STORAGE_BACKEND=minio`.
-- Key IDs: task `task-1777934728573`, material `3969562638063124`, AI job `ai-job-1777934731633-3e49`, MinerU task `6276827e-8b3e-4d2f-bad0-b8a8cbccf4ad`, uploaded file `l3-staging-e2e-1777934728043.pdf`.
-- ZIP sha256: `d7e6e51a55d058d5b368ff7435dfc7aa6bf5681ddb7de1f3bf7a41ad03fe7cfb`
-- Confirmed L3 E2E behavior:
-  - frontend upload input via Playwright `setInputFiles`.
-  - task/material created.
-  - local MinerU task completed.
-  - MinIO raw/parsed/AI raw artifacts available.
-  - AI provider/model: `ollama` / `qwen3.5:9b`.
-  - provider/model was not `skeleton`.
-  - task reached `review-pending`.
-  - MetadataTab four-layer structure validated.
-  - `Material.tags` updated.
-  - `metadata.tags` unchanged.
-  - review approval completed.
-  - task reached `completed` / `done`.
-  - ZIP downloaded with size/hash evidence.
-  - browser console had no business error/warn.
-  - dependency-health: `blocking=false`.
-  - consistency audit: `findingsCount=0`, `blockingFindings=0`.
-- Scope limits: this L3 result does not claim production release readiness, full-site completion, all error paths, concurrent uploads, large PDF / long-run stability, permissions/security coverage, online MinerU v4 compatibility, folder upload, settings/products/library full coverage, or rollback/backup rehearsal completion.
-- Non-blocking follow-ups recorded:
-  - `P3-task-detail-toast-overlay-toolbar-polish`: toast can overlay the task detail toolbar and block a normal Playwright click on `下载 ZIP`.
-  - `P2-completed-material-status-consistency-review`: after review approval, task is `completed/done` but `Material.status` remains `reviewing`; consistency audit currently does not flag it.
+## 4. Validation Ledger
 
-- `P2-upload-entry-testability-enhancement`: `PASS`
-- luceonhmm final status: `PASS_CANDIDATE`
-- Lucia final judgment: `PASS`
-- Validated branch HEAD: `042c6508e8357fa07c6a0bb12ec48fc09129e8cc`
-- Main merged HEAD: `042c6508e8357fa07c6a0bb12ec48fc09129e8cc`
-- Scope: local real runtime UAT, `/cms/tasks` upload file input testability.
-- Confirmed behavior:
-  - `data-testid` upload contract present.
-  - Playwright `setInputFiles` works on `task-upload-file-input`.
-  - real PDF creates task/material through the frontend input path.
-  - task appears in task list.
-  - task detail opens.
-  - local MinerU completed.
-  - MinIO parsed artifacts available.
-  - Ollama provider/model: `ollama` / `qwen3.5:9b`.
-  - final state: `review-pending`.
-  - browser console clean.
-  - dependency-health: `blocking=false`.
-  - consistency audit: `findingsCount=0`, `blockingFindings=0`.
-- Scope limits: this task does not claim folder input validation, error-path validation, concurrent upload validation, large-file upload validation, L3 readiness, or production readiness. The raw object list API `rawTotal=0` observation remains non-blocking and unpromoted unless separately assigned.
+Commands run in this governance pass:
 
-- `P3-task-list-pending-sync-tooltip-polish`: `PASS`
-- luceonhmm final status: `PASS_CANDIDATE`
-- Lucia final judgment: `PASS`
-- Validated branch HEAD: `3962fb1d7834a4b13683503d740fb9ea7edb28c1`
-- Main merged HEAD: `3962fb1d7834a4b13683503d740fb9ea7edb28c1`
-- Scope: local real runtime UAT, task list `待同步` tooltip polish.
-- Confirmed behavior:
-  - Tooltip text: `状态映射待同步：任务、资料、AI 任务或产物状态暂未完全对齐；不代表审核失败。`
-  - `状态一致` title did not regress.
-  - Page did not show `需审计`.
-  - browser console clean.
-  - dependency-health: `blocking=false`.
-  - consistency audit: `findingsCount=0`, `blockingFindings=0`.
-- Scope limits: this task does not claim L3 readiness, production readiness, full-site UI review, full badge state matrix validation, or upload modal / file picker validation.
+| Check | Result |
+| --- | --- |
+| `npx pnpm@10.4.1 install --frozen-lockfile` | PASS |
+| `npx pnpm@10.4.1 exec tsc --noEmit` | PASS |
+| `npx pnpm@10.4.1 run build` | PASS; Vite reported only the existing chunk-size warning |
+| `node server/tests/worker-smoke.mjs` | PASS; strict AI mode fails fast without skeleton fallback |
+| `node server/tests/dependency-supervisor-smoke.mjs` | PASS |
+| `BASE_URL=http://localhost:8081 LOCAL_MINERU_ENDPOINT=http://127.0.0.1:8083 OLLAMA_API_URL=http://127.0.0.1:11434 OLLAMA_TIER2_MODEL=qwen3.5:9b npx pnpm@10.4.1 run tier2:standard:check` | PASS |
+| `BASE_URL=http://localhost:8081 bash uat/smoke-test.sh` | PASS, 12 passed / 0 failed / 0 skipped |
+| `DB_BASE_URL=http://localhost:8081/__proxy/db node server/tests/mineru-deep-check.mjs` | PASS |
+| `BASE_URL=http://localhost:8081 npx pnpm@10.4.1 --dir uat exec playwright test tests/pages-smoke.spec.ts` | PASS, 8 passed |
+| `BASE_URL=http://localhost:8081 npx pnpm@10.4.1 --dir uat exec playwright test tests/cms-uat.spec.ts` | PASS, 18 passed |
+| `BASE_URL=http://localhost:8081 npx pnpm@10.4.1 --dir uat exec playwright test tests/pipeline-consistency.spec.ts` | PASS, 2 passed |
 
-- `P2-operator-main-workflow-polish-bundle`: `PASS`
-- luceonhmm final status: `PASS_CANDIDATE`
-- Lucia final judgment: `PASS`
-- Validated implementation HEAD: `c60152d72fe8dae545a2c18c3f425b6f0620ecf4`
-- Scope: local real runtime UAT, task `task-1777849339744`, material `mat-1777849339732`, focused Operator polish checks for MetadataTab tags, completed actions, completed list wording, and overview next-action label.
-- Confirmed behavior:
-  - MetadataTab tag save immediate sync passed.
-  - read-only chip updates immediately after save without refresh.
-  - re-entering edit mode preserves the saved draft tags.
-  - delete tag -> save -> read-only chip disappears immediately without refresh.
-  - refresh UI matches API `Material.tags`.
-  - `metadata.tags` was not polluted.
-  - completed task detail no longer shows misleading `审核通过` main button.
-  - completed task list row no longer shows review action.
-  - completed list row no longer shows `需审计`; it shows `待同步` where relevant.
-  - overview label now shows `下一步动作`.
-  - browser console error/warn empty.
-  - consistency audit: `findingsCount=0`, `blockingFindings=0`.
-- Scope limits: this task does not claim L3 readiness, production readiness, full-site UI review, all task states validation, all error paths validation, or upload file-picker / upload modal validation.
-- Follow-up polish status: `待同步` tooltip clarity was later resolved by `P3-task-list-pending-sync-tooltip-polish`.
+Runtime evidence from the final pipeline run:
 
-- `P1-operator-main-workflow-usability-review`: `PASS`
-- luceonhmm final status: `PASS_CANDIDATE`
-- Lucia final judgment: `PASS`
-- Validated HEAD: `1849beacef6d755859c45e7704ddd467dc3b03aa`
-- Scope: local real runtime UAT, task `task-1777849339744`, material `mat-1777849339732`, Operator main workflow: upload real PDF, task list, task detail, MetadataTab, tag save, review approval, ZIP download, and event log.
-- Confirmed behavior:
-  - real PDF upload created the task successfully.
-  - local MinerU completed.
-  - MinIO raw and parsed artifacts were available.
-  - Ollama provider/model: `ollama` / `qwen3.5:9b`.
-  - `review-pending` -> `completed` / `done` can complete.
-  - `Material.tags` saved successfully.
-  - `metadata.tags` was not polluted.
-  - ZIP download succeeded.
-  - event log explains MinerU, MinIO, AI, and review stages.
-  - dependency-health: `blocking=false`.
-  - consistency audit: `findingsCount=0`, `blockingFindings=0`.
-  - browser console error/warn empty.
-- Scope limits: this task does not claim L3 readiness, production readiness, full-site UI review, complete browser file-picker / upload modal validation, all task states validation, or all error paths validation.
-- Follow-up polish status: MetadataTab tag save immediate chip/draft sync, completed `审核通过` action visibility, completed-list `需审计` wording, and completed overview next-action label were later resolved by `P2-operator-main-workflow-polish-bundle`.
+- PDF chain reached `review-pending`.
+- Markdown chain reached an accepted AI-after-parse terminal state.
+- Parsed artifacts included `full.md`, `artifact-manifest.json`, and MinerU result carriers.
+- Parsed ZIP export included the manifest and canonical Markdown.
+- Strict AI worker smoke proved provider failure does not produce skeleton output in current strict mode.
 
-- `P1-metadatatab-expanded-tag-interaction-validation`: `PASS`
-- luceonhmm final status: `PASS_CANDIDATE`
-- Lucia final judgment: `PASS`
-- Validated HEAD: `8601eab2dd784f7d808f4bc9257b3b5c47909f9a`
-- Scope: real local runtime stack, task `task-1777788279069`, material `mat-1777788279055`, MetadataTab current-tags expanded interaction.
-- Confirmed behavior:
-  - multi-tag add passed.
-  - tag deletion passed.
-  - duplicate tag handling passed.
-  - refresh persistence passed.
-  - toast success was observed.
-  - `Material.tags` remains the Operator current tags fact source.
-  - `metadata.tags` remains the AI/parse tag source and was not polluted.
-  - internal diagnostics title includes `AI 任务`.
-  - dependency-health: `blocking=false`.
-  - consistency audit: `findingsCount=0`, `blockingFindings=0`.
-  - browser console error/warn empty.
-- Final `Material.tags`: `["uat-tag-persistence","uat-tag-multi-a","uat-tag-multi-b"]`
-- `metadata.tags` remained: `["PDF","OCR","Pipeline","表格识别","公式识别","含解析产物"]`
-- Scope limits: this task does not claim L3 readiness, production readiness, full-site UI review, other task states, concurrent editing, or failure-toast/error-path behavior.
-- Non-blocking polish still pending: after save success, current-page chips may not immediately sync to the final state, but refresh stabilizes the state. Potential follow-up: `P2-metadatatab-tags-immediate-chip-sync-polish`.
+## 5. Known Technical Debts
 
-- `P1-ui-clarity-polish-after-review-pass`: `PASS`
-- luceonhmm final status: `PASS_CANDIDATE`
-- Lucia final judgment: `PASS`
-- Validated HEAD: `87543399673308f2b8ff2febf145c85b3e342f75`
-- Scope: `/cms/tasks`, review-pending task detail overview, internal diagnostics folded area, task `task-1777788279069`, material `mat-1777788279055`.
-- Validated behavior:
-  - task list main status remains `待复核`.
-  - same-row diagnostics badge now shows `状态一致`, with no duplicate second `待复核`.
-  - overview shows current state, current stage, generated artifact, and next action.
-  - AI Job / model technical info no longer appears in the main summary by default.
-  - AI metadata job/model remains available after expanding internal diagnostics.
-  - dependency-health: `blocking=false`.
-  - consistency audit: `ok=true`, `findingsCount=0`.
-  - browser console error/warn empty.
-- Scope limits: this task does not claim MetadataTab full revalidation, products/library/settings review, multi-task-state UI validation, L3 readiness, or production readiness.
-- Follow-up polish status: internal diagnostics title clarity was later resolved by `P1-metadatatab-expanded-tag-interaction-validation`; the title now includes `AI 任务`.
+| ID | Status | Description | Boundary |
+| --- | --- | --- | --- |
+| TD-001 | Open | MinerU `/health` can report healthy while `/tasks` submit path is unavailable in a half-failed MinerU runtime. | Add a submit-path dependency probe before production release readiness is claimed. |
+| TD-002 | Open | `server/upload-server.mjs` remains a large mixed server containing upload, storage, parser, AI, and ops routes. | Keep unchanged for Phase 1 stability; modular refactor belongs to a later phase. |
+| TD-003 | Open | Legacy compatibility routes remain for `/cms/source-materials` and `/cms/workspace`. | Keep redirect tests; do not use them as the main operator entry point. |
+| TD-004 | Open | Online MinerU v4 adapter remains in the codebase for explicit compatibility-only validation. | It must not be selected by no-skeleton flags or treated as the current Standard gate. |
+| TD-005 | Open | Vite production build emits a chunk-size warning for the main bundle. | Non-blocking for Phase 1; consider route-level code splitting later. |
+| TD-006 | Open | Full concurrency, large-PDF soak, permissions/security, rollback rehearsal, folder upload, and all error-path coverage are not closed by this governance run. | These are Phase 2 or release-readiness validation items. |
 
-- `P1-latest-ui-metadata-task-detail-interaction-review`: `PASS`
-- luceonhmm final status: `PASS_CANDIDATE`
-- Lucia final judgment: `PASS`
-- Scope: latest UI/code baseline `origin/main@cb6f2376b5146e53c7c83cba62d36bac2236e7e3`, real local runtime stack, review-pending task `task-1777788279069`, material `mat-1777788279055`, `/cms/tasks`, task detail overview, MetadataTab, classification/tag display, and current tag persistence state.
-- Validated UI facts:
-  - task list and detail use `待复核` consistently.
-  - overview answers state, stage, artifact, and next action.
-  - MetadataTab four-layer structure is visible: 审核摘要; 当前保存值; AI 建议与证据; 技术详情 (`Technical Details`) default folded.
-  - provider/model displayed as `ollama` / `qwen3.5:9b`.
-  - `[object Object]` regression not present.
-  - `Material.tags=["uat-tag-persistence"]`.
-  - `metadata.tags` remains the AI/parse tag source.
-  - dependency-health: `blocking=false`.
-  - consistency audit: `ok=true`, `findingsCount=0`.
-  - browser console error/warn empty.
-- Follow-up polish status: duplicate `待复核` in the task-list row and default main-summary AI job/model exposure were later resolved by `P1-ui-clarity-polish-after-review-pass`.
-- Scope limits: this is not an L3 or production-readiness claim, not a full-site UI review, and does not validate other task states or concurrent editing. Tag deletion, multi-tag editing, duplicate-tag handling, refresh persistence, and success toast observation were later covered by `P1-metadatatab-expanded-tag-interaction-validation`.
+## 6. Core Asset Directory Index
 
-- `P0-metadata-tab-review-architecture-first-pass`: `PASS`
-- Scope: MetadataTab information architecture first-pass closure, covering only a real `review-pending` sample.
-- Validated HEAD: `372f060450a387da7122064520ecc6a682198dda`
-- Later tag persistence HEAD: `cb6f2376b5146e53c7c83cba62d36bac2236e7e3`
-- Validated structure:
-  - 审核摘要
-  - 当前保存值
-  - AI 建议与证据
-  - 技术详情 (`Technical Details`) 默认折叠
-- Actual provider/model displayed from result facts: `ollama` / `qwen3.5:9b`
-- `[object Object]` controlled-classification leak was fixed and the rerun passed.
+| Path | Role |
+| --- | --- |
+| `src/app/` | React SPA routes, pages, and reusable UI components |
+| `src/store/` | Frontend application state and seed data |
+| `server/upload-server.mjs` | Upload, MinIO, parse task, AI trigger, operational proxy entrypoints |
+| `server/db-server.mjs` | JSON-backed data API for materials, tasks, settings, secrets, and AI metadata jobs |
+| `server/services/mineru/` | Local and compatibility MinerU adapters |
+| `server/services/queue/` | Parse task worker and task processing orchestration |
+| `server/services/ai/` | AI metadata worker, provider adapters, taxonomy, and v0.2 schema helpers |
+| `server/tests/` | Service-level smoke and regression checks |
+| `ops/` | Local dependency supervisor and operator tooling |
+| `scripts/` | Local checks, test runner wrappers, and Tier 2 pre-check scripts |
+| `uat/` | Playwright UAT suites and shell smoke test |
+| `docs/prd/` | Active PRD source |
+| `docs/codex/` | Project state, handoff, role, validation policy, repository structure, and historical project records |
+| `docs/deploy/` | Deployment documentation and environment migration notes |
+| `docs/reviews/` | Current review index and phase acceptance summary only |
+| `archive/phase1-governance-2026-05-06/` | Historical plan and review archive for traceability |
 
-- `P1-fix-metadata-current-tags-persistence-contract`: `PASS`
-- Scope: `review-pending` task single-tag add + refresh persistence path.
-- Validated HEAD: `cb6f2376b5146e53c7c83cba62d36bac2236e7e3`
-- Task: `task-1777788279069`
-- Material: `mat-1777788279055`
-- Test tag: `uat-tag-persistence`
-- Backend fact: `Material.tags=["uat-tag-persistence"]`
-- `metadata.tags` remains the AI/parse tag source and is not the Operator current-tags fact source.
-- Consistency audit: `ok=true`, `findingsCount=0`
-- Dependency-health: `blocking=false`
+## 7. Boundary For Future Work
 
-- `P1-uat-verify-disable-ai-skeleton-local9b-after-decouple`: `PASS`
-- Lucia final judgment: `PASS`
-- Scope: strict no-skeleton local real runtime UAT with local `qwen3.5:9b`; not online MinerU v4 Standard.
-- HEAD: `3714590bb2fe351bfc018cd369a08c5491c98628`
-- Required local runtime env:
-  - `DISABLE_AI_SKELETON_FALLBACK=true`
-  - `OLLAMA_TIER2_MODEL=qwen3.5:9b`
-- Must not require:
-  - `MINERU_ONLINE_API_BASE_URL`
-  - `MINERU_ONLINE_API_TOKEN`
-- UAT taskId: `task-1777788279069`
-- materialId: `mat-1777788279055`
-- MinerU taskId: `ebfbd78e-5304-4748-a6e6-c527f3b9b7c6`
-- AI job: `ai-job-1777788288960-12c7`
-- AI provider/model: `ollama` / `qwen3.5:9b`
-- Consistency audit: `ok=true`, `findingsCount=0`
-- Director browser verification: pending for this specific run
-- Baseline meaning: this is the current valid configuration baseline for the local real runtime stack: strict no-skeleton + local qwen3.5:9b.
-
-- `P1-real-runtime-uat-local-mineru-minio-ollama9b`: `PASS`
-- luceonhmm final status: `PASS_CANDIDATE`
-- Lucia final judgment: `PASS`
-- Scope: local real runtime UAT only, not online MinerU v4 Standard.
-- Machine: `concmdeMac-mini.local`
-- HEAD: `d0af4837b6d13605cf5245d275031e0a6a13f895`
-- Runtime URL: `http://127.0.0.1:8081/cms/`
-- Compose files: `docker-compose.yml` + `docker-compose.override.yml`
-- Upload task: `task-1777784999485`
-- Material: `mat-1777784999468`
-- Local MinerU task: `8c8216c8-6f92-45ea-b76a-c719fcb9e326`, completed
-- Raw object: `originals/mat-1777784999468/source.pdf`
-- Parsed prefix: `parsed/mat-1777784999468/`
-- MinIO artifacts: `artifact-manifest.json`, `full.md`, `mineru-result.zip`
-- `full.md`: 211 bytes, HTTP 200 via presigned URL
-- AI job: `ai-job-1777785048072-dfc0`
-- AI provider/model: `ollama` / `qwen3.5:9b`
-- Final state: task `review-pending`; material `reviewing` / `completed` / `analyzed`
-- Consistency audit: `ok=true`, `findingsCount=0`
-- Director browser verification: completed; task details usable
-- Remaining risk: container configuration was not explicitly proven to have `ALLOW_AI_SKELETON_FALLBACK=false`; this run did not use skeleton, but luceonhmm still needs a configuration closure check.
-
-Retired / compatibility-only validation target:
-
-- The previous online MinerU v4 Tier 2 Standard target using `MINERU_ONLINE_API_BASE_URL=https://mineru.net/api/v4`, `MINERU_ONLINE_API_TOKEN`, `MINERU_ONLINE_MODEL_VERSION=vlm`, and local Docker Ollama `qwen3.5:0.8b` is no longer the current main blocking gate.
-- Historical evidence from that line remains useful context, but it must not be rewritten as passed and missing online token must not block `P1-real-runtime-uat-local-mineru-minio-ollama9b`.
-
-Recent commits leading to current state:
-
-```text
-d8ef152 fix(uat): add minio fallback evidence check for artifact quality in standard smoke
-bcf3de2 fix(uat): increase smoke poll window to 12m and fix pre-check hang
-ee932a4 fix(uat): increase ollama timeout and provide text-rich pdf fixture
-4ada517 fix(uat): resolve ollama container network and provide valid pdf for standard smoke test
-3e3064f feat(mineru): implement v4 online API adapter for Tier 2 Standard
-20d0c90 feat(uat): implement tier 2 standard with real MinerU & Ollama configuration
-13610d1 docs(prd): record tier2 standard online mineru decision
-76fca4b test(uat): add markdown upload regression smoke test
-aa2667d docs(prd): record local tier2 uat baseline
-328c975 fix(uat): auto-init minio buckets, fix mineru mock health, and allow primitive JSON payloads
-```
-
-## Last Known Tier 2 Evidence
-
-The following evidence is retained as historical background for the retired online MinerU v4 Standard line.
-
-At commit `bcf3de2`, the legacy lutest role reported:
-
-- `npm.cmd run tier2:standard:check`: green exit, exit `0`, about `2.7s`
-- `node server/tests/tier2-standard-smoke.mjs`: exit `1`, about `576.69s`
-- MinerU v4 returned a real `batch_id`
-- `full_zip_url` existed
-- MinIO contained `full.md`, `mineru-result.json`, `mineru-result.zip`, `artifact-manifest.json`, and content-list artifacts
-- AI completed with provider `ollama`, model `qwen3.5:0.8b`
-- `aiClassificationProvider=ollama`, not `skeleton`
-- Consistency audit was `ok=true` with one existing orphan-object warning
-
-At commit `d8ef152`, Lucia approved code review for a smoke fallback fix that accepts real parsed artifact evidence from `full.md` when `metadata.artifactQuality` is missing. The final green smoke result for `d8ef152` was still pending in the captured handoff.
-
-## Current Blocker
-
-No current blocker remains for the accepted local real runtime UAT scope of `P1-real-runtime-uat-local-mineru-minio-ollama9b` or the strict no-skeleton local9b configuration baseline `P1-uat-verify-disable-ai-skeleton-local9b-after-decouple`.
-
-Current follow-up:
-
-- Operator main workflow pending scope: no L3 or production-readiness claim; no full-site UI review; complete browser file-picker / upload modal behavior, all task states, and all error paths remain unvalidated.
-- Operator main workflow polish follow-up: MetadataTab tag save immediate chip/draft sync, `审核通过` visibility in `completed`, completed-list `需审计` wording, and completed overview next-action label were resolved by `P2-operator-main-workflow-polish-bundle`.
-- Operator main workflow polish follow-up: `待同步` tooltip clarity was resolved by `P3-task-list-pending-sync-tooltip-polish`.
-- Latest UI/Metadata/Task Detail review pending scope: no L3 or production-readiness claim; no full-site UI review; other task states beyond the current `review-pending` sample are not validated.
-- Latest UI/Metadata/Task Detail tag follow-up: tag deletion, multi-tag editing, duplicate-tag handling, refresh persistence, and success toast observation were validated by `P1-metadatatab-expanded-tag-interaction-validation`.
-- Latest UI/Metadata/Task Detail pending scope: concurrent editing and failure-toast/error-path behavior remain unvalidated.
-- Latest UI/Metadata/Task Detail non-blocking polish: duplicate `待复核` in the task-list row and default main-summary AI job/model exposure were resolved by `P1-ui-clarity-polish-after-review-pass`; internal diagnostics title clarity was resolved by `P1-metadatatab-expanded-tag-interaction-validation`; remaining polish is `P2-metadatatab-tags-immediate-chip-sync-polish`.
-- Director browser verification is pending for the specific `P1-uat-verify-disable-ai-skeleton-local9b-after-decouple` run.
-- This pending browser verification does not change Lucia's recorded PASS for the strict no-skeleton local9b UAT configuration baseline.
-- MetadataTab pending scope: other task states beyond the single `review-pending` sample are not validated.
-- MetadataTab pending scope: concurrent editing and failure-toast/error-path behavior are not validated.
-- PRD wording updates beyond recording these MetadataTab facts remain pending unless Lucia or Director separately assigns PRD revision.
-
-Future repeat evidence for this gate should still include:
-
-- environment identity and Git HEAD
-- deployment path and compose/runtime mode
-- command list, exit codes, and durations
-- local MinerU health/reachability/effective task evidence
-- MinIO raw and parsed object evidence
-- Ollama provider, 9B model, and duration
-- `aiClassificationProvider` is real and not `skeleton`
-- consistency audit status
-- Director manual browser verification status
-- strict no-skeleton configuration state
-
-## Immediate Mac Mini Migration Tasks
-
-1. Push the current branch to GitHub after review.
-2. Clone the repository on the Home Mac mini into `~/dev/Luceon2026`.
-3. Install and sign in to Codex on the Mac mini.
-4. Create or reopen `lucia`, `luplan`, and `luceonhmm` threads on the Mac mini.
-5. Read `AGENTS.md` and `docs/codex/roles/*.md` in each thread.
-6. Re-run L1 on Mac mini.
-7. Keep `P1-real-runtime-uat-local-mineru-minio-ollama9b` as the current local real runtime UAT baseline; rerun it when code or runtime changes affect upload, parse, MinIO, Ollama, AI metadata, task state, or result-library behavior.
-8. Keep `lutest` archived; route new UAT, L2, L3, and dependency-debugging tasks to `luceonhmm`.
+- GitHub `main`, this local workspace, and the PRD remain the three project truth sources.
+- Current Phase 1 status is local real-runtime PASS for the upload -> MinerU -> MinIO -> Ollama metadata -> review path.
+- This record does not promote staging readiness, production release readiness, or full-site acceptance.
+- Future changes must preserve full-text reasoning as the chapter-preprocessing direction if chapter preprocessing is reintroduced or extended; heuristic chapter preprocessing such as `chapterPreprocessV2.ts` must not be restored as a main path.

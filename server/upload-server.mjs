@@ -54,6 +54,14 @@ const port = Number(process.env.UPLOAD_PORT || 8788);
 
 // db-server 地址（用于持久化 MinIO 配置）
 const DB_BASE_URL = process.env.DB_BASE_URL || 'http://localhost:8789';
+const STRICT_NO_SKELETON =
+  process.env.DISABLE_AI_SKELETON_FALLBACK === 'true' ||
+  process.env.ALLOW_AI_SKELETON_FALLBACK === 'false';
+const ONLINE_MINERU_MODE =
+  process.env.MINERU_ENGINE === 'online' ||
+  process.env.MINERU_MODE === 'online' ||
+  process.env.MINERU_ONLINE_ENABLED === 'true';
+const REQUIRED_OLLAMA_MODEL = process.env.OLLAMA_TIER2_MODEL || 'qwen3.5:9b';
 
 const debugLogs = [];
 
@@ -283,26 +291,25 @@ async function checkDependencyHealth(minioBucket) {
     let aiEnabled = !!ollamaEndpoint || false;
 
     try {
-      if (process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') {
-        // Standard Tier 2 mode: strictly enforce env configs, skip DB settings for AI/MinerU
+      if (STRICT_NO_SKELETON) {
         aiEnabled = true;
-        if (!ollamaEndpoint) ollamaEndpoint = 'http://cms-ollama-local:11434';
-      } else {
-        const setResp = await fetch(`${DB_BASE_URL}/settings`);
-        if (setResp.ok) {
-          const allSettings = await setResp.json();
-          const mSet = allSettings?.mineruConfig || {};
-          if (mSet.localEndpoint && !process.env.LOCAL_MINERU_ENDPOINT) mineruEndpoint = mSet.localEndpoint;
+        if (!ollamaEndpoint) ollamaEndpoint = 'http://host.docker.internal:11434';
+      }
 
-          const aiSet = allSettings?.aiConfig || {};
+      const setResp = await fetch(`${DB_BASE_URL}/settings`);
+      if (setResp.ok) {
+        const allSettings = await setResp.json();
+        const mSet = allSettings?.mineruConfig || {};
+        if (mSet.localEndpoint && !process.env.LOCAL_MINERU_ENDPOINT && !ONLINE_MINERU_MODE) mineruEndpoint = mSet.localEndpoint;
+
+        const aiSet = allSettings?.aiConfig || {};
+        if (!STRICT_NO_SKELETON) {
           if (!aiEnabled) {
             aiEnabled = aiSet.enabled === true || (aiSet.enabled !== false && Array.isArray(aiSet.providers) && aiSet.providers.some(p => p.enabled !== false));
           }
           if (aiEnabled && Array.isArray(aiSet.providers) && !process.env.OLLAMA_API_URL) {
             const ollamaProvider = aiSet.providers.find(p => p.enabled !== false && (p.providerId === 'ollama' || (p.apiEndpoint && p.apiEndpoint.includes('11434'))));
-            if (ollamaProvider && ollamaProvider.apiEndpoint) {
-              ollamaEndpoint = ollamaProvider.apiEndpoint;
-            }
+            if (ollamaProvider && ollamaProvider.apiEndpoint) ollamaEndpoint = ollamaProvider.apiEndpoint;
           }
         }
       }
@@ -311,11 +318,11 @@ async function checkDependencyHealth(minioBucket) {
     }
 
     // 3. MinerU
-    if (process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') {
+    if (ONLINE_MINERU_MODE) {
       const onlineUrl = process.env.MINERU_ONLINE_API_BASE_URL;
       const token = process.env.MINERU_ONLINE_API_TOKEN;
       if (!onlineUrl || !token) {
-        result.dependencies.mineru.error = 'Missing MINERU_ONLINE_API_BASE_URL or MINERU_ONLINE_API_TOKEN in Standard mode';
+        result.dependencies.mineru.error = 'Missing MINERU_ONLINE_API_BASE_URL or MINERU_ONLINE_API_TOKEN in online MinerU mode';
       } else {
         result.dependencies.mineru.endpoint = onlineUrl;
         try {
@@ -386,13 +393,11 @@ async function checkDependencyHealth(minioBucket) {
          if (ollamaRes.ok) {
            const data = await ollamaRes.json();
            const modelNames = (data.models || []).map(m => m.name);
-           const targetModel = process.env.ALLOW_AI_SKELETON_FALLBACK === 'false'
-             ? (process.env.OLLAMA_TIER2_MODEL || 'qwen3.5:0.8b')
-             : (process.env.OLLAMA_TIER2_MODEL || 'qwen3.5:9b');
+           const targetModel = REQUIRED_OLLAMA_MODEL;
            const hasTarget = modelNames.some(n => n.includes(targetModel));
 
-           if (!hasTarget && process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') {
-             result.dependencies.ollama.error = `Missing required Standard model: ${targetModel}`;
+           if (!hasTarget && STRICT_NO_SKELETON) {
+             result.dependencies.ollama.error = `Missing required Ollama model: ${targetModel}`;
              result.dependencies.ollama.ok = false;
            } else {
              // 5. Lightweight smoke test to ensure actual generation works, not just tags
@@ -407,7 +412,7 @@ async function checkDependencyHealth(minioBucket) {
                    stream: false,
                    options: { num_predict: 2 } // Extremely low token budget for healthcheck
                  }),
-                 signal: AbortSignal.timeout(5000)
+	                 signal: AbortSignal.timeout(15000)
                });
 
                result.dependencies.ollama.durationMs = Date.now() - smokeStart;
@@ -754,11 +759,11 @@ app.get('/ops/health', async (req, res) => {
 
   // 3. MinerU Check
   try {
-    if (process.env.ALLOW_AI_SKELETON_FALLBACK === 'false') {
+    if (ONLINE_MINERU_MODE) {
       const onlineUrl = process.env.MINERU_ONLINE_API_BASE_URL;
       const token = process.env.MINERU_ONLINE_API_TOKEN;
       if (!onlineUrl || !token) {
-        results.mineru = { status: 'error', message: 'Missing MINERU_ONLINE_API_BASE_URL or MINERU_ONLINE_API_TOKEN in Standard mode' };
+        results.mineru = { status: 'error', message: 'Missing MINERU_ONLINE_API_BASE_URL or MINERU_ONLINE_API_TOKEN in online MinerU mode' };
       } else {
         const dummyRes = await fetch(`${onlineUrl.replace(/\/+$/, '')}/extract/task/dummy-health-check`, {
           headers: { 'Authorization': `Bearer ${token}` },
@@ -801,7 +806,7 @@ app.get('/ops/health', async (req, res) => {
   // 4. Ollama Check
   try {
     let ollamaUrl = process.env.OLLAMA_API_URL || 'http://host.docker.internal:11434';
-    if (process.env.ALLOW_AI_SKELETON_FALLBACK !== 'false') {
+    if (!STRICT_NO_SKELETON) {
       try {
         const setResp = await fetch(`${dbBaseUrl}/settings`, { signal: AbortSignal.timeout(1000) });
         if (setResp.ok) {
@@ -821,9 +826,7 @@ app.get('/ops/health', async (req, res) => {
     if (ollamaRes.ok) {
       const data = await ollamaRes.json();
       const modelNames = (data.models || []).map(m => m.name);
-      const targetModel = process.env.ALLOW_AI_SKELETON_FALLBACK === 'false'
-        ? (process.env.OLLAMA_TIER2_MODEL || 'qwen3.5:0.8b')
-        : (process.env.OLLAMA_TIER2_MODEL || 'qwen3.5:9b');
+      const targetModel = REQUIRED_OLLAMA_MODEL;
       const hasTarget = modelNames.some(n => n.includes(targetModel));
       results.ollama = {
         status: hasTarget ? 'ok' : 'warning',
@@ -2601,7 +2604,7 @@ app.post('/parse/local-mineru', upload.single('file'), async (req, res) => {
 
 // ─── 接口：POST /tasks ────────────────────────────────────────
 // 统一入口：上传文件，创建 Material 与 ParseTask 并在 db-server 落库
-// 根据约束，现阶段不接入真实长耗时 MinerU worker，仅完成落库及信息保存
+// Worker 负责后续 MinerU 解析和 AI 元数据识别，入口保持上传与任务创建职责。
 app.post('/tasks', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -2789,7 +2792,7 @@ app.post('/tasks', upload.single('file'), async (req, res) => {
 
     const optionsSnapshot = {
       localEndpoint: mineruConfig.localEndpoint || 'http://host.docker.internal:8083',
-      onlineEndpoint: process.env.ALLOW_AI_SKELETON_FALLBACK === 'false' ? process.env.MINERU_ONLINE_API_BASE_URL : undefined,
+      onlineEndpoint: ONLINE_MINERU_MODE ? process.env.MINERU_ONLINE_API_BASE_URL : undefined,
       localTimeout: mineruConfig.localTimeout || 3600,
       ocrLanguage: mineruConfig.localOcrLanguage || mineruConfig.ocrLanguage || 'ch',
       enableOcr: mineruConfig.enableOcr,

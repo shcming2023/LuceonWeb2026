@@ -4,7 +4,7 @@
 
 任何 Lucia 临时代班、并行协作、Lucia 额度恢复或重新接手，均应先阅读以下文档，再开始派单、验收或调整节奏。
 
-- Lucia 接班手册：[docs/reviews/Lucia-接班手册.md](/Users/concm/prod_workspace/Luceon2026/docs/reviews/Lucia-接班手册.md)
+- Lucia 角色定义：[docs/codex/roles/lucia.md](/Users/concm/prod_workspace/Luceon2026/docs/codex/roles/lucia.md)
 - PRD v0.4：[docs/prd/Luceon2026-PRD-v0.4.md](/Users/concm/prod_workspace/Luceon2026/docs/prd/Luceon2026-PRD-v0.4.md)
 - PRD 唯一性索引：[docs/prd/README.md](/Users/concm/prod_workspace/Luceon2026/docs/prd/README.md)
 - luplan PRD 维护规程：[docs/prd/luplan-prd-maintenance.md](/Users/concm/prod_workspace/Luceon2026/docs/prd/luplan-prd-maintenance.md)
@@ -242,8 +242,8 @@ src/store/
 - [x] **Docker 端到端验证**：在 Mac Mini 局域网环境（`192.168.31.33:8081`）下，使用 Docker Compose 部署的完整系统成功通过测试
 - [x] **MinerU 云端解析验证**：单个 PDF 文件（`FastTest01.pdf`）的 MinerU 解析流程在 Docker 环境下完整运行成功
 - [x] **Nginx 代理路由确认**：`/__proxy/mineru/` 路由正确代理到 `mineru.net`，请求头 `Authorization: Bearer <apiKey>` 正确转发
-- [x] **MinerU API Key 配置说明更新**：DEPLOY.md 新增配置注意事项，明确系统设置页面配置方式（不带 `Bearer ` 前缀），以及常见错误排查方法
-- [x] **文档里程碑记录**：CHANGELOG.md 新增 v0.7.0 版本记录，说明文档.md 新增部署验证里程碑章节
+- [x] **MinerU API Key 配置说明更新**：docs/deploy/DEPLOY.md 新增配置注意事项，明确系统设置页面配置方式（不带 `Bearer ` 前缀），以及常见错误排查方法
+- [x] **文档里程碑记录**：CHANGELOG.md 新增 v0.7.0 版本记录，docs/codex/PROJECT_HISTORY.md 新增部署验证里程碑章节
 
 **验证环境**：
 - 宿主机：Mac Mini（`192.168.31.33`）
@@ -572,7 +572,7 @@ src/store/
 
 - [x] **消除硬编码 IP**：将测试与源码中所有 `192.168.31.33` 硬编码替换为环境变量，默认值改为 `localhost` 或 `host.docker.internal`，涉及 8 个文件（`playwright.config.ts`、`cms-uat.spec.ts`、`smoke-test.sh`、`proxy-server.mjs`、`metadata-worker.mjs`、`mockData.ts`、`vite.config.ts`、`start-uat.sh`、`SettingsPage.tsx`、`README.md`）。
 - [x] **测试夹具补齐**：`cms-uat.spec.ts` 新增 `PUBLIC_HOST` 环境变量用于 presigned URL 断言，增加 `afterAll` 自动清理测试写入的 settings/secrets，使用 `uat_` 命名空间隔离。
-- [x] **收敛断言策略**：消除所有 `console.warn + return` 假通过模式，改用 `test.skip()` 显式跳过或 `expect()` 严格断言。
+- [x] **收敛断言策略**：消除所有 `console.warn + return` 假通过模式，当前主 UAT 不使用显式跳过标记规避失败；可执行分支使用 `expect()` 严格断言，数据缺失分支记录为未覆盖事实。
 - [x] **AssetDetailPage AI 触发迁移**：`handleAiAnalyze` 从旧链路（`/parse/analyze` + `/parse/download`）迁移到 PRD 主链路（`POST /tasks/:id/re-ai`），通过 SSE 监听任务完成事件并自动刷新 Material 元数据。
 - [x] **根级测试入口**：`package.json` 新增 `test`/`test:smoke`/`test:server`/`test:e2e` 脚本，新建 `scripts/run-tests.sh` 聚合入口（按 smoke → server → e2e 顺序执行）。
 - [x] **构建验证**：Vite Production Build 通过，零错误。
@@ -594,12 +594,12 @@ src/store/
 ### 阶段四十：UAT 稳定性加固与运维文档规范 (已完成 ✅, 2026-04-23)
 
 - [x] **UAT 稳定性加固**：增加 `pipeline-consistency.spec.ts` 的超时时间（180s）与轮询上限（PDF 120s / MD 90s），解决 Playwright 用例在慢速环境下的 flaky 问题。
-- [x] **测试产物规范化**：更新 `.gitignore`，显式排除 `uat/package-lock.json` 及 Playwright 报告目录，保持 Git 树洁净。
-- [x] **运维操作指引补齐**：新增 `docs/reviews/一致性清理操作说明.md`，明确 `/audit/consistency` 的 findings 含义、dry-run 流程及安全操作边界。
+- [x] **测试产物规范化**：UAT 已纳入 pnpm workspace，根目录保留 `pnpm-lock.yaml` 作为唯一包管理锁文件；Playwright 报告目录继续保持为非版本化产物。
+- [x] **运维操作指引补齐**：历史操作说明已归档至 `archive/phase1-governance-2026-05-06/docs-reviews/`，当前状态以 `docs/reviews/PHASE1_ACCEPTANCE_SUMMARY.md` 与 `docs/codex/PROJECT_STATE.md` 为准。
 
 ### 阶段四十一：运维文档契约对齐与操作收敛 (已完成 ✅, 2026-04-23)
 
-- [x] **一致性审计文档对齐**：更新 `docs/reviews/一致性清理操作说明.md`，将 Finding Kinds 与 `consistency-routes.mjs` 中的 12 种实际类型（如 `bad-parsed-prefix`, `orphan-ai-job` 等）完全对齐。
+- [x] **一致性审计文档对齐**：一致性审计历史说明已归档；当前实现事实以 `server/lib/consistency-routes.mjs` 与 `docs/codex/PROJECT_STATE.md` 为准。
 - [x] **运维示例与边界强化**：在文档中补充了 Dry-run 分布示例，并进一步强化了 `orphan-object` 物理删除的安全边界说明，强调手动确认与备份的重要性。
 - [x] **契约闭环 (Patch v1.2)**：补齐了漏掉的 `non-canonical-ai-state` 类型说明，确保文档表格完整覆盖后端 12 种 Finding Kinds。
 
@@ -626,7 +626,7 @@ src/store/
 - [x] **阶段四第二批：系统健康与诊断增强 (2026-04-23)**
     - 新增 `/ops/health` 系统健康仪表盘，实时监控全链路组件（Frontend, Upload, DB, MinIO, MinerU, Ollama）。
     - 审计页面支持 Findings 导出为 JSON/Markdown 报告，便于线下存档。
-    - 沉淀 `docs/reviews/任务状态诊断说明.md`，明确主链路合法状态组合与异常诊断口径。
+    - 历史任务状态诊断说明已归档至 `archive/phase1-governance-2026-05-06/docs-reviews/`；当前主链路状态以 `docs/reviews/PHASE1_ACCEPTANCE_SUMMARY.md` 为准。
 - [x] **阶段四第二批 Patch 1 (2026-04-23)**
     - 审计导出功能增强：Markdown 导出新增 ## Kind Distribution 段落，JSON 导出新增 distribution 字典。
     - 任务诊断手册修正：对齐 `analyzed` 等实际状态语义，修正 PDF/Markdown 链路路径说明。
@@ -659,7 +659,7 @@ src/store/
     - **Lucia 复核结论**：已通过当前验收防线。
         - 最新复核代码提交：`773d328 fix(p0): support string material ids in asset detail UAT`
         - `npx tsc --noEmit`：通过。
-        - `npm run build`：通过。
+        - `npx pnpm@10.4.1 run build`：通过。
         - `docker compose up -d --build`：通过，最新前端已进入容器。
         - `uat/smoke-test.sh`：12/12 通过。
         - `pages-smoke.spec.ts`：8/8 通过。
@@ -877,7 +877,7 @@ node server/tests/mineru-deep-check.mjs
     - 服务端同步 `appContext.tsx` 的 `handleDbWriteError` 提供精确的 `operation` 输出，如 `PUT /settings/batchProcessing HTTP 400`。
 
 **回归验证**：
-执行了冒烟测试 `server/tests/task-fifo-scheduling-smoke.mjs`，通过。执行前端构建打包 `npm run build`，通过。
+执行了冒烟测试 `server/tests/task-fifo-scheduling-smoke.mjs`，通过。执行前端构建打包 `npx pnpm@10.4.1 run build`，通过。
 **背景**：MinerU / AI 流程完成后，Material 顶层状态已经正确，但 `Material.metadata.mineruStatus` 仍残留 processing，导致任务详情、工作台诊断、审计判断和后续排障出现语义污染。
 
 **修复内容**：
@@ -1001,7 +1001,7 @@ node server/tests/mineru-deep-check.mjs
 - `src/app/pages/TaskManagementPage.tsx`
 - `src/app/pages/AssetDetailPage.tsx`
 - `src/app/pages/SourceMaterialsPage.tsx`（legacy 页面同步修正）
-- `说明文档.md`
+- `docs/codex/PROJECT_HISTORY.md`
 
 ---
 
@@ -1053,7 +1053,7 @@ node server/tests/mineru-deep-check.mjs
 
 **验收结果**：
 - ✅ `npx tsc --noEmit` 无新增错误
-- ✅ `npm run build` 成功（1648 modules, 1.77s）
+- ✅ `npx pnpm@10.4.1 run build` 成功（1648 modules, 1.77s）
 - ✅ 新增冒烟测试：`db-large-artifact-manifest-smoke.mjs`
 - ✅ 新增冒烟测试：`task-events-compaction-smoke.mjs`
 
@@ -1065,7 +1065,7 @@ node server/tests/mineru-deep-check.mjs
 - `server/upload-server.mjs` — /list 分页、/parsed-zip 限流、parsedArtifacts 移除
 - `server/tests/db-large-artifact-manifest-smoke.mjs` — 新增
 - `server/tests/task-events-compaction-smoke.mjs` — 新增
-- `说明文档.md`
+- `docs/codex/PROJECT_HISTORY.md`
 
 ---
 
@@ -1096,7 +1096,7 @@ node server/tests/mineru-deep-check.mjs
 - `src/app/utils/taskView.ts`
 - `server/upload-server.mjs`
 - `server/tests/*-smoke.mjs`
-- `说明文档.md`
+- `docs/codex/PROJECT_HISTORY.md`
 
 ---
 
@@ -1132,7 +1132,7 @@ node server/tests/mineru-deep-check.mjs
 - `src/app/components/DependencyHealthBanner.tsx`
 - `src/app/components/Layout.tsx`
 - `server/tests/dependency-health-smoke.mjs`
-- `说明文档.md`
+- `docs/codex/PROJECT_HISTORY.md`
 
 ### P0 Patch 1.2.3：reset-test-env orphan helper 依赖注入与扫描失败显性化收口（2026-04-29 完成 ✅）
 
@@ -1161,7 +1161,7 @@ node server/tests/mineru-deep-check.mjs
 - `server/lib/consistency-routes.mjs`
 - `server/lib/task-actions-routes.mjs`
 - `server/tests/reset-test-env-smoke.mjs`
-- `说明文档.md`
+- `docs/codex/PROJECT_HISTORY.md`
 
 ### P1/P0 Patch：AI Metadata v0.2 最小事实层与 Ollama 健康控制闭环（2026-04-30 完成 ✅）
 
@@ -1197,17 +1197,17 @@ node server/tests/mineru-deep-check.mjs
 - `ops/luceon-dependency-supervisor.mjs`
 - `src/app/components/DependencyHealthBanner.tsx`
 - `server/tests/ai-metadata-v02-smoke.mjs`
-- `说明文档.md`
+- `docs/codex/PROJECT_HISTORY.md`
 
 
-### P1 Patch：AI Metadata schema-invalid JSON 触发 repair 与 skeleton 降级显性化收口 (2026-05-01 完成 ✅)
+### P1 Patch：AI Metadata schema-invalid JSON 触发 repair 与非严格模式兜底显性化收口 (2026-05-01 完成 ✅)
 
-**目标**：修复合法 JSON 但不符合 v0.2 canonical schema 的场景，将其正确引入 two-pass repair 流程，并在修复失败时显性化地进行 skeleton 降级处理。
+**目标**：修复合法 JSON 但不符合 v0.2 canonical schema 的场景，将其正确引入 two-pass repair 流程，并在修复失败时显性化记录非严格模式兜底信息。
 **变更内容**：
 1. **Schema Check 引入 Repair**：在 AiMetadataWorker 中新增 checkSchemaInvalid，检查 JSON 是否具备 primary_facets、governance、evidence，否则即使解析成功也触发 Repair。
 2. **Repair Prompt 适配**：增强 generateV02RepairPrompt，明确指示其支持旧式/扁平化 JSON 转换为标准 v0.2，并添加了字段映射提示。
-3. **降级显性化展示**：修复了 UI 与 worker 中的 fallback 判断逻辑。当发生 json_parse_failed、repair_failed 或 schema-invalid 时，会在生成的 skeleton 中显性写入 iClassificationDegraded、iClassificationDegradedReason 以及 iClassificationErrorSource。
-4. **前端适配**：在 MetadataTab.tsx 中兼容识别这些错误源（如 i-metadata-schema-invalid、ollama-json-repair-failed）并高亮显示给用户。
+3. **兜底显性化展示**：修复了 UI 与 worker 中的 fallback 判断逻辑。当发生 json_parse_failed、repair_failed 或 schema-invalid 时，会显性写入 `aiClassificationDegraded`、`aiClassificationDegradedReason` 以及 `aiClassificationErrorSource`。
+4. **前端适配**：在 MetadataTab.tsx 中兼容识别这些错误源（如 `ai-metadata-schema-invalid`、`ollama-json-repair-failed`）并高亮显示给用户。
 5. **测试用例覆盖**：新增 Case 12~15，确保合法旧结构触发 Repair，且失败后能够正确捕获，同时确保 valid v0.2 的结果原样保留。
 
 **涉及文件**：
@@ -1240,7 +1240,7 @@ node server/tests/mineru-deep-check.mjs
 1. **引入双事实源**：在 	ask-client.mjs 中补充了 getMaterialById 方法。
 2. **源构造合并**：在 AiMetadataWorker 中新建 _buildSourceMeta 工具方法，优先读取 Material 层的 ileName、ileSize、mimeType，若为空则降级至 ParseTask 的相应字段。
 3. **统一调用口**：在任务执行的主路径 processJob 及各错误回退、未启用 degradeToSkeleton 路径中，统一通过同一事实源实例进行骨架数据构建，消除不同退出点的差异。
-4. **新增冒烟测试**：在 i-metadata-real-sample-smoke.mjs 增补 Case 17~20，涵盖双事实源组装、ParseTask 降级、LLM 污染隔离、骨架降级链路。
+4. **新增冒烟测试**：在 `ai-metadata-real-sample-smoke.mjs` 增补 Case 17~20，涵盖双事实源组装、ParseTask 失败处理、LLM 污染隔离和非严格模式待复核兜底链路。
 
 **涉及文件**：
 - server/services/tasks/task-client.mjs
@@ -1349,4 +1349,3 @@ node server/tests/mineru-deep-check.mjs
 - server/tests/parsed-zip-export-modes-smoke.mjs (重写为真实测试)
 - server/tests/mineru-zip-source-storage-smoke.mjs (重写为真实测试)
 - server/tests/parsed-artifacts-migration-dry-run-smoke.mjs (重写为真实测试)
-

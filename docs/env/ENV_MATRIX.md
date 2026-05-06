@@ -1,66 +1,73 @@
 # Environment Matrix
 
-Last updated: 2026-05-03
+Last updated: 2026-05-06
 
-This matrix records the environments that can run Luceon2026. Keep it updated whenever validation evidence is reported.
+This matrix records environments that can run Luceon2026. Validation evidence must state the machine, path, commit, compose files, runtime URL, and dependency mode.
 
-## Windows Work Computer
+## Active Development Workspace
 
-- Role: current transition development and Tier 2 validation environment
-- Path: `D:\Users\moonp\OneDrive\Mac\项目开发\Luceon2026`
+- Role: current repository governance and development workspace
+- Path: `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/3.Luceon2026`
 - Branch: `main`
-- Notes:
-  - This is an active OneDrive-backed working copy.
-  - GitHub should be treated as the durable sync source.
-  - Codex thread state is local to `C:\Users\moonp\.codex`.
-  - Tier 2 Standard has been tested here with real MinerU v4 online and Docker Ollama.
+- Remote source: GitHub `origin/main`
+- Package manager: `npx pnpm@10.4.1`
+- Main validation URL used in this governance pass: `http://localhost:8081/cms/tasks`
 
-Known services:
+Runtime baseline:
 
-- Docker available
-- MinIO through compose
-- Ollama through compose as `cms-ollama-local`
-- MinerU v4 online through external API
+- Docker Compose frontend, upload server, DB server, MinIO
+- Host local conda MinerU FastAPI, default container endpoint `http://host.docker.internal:8083`
+- Host Ollama, default container endpoint `http://host.docker.internal:11434`
+- Required model: `qwen3.5:9b`
+- Strict AI mode: `DISABLE_AI_SKELETON_FALLBACK=true`, `ALLOW_AI_SKELETON_FALLBACK=false`
+- Storage backend: `minio`
 
 Known risks:
 
-- OneDrive can create file-locking and sync-timing issues for active development.
-- Windows Docker behavior may differ from the Home Mac mini.
-- Local Codex threads do not automatically move with the repository.
+- The workspace is OneDrive-backed; GitHub remains the durable sync source.
+- Local runtime state can retain prior UAT jobs. Full-chain UAT should either start from a drained AI queue or use the updated pipeline wait windows.
 
-## Home Mac Mini
+## Staging Workspace
 
-- Role: target primary Codex host, staging validator, production host
-- Path targets:
-  - `~/dev/Luceon2026`
-  - `~/staging/Luceon2026`
-  - `/opt/luceon2026`
-- Status: planned migration target
+- Role: staging / production-like validation
+- Path: `/Users/concm/staging/Luceon2026`
+- Runtime URL previously recorded for L3 evidence: `http://127.0.0.1:18081/cms/tasks`
+- Compose project previously recorded: `luceon2026-staging`
 
-Required setup:
+Boundary:
 
-- Git
-- Docker or Docker Desktop equivalent
-- Node.js
-- npm
-- Codex
-- Ollama, either compose-managed or host-managed with documented routing
-- production secrets stored outside Git
+- Staging PASS evidence is distinct from production release readiness.
+- Staging records must include exact HEAD, compose files, task/material IDs, MinIO evidence, AI provider/model, and dependency health.
 
-First validation goal:
+## Production Workspace
 
-- clone from GitHub
-- run L1
-- run Tier 2 Standard
-- create `luceonhmm` thread for staging, production validation, deployment, rollback, and evidence capture
+- Role: production deployment and validation target
+- Path: `/Users/concm/prod_workspace/Luceon2026`
+
+Boundary:
+
+- Production release readiness is not claimed by the 2026-05-06 repository governance pass.
+- Production validation must include backup/rollback procedure evidence before release approval.
+
+## Compatibility-Only Online MinerU
+
+- Online MinerU v4 is retained only for explicitly assigned compatibility validation.
+- Missing online MinerU credentials must not block the current local real runtime main gate.
+- Strict AI no-skeleton flags must not implicitly switch MinerU from local mode to online mode.
 
 ## Reporting Rule
 
-Every L2 or L3 report must include:
+Every L2, L3, or release-readiness report must include:
 
 - machine name or role
 - OS
+- repository path
 - commit hash
-- Docker/compose status
-- env presence with secrets redacted
-- validation level: L1, L2, or L3
+- Docker/Compose status
+- compose files
+- runtime URL
+- MinerU endpoint mode
+- Ollama endpoint and model
+- MinIO bucket/object evidence
+- validation command list and exit codes
+- scope limits and remaining risks

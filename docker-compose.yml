@@ -20,7 +20,7 @@
 #   3. 访问 http://localhost:8080/cms/
 #
 # 完整启动（含 Overleaf 备份后端）：
-#   参见 DEPLOY.md 第四节
+#   参见 docs/deploy/DEPLOY.md 第四节
 # ============================================================
 
 services:

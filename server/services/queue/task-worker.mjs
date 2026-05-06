@@ -1,11 +1,10 @@
 /**
- * task-worker.mjs - ParseTask 任务执行器骨架
+ * task-worker.mjs - ParseTask 任务执行器
  *
  * 约束要求：
- * 1. 模拟执行需明确标记 "worker skeleton"
- * 2. 内存锁防重复处理
- * 3. 常量化轮询与延迟配置
- * 4. 解析完成后自动创建 AI Metadata Job（含去重保护）
+ * 1. 内存锁防重复处理
+ * 2. 常量化轮询配置
+ * 3. 解析完成后自动创建 AI Metadata Job（含去重保护）
  */
 
 import { getAllTasks, updateTask, updateMaterial } from '../tasks/task-client.mjs';
@@ -15,17 +14,20 @@ import { processWithOnlineMinerU, resumeWithOnlineMinerU } from '../mineru/v4-on
 import { createAiMetadataJob } from '../ai/metadata-job-client.mjs';
 import { parseLatestMineruProgress } from '../../lib/ops-mineru-log-parser.mjs';
 
-// 约束 3: 集中配置常量
+// 集中配置常量
 const POLL_INTERVAL_MS = 10000; // 10秒检查一次
-const SIMULATED_DELAY_MS = 5000; // 每个阶段模拟耗时 5秒
 const MAX_CONCURRENT_TASKS = 1;
+const ONLINE_MINERU_MODE =
+  process.env.MINERU_ENGINE === 'online' ||
+  process.env.MINERU_MODE === 'online' ||
+  process.env.MINERU_ONLINE_ENABLED === 'true';
 
 // stale-running 自愈缓冲期（PRD v0.4 §9.3）
 const STALE_GRACE_MS = 60_000;
 // 启动后等待多久再做首次恢复扫描，确保 db-server 已就绪
 const RECOVERY_DELAY_MS = 2_000;
 
-// 约束 2: 内存队列锁，防止同一个实例中的多个 tick 重复处理
+// 内存队列锁，防止同一个实例中的多个 tick 重复处理
 const processingMap = new Set();
 
 export class ParseTaskWorker {
@@ -49,9 +51,8 @@ export class ParseTaskWorker {
       || (typeof options.getFileStream === 'function' ? options : null);
     this.eventBus = options.eventBus || null;
     this.taskClient = options.taskClient || { getAllTasks, updateTask, updateMaterial };
-    const isStandardMode = process.env.ALLOW_AI_SKELETON_FALLBACK === 'false';
-    this.mineruProcessor = options.mineruProcessor || (isStandardMode ? processWithOnlineMinerU : processWithLocalMinerU);
-    this.mineruResumer = options.mineruResumer || (isStandardMode ? resumeWithOnlineMinerU : resumeWithLocalMinerU);
+    this.mineruProcessor = options.mineruProcessor || (ONLINE_MINERU_MODE ? processWithOnlineMinerU : processWithLocalMinerU);
+    this.mineruResumer = options.mineruResumer || (ONLINE_MINERU_MODE ? resumeWithOnlineMinerU : resumeWithLocalMinerU);
     this.pendingTaskPatches = new Map();
     this.pendingMaterialPatches = new Map();
   }
@@ -1135,7 +1136,7 @@ export class ParseTaskWorker {
 
   async processTask(task) {
     processingMap.add(task.id);
-    const modeLabel = task.engine === 'local-mineru' ? 'local-mineru' : 'worker skeleton';
+    const modeLabel = task.engine || 'unknown';
     console.log(`[task-worker] Picked up task: ${task.id} (${modeLabel})`);
 
     // P0 硬约束：已有 mineruTaskId 的任务禁止重新 POST /tasks
@@ -1345,49 +1346,7 @@ export class ParseTaskWorker {
         await this.tryCreateAiJob(task, markdownObjectName);
 
       } else {
-        // 1. 进入 running 状态 (模拟过程)
-        await this.transition(task, {
-          stage: 'process',
-          state: 'running',
-          progress: 10,
-          message: '[worker skeleton] 正在解析文档结构...'
-        }, 'worker-picked');
-
-        await this.sleep(SIMULATED_DELAY_MS);
-
-        // 2. 模拟中途进度
-        await this.transition(task, {
-          progress: 50,
-          message: '[worker skeleton] 正在提取文本与表格内容...'
-        }, 'progress-update');
-
-        await this.sleep(SIMULATED_DELAY_MS);
-
-        // 3. 进入 result-store 状态
-        await this.transition(task, {
-          stage: 'store',
-          state: 'result-store',
-          progress: 80,
-          message: '[worker skeleton] 正在保存解析产物到存储后端...'
-        }, 'stage-changed');
-
-        await this.sleep(SIMULATED_DELAY_MS);
-
-        // 4. 完成模拟，进入已就绪待 AI 处理状态
-        await this.transition(task, {
-          stage: 'complete',
-          state: 'ai-pending',
-          progress: 100,
-          message: '[worker skeleton] 解析完成（模拟），等待 AI 元数据识别',
-          metadata: {
-            ...(task.metadata || {}),
-            mineruStatus: 'completed'
-          },
-          completedAt: new Date().toISOString()
-        }, 'worker-completed');
-
-        // ── 解析成功后自动创建 AI Metadata Job ──────────────────
-        await this.tryCreateAiJob(task);
+        throw new Error(`不支持的解析引擎: ${task.engine || 'unknown'}`);
       }
 
     } catch (error) {

@@ -4,7 +4,7 @@
  * 数据持久化策略（三级降级）：
  *   1. 主存储：db-server（通过 /__proxy/db/ REST API，JSON 文件持久化）
  *   2. 次存储：localStorage（降级兜底，同步写）
- *   3. 内存 fallback：mockData 初始数据（全量 API 失败时）
+ *   3. 内存 fallback：seedData 初始数据（全量 API 失败时）
  *
  * 启动流程：
  *   a. 先用 localStorage 快速渲染（避免白屏）
@@ -37,7 +37,7 @@ import {
   initialMinerUConfig,
   initialMinioConfig,
   initialAssetDetails,
-} from './mockData';
+} from './seedData';
 
 // ─── API 基础路径 ──────────────────────────────────────────────
 const DB_BASE = '/__proxy/db';

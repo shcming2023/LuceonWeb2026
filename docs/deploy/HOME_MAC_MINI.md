@@ -1,6 +1,6 @@
 # Home Mac Mini Migration Notes
 
-Last updated: 2026-05-03
+Last updated: 2026-05-06
 
 ## Goal
 
@@ -20,7 +20,7 @@ Use separate compose project names or container name conventions for dev, stagin
 
 ## Migration Steps
 
-1. Push the current Windows `main` branch to GitHub after review.
+1. Push the reviewed `main` branch to GitHub.
 2. On Mac mini:
 
 ```bash
@@ -38,6 +38,7 @@ docker --version
 docker compose version
 node --version
 npm --version
+npx pnpm@10.4.1 --version
 ```
 
 4. Install and sign in to Codex on the Mac mini.
@@ -60,9 +61,9 @@ docs/codex/roles/<role>.md
 7. Run L1:
 
 ```bash
-npx tsc --noEmit
-npm run build
-npm run local:check
+npx pnpm@10.4.1 exec tsc --noEmit
+npx pnpm@10.4.1 run build
+npx pnpm@10.4.1 run local:check
 ```
 
 8. Run Tier 2 Standard with real MinerU env values.

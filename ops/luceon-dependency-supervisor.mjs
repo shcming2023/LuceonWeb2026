@@ -2,9 +2,7 @@ import express from 'express';
 import { exec } from 'child_process';
 import util from 'util';
 
-const execPromise = process.env.MOCK_EXEC === 'true' 
-  ? async (cmd) => { console.log(`[MOCK_EXEC] ${cmd}`); if (cmd.includes('has-session') && process.env.MOCK_TMUX_HAS_SESSION === 'true') return { stdout: '' }; if (cmd.includes('has-session')) throw new Error('mock no session'); return { stdout: 'mocked' }; }
-  : util.promisify(exec);
+const execPromise = util.promisify(exec);
 const app = express();
 app.use(express.json());
 

@@ -171,7 +171,7 @@ function normalizeTags(groupName, rawTagsArray) {
     }
 
     if (!matched) {
-      // 过滤太长或太短的垃圾标签
+      // 过滤长度不符合规范的候选标签。
       const originalVal = typeof rawTag === 'string' ? rawTag.trim() : (rawTag.zh || rawTag.en || '').trim();
       if (originalVal.length > 1 && originalVal.length < 30) {
         if (!proposed.includes(originalVal)) {

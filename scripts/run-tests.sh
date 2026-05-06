@@ -15,12 +15,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
-GREEN="\033[32m"; RED="\033[31m"; CYAN="\033[36m"; NC="\033[0m]
+GREEN="\033[32m"; RED="\033[31m"; CYAN="\033[36m"; NC="\033[0m"
 
 BASE_URL="${BASE_URL:-http://localhost:8081}"
 EXIT_CODE=0
 
-echo -e "${CYAN}============================================================${RESET}"
+echo -e "${CYAN}============================================================${NC}"
 echo -e "${CYAN}  EduAsset CMS 聚合测试${NC}"
 echo -e "${CYAN}  目标地址：${BASE_URL}${NC}"
 echo -e "${CYAN}  时间：$(date '+%Y-%m-%d %H:%M:%S')${NC}"
@@ -55,7 +55,7 @@ echo ""
 echo -e "${CYAN}【阶段 3/3】E2E 测试 (playwright)${NC}"
 echo ""
 cd "$PROJECT_DIR/uat"
-if BASE_URL="$BASE_URL" npx playwright test; then
+if BASE_URL="$BASE_URL" pnpm exec playwright test; then
   echo -e "${GREEN}✓ E2E 测试通过${NC}"
 else
   echo -e "${RED}✗ E2E 测试失败${NC}"
