@@ -35,37 +35,56 @@ Task names must use ASCII-safe hyphenated words. Example:
 
 Use these status values in `TASK_TRACKING_LIST.md`:
 
-- `下达`: Lucia has issued the task and Lucode may execute it.
+- `下达待执行`: Lucia has issued the task; Lucode is the next actor.
+- `执行中`: Lucode has started execution.
+- `已回报待审`: Lucode has submitted a report; Lucia is the next actor.
+- `退回待修正`: Lucia has returned the task for correction; Lucode is the next actor.
+- `修正中`: Lucode has started the correction work.
+- `修正回报待审`: Lucode has submitted a correction report; Lucia is the next actor.
 - `完成关闭`: Lucia has accepted the report and closed the task.
 - `失败关闭`: Lucia has reviewed the report and closed the task as failed.
 - `取消`: Lucia or Director has canceled the task before completion.
 - `挂起`: the task is intentionally paused pending dependency, decision, or evidence.
-- `退回修正`: Lucia has reviewed the report and returned the task for correction.
+
+## Tracking Columns
+
+`TASK_TRACKING_LIST.md` must include these execution-control columns:
+
+- `Status`: current workflow state.
+- `Next Actor`: `Lucia`, `Lucode`, `Director`, or `None`.
+- `Next Action`: the next concrete action required.
+- `Required Output`: the next required artifact, such as `*_REPORT.md` or `*_LUCIA_REVIEW.md`.
+
+These fields are mandatory. A non-closed task must always have a non-empty `Next Actor`, `Next Action`, and `Required Output`.
 
 ## Workflow
 
 1. Lucia writes the task brief file in this folder.
-2. Lucia appends or updates the task row in `TASK_TRACKING_LIST.md` with status `下达`.
+2. Lucia appends or updates the task row in `TASK_TRACKING_LIST.md` with status `下达待执行`, `Next Actor=Lucode`, and a concrete `Next Action`.
 3. Lucode reads the task file from this folder before starting.
 4. Lucode writes the report file in this folder using the same task name and a report timestamp.
-5. Lucode updates the task row with report path and GitHub branch/HEAD when available.
-6. Lucia reads the report file from this folder, reviews the evidence, and updates status.
+5. Lucode updates the task row with report path, GitHub branch/HEAD, status `已回报待审` or `修正回报待审`, and `Next Actor=Lucia`.
+6. Lucia reads the report file from this folder, reviews the evidence, and updates status, next actor, next action, and required output.
 
 ## Check Task Shortcut
 
 When Director says `Lucia, check task`, Lucia must:
 
 1. Read `TaskAndReport/TASK_TRACKING_LIST.md`.
-2. Check for new or updated `*_REPORT.md` files that have not received a Lucia review.
-3. If a report exists, review it according to `docs/codex/roles/lucia.md`, write a `*_LUCIA_REVIEW.md` file when needed, and update the task status.
-4. If no new report or Lucia action is found, state that no new task/report is available and wait for the next instruction.
+2. Find rows with `Next Actor=Lucia`.
+3. If a Lucia-owned action exists, perform the `Next Action` according to `docs/codex/roles/lucia.md`.
+4. If a report review is required, write a `*_LUCIA_REVIEW.md` file and update the row.
+5. If no row has `Next Actor=Lucia`, state that no new Lucia task/report is available and wait for the next instruction.
 
 When Director says `Lucode, check task`, Lucode must:
 
 1. Read `TaskAndReport/TASK_TRACKING_LIST.md`.
-2. Find tasks in status `下达` or `退回修正` that are assigned to Lucode and do not have a completed accepted closure.
-3. Read the matching `*_TASK.md` file and execute according to the task brief.
-4. Write the `*_REPORT.md` file and update the tracking list after execution.
-5. If no actionable task is found, state that no new task is available and wait for the next instruction.
+2. Find rows with `Next Actor=Lucode`.
+3. If a Lucode-owned action exists, execute the `Next Action`; do not stop at reporting branch or workspace state.
+4. Read the matching `*_TASK.md` and any `*_LUCIA_REVIEW.md` files before execution.
+5. Write the required `*_REPORT.md` or blocked report, then update the row.
+6. If no row has `Next Actor=Lucode`, state that no new Lucode task is available and wait for the next instruction.
+
+If the next actor cannot execute the next action, that actor must write a report explaining the blocker and update the task to `挂起` with the appropriate next actor. Silence or state-only replies are not valid when a row names that role as `Next Actor`.
 
 Do not store secrets, API tokens, raw credentials, generated build outputs, UAT screenshots, large artifacts, or machine-only files in this folder.

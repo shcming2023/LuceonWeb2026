@@ -100,7 +100,8 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 - Task ledger: `TaskAndReport/TASK_TRACKING_LIST.md`
 - Task brief naming: `YYYY-MM-DDTHH-MM-SS+0800_<Task-Name>_TASK.md`
 - Report naming: `YYYY-MM-DDTHH-MM-SS+0800_<Task-Name>_REPORT.md`
-- Controlled statuses: `下达`, `完成关闭`, `失败关闭`, `取消`, `挂起`, `退回修正`
+- Controlled statuses: `下达待执行`, `执行中`, `已回报待审`, `退回待修正`, `修正中`, `修正回报待审`, `完成关闭`, `失败关闭`, `取消`, `挂起`
+- Required tracking fields: `Next Actor`, `Next Action`, `Required Output`
 
 Current issued task:
 
@@ -108,6 +109,7 @@ Current issued task:
 
 Director shorthand is active:
 
-- `Lucia, check task`: inspect `TaskAndReport/` for unreviewed reports or Lucia action.
-- `Lucode, check task`: inspect `TaskAndReport/` for actionable `下达` or `退回修正` tasks.
-- If no actionable task/report exists, report no new item and wait.
+- `Lucia, check task`: inspect `TaskAndReport/` for rows with `Next Actor=Lucia`.
+- `Lucode, check task`: inspect `TaskAndReport/` for rows with `Next Actor=Lucode`.
+- If a row names the role as `Next Actor`, execute `Next Action` or write a blocked report; state-only replies are not sufficient.
+- If no actionable task/report exists for that role, report no new item and wait.

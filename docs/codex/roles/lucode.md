@@ -28,11 +28,14 @@ Lucode must not begin implementation or testing without a Lucia task brief file 
 When Director says `Lucode, check task`, Lucode must:
 
 1. Read `TaskAndReport/TASK_TRACKING_LIST.md`.
-2. Find tasks assigned to Lucode in status `下达` or `退回修正`.
-3. Read the matching `*_TASK.md` file under `TaskAndReport/`.
-4. Execute the task according to the task brief and this role contract.
-5. Write the matching `*_REPORT.md` file and update the tracking list after execution.
-6. If no actionable task exists, report that no new task is available and wait for the next instruction.
+2. Find rows where `Next Actor=Lucode`.
+3. Read the matching `*_TASK.md` file and any `*_LUCIA_REVIEW.md` files under `TaskAndReport/`.
+4. Execute the listed `Next Action` according to the task brief and this role contract.
+5. Write the matching `*_REPORT.md` file and update status, report path, branch, HEAD, next actor, next action, and required output after execution.
+6. If Lucode cannot execute the listed next action, write a blocked report and update the task to `挂起` with the appropriate next actor.
+7. If no row has `Next Actor=Lucode`, report that no new Lucode task is available and wait for the next instruction.
+
+A branch-state-only reply is not sufficient when a row names Lucode as `Next Actor`.
 
 ## Project Anchors
 

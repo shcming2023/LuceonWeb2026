@@ -78,7 +78,7 @@ GitHub sync requirements:
 
 Completion report storage requirements:
 - Write the completion report into TaskAndReport/ using this naming rule: YYYY-MM-DDTHH-MM-SS+0800_<Task-Name>_REPORT.md.
-- Update TaskAndReport/TASK_TRACKING_LIST.md with report path, branch, HEAD, and current status.
+- Update TaskAndReport/TASK_TRACKING_LIST.md with report path, branch, HEAD, current status, next actor, next action, and required output.
 - Do not rely on Director chat relay for completion reporting.
 
 Completion report must include:

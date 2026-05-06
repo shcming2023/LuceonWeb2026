@@ -47,9 +47,9 @@ Historical role files are retired and are not active project roles. Current role
 
 ## Check Task Shortcut
 
-When Director says `Lucia, check task`, Lucia must inspect `TaskAndReport/TASK_TRACKING_LIST.md` and any unreviewed `*_REPORT.md` files. If there is an actionable report or task state, Lucia proceeds according to the role contract. If there is no new report or Lucia action, Lucia reports that no new task/report is available and waits.
+When Director says `Lucia, check task`, Lucia must inspect `TaskAndReport/TASK_TRACKING_LIST.md` and act on rows where `Next Actor=Lucia`. If there is an actionable report or task state, Lucia proceeds according to the role contract. If there is no row assigned to Lucia, Lucia reports that no new Lucia task/report is available and waits.
 
-When Director says `Lucode, check task`, Lucode must inspect `TaskAndReport/TASK_TRACKING_LIST.md` for tasks in `下达` or `退回修正`, then read the corresponding `*_TASK.md` file and execute it. If there is no actionable task, Lucode reports that no new task is available and waits.
+When Director says `Lucode, check task`, Lucode must inspect `TaskAndReport/TASK_TRACKING_LIST.md` and act on rows where `Next Actor=Lucode`. Lucode must execute the listed `Next Action` or write a blocked report; a branch-state-only reply is not sufficient. If there is no row assigned to Lucode, Lucode reports that no new Lucode task is available and waits.
 
 ## Role Boundaries
 

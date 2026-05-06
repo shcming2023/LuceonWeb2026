@@ -60,19 +60,29 @@ Lucode must not expand scope, rewrite architecture, alter role contracts, change
 1. Director and Lucia discuss the product goal, implementation direction, technical constraints, and acceptance boundary.
 2. Lucia updates PRD or project governance documents when the discussion changes project truth.
 3. Lucia writes a Lucode task brief under `TaskAndReport/` using `docs/codex/TASK_BRIEF_TEMPLATE.md`.
-4. Lucia records the task in `TaskAndReport/TASK_TRACKING_LIST.md` with status `下达`.
+4. Lucia records the task in `TaskAndReport/TASK_TRACKING_LIST.md` with status, next actor, next action, and required output.
 5. Lucode executes the brief in the development workspace and keeps the work scoped.
-6. Lucode writes the completion report under `TaskAndReport/` and updates the tracking list with report path, branch, and HEAD.
+6. Lucode writes the completion report under `TaskAndReport/` and updates the tracking list with report path, branch, HEAD, status, next actor, next action, and required output.
 7. Lucia reviews the report, code diff, tests, and evidence from the repository.
-8. Lucia either accepts the result, returns a correction task, or records the remaining risk as known technical debt.
+8. Lucia either accepts the result, returns a correction task with `Next Actor=Lucode`, or records the remaining risk as known technical debt.
 9. Director makes final product or release decisions when the boundary requires owner judgment.
 
 ## 4.1 Check Task Shortcut
 
 Director may use a short command to trigger repository-based task inspection:
 
-- `Lucia, check task`: Lucia reads `TaskAndReport/TASK_TRACKING_LIST.md`, checks for unreviewed reports or task states requiring Lucia action, and proceeds under the Lucia role contract. If there is no new report or required action, Lucia reports that no new task/report is available and waits.
-- `Lucode, check task`: Lucode reads `TaskAndReport/TASK_TRACKING_LIST.md`, finds actionable `下达` or `退回修正` tasks, reads the matching task brief, and executes under the Lucode role contract. If there is no actionable task, Lucode reports that no new task is available and waits.
+- `Lucia, check task`: Lucia reads `TaskAndReport/TASK_TRACKING_LIST.md`, finds rows with `Next Actor=Lucia`, and executes the listed `Next Action`. If there is no row assigned to Lucia, Lucia reports that no new Lucia task/report is available and waits.
+- `Lucode, check task`: Lucode reads `TaskAndReport/TASK_TRACKING_LIST.md`, finds rows with `Next Actor=Lucode`, reads the matching task and review files, and executes the listed `Next Action`. If Lucode cannot execute, Lucode must write a blocked report and update the task to `挂起`; a branch-state-only reply is not sufficient. If there is no row assigned to Lucode, Lucode reports that no new Lucode task is available and waits.
+
+Required task-tracking columns:
+
+- `Status`
+- `Next Actor`
+- `Next Action`
+- `Required Output`
+- task brief link
+- report or review link
+- branch and HEAD
 
 ## 5. Source Of Truth
 

@@ -69,7 +69,8 @@ Team contract updated on 2026-05-07:
 - Historical role files are retired and not active project roles.
 - Current role truth is stored in `docs/codex/TEAM_CONTRACT.md`, `docs/codex/roles/lucia.md`, `docs/codex/roles/lucode.md`, and `docs/codex/TASK_BRIEF_TEMPLATE.md`.
 - Task briefs and reports are stored in `TaskAndReport/` and tracked in `TaskAndReport/TASK_TRACKING_LIST.md`.
-- First registered task: `TASK-20260507-063238-P0-MinerU-Submit-Path-Health-Probe`, status `下达`.
+- Task tracking rows include `Status`, `Next Actor`, `Next Action`, and `Required Output` to prevent handoff stalls.
+- First registered task: `TASK-20260507-063238-P0-MinerU-Submit-Path-Health-Probe`, current status `退回待修正`, next actor `Lucode`.
 
 ## 4. Validation Ledger
 

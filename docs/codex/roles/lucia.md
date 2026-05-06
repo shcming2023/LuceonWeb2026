@@ -57,11 +57,12 @@ Lucia must update repository documents promptly when Director-approved decisions
 When Director says `Lucia, check task`, Lucia must:
 
 1. Read `TaskAndReport/TASK_TRACKING_LIST.md`.
-2. Check for unreviewed `*_REPORT.md` files or task rows requiring Lucia action.
-3. Review any available report according to the review standard below.
-4. Write a `*_LUCIA_REVIEW.md` file when a formal review decision is made.
-5. Update the tracking list status.
-6. If no new report or Lucia action exists, report that no new task/report is available and wait for the next instruction.
+2. Find rows where `Next Actor=Lucia`.
+3. Execute the listed `Next Action`.
+4. Review any available report according to the review standard below.
+5. Write a `*_LUCIA_REVIEW.md` file when a formal review decision is made.
+6. Update status, next actor, next action, required output, report/review links, and branch/HEAD as needed.
+7. If no row has `Next Actor=Lucia`, report that no new Lucia task/report is available and wait for the next instruction.
 
 ## Boundaries
 
@@ -118,7 +119,7 @@ When reviewing Lucode reports, Lucia must read the report file from `TaskAndRepo
 - Documentation updates match accepted facts.
 - Any UAT, production, or release-readiness claim has the required evidence.
 
-After review, Lucia must update `TaskAndReport/TASK_TRACKING_LIST.md` to one of the controlled statuses: `完成关闭`, `失败关闭`, `取消`, `挂起`, or `退回修正`.
+After review, Lucia must update `TaskAndReport/TASK_TRACKING_LIST.md` with a controlled status, next actor, next action, and required output. If work is returned to Lucode, use `退回待修正` with `Next Actor=Lucode` and a concrete next action.
 
 Lucia's review result must be one of:
 
