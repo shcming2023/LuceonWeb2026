@@ -255,13 +255,120 @@ function validateFetchUrl(url, { allowHttp = false } = {}) {
 }
 
 // ─── 依赖监控检查（MinIO, MinerU, Ollama） ───────────────────────
-async function checkDependencyHealth(minioBucket) {
+function isTruthyEnv(value) {
+  return ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase());
+}
+
+function isTruthyQuery(value) {
+  if (Array.isArray(value)) return value.some(isTruthyQuery);
+  return isTruthyEnv(value);
+}
+
+function createSyntheticMineruProbePdf() {
+  return Buffer.from(
+    '%PDF-1.4\n' +
+    '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n' +
+    '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n' +
+    '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 72 72] /Contents 4 0 R >>\nendobj\n' +
+    '4 0 obj\n<< /Length 44 >>\nstream\nBT /F1 12 Tf 10 40 Td (Luceon health) Tj ET\nendstream\nendobj\n' +
+    'xref\n0 5\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000202 00000 n \n' +
+    'trailer\n<< /Root 1 0 R /Size 5 >>\nstartxref\n296\n%%EOF\n',
+    'utf8'
+  );
+}
+
+async function probeMineruSubmitPath(localEndpoint) {
+  const startedAt = Date.now();
+  const result = {
+    enabled: true,
+    ok: false,
+    status: null,
+    durationMs: null,
+    taskId: null,
+    error: null
+  };
+
+  const timeoutMs = Number(process.env.DEPENDENCY_HEALTH_MINERU_SUBMIT_TIMEOUT_MS || 5000);
+  const boundary = `----luceon-health-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const fields = [
+    ['backend', process.env.DEPENDENCY_HEALTH_MINERU_SUBMIT_BACKEND || 'pipeline'],
+    ['lang_list', process.env.DEPENDENCY_HEALTH_MINERU_SUBMIT_LANG || 'ch'],
+    ['parse_method', 'auto'],
+    ['formula_enable', '0'],
+    ['table_enable', '0'],
+    ['response_format_zip', 'false'],
+    ['end_page_id', '0'],
+    ['endpageid', '0']
+  ];
+  const multipart = createMultipartStream({
+    boundary,
+    fields,
+    fileFieldName: 'files',
+    fileName: 'luceon-health-probe.pdf',
+    mimeType: 'application/pdf',
+    fileStream: [createSyntheticMineruProbePdf()],
+  });
+
+  try {
+    const res = await fetch(`${localEndpoint.replace(/\/+$/, '')}/tasks`, {
+      method: 'POST',
+      headers: { 'content-type': multipart.contentType },
+      body: multipart.body,
+      duplex: 'half',
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    result.status = res.status;
+    const rawBody = await res.text().catch(() => '');
+    let payload = null;
+    if (rawBody) {
+      try {
+        payload = JSON.parse(rawBody);
+      } catch {
+        result.error = `Invalid JSON response: ${rawBody.slice(0, 160)}`;
+      }
+    }
+    if (!res.ok) {
+      const detail = payload?.error || payload?.message || payload?.detail || rawBody.slice(0, 160);
+      result.error = `HTTP ${res.status}${detail ? `: ${String(detail).slice(0, 160)}` : ''}`;
+      return result;
+    }
+    if (!payload) {
+      result.error = result.error || 'Invalid JSON response';
+      return result;
+    }
+    const taskId = String(payload?.task_id || payload?.taskid || payload?.taskId || '').trim();
+    if (!taskId) {
+      result.error = `Missing task_id/taskId in response: ${JSON.stringify(payload).slice(0, 160)}`;
+      return result;
+    }
+    result.taskId = taskId;
+    result.ok = true;
+    return result;
+  } catch (e) {
+    result.error = e?.name === 'TimeoutError'
+      ? `timeout after ${timeoutMs}ms`
+      : (e.cause?.code === 'ECONNREFUSED' ? 'connect ECONNREFUSED' : (e.message || 'submit probe failed'));
+    return result;
+  } finally {
+    result.durationMs = Date.now() - startedAt;
+  }
+}
+
+async function checkDependencyHealth(minioBucket, options = {}) {
+  const mineruSubmitProbeEnabled = options.mineruSubmitProbe === true || isTruthyEnv(process.env.DEPENDENCY_HEALTH_MINERU_SUBMIT_PROBE);
   const result = {
     ok: false,
     blocking: false,
     dependencies: {
       minio: { ok: false, requiredFor: ['upload', 'parse'] },
-      mineru: { ok: false, requiredFor: ['parse'], endpoint: null, error: null },
+      mineru: {
+        ok: false,
+        requiredFor: ['parse'],
+        endpoint: null,
+        healthOk: false,
+        error: null,
+        submitProbe: { enabled: mineruSubmitProbeEnabled, ok: null, status: null, durationMs: null, taskId: null, error: null }
+      },
       ollama: { ok: false, requiredFor: ['ai'], blockingParse: false, endpoint: null, error: null }
     },
     commands: {
@@ -334,12 +441,14 @@ async function checkDependencyHealth(minioBucket) {
              result.dependencies.mineru.error = 'MinerU Online API Token Invalid';
           } else if (dummyRes.ok) {
              result.dependencies.mineru.ok = true;
+             result.dependencies.mineru.healthOk = true;
           } else if (dummyRes.status === 400 || dummyRes.status === 404) {
              const text = await dummyRes.text().catch(() => '');
              try {
                 const json = JSON.parse(text);
                 if (json && ('code' in json || 'error' in json || 'msg' in json)) {
                    result.dependencies.mineru.ok = true;
+                   result.dependencies.mineru.healthOk = true;
                 } else {
                    result.dependencies.mineru.error = `MinerU HTTP ${dummyRes.status}: ${text.slice(0, 100)}`;
                 }
@@ -366,12 +475,34 @@ async function checkDependencyHealth(minioBucket) {
       try {
         const mineruRes = await fetch(`${checkMineruEndpoint}/health`, { signal: AbortSignal.timeout(3000) });
         if (mineruRes.ok) {
+          result.dependencies.mineru.healthOk = true;
           result.dependencies.mineru.ok = true;
         } else {
           result.dependencies.mineru.error = `HTTP ${mineruRes.status}`;
         }
       } catch (e) {
         result.dependencies.mineru.error = e.cause?.code === 'ECONNREFUSED' ? 'connect ECONNREFUSED' : (e.message || 'connect ECONNREFUSED');
+      }
+
+      if (mineruSubmitProbeEnabled) {
+        if (!result.dependencies.mineru.healthOk) {
+          result.dependencies.mineru.submitProbe = {
+            enabled: true,
+            ok: false,
+            status: null,
+            durationMs: null,
+            taskId: null,
+            error: 'Skipped because MinerU /health is not OK'
+          };
+          result.dependencies.mineru.ok = false;
+        } else {
+          const submitProbe = await probeMineruSubmitPath(checkMineruEndpoint);
+          result.dependencies.mineru.submitProbe = submitProbe;
+          result.dependencies.mineru.ok = result.dependencies.mineru.healthOk && submitProbe.ok;
+          if (!submitProbe.ok) {
+            result.dependencies.mineru.error = `submit probe failed: ${submitProbe.error || 'unknown error'}`;
+          }
+        }
       }
     }
 
@@ -453,7 +584,9 @@ async function checkDependencyHealth(minioBucket) {
 }
 
 app.get('/ops/dependency-health', async (req, res) => {
-  const result = await checkDependencyHealth();
+  const result = await checkDependencyHealth(undefined, {
+    mineruSubmitProbe: isTruthyQuery(req.query.mineruSubmitProbe),
+  });
   res.json(result);
 });
 

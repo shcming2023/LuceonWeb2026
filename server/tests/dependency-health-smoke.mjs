@@ -31,6 +31,8 @@ async function runTest() {
   
   const dummyApp = express();
   let mineruOk = false;
+  let mineruSubmitOk = false;
+  let mineruSubmitCalls = 0;
   let ollamaOk = false;
   let ollamaChatOk = true;
 
@@ -52,6 +54,11 @@ async function runTest() {
   dummyApp.get('/mineru/health', (req, res) => {
     if (mineruOk) res.sendStatus(200);
     else res.sendStatus(503);
+  });
+  dummyApp.post('/mineru/tasks', multer().any(), (req, res) => {
+    mineruSubmitCalls++;
+    if (mineruSubmitOk) res.json({ task_id: `probe-task-${mineruSubmitCalls}` });
+    else res.status(503).json({ error: 'submit path unavailable' });
   });
 
   // Ollama Mock
@@ -153,12 +160,46 @@ async function runTest() {
     assertEqual(data.ok, false, 'health.ok should be false when mineru is down');
     assertEqual(data.blocking, true, 'health.blocking should be true');
     assertEqual(data.dependencies.mineru.ok, false, 'mineru.ok should be false');
+    assertEqual(data.dependencies.mineru.healthOk, false, 'mineru.healthOk should be false when /health is down');
+
+    // Test 1b: /health OK with submit probe disabled keeps default dependency-health cheap
+    mineruOk = true;
+    mineruSubmitOk = false;
+    ollamaOk = true;
+    mineruSubmitCalls = 0;
+    res = await fetch(`${uploadBase}/ops/dependency-health`);
+    data = await res.json();
+    assertEqual(data.dependencies.mineru.healthOk, true, 'mineru.healthOk should be true when /health is OK');
+    assertEqual(data.dependencies.mineru.submitProbe.enabled, false, 'mineru submit probe should be disabled by default');
+    assertEqual(data.dependencies.mineru.ok, true, 'mineru.ok should use cheap /health result by default');
+    assertEqual(mineruSubmitCalls, 0, 'default dependency-health should not call MinerU /tasks');
+
+    // Test 1c: /health OK but /tasks submit fails with submit probe enabled
+    res = await fetch(`${uploadBase}/ops/dependency-health?mineruSubmitProbe=true`);
+    data = await res.json();
+    assertEqual(data.dependencies.mineru.healthOk, true, 'submit probe failure case keeps /health true');
+    assertEqual(data.dependencies.mineru.submitProbe.enabled, true, 'mineru submit probe should be enabled by query');
+    assertEqual(data.dependencies.mineru.submitProbe.ok, false, 'mineru submit probe should fail when /tasks fails');
+    assertEqual(data.dependencies.mineru.submitProbe.status, 503, 'mineru submit probe should report HTTP status');
+    assertEqual(data.dependencies.mineru.ok, false, 'mineru.ok should be false when submit probe fails');
+    assertEqual(data.blocking, true, 'blocking should be true when submit probe fails');
+
+    // Test 1d: /health OK and /tasks submit returns task_id with submit probe enabled
+    mineruSubmitOk = true;
+    res = await fetch(`${uploadBase}/ops/dependency-health?mineruSubmitProbe=true`);
+    data = await res.json();
+    assertEqual(data.dependencies.mineru.healthOk, true, 'submit probe success case keeps /health true');
+    assertEqual(data.dependencies.mineru.submitProbe.ok, true, 'mineru submit probe should pass when /tasks returns task_id');
+    assertEqual(Boolean(data.dependencies.mineru.submitProbe.taskId), true, 'mineru submit probe should include taskId');
+    assertEqual(data.dependencies.mineru.ok, true, 'mineru.ok should be true when /health and submit probe pass');
+    assertEqual(data.blocking, false, 'blocking should be false when minio and mineru submit probe pass');
 
     // Test 2: POST /tasks blocked when mineru down
     const form1 = new FormData();
     const blob1 = new Blob(['dummy pdf content'], { type: 'application/pdf' });
     form1.append('file', blob1, 'test.pdf');
     
+    mineruOk = false;
     let taskRes = await fetch(`${uploadBase}/tasks`, { method: 'POST', body: form1 });
     assertEqual(taskRes.status, 503, 'POST /tasks should return 503 when mineru down');
     let taskData = await taskRes.json();
@@ -167,6 +208,7 @@ async function runTest() {
 
     // Test 3: POST /tasks allowed when mineru and minio ok
     mineruOk = true;
+    mineruSubmitOk = false;
     // (minio ok is implicit via tmpfiles backend mock)
     const form2 = new FormData();
     form2.append('file', blob1, 'test.pdf');
