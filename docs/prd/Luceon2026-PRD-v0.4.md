@@ -572,7 +572,7 @@ v0.4 要求把 `AiMetadataJob.state` 的终态命名统一为 `confirmed | revie
 
 1. **MinerU 接入方式**：Standard 档使用本机 conda MinerU FastAPI，不使用 MinerU mock，不要求 online MinerU token。
 2. **Ollama 模型要求**：本机 Ollama 必须可达，且 `qwen3.5:9b` 必须存在。Ollama 不可达或模型不可用均视为 Standard 环境未就绪。
-3. **依赖健康**：Standard 预检必须同时确认 CMS、MinIO、本地 MinerU、Ollama、后端 dependency-health 均满足要求；任一关键项失败，不得打印通过结论。
+3. **依赖健康**：Standard 预检必须同时确认 CMS、MinIO、本地 MinerU、Ollama、后端 dependency-health 均满足要求；任一关键项失败，不得打印通过结论。本地 MinerU 检查不得只依赖 `/health`，还必须通过 `mineruSubmitProbe=true` 验证 `POST /tasks` 可返回有效任务 ID。
 4. **Markdown 回归**：Standard 档不得破坏 `P0-markdown-upload-regression` 中已固化的 Markdown 上传、MinIO 落盘、任务创建、AI Job 和一致性审计闭环。
 5. **PDF 解析入口**：上传小型 PDF 后，任务必须真实进入 MinerU pipeline；若轮询结束仍未观察到 MinerU 执行痕迹，smoke test 必须失败，并输出最后一次任务状态、message 与 metadata 摘要。
 6. **状态约束**：Standard 不允许使用 MinerU mock 或 AI skeleton fallback 来证明 PDF 解析链路成功；Lite 档可继续保留 mock 和 AI skeleton fallback 以服务快速回归。

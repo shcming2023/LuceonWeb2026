@@ -232,7 +232,7 @@ Required report fields:
 - commit hash
 - command list and exit codes
 - Docker/compose status
-- dependency-health result
+- dependency-health result; for Tier 2 Standard, MinerU evidence must include `dependencies.mineru.healthOk=true` and `dependencies.mineru.submitProbe.ok=true`
 - local Conda MinerU process/reachability/effective runtime evidence
 - Docker MinIO health and object-storage evidence
 - Ollama health and effective 9B model evidence

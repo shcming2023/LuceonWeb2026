@@ -70,7 +70,15 @@ Team contract updated on 2026-05-07:
 - Current role truth is stored in `docs/codex/TEAM_CONTRACT.md`, `docs/codex/roles/lucia.md`, `docs/codex/roles/lucode.md`, and `docs/codex/TASK_BRIEF_TEMPLATE.md`.
 - Task briefs and reports are stored in `TaskAndReport/` and tracked in `TaskAndReport/TASK_TRACKING_LIST.md`.
 - Task tracking rows include `Status`, `Next Actor`, `Next Action`, and `Required Output` to prevent handoff stalls.
-- First registered task: `TASK-20260507-063238-P0-MinerU-Submit-Path-Health-Probe`, current status `退回待修正`, next actor `Lucode`.
+- First registered task: `TASK-20260507-063238-P0-MinerU-Submit-Path-Health-Probe`, current status `完成关闭`, no next actor.
+
+MinerU submit-path probe accepted on 2026-05-07:
+
+- Task: `TASK-20260507-063238-P0-MinerU-Submit-Path-Health-Probe`.
+- Implementation commit: `5b21ae3392a4f334b02e0ac2d75f616d4286fdfb`.
+- Accepted Lucia review: `TaskAndReport/2026-05-07T08-15-58+0800_P0-MinerU-Submit-Path-Health-Probe_LUCIA_REVIEW.md`.
+- Merge commit into `main`: `8201d2e903d5fa524490c17d16258f1764ce98fe`.
+- Effective behavior: `/ops/dependency-health` remains lightweight by default; `mineruSubmitProbe=true` or `DEPENDENCY_HEALTH_MINERU_SUBMIT_PROBE=true` enables a bounded synthetic MinerU `/tasks` submit probe. When enabled, MinerU readiness requires both `/health` success and `/tasks` task-id success.
 
 ## 4. Validation Ledger
 
@@ -81,6 +89,7 @@ Commands run in this governance pass:
 | `npx pnpm@10.4.1 install --frozen-lockfile` | PASS |
 | `npx pnpm@10.4.1 exec tsc --noEmit` | PASS |
 | `npx pnpm@10.4.1 run build` | PASS; Vite reported only the existing chunk-size warning |
+| `node server/tests/dependency-health-smoke.mjs` after MinerU submit-path probe | PASS, 31 passed / 0 failed |
 | `node server/tests/worker-smoke.mjs` | PASS; strict AI mode fails fast without skeleton fallback |
 | `node server/tests/dependency-supervisor-smoke.mjs` | PASS |
 | `BASE_URL=http://localhost:8081 LOCAL_MINERU_ENDPOINT=http://127.0.0.1:8083 OLLAMA_API_URL=http://127.0.0.1:11434 OLLAMA_TIER2_MODEL=qwen3.5:9b npx pnpm@10.4.1 run tier2:standard:check` | PASS |
@@ -102,12 +111,13 @@ Runtime evidence from the final pipeline run:
 
 | ID | Status | Description | Boundary |
 | --- | --- | --- | --- |
-| TD-001 | Open | MinerU `/health` can report healthy while `/tasks` submit path is unavailable in a half-failed MinerU runtime. | Add a submit-path dependency probe before production release readiness is claimed. |
+| TD-001 | Closed | MinerU `/health` and `/tasks` readiness are now separated through an explicit submit-path dependency probe. | Default dependency health remains lightweight; Tier 2 Standard now requests `mineruSubmitProbe=true`. Production release readiness still requires rebuilt-runtime validation. |
 | TD-002 | Open | `server/upload-server.mjs` remains a large mixed server containing upload, storage, parser, AI, and ops routes. | Keep unchanged for Phase 1 stability; modular refactor belongs to a later phase. |
 | TD-003 | Open | Legacy compatibility routes remain for `/cms/source-materials` and `/cms/workspace`. | Keep redirect tests; do not use them as the main operator entry point. |
 | TD-004 | Open | Online MinerU v4 adapter remains in the codebase for explicit compatibility-only validation. | It must not be selected by no-skeleton flags or treated as the current Standard gate. |
 | TD-005 | Open | Vite production build emits a chunk-size warning for the main bundle. | Non-blocking for Phase 1; consider route-level code splitting later. |
 | TD-006 | Open | Full concurrency, large-PDF soak, permissions/security, rollback rehearsal, folder upload, and all error-path coverage are not closed by this governance run. | These are Phase 2 or release-readiness validation items. |
+| TD-007 | Open | `scripts/tier2-standard-check.mjs` can still show an unhelpful JSON parse error when `BASE_URL` points to a frontend-only route returning HTML. | Validation ergonomics debt; does not affect MinerU submit-path probe behavior. |
 
 ## 6. Core Asset Directory Index
 

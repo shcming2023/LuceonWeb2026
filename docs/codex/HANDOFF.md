@@ -62,7 +62,7 @@ BASE_URL=http://localhost:8081 npx pnpm@10.4.1 --dir uat exec playwright test te
 
 ## Known Open Boundaries
 
-- MinerU health checks still need a submit-path probe before production release readiness.
+- MinerU submit-path probing is implemented and accepted on `main`; after a rebuilt runtime is deployed, rerun Tier 2 Standard before making any release-readiness claim.
 - `server/upload-server.mjs` remains a monolithic server and should not be modularized inside Phase 1 closure.
 - Legacy redirects remain for `/cms/source-materials` and `/cms/workspace`.
 - Large-PDF soak, concurrent upload, permissions/security, rollback rehearsal, folder upload, and all error-path validation remain outside this governance pass.
