@@ -107,7 +107,8 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260507-125133-P0-Current-Main-Production-Deployment-And-Manual-Runtime-Regression`
+- `TASK-20260507-131426-P0-MinerU-Log-Observation-Transport-And-Attribution-Robustness`
+- `TASK-20260507-131426-P1-AI-Deterministic-Repair-UI-And-Ops-Status-Semantics`
 
 Director shorthand is active:
 

@@ -161,6 +161,18 @@ Current-main production deployment task issued on 2026-05-07:
 - Objective: deploy current `main` to `/Users/concm/prod_workspace/Luceon2026` and prepare `http://localhost:8081/cms/` for Director manual review with non-destructive runtime regression evidence.
 - Boundary: this task can establish manual-review readiness; it must not claim production release readiness.
 
+Current-main production deployment accepted on 2026-05-07:
+
+- Task: `TASK-20260507-125133-P0-Current-Main-Production-Deployment-And-Manual-Runtime-Regression`.
+- Lucia review: `TaskAndReport/2026-05-07T13-14-26+0800_P0-Current-Main-Production-Deployment-And-Manual-Runtime-Regression_LUCIA_REVIEW.md`.
+- Accepted status: `READY_WITH_KNOWN_LIMITATIONS`.
+- Deployed production HEAD: `a4fcb05a95d59847b6218cb7a8d2f590097fb4e0`.
+- Runtime result: `http://localhost:8081/cms/` is reachable; dependency health is non-blocking with MinerU submit probe and Ollama passing; Tier 2 Standard and UAT smoke passed; controlled sample upload reached `review-pending`.
+- Boundary: manual review can continue, but production release readiness remains unclaimed.
+- Follow-up tasks issued:
+  - `TASK-20260507-131426-P0-MinerU-Log-Observation-Transport-And-Attribution-Robustness`.
+  - `TASK-20260507-131426-P1-AI-Deterministic-Repair-UI-And-Ops-Status-Semantics`.
+
 ## 4. Validation Ledger
 
 Commands run in this governance pass:
@@ -214,6 +226,8 @@ Runtime evidence from the final pipeline run:
 | TD-009 | Mitigated | AI metadata recognition / JSON Repair can block or time out through Ollama `qwen3.5:9b` after MinerU succeeds. | Implementation accepted on `main`: bounded repair input, deterministic draft normalization, and strict no-skeleton failure semantics. Production runtime revalidation remains a release-readiness concern. |
 | TD-010 | Mitigated | MinerU host logs can contain valid progress while fast-completing tasks fail to receive useful task-level `mineruObservedProgress`. | Implementation accepted on `main`: bounded completed-window backfill with ambiguous observations remaining unattributed. Production runtime revalidation remains a release-readiness concern. |
 | TD-011 | Closed | `server/tests/mineru-log-progress-smoke.mjs` Test 4 expected `failed-confirmed`, while the parser returned `log-error-signal`. | Closed by `TASK-20260507-121324-P0-MinerU-Log-Progress-Smoke-Truth-Alignment`; confirmed execution errors now produce `failed-confirmed`, and the smoke test passes without `.skip` or weakened assertions. |
+| TD-012 | Open | MinerU task-level live log observation can still be unreliable in production manual review even when MinerU parse succeeds and host logs contain business progress. | Follow-up task `TASK-20260507-131426-P0-MinerU-Log-Observation-Transport-And-Attribution-Robustness` is assigned. Preserve ambiguous-attribution safety and avoid destructive production operations. |
+| TD-013 | Open | UI/diagnostic wording can describe deterministic AI repair success or reachable-but-unmanaged Ollama status as AI blocked. | Follow-up task `TASK-20260507-131426-P1-AI-Deterministic-Repair-UI-And-Ops-Status-Semantics` is assigned. Do not hide real AI dependency failures. |
 
 ## 6. Core Asset Directory Index
 
