@@ -1118,6 +1118,56 @@ app.get('/ops/mineru/active-task', async (req, res) => {
 });
 
 let globalLogObservation = null;
+const MINERU_COMPLETED_OBSERVATION_GRACE_MS = 5 * 60 * 1000;
+
+function getObservationTimeMs(snapshot) {
+  const candidates = [snapshot?.contextTime, snapshot?.observedAt, snapshot?.logFileUpdatedAt];
+  for (const value of candidates) {
+    const ms = new Date(value || 0).getTime();
+    if (Number.isFinite(ms) && ms > 0) return ms;
+  }
+  return 0;
+}
+
+export function selectMineruObservationAttribution(tasks, snapshot, nowMs = Date.now()) {
+  const liveTasks = tasks.filter(t =>
+    t.engine === 'local-mineru' &&
+    t.state === 'running' &&
+    !t.metadata?.canceledAt &&
+    ['mineru-processing', 'mineru-queued', 'result-fetching'].includes(t.stage)
+  );
+
+  if (liveTasks.length === 1) {
+    return { task: liveTasks[0], mode: 'live-active' };
+  }
+  if (liveTasks.length > 1) {
+    return { task: null, mode: 'unattributed', reason: 'multiple live active tasks' };
+  }
+
+  const obsTimeMs = getObservationTimeMs(snapshot);
+  if (!obsTimeMs) {
+    return { task: null, mode: 'unattributed', reason: 'missing observation time' };
+  }
+
+  const completedCandidates = tasks.filter(t => {
+    if (t.engine !== 'local-mineru' || t.metadata?.canceledAt || !t.metadata?.mineruTaskId || !t.metadata?.mineruStartedAt) return false;
+    if (t.state === 'running' && ['mineru-processing', 'mineru-queued', 'result-fetching'].includes(t.stage)) return false;
+    const startedAtMs = new Date(t.metadata.mineruStartedAt).getTime();
+    const completedAtMs = new Date(t.parsedAt || t.metadata.parsedAt || t.metadata.mineruLastStatusAt || 0).getTime();
+    if (!Number.isFinite(startedAtMs) || !Number.isFinite(completedAtMs) || startedAtMs <= 0 || completedAtMs <= 0) return false;
+    if (nowMs - completedAtMs > MINERU_COMPLETED_OBSERVATION_GRACE_MS) return false;
+    return obsTimeMs >= startedAtMs && obsTimeMs <= completedAtMs + MINERU_COMPLETED_OBSERVATION_GRACE_MS;
+  });
+
+  if (completedCandidates.length === 1) {
+    return { task: completedCandidates[0], mode: 'completed-window-backfill' };
+  }
+  return {
+    task: null,
+    mode: 'unattributed',
+    reason: completedCandidates.length === 0 ? 'no matching completed-window task' : 'multiple completed-window candidates'
+  };
+}
 
 app.get('/ops/mineru/global-observation', (req, res) => {
   res.json({ observation: globalLogObservation });
@@ -1138,19 +1188,14 @@ app.post('/ops/mineru-log-observation', async (req, res) => {
     return res.status(500).json({ error: 'db unreachable' });
   }
 
-  const eligibleTasks = tasks.filter(t =>
-    t.engine === 'local-mineru' &&
-    t.state === 'running' &&
-    !t.metadata?.canceledAt &&
-    ['mineru-processing', 'mineru-queued', 'result-fetching'].includes(t.stage)
-  );
+  const attribution = selectMineruObservationAttribution(tasks, snapshot);
 
-  if (eligibleTasks.length !== 1) {
-    globalLogObservation = { ...snapshot, attribution: 'unattributed', unattributedReason: 'not exactly 1 active task' };
-    return res.json({ ok: true, attributed: false, reason: 'not exactly 1 active task' });
+  if (!attribution.task) {
+    globalLogObservation = { ...snapshot, attribution: 'unattributed', unattributedReason: attribution.reason || 'not exactly 1 active task' };
+    return res.json({ ok: true, attributed: false, reason: attribution.reason || 'not exactly 1 active task' });
   }
 
-  const task = eligibleTasks[0];
+  const task = attribution.task;
   const startTimeMs = new Date(task.metadata?.mineruStartedAt || task.createdAt || 0).getTime();
   const obsTimeMs = new Date(snapshot.contextTime || snapshot.observedAt || snapshot.logFileUpdatedAt || 0).getTime();
 
@@ -1164,7 +1209,12 @@ app.post('/ops/mineru-log-observation', async (req, res) => {
     return res.json({ ok: true, attributed: false, reason: 'api noise' });
   }
 
-  globalLogObservation = { ...snapshot, attribution: task.id };
+  const attributedSnapshot = {
+    ...snapshot,
+    attribution: task.id,
+    attributionMode: attribution.mode
+  };
+  globalLogObservation = attributedSnapshot;
 
   // 写入 ParseTask metadata 并实现事件降噪
   const obs = snapshot;
@@ -1192,7 +1242,7 @@ app.post('/ops/mineru-log-observation', async (req, res) => {
   const patch = {
     metadata: {
       ...(task.metadata || {}),
-      mineruObservedProgress: snapshot
+      mineruObservedProgress: attributedSnapshot
     }
   };
 

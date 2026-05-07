@@ -405,12 +405,17 @@ ${taxonomyContext}
 `;
 }
 
-export function generateV02RepairPrompt(draftContent) {
+export function generateV02RepairPrompt(draftContent, options = {}) {
   const taxonomyContext = buildTaxonomyPromptContext({ facets: ['domain', 'collection', 'resource_type', 'component_role'] });
+  const errorSummary = options.errorSummary ? `\n**需要修复的问题：**\n${options.errorSummary}\n` : '';
+  const compactNote = options.compact
+    ? '\n本次 Repair 只处理下方草稿内容；不要要求或复述原始 Markdown 全文。\n'
+    : '';
   return `你是一个 JSON 修复与格式化助手。请根据以下提取的草稿内容，将其严格格式化为符合 AI Metadata v0.2 标准的唯一 JSON 对象。
 
 **草稿内容（可能是旧式 JSON、扁平 JSON、或自然语言草稿，或包含 classification_draft 的草稿 JSON）：**
 ${draftContent}
+${errorSummary}${compactNote}
 
 **极其重要的硬规则：**
 1. 必须将输入转换为 v0.2 canonical schema。

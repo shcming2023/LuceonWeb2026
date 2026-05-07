@@ -513,8 +513,8 @@ async function runTests() {
   
   console.log('Case 11 Pass ✅');
 
-  // Case 12: schema-invalid triggers repair
-  console.log('Case 12: schema-invalid triggers repair');
+  // Case 12: recoverable schema-invalid draft uses deterministic repair
+  console.log('Case 12: recoverable schema-invalid draft uses deterministic repair');
   callCount = 0;
   let repairPromptReceived = '';
   worker1.executeWithFallback = async (provider, markdown, settings) => {
@@ -529,7 +529,9 @@ async function runTests() {
   await worker1.processJob({ id: 'test-job-12', parseTaskId: 'test-task-12', materialId: 'm12', inputMarkdownObjectName: 'test.md' });
   
   assert.equal(finalResultObj.aiClassificationTwoPassAttempted, true);
-  assert.ok(repairPromptReceived.includes('出国行李清单'));
+  assert.equal(finalResultObj.aiClassificationDeterministicRepairSucceeded, true);
+  assert.equal(callCount, 1);
+  assert.equal(repairPromptReceived, '');
   assert.equal(finalResultObj.aiClassificationRepairSucceeded, true);
   assert.equal(finalResultObj.aiClassificationDegraded, undefined);
   assert.equal(finalResultObj.aiClassificationV02.primary_facets.domain.zh, 'travel');
@@ -542,7 +544,7 @@ async function runTests() {
   worker1.executeWithFallback = async (provider, markdown, settings, prompt) => {
     callCount++;
     if (callCount === 1) {
-      return { provider: 'ollama', model: 'qwen3.5', result: '{"title": "出国行李清单", "domain": "travel"}', usage: {} };
+      return { provider: 'ollama', model: 'qwen3.5', result: '{"still_flat": "yes"}', usage: {} };
     } else {
       return { provider: 'ollama', model: 'qwen3.5', result: '{"still_flat": "yes"}', usage: {} };
     }

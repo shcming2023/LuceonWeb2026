@@ -224,6 +224,7 @@ export class AiMetadataWorker {
   }
 
   async _runProviderPass(provider, job, aiSettings, prompt, options) {
+    const passStart = Date.now();
     try {
       const response = await this.executeWithFallback(provider, options.markdownContent, {
         ...aiSettings,
@@ -237,6 +238,10 @@ export class AiMetadataWorker {
       const persistMeta = await this._persistRawOutputSafe(job, options.phaseName, response.rawResponse);
       const traceDetails = this._buildErrorDetails(response, options.expectJson, persistMeta);
       traceDetails.phaseName = options.phaseName;
+      traceDetails.promptLength = String(prompt || '').length;
+      traceDetails.inputLength = String(options.markdownContent || '').length;
+      traceDetails.numPredict = options.num_predict || 512;
+      traceDetails.durationMs = response.usage?.total_duration_ms || (Date.now() - passStart);
 
       if (response.parseFailed) {
         const err = new Error(response.parseError);
@@ -250,6 +255,9 @@ export class AiMetadataWorker {
     } catch (err) {
       if (err.details) {
         err.details.phaseName = options.phaseName;
+        err.details.promptLength = String(prompt || '').length;
+        err.details.inputLength = String(options.markdownContent || '').length;
+        err.details.numPredict = options.num_predict || 512;
       }
       throw err;
     }
@@ -269,7 +277,122 @@ export class AiMetadataWorker {
       timeoutKind: details.timeoutKind,
       durationMs: details.durationMs,
       timeoutMs: details.timeoutMs,
+      promptLength: details.promptLength,
+      inputLength: details.inputLength,
+      numPredict: details.numPredict,
       phase: details.phaseName
+    };
+  }
+
+  _toFacetValue(value) {
+    if (!value) return { zh: '', en: '' };
+    if (typeof value === 'object') return { zh: value.zh || value.id || value.name || '', en: value.en || '' };
+    return { zh: String(value), en: '' };
+  }
+
+  _canonicalizeDraftObject(rawDraft) {
+    if (!rawDraft || typeof rawDraft !== 'object' || Array.isArray(rawDraft)) return null;
+
+    const draft = rawDraft.classification_draft && typeof rawDraft.classification_draft === 'object'
+      ? rawDraft.classification_draft
+      : rawDraft;
+    const fields = ['domain', 'collection', 'curriculum', 'stage', 'level', 'subject', 'resource_type', 'component_role'];
+    const primaryFacets = {};
+    for (const field of fields) {
+      const sourceValue = rawDraft.primary_facets?.[field] ?? draft[field] ?? rawDraft[field];
+      primaryFacets[field] = this._toFacetValue(sourceValue);
+    }
+
+    const descriptiveDraft = rawDraft.descriptive_draft || rawDraft.descriptive_metadata || {};
+    const candidateTags = rawDraft.candidate_tags || rawDraft.search_tags || {};
+    const evidence = Array.isArray(rawDraft.evidence)
+      ? rawDraft.evidence
+      : Array.isArray(rawDraft.evidence_snippets)
+        ? rawDraft.evidence_snippets
+        : (rawDraft.notes || rawDraft.title || descriptiveDraft.series_title)
+          ? [rawDraft.notes || rawDraft.title || descriptiveDraft.series_title]
+          : [];
+
+    const hasAnyFacet = fields.some(field => primaryFacets[field]?.zh || primaryFacets[field]?.en);
+    if (!hasAnyFacet) return null;
+
+    return {
+      source: rawDraft.source || {},
+      primary_facets: primaryFacets,
+      descriptive_metadata: {
+        series_title: descriptiveDraft.series_title || rawDraft.series_title || rawDraft.title || '',
+        edition: descriptiveDraft.edition || rawDraft.edition || '',
+        year: descriptiveDraft.year || rawDraft.year || '',
+        publisher_org: descriptiveDraft.publisher_org || rawDraft.publisher_org || '',
+        language: descriptiveDraft.language || rawDraft.language || ''
+      },
+      search_tags: {
+        topic_tags: candidateTags.topic_tags || [],
+        skill_tags: candidateTags.skill_tags || []
+      },
+      governance: {
+        confidence: rawDraft.governance?.confidence || 'low',
+        human_review_required: rawDraft.governance?.human_review_required ?? true,
+        human_review_reason: rawDraft.governance?.human_review_reason || 'Deterministic draft normalization',
+        markdown_quality: rawDraft.governance?.markdown_quality || 'partial',
+        duplicate_candidate: rawDraft.governance?.duplicate_candidate || false,
+        retention_policy: rawDraft.governance?.retention_policy || 'keep_pending_review',
+        risk_flags: rawDraft.governance?.risk_flags || []
+      },
+      evidence,
+      recommended_catalog_path: rawDraft.recommended_catalog_path || '',
+      catalog_change_type: rawDraft.catalog_change_type || 'needs_human_review'
+    };
+  }
+
+  _tryDeterministicDraftRepair(parsedResult, sourceMeta, checkSchemaInvalid) {
+    const canonicalDraft = this._canonicalizeDraftObject(parsedResult);
+    if (!canonicalDraft) return null;
+    const normalized = validateAndNormalizeV02(canonicalDraft, sourceMeta);
+    const isSkeleton = normalized?.governance?.risk_flags?.includes('skeleton_fallback');
+    if (isSkeleton || checkSchemaInvalid(normalized)) return null;
+    return {
+      parsedResult: canonicalDraft,
+      resultV02: normalized,
+      draftLength: JSON.stringify(parsedResult || {}).length,
+      canonicalLength: JSON.stringify(canonicalDraft).length
+    };
+  }
+
+  _buildRepairPassInput(firstPassResult, parsedResult, sourceMeta, failureKind, parseErrorMessage) {
+    const firstPassText = typeof firstPassResult === 'string'
+      ? firstPassResult
+      : JSON.stringify(firstPassResult || {});
+    const boundedDraft = firstPassText.length > 12000
+      ? `${firstPassText.slice(0, 6000)}\n\n...[truncated for bounded repair]...\n\n${firstPassText.slice(-3000)}`
+      : firstPassText;
+    const sourceIdentity = {
+      material_id: sourceMeta.materialId || '',
+      file_name: sourceMeta.filename || '',
+      raw_object_name: sourceMeta.rawObjectName || '',
+      parsed_prefix: sourceMeta.parsedPrefix || '',
+      markdown_object_name: sourceMeta.markdownObjectName || '',
+      parsed_files_count: sourceMeta.parsedFilesCount || 0
+    };
+    const errorSummary = [
+      `failureKind=${failureKind || 'unknown'}`,
+      parseErrorMessage ? `parseError=${parseErrorMessage}` : '',
+      `firstPassOutputLength=${firstPassText.length}`
+    ].filter(Boolean).join('\n');
+    const userContent = [
+      '请仅根据 system prompt 中的草稿内容输出修复后的唯一 JSON 对象。',
+      '不要重新分析原始 Markdown；不要输出解释文字。',
+      `source identity: ${JSON.stringify(sourceIdentity)}`
+    ].join('\n');
+    return {
+      prompt: generateV02RepairPrompt(boundedDraft, { errorSummary, compact: true }),
+      userContent,
+      firstPassOutputLength: firstPassText.length,
+      boundedDraftLength: boundedDraft.length,
+      repairPromptLength: 0,
+      repairUserInputLength: userContent.length,
+      markdownRepeated: false,
+      sourceIdentity
     };
   }
 
@@ -550,6 +673,7 @@ export class AiMetadataWorker {
       let schemaInvalid = false;
       let firstPassFailureKind = null;
       let parseErrorMessage = '';
+      let resultV02;
 
       function checkSchemaInvalid(obj) {
         if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false; // Handled by jsonParseFailed if not an object, but if extractJson somehow returns an array, it's invalid
@@ -593,10 +717,38 @@ export class AiMetadataWorker {
       let repairRetrySucceeded = false;
       let repairRetryReason = '';
       let firstFailureDetails = null;
+      let deterministicRepairSucceeded = false;
+      let deterministicRepairDetails = null;
 
       if ((jsonParseFailed || schemaInvalid) && twoPassEnabled) {
         twoPassAttempted = true;
-        const repairPrompt = generateV02RepairPrompt(aiResponse.result);
+        const deterministicRepair = this._tryDeterministicDraftRepair(parsedResult, sourceMeta, checkSchemaInvalid);
+        if (deterministicRepair) {
+          parsedResult = deterministicRepair.parsedResult;
+          jsonParseFailed = false;
+          schemaInvalid = false;
+          repairSucceeded = true;
+          deterministicRepairSucceeded = true;
+          deterministicRepairDetails = {
+            mode: 'deterministic-draft-normalization',
+            firstPassDraftLength: deterministicRepair.draftLength,
+            canonicalDraftLength: deterministicRepair.canonicalLength
+          };
+          rawTrace.deterministicRepair = deterministicRepairDetails;
+          await this._updatePhase(job, 'repair-deterministic-succeeded', 60, `JSON Repair deterministic normalization 成功`);
+          await logTaskEvent({
+            taskId: job.parseTaskId,
+            event: 'ai-provider-repair-deterministic-succeeded',
+            level: 'info',
+            message: `AI JSON Repair 已通过确定性草稿归一化完成`,
+            payload: deterministicRepairDetails
+          });
+        }
+      }
+
+      if ((jsonParseFailed || schemaInvalid) && twoPassEnabled) {
+        const repairInput = this._buildRepairPassInput(aiResponse.result, parsedResult, sourceMeta, firstPassFailureKind, parseErrorMessage);
+        repairInput.repairPromptLength = repairInput.prompt.length;
         try {
           let logReason = 'JSON extraction failed';
           if (firstPassFailureKind === 'schema_invalid') {
@@ -607,8 +759,8 @@ export class AiMetadataWorker {
 
           console.log(`[ai-worker] First pass ${logReason}, attempting repair for job ${job.id}...`);
           await this._updatePhase(job, 'repair-pass-running', 40, `正在进行 JSON Repair...`);
-          const repairResponse = await this._runProviderPass(provider, job, aiSettings, repairPrompt, {
-            markdownContent,
+          const repairResponse = await this._runProviderPass(provider, job, aiSettings, repairInput.prompt, {
+            markdownContent: repairInput.userContent,
             temperature: 0.1,
             expectJson: true,
             num_predict: 3072,
@@ -634,6 +786,7 @@ export class AiMetadataWorker {
           repairSucceeded = true;
           aiResponse = repairResponse;
           rawTrace.repairPass = this._extractTrace(repairResponse.traceDetails);
+          rawTrace.repairInput = repairInput;
 
           await this._updatePhase(job, 'repair-succeeded', 60, `JSON Repair 成功`);
           await logTaskEvent({
@@ -654,6 +807,7 @@ export class AiMetadataWorker {
           if (repairErr.details) {
             repairProviderDetails = repairErr.details;
             rawTrace.repairPass = this._extractTrace(repairProviderDetails);
+            rawTrace.repairInput = repairInput;
           }
 
           if (repairProviderDetails?.rawLooksTruncated === true) {
@@ -671,8 +825,8 @@ export class AiMetadataWorker {
 
             try {
               await this._updatePhase(job, 'repair-retry-running', 50, `Repair 阶段重新尝试...`);
-              const retryResponse = await this._runProviderPass(provider, job, aiSettings, repairPrompt, {
-                markdownContent,
+              const retryResponse = await this._runProviderPass(provider, job, aiSettings, repairInput.prompt, {
+                markdownContent: repairInput.userContent,
                 temperature: 0,
                 expectJson: true,
                 num_predict: 4096,
@@ -740,7 +894,6 @@ export class AiMetadataWorker {
         }
       }
 
-      let resultV02;
       let aiClassificationDegraded = false;
       let aiClassificationDegradedReason = '';
       let aiClassificationErrorSource = '';
@@ -831,6 +984,10 @@ export class AiMetadataWorker {
       if (twoPassAttempted) {
         result.aiClassificationTwoPassAttempted = true;
         result.aiClassificationRepairSucceeded = repairSucceeded;
+        if (deterministicRepairSucceeded) {
+          result.aiClassificationDeterministicRepairSucceeded = true;
+          result.aiClassificationDeterministicRepairDetails = deterministicRepairDetails;
+        }
 
         if (repairRetryAttempted) {
           result.aiClassificationRepairRetryAttempted = true;
