@@ -126,6 +126,17 @@ Supplemental manual-review facts recorded on 2026-05-07:
 - Host MinerU logs contained valid business progress for the file, but task-level `mineruObservedProgress` remained low-signal.
 - Current likely split: AI/Ollama JSON Repair blockage is separate from MinerU sidecar attribution/backfill gap.
 
+AI repair and sidecar attribution diagnoses accepted on 2026-05-07:
+
+- AI timeout diagnosis task: `TASK-20260507-104151-P0-Production-AI-JSON-Repair-Ollama-Timeout-Diagnosis`.
+- Lucia review: `TaskAndReport/2026-05-07T10-56-16+0800_P0-Production-AI-JSON-Repair-Ollama-Timeout-Diagnosis_LUCIA_REVIEW.md`.
+- Accepted conclusion: the observed failures are in AI metadata / JSON Repair execution against Ollama `qwen3.5:9b`, after MinerU parse completion. Strict no-skeleton behavior remains intact.
+- Follow-up implementation task issued: `TASK-20260507-105616-P0-AI-Metadata-Repair-Prompt-And-Timeout-Hardening`.
+- MinerU sidecar attribution task: `TASK-20260507-104151-P1-MinerU-Sidecar-Task-Level-Log-Attribution`.
+- Lucia review: `TaskAndReport/2026-05-07T10-56-16+0800_P1-MinerU-Sidecar-Task-Level-Log-Attribution_LUCIA_REVIEW.md`.
+- Accepted conclusion: host MinerU logs exist, while task-level progress can remain low-signal for fast-completing tasks because attribution currently depends on an exact-one-active-task window.
+- Follow-up implementation task issued: `TASK-20260507-105616-P1-MinerU-Sidecar-Completed-Window-Log-Backfill`.
+
 ## 4. Validation Ledger
 
 Commands run in this governance pass:
@@ -167,8 +178,8 @@ Runtime evidence from the final pipeline run:
 | TD-006 | Open | Full concurrency, large-PDF soak, permissions/security, rollback rehearsal, folder upload, and all error-path coverage are not closed by this governance run. | These are Phase 2 or release-readiness validation items. |
 | TD-007 | Open | `scripts/tier2-standard-check.mjs` can still show an unhelpful JSON parse error when `BASE_URL` points to a frontend-only route returning HTML. | Validation ergonomics debt; does not affect MinerU submit-path probe behavior. |
 | TD-008 | Mitigated | Production ops observer and dependency supervisor were missing after deployment; `luceon-supervisor` and `luceon-sidecar` have been started. | Long-term guarantee that these sessions survive deployment/restart remains open for a later ops automation task. |
-| TD-009 | Open | AI metadata recognition / JSON Repair can block or time out through Ollama `qwen3.5:9b` after MinerU succeeds. | Diagnostic task `TASK-20260507-104151-P0-Production-AI-JSON-Repair-Ollama-Timeout-Diagnosis` is assigned; strict no-skeleton semantics must be preserved. |
-| TD-010 | Open | MinerU host logs can contain valid progress while fast-completing tasks fail to receive useful task-level `mineruObservedProgress`. | Analysis task `TASK-20260507-104151-P1-MinerU-Sidecar-Task-Level-Log-Attribution` is assigned; do not change parse semantics without a scoped implementation task. |
+| TD-009 | Open | AI metadata recognition / JSON Repair can block or time out through Ollama `qwen3.5:9b` after MinerU succeeds. | Diagnostic task was accepted; implementation task `TASK-20260507-105616-P0-AI-Metadata-Repair-Prompt-And-Timeout-Hardening` is assigned. Strict no-skeleton semantics must be preserved. |
+| TD-010 | Open | MinerU host logs can contain valid progress while fast-completing tasks fail to receive useful task-level `mineruObservedProgress`. | Analysis task was accepted; implementation task `TASK-20260507-105616-P1-MinerU-Sidecar-Completed-Window-Log-Backfill` is assigned. Parse semantics and ambiguous-attribution behavior must remain unchanged. |
 
 ## 6. Core Asset Directory Index
 
