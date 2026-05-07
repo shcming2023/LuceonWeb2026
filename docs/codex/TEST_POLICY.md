@@ -39,6 +39,20 @@ Current main L2/UAT target:
 
 Current accepted result:
 
+- `P0-Main-Rebuilt-Runtime-Tier2-Standard-Validation`: `PASS`
+- Lucia final judgment: `PASS`
+- Evidence source: `TaskAndReport/2026-05-07T09-31-59+0800_P0-Main-Rebuilt-Runtime-Tier2-Standard-Validation_REPORT.md`, accepted by `TaskAndReport/2026-05-07T09-35-39+0800_P0-Main-Rebuilt-Runtime-Tier2-Standard-Validation_LUCIA_REVIEW.md`.
+- Validated report HEAD: `1da8ce1a55c8b4115fbd30c4fc707f21355ccfb8`.
+- Scope: local rebuilt runtime at `http://localhost:8081`, Tier 2 Standard dependency-health and smoke validation after MinerU submit-path probe merge.
+- Confirmed behavior:
+  - `mineru.healthOk=true`.
+  - `mineru.submitProbe.enabled=true`.
+  - `mineru.submitProbe.ok=true`.
+  - `mineru.submitProbe.status=202`.
+  - `BASE_URL=http://localhost:8081 npx pnpm@10.4.1 run tier2:standard:check` passed.
+  - `BASE_URL=http://localhost:8081 bash uat/smoke-test.sh` passed, 12 passed / 0 failed / 0 skipped.
+- Pending scope: no production release readiness, no L3 validation, no large-PDF soak, no concurrency validation, no rollback rehearsal, and no all-error-path coverage.
+
 - `P2-upload-entry-testability-enhancement`: `PASS`
 - Lucia final judgment: `PASS`
 - Evidence source: historical validation report recorded `PASS_CANDIDATE`, then Lucia accepted it as `PASS`.

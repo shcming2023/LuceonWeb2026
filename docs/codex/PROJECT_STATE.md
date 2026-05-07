@@ -80,6 +80,15 @@ MinerU submit-path probe accepted on 2026-05-07:
 - Merge commit into `main`: `8201d2e903d5fa524490c17d16258f1764ce98fe`.
 - Effective behavior: `/ops/dependency-health` remains lightweight by default; `mineruSubmitProbe=true` or `DEPENDENCY_HEALTH_MINERU_SUBMIT_PROBE=true` enables a bounded synthetic MinerU `/tasks` submit probe. When enabled, MinerU readiness requires both `/health` success and `/tasks` task-id success.
 
+Rebuilt-runtime Tier 2 Standard validation accepted on 2026-05-07:
+
+- Task: `TASK-20260507-092406-P0-Main-Rebuilt-Runtime-Tier2-Standard-Validation`.
+- Lucode report: `TaskAndReport/2026-05-07T09-31-59+0800_P0-Main-Rebuilt-Runtime-Tier2-Standard-Validation_REPORT.md`.
+- Lucia review: `TaskAndReport/2026-05-07T09-35-39+0800_P0-Main-Rebuilt-Runtime-Tier2-Standard-Validation_LUCIA_REVIEW.md`.
+- Runtime: rebuilt local runtime at `http://localhost:8081`.
+- Result: Tier 2 Standard PASS with `mineru.healthOk=true`, `mineru.submitProbe.enabled=true`, `mineru.submitProbe.ok=true`, and UAT smoke `12 passed / 0 failed / 0 skipped`.
+- Boundary: this is local rebuilt-runtime Tier 2 validation only; production release readiness remains unclaimed.
+
 ## 4. Validation Ledger
 
 Commands run in this governance pass:
@@ -90,6 +99,8 @@ Commands run in this governance pass:
 | `npx pnpm@10.4.1 exec tsc --noEmit` | PASS |
 | `npx pnpm@10.4.1 run build` | PASS; Vite reported only the existing chunk-size warning |
 | `node server/tests/dependency-health-smoke.mjs` after MinerU submit-path probe | PASS, 31 passed / 0 failed |
+| `BASE_URL=http://localhost:8081 npx pnpm@10.4.1 run tier2:standard:check` after rebuilt runtime | PASS; `mineru.healthOk=true`, `mineru.submitProbe.ok=true` |
+| `BASE_URL=http://localhost:8081 bash uat/smoke-test.sh` after rebuilt runtime | PASS, 12 passed / 0 failed / 0 skipped |
 | `node server/tests/worker-smoke.mjs` | PASS; strict AI mode fails fast without skeleton fallback |
 | `node server/tests/dependency-supervisor-smoke.mjs` | PASS |
 | `BASE_URL=http://localhost:8081 LOCAL_MINERU_ENDPOINT=http://127.0.0.1:8083 OLLAMA_API_URL=http://127.0.0.1:11434 OLLAMA_TIER2_MODEL=qwen3.5:9b npx pnpm@10.4.1 run tier2:standard:check` | PASS |
