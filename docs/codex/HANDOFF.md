@@ -105,9 +105,10 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 - Controlled statuses: `下达待执行`, `执行中`, `已回报待审`, `退回待修正`, `修正中`, `修正回报待审`, `完成关闭`, `失败关闭`, `取消`, `挂起`
 - Required tracking fields: `Next Actor`, `Next Action`, `Required Output`
 
-Current active task:
+Current active tasks:
 
-- `TASK-20260507-101305-P0-Production-Ops-Sidecar-Supervisor-Recovery`
+- `TASK-20260507-104151-P0-Production-AI-JSON-Repair-Ollama-Timeout-Diagnosis`
+- `TASK-20260507-104151-P1-MinerU-Sidecar-Task-Level-Log-Attribution`
 
 Director shorthand is active:
 

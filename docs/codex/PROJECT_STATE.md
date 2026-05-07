@@ -108,6 +108,24 @@ Manual-review incident facts recorded on 2026-05-07:
 - Strict no-skeleton behavior is preserved: the failed AI metadata stage did not silently generate skeleton metadata.
 - Ops observation gap: `luceon-supervisor` and `luceon-sidecar` / `mineru-log-observer` were not running; `/ops/dependency-repair/status` returned `SUPERVISOR_UNAVAILABLE`; `/ops/mineru/global-observation` returned `{"observation":null}`.
 
+Production ops recovery accepted on 2026-05-07:
+
+- Task: `TASK-20260507-101305-P0-Production-Ops-Sidecar-Supervisor-Recovery`.
+- Lucode reports: `TaskAndReport/2026-05-07T10-23-55+0800_P0-Production-Ops-Sidecar-Supervisor-Recovery_REPORT.md` and `TaskAndReport/2026-05-07T10-34-23+0800_P0-Production-Ops-Sidecar-Supervisor-Recovery_SUPPLEMENTAL_REPORT.md`.
+- Lucia review: `TaskAndReport/2026-05-07T10-41-51+0800_P0-Production-Ops-Sidecar-Supervisor-Recovery_LUCIA_REVIEW.md`.
+- Result: `luceon-supervisor` and `luceon-sidecar` were started without restarting MinerU/Ollama or mutating failed tasks.
+- Follow-up tasks issued:
+  - `TASK-20260507-104151-P0-Production-AI-JSON-Repair-Ollama-Timeout-Diagnosis`.
+  - `TASK-20260507-104151-P1-MinerU-Sidecar-Task-Level-Log-Attribution`.
+
+Supplemental manual-review facts recorded on 2026-05-07:
+
+- New task `task-1778120784621`, file `走向成功_英语_二模卷16篇.pdf`, reached `stage=ai`, `state=ai-running`, message `AI: 正在进行 JSON Repair...`.
+- Associated AI job `ai-job-1778120889758-8cab` was running with `currentPhase=repair-pass-running`.
+- MinerU completed for that task and produced `25` parsed files.
+- Host MinerU logs contained valid business progress for the file, but task-level `mineruObservedProgress` remained low-signal.
+- Current likely split: AI/Ollama JSON Repair blockage is separate from MinerU sidecar attribution/backfill gap.
+
 ## 4. Validation Ledger
 
 Commands run in this governance pass:
@@ -148,8 +166,9 @@ Runtime evidence from the final pipeline run:
 | TD-005 | Open | Vite production build emits a chunk-size warning for the main bundle. | Non-blocking for Phase 1; consider route-level code splitting later. |
 | TD-006 | Open | Full concurrency, large-PDF soak, permissions/security, rollback rehearsal, folder upload, and all error-path coverage are not closed by this governance run. | These are Phase 2 or release-readiness validation items. |
 | TD-007 | Open | `scripts/tier2-standard-check.mjs` can still show an unhelpful JSON parse error when `BASE_URL` points to a frontend-only route returning HTML. | Validation ergonomics debt; does not affect MinerU submit-path probe behavior. |
-| TD-008 | Open | Production ops observer and dependency supervisor are not guaranteed to be running after deployment. | Recovery task `TASK-20260507-101305-P0-Production-Ops-Sidecar-Supervisor-Recovery` is assigned; do not restart MinerU as part of the narrow recovery unless separately authorized. |
-| TD-009 | Open | AI metadata recognition for large or difficult documents can hit the current Ollama provider timeout and leave the task failed after MinerU succeeds. | Preserve strict no-skeleton semantics; retry/re-AI behavior needs a separate scoped product decision and task. |
+| TD-008 | Mitigated | Production ops observer and dependency supervisor were missing after deployment; `luceon-supervisor` and `luceon-sidecar` have been started. | Long-term guarantee that these sessions survive deployment/restart remains open for a later ops automation task. |
+| TD-009 | Open | AI metadata recognition / JSON Repair can block or time out through Ollama `qwen3.5:9b` after MinerU succeeds. | Diagnostic task `TASK-20260507-104151-P0-Production-AI-JSON-Repair-Ollama-Timeout-Diagnosis` is assigned; strict no-skeleton semantics must be preserved. |
+| TD-010 | Open | MinerU host logs can contain valid progress while fast-completing tasks fail to receive useful task-level `mineruObservedProgress`. | Analysis task `TASK-20260507-104151-P1-MinerU-Sidecar-Task-Level-Log-Attribution` is assigned; do not change parse semantics without a scoped implementation task. |
 
 ## 6. Core Asset Directory Index
 
