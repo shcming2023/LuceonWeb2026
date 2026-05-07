@@ -126,6 +126,74 @@ function getAiJobStateStyle(state: string | undefined) {
   }
 }
 
+function getAiJobOutcome(job: AiMetadataJob) {
+  const result = job.result || {};
+  const provider = String(result.aiClassificationProvider || job.providerId || '').toLowerCase();
+  const deterministicRepairSucceeded = Boolean(
+    result.aiClassificationDeterministicRepairSucceeded ||
+    result.deterministicRepairSucceeded ||
+    result.aiClassificationRepairSucceeded
+  );
+  const degradedReason = String(result.aiClassificationDegradedReason || result.degradedReason || '');
+  const failureKind = String((result.rawTrace as any)?.firstPass?.failureKind || result.failureKind || '');
+
+  if (job.state === 'failed') {
+    return {
+      label: 'AI 识别失败',
+      detail: job.errorMessage || failureKind || 'AI 任务失败，需重新触发或排查模型服务。',
+      className: 'text-red-700 bg-red-50 border-red-100'
+    };
+  }
+
+  if (provider === 'skeleton' || degradedReason.includes('skeleton')) {
+    return {
+      label: '骨架兜底结果',
+      detail: degradedReason || '当前结果来自骨架兜底，不应视为真实 AI 识别完成。',
+      className: 'text-amber-700 bg-amber-50 border-amber-100'
+    };
+  }
+
+  if (job.state === 'review-pending' && deterministicRepairSucceeded) {
+    return {
+      label: 'AI 已完成 · 自动规范化 · 待复核',
+      detail: 'Ollama 已返回可用草稿，结构问题已确定性修复；这是待人工复核，不是依赖阻塞。',
+      className: 'text-emerald-700 bg-emerald-50 border-emerald-100'
+    };
+  }
+
+  if (job.state === 'review-pending') {
+    return {
+      label: 'AI 已完成 · 待复核',
+      detail: job.needsReview || job.confidence == null || job.confidence < 0.8
+        ? '结果需要人工复核或补全分类置信度。'
+        : '结果等待人工确认。',
+      className: 'text-amber-700 bg-amber-50 border-amber-100'
+    };
+  }
+
+  if (['confirmed', 'succeeded', 'completed'].includes(job.state)) {
+    return {
+      label: 'AI 已确认',
+      detail: 'AI 元数据识别已完成并确认。',
+      className: 'text-green-700 bg-green-50 border-green-100'
+    };
+  }
+
+  if (job.state === 'running') {
+    return {
+      label: 'AI 识别进行中',
+      detail: '正在调用 AI 元数据识别。',
+      className: 'text-purple-700 bg-purple-50 border-purple-100'
+    };
+  }
+
+  return {
+    label: '等待 AI 识别',
+    detail: 'AI 元数据任务已创建，等待执行。',
+    className: 'text-slate-700 bg-slate-50 border-slate-100'
+  };
+}
+
 /**
  * 根据事件 level 返回时间线节点样式
  * @param level - 事件级别 (info / error / warn)
@@ -1050,6 +1118,7 @@ export function TaskDetailPage() {
                 <div className="space-y-3">
                   {aiJobs.map((job) => {
                     const jobStyle = getAiJobStateStyle(job.state);
+                    const jobOutcome = getAiJobOutcome(job);
                     return (
                       <div
                         key={job.id}
@@ -1069,6 +1138,13 @@ export function TaskDetailPage() {
                           <div className="flex justify-between">
                             <dt className="text-slate-400">Model</dt>
                             <dd className="text-slate-700">{job.model || '—'}</dd>
+                          </div>
+                          <div className="md:col-span-2 border-t border-slate-100 pt-2 mt-1">
+                            <dt className="text-slate-400 mb-1">识别结论</dt>
+                            <dd className={`rounded-md border px-3 py-2 ${jobOutcome.className}`}>
+                              <div className="font-medium">{jobOutcome.label}</div>
+                              <div className="mt-1 text-[11px] leading-relaxed">{jobOutcome.detail}</div>
+                            </dd>
                           </div>
                         </dl>
                       </div>
