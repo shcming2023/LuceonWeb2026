@@ -26,32 +26,72 @@ async function checkSession(name) {
   }
 }
 
+async function listTmuxSessions() {
+  try {
+    const { stdout } = await execPromise(`tmux list-sessions -F '#S'`);
+    return stdout.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function findUnmanagedSessions(sessionNames, patterns) {
+  return sessionNames.filter(name => patterns.some(pattern => pattern.test(name)));
+}
+
+async function checkHttpReachable(url, expectedText = null) {
+  try {
+    const curlRes = await execPromise(`curl -s --connect-timeout 2 '${url}'`);
+    if (!expectedText) return Boolean(curlRes.stdout);
+    return Boolean(curlRes.stdout && curlRes.stdout.includes(expectedText));
+  } catch {
+    return false;
+  }
+}
+
 // 状态检查
 app.get('/status', async (req, res) => {
   try {
+    const allSessions = await listTmuxSessions();
     const mineru = await checkSession('luceon-mineru');
     const sidecar = await checkSession('luceon-sidecar');
     const ollama = await checkSession('luceon-ollama');
-    
-    // Check if Ollama service is reachable even if not in tmux
-    let ollamaReachable = false;
-    try {
-      const curlRes = await execPromise(`curl -s --connect-timeout 2 http://127.0.0.1:11434/api/tags`);
-      if (curlRes.stdout && curlRes.stdout.includes('models')) {
-        ollamaReachable = true;
-      }
-    } catch (e) {
-      // ignore curl failure
-    }
+    const unmanagedMineruSessions = mineru ? [] : findUnmanagedSessions(allSessions, [/^mineru(?:_|-)/i, /mineru_api/i, /mineru_gradio/i]);
+    const unmanagedOllamaSessions = ollama ? [] : findUnmanagedSessions(allSessions, [/ollama/i]);
+    const mineruReachable = await checkHttpReachable(process.env.MINERU_HEALTH_URL || 'http://127.0.0.1:8083/health');
+    const ollamaReachable = await checkHttpReachable('http://127.0.0.1:11434/api/tags', 'models');
 
     res.json({ 
       ok: true, 
       message: 'Supervisor running', 
       sessions: { mineru, sidecar, ollama },
-      services: { ollamaReachable }
+      services: { mineruReachable, ollamaReachable },
+      ownership: {
+        mineru: {
+          managed: mineru,
+          reachable: mineruReachable,
+          unmanagedSessions: unmanagedMineruSessions,
+          warning: !mineru && mineruReachable ? 'MinerU service reachable but not managed by luceon-mineru tmux session' : null
+        },
+        ollama: {
+          managed: ollama,
+          reachable: ollamaReachable,
+          unmanagedSessions: unmanagedOllamaSessions,
+          warning: !ollama && ollamaReachable ? 'Ollama service reachable but not managed by luceon-ollama tmux session' : null
+        }
+      }
     });
   } catch (error) {
-    res.json({ ok: true, message: 'Supervisor running', sessions: { mineru: false, sidecar: false, ollama: false }, services: { ollamaReachable: false } });
+    res.json({
+      ok: true,
+      message: 'Supervisor running',
+      sessions: { mineru: false, sidecar: false, ollama: false },
+      services: { mineruReachable: false, ollamaReachable: false },
+      ownership: {
+        mineru: { managed: false, reachable: false, unmanagedSessions: [], warning: null },
+        ollama: { managed: false, reachable: false, unmanagedSessions: [], warning: null }
+      }
+    });
   }
 });
 
