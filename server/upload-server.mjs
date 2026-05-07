@@ -1120,6 +1120,7 @@ app.get('/ops/mineru/active-task', async (req, res) => {
 let globalLogObservation = null;
 const MINERU_COMPLETED_OBSERVATION_GRACE_MS = 5 * 60 * 1000;
 const MINERU_OBSERVATION_START_TOLERANCE_MS = Number(process.env.MINERU_OBSERVATION_START_TOLERANCE_MS) || 1_000;
+const TERMINAL_MINERU_OBSERVATION_STATES = new Set(['review-pending', 'confirmed', 'completed', 'failed', 'canceled']);
 
 function getObservationTimeMs(snapshot) {
   const candidates = [snapshot?.contextTime, snapshot?.observedAt, snapshot?.logFileUpdatedAt];
@@ -1170,6 +1171,45 @@ export function selectMineruObservationAttribution(tasks, snapshot, nowMs = Date
   };
 }
 
+export function isTerminalMineruObservationTask(task) {
+  return TERMINAL_MINERU_OBSERVATION_STATES.has(String(task?.state || ''));
+}
+
+export function shouldMutateMineruObservation(task, attributionMode) {
+  if (
+    attributionMode === 'completed-window-backfill' &&
+    isTerminalMineruObservationTask(task) &&
+    task?.metadata?.mineruObservedProgress
+  ) {
+    return {
+      mutate: false,
+      reason: 'terminal task already has mineru observation; completed-window observation kept global-only'
+    };
+  }
+  return { mutate: true, reason: null };
+}
+
+export function normalizeTerminalMineruObservationSnapshot(task, snapshot) {
+  if (!isTerminalMineruObservationTask(task)) return snapshot;
+  if (snapshot.activityLevel !== 'log-observation-stale') return snapshot;
+
+  const observationStaleReason = 'completed local-MinerU task has no newer host log activity; final task observation is diagnostic only';
+  const logFreshnessDiagnostic = snapshot.logFreshnessDiagnostic
+    ? { ...snapshot.logFreshnessDiagnostic, terminalTaskState: task.state, suggestion: 'No action required for a terminal task unless a new parse is running and lacks fresh host logs.' }
+    : snapshot.logFreshnessDiagnostic;
+  const mountDiagnostic = snapshot.mountDiagnostic
+    ? { ...snapshot.mountDiagnostic, terminalTaskState: task.state, suggestion: 'No action required for a terminal task unless a new parse is running and lacks fresh host logs.' }
+    : snapshot.mountDiagnostic;
+
+  return {
+    ...snapshot,
+    observationStaleReason,
+    logFreshnessDiagnostic,
+    mountDiagnostic,
+    terminalTaskState: task.state
+  };
+}
+
 app.get('/ops/mineru/global-observation', (req, res) => {
   res.json({ observation: globalLogObservation });
 });
@@ -1210,15 +1250,31 @@ app.post('/ops/mineru-log-observation', async (req, res) => {
     return res.json({ ok: true, attributed: false, reason: 'api noise' });
   }
 
-  const attributedSnapshot = {
+  const attributedSnapshot = normalizeTerminalMineruObservationSnapshot(task, {
     ...snapshot,
     attribution: task.id,
     attributionMode: attribution.mode
-  };
+  });
   globalLogObservation = attributedSnapshot;
 
+  const mutationDecision = shouldMutateMineruObservation(task, attribution.mode);
+  if (!mutationDecision.mutate) {
+    globalLogObservation = {
+      ...attributedSnapshot,
+      nonMutating: true,
+      nonMutatingReason: mutationDecision.reason
+    };
+    return res.json({
+      ok: true,
+      attributed: true,
+      mutated: false,
+      taskId: task.id,
+      reason: mutationDecision.reason
+    });
+  }
+
   // 写入 ParseTask metadata 并实现事件降噪
-  const obs = snapshot;
+  const obs = attributedSnapshot;
   const logStatus = obs.logSource?.logSourceSelectedReason || (obs.logSource?.logSourceExists ? 'exists' : 'missing');
   const activityLevel = obs.activityLevel || '';
   const phase = obs.phase || '';
