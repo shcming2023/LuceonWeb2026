@@ -173,6 +173,18 @@ Current-main production deployment accepted on 2026-05-07:
   - `TASK-20260507-131426-P0-MinerU-Log-Observation-Transport-And-Attribution-Robustness`.
   - `TASK-20260507-131426-P1-AI-Deterministic-Repair-UI-And-Ops-Status-Semantics`.
 
+Follow-up runtime-semantics fixes accepted at code level on 2026-05-07:
+
+- MinerU log observation task: `TASK-20260507-131426-P0-MinerU-Log-Observation-Transport-And-Attribution-Robustness`.
+- Lucia review: `TaskAndReport/2026-05-07T13-39-17+0800_P0-MinerU-Log-Observation-Transport-And-Attribution-Robustness_LUCIA_REVIEW.md`.
+- Accepted implementation commit: `b98be38c8269a99a09cd86c18733315d4adfa345`; integrated main commit: `da83520`.
+- Accepted behavior: the observer source is explicit as `host-filesystem`, host log paths are passed into the sidecar, log freshness diagnostics are source-aware, and task attribution uses a bounded 1000 ms timestamp tolerance while keeping ambiguous observations unattributed.
+- AI UI and ops status semantics task: `TASK-20260507-131426-P1-AI-Deterministic-Repair-UI-And-Ops-Status-Semantics`.
+- Lucia review: `TaskAndReport/2026-05-07T13-39-17+0800_P1-AI-Deterministic-Repair-UI-And-Ops-Status-Semantics_LUCIA_REVIEW.md`.
+- Accepted implementation commit: `4a1d42c4db7cec942b5f05d263171f50aa001a24`; integrated main commit: `da83520`.
+- Accepted behavior: deterministic repair success in `review-pending` is shown as completed and review-needed, actual AI failure and skeleton fallback remain distinct, and reachable Ollama without tmux management is treated as an ops-session warning rather than an AI outage.
+- Boundary: these are code-level acceptances only. Production deployment and manual-runtime validation are assigned to `TASK-20260507-133917-P0-Deploy-Followup-Fixes-And-Manual-Validation`.
+
 ## 4. Validation Ledger
 
 Commands run in this governance pass:
@@ -192,6 +204,13 @@ Commands run in this governance pass:
 | `node server/tests/mineru-log-progress-smoke.mjs` during Lucia pre-fix review | FAIL; existing Test 4 expectation drift: expected `failed-confirmed`, actual `log-error-signal`; parser/test files were not changed by the accepted branch |
 | `node server/tests/mineru-log-progress-smoke.mjs` after truth alignment | PASS, 118 passed / 0 failed |
 | `node server/tests/mineru-artifact-empty-retry-smoke.mjs` after truth alignment | PASS, 62 passed / 0 failed |
+| `node server/tests/mineru-log-observation-transport-smoke.mjs` after runtime-semantics follow-up integration | PASS |
+| `node server/tests/mineru-sidecar-completed-window-smoke.mjs` after runtime-semantics follow-up integration | PASS |
+| `node server/tests/mineru-log-progress-smoke.mjs` after runtime-semantics follow-up integration | PASS, 118 passed / 0 failed |
+| `node server/tests/mineru-log-source-live-smoke.mjs` after runtime-semantics follow-up integration | PASS, 21 passed / 0 failed |
+| `npx pnpm@10.4.1 exec tsc --noEmit` after runtime-semantics follow-up integration | PASS |
+| `npx pnpm@10.4.1 run build` after runtime-semantics follow-up integration | PASS; Vite reported only the existing chunk-size warning |
+| `BASE_URL=http://localhost:8081 bash uat/smoke-test.sh` after runtime-semantics follow-up integration | PASS, 12 passed / 0 failed / 0 skipped |
 | `BASE_URL=http://localhost:8081 npx pnpm@10.4.1 run tier2:standard:check` after rebuilt runtime | PASS; `mineru.healthOk=true`, `mineru.submitProbe.ok=true` |
 | `BASE_URL=http://localhost:8081 bash uat/smoke-test.sh` after rebuilt runtime | PASS, 12 passed / 0 failed / 0 skipped |
 | `node server/tests/worker-smoke.mjs` | PASS; strict AI mode fails fast without skeleton fallback |
@@ -226,8 +245,8 @@ Runtime evidence from the final pipeline run:
 | TD-009 | Mitigated | AI metadata recognition / JSON Repair can block or time out through Ollama `qwen3.5:9b` after MinerU succeeds. | Implementation accepted on `main`: bounded repair input, deterministic draft normalization, and strict no-skeleton failure semantics. Production runtime revalidation remains a release-readiness concern. |
 | TD-010 | Mitigated | MinerU host logs can contain valid progress while fast-completing tasks fail to receive useful task-level `mineruObservedProgress`. | Implementation accepted on `main`: bounded completed-window backfill with ambiguous observations remaining unattributed. Production runtime revalidation remains a release-readiness concern. |
 | TD-011 | Closed | `server/tests/mineru-log-progress-smoke.mjs` Test 4 expected `failed-confirmed`, while the parser returned `log-error-signal`. | Closed by `TASK-20260507-121324-P0-MinerU-Log-Progress-Smoke-Truth-Alignment`; confirmed execution errors now produce `failed-confirmed`, and the smoke test passes without `.skip` or weakened assertions. |
-| TD-012 | Open | MinerU task-level live log observation can still be unreliable in production manual review even when MinerU parse succeeds and host logs contain business progress. | Follow-up task `TASK-20260507-131426-P0-MinerU-Log-Observation-Transport-And-Attribution-Robustness` is assigned. Preserve ambiguous-attribution safety and avoid destructive production operations. |
-| TD-013 | Open | UI/diagnostic wording can describe deterministic AI repair success or reachable-but-unmanaged Ollama status as AI blocked. | Follow-up task `TASK-20260507-131426-P1-AI-Deterministic-Repair-UI-And-Ops-Status-Semantics` is assigned. Do not hide real AI dependency failures. |
+| TD-012 | Pending production validation | MinerU task-level live log observation can still be unreliable in production manual review even when MinerU parse succeeds and host logs contain business progress. | Code-level implementation accepted and integrated in `da83520`; production validation is assigned to `TASK-20260507-133917-P0-Deploy-Followup-Fixes-And-Manual-Validation`. Preserve ambiguous-attribution safety and avoid destructive production operations. |
+| TD-013 | Pending production validation | UI/diagnostic wording can describe deterministic AI repair success or reachable-but-unmanaged Ollama status as AI blocked. | Code-level implementation accepted and integrated in `da83520`; production/browser validation is assigned to `TASK-20260507-133917-P0-Deploy-Followup-Fixes-And-Manual-Validation`. Do not hide real AI dependency failures. |
 
 ## 6. Core Asset Directory Index
 
