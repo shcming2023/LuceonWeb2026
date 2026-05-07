@@ -154,6 +154,13 @@ MinerU log progress smoke truth alignment accepted on 2026-05-07:
 - Accepted behavior: confirmed MinerU execution errors now map to `failed-confirmed`; stale-log handling preserves confirmed failures.
 - Boundary: bare `Error:` style low-confidence signals remain outside confirmed-failure adjudication; no production runtime mutation or release-readiness claim is made.
 
+Current-main production deployment task issued on 2026-05-07:
+
+- Task: `TASK-20260507-125133-P0-Current-Main-Production-Deployment-And-Manual-Runtime-Regression`.
+- Target main HEAD: `5ffa31d109b2133fdc31645bba25dfe26d36e136`.
+- Objective: deploy current `main` to `/Users/concm/prod_workspace/Luceon2026` and prepare `http://localhost:8081/cms/` for Director manual review with non-destructive runtime regression evidence.
+- Boundary: this task can establish manual-review readiness; it must not claim production release readiness.
+
 ## 4. Validation Ledger
 
 Commands run in this governance pass:

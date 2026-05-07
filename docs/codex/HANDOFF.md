@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- None.
+- `TASK-20260507-125133-P0-Current-Main-Production-Deployment-And-Manual-Runtime-Regression`
 
 Director shorthand is active:
 
