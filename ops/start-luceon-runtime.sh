@@ -13,7 +13,7 @@ tmux new-session -d -s luceon-mineru "cd '$REPO_ROOT' && bash ops/start-mineru-a
 
 echo "[3/4] Starting MinerU Log Observer in tmux session (luceon-sidecar)..."
 tmux kill-session -t luceon-sidecar 2>/dev/null || true
-tmux new-session -d -s luceon-sidecar "UPLOAD_SERVER_URL=http://127.0.0.1:8081/__proxy/upload node ops/mineru-log-observer.mjs"
+tmux new-session -d -s luceon-sidecar "UPLOAD_SERVER_URL=http://127.0.0.1:8081/__proxy/upload MINERU_LOG_SOURCE_CONTEXT=host-filesystem MINERU_ERR_LOG_PATH=/Users/concm/ops/logs/mineru-api.err.log MINERU_LOG_PATH=/Users/concm/ops/logs/mineru-api.log node ops/mineru-log-observer.mjs"
 
 echo "[4/4] Starting Dependency Supervisor in tmux session (luceon-supervisor)..."
 tmux kill-session -t luceon-supervisor 2>/dev/null || true

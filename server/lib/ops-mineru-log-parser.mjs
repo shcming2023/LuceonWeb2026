@@ -29,6 +29,39 @@ import path from 'path';
 
 /** 日志文件新鲜度阈值（毫秒），超过此时间视为观测通道滞后。可通过环境变量覆盖。 */
 export const MINERU_LOG_STALE_MS = Number(process.env.MINERU_LOG_STALE_MS) || 120_000;
+/** 日志行时间戳为秒级，允许与任务毫秒级开始时间存在小幅边界误差。 */
+export const MINERU_LOG_TIMESTAMP_TOLERANCE_MS = Number(process.env.MINERU_LOG_TIMESTAMP_TOLERANCE_MS) || 1_000;
+
+function getLogSourceContext(filePath) {
+  return process.env.MINERU_LOG_SOURCE_CONTEXT || (filePath.includes('/host/') ? 'container-mounted-log' : 'host-filesystem');
+}
+
+function isBeforeMinObserved(effectiveMs, minObservedMs) {
+  return Number.isFinite(effectiveMs) && Number.isFinite(minObservedMs) && effectiveMs + MINERU_LOG_TIMESTAMP_TOLERANCE_MS < minObservedMs;
+}
+
+function buildLogFreshnessDiagnostic(logSource, logAge) {
+  const logSourceContext = logSource?.logSourceContext || 'unknown-log-source';
+  const diagnostic = {
+    logAgeMs: logAge,
+    logStaleThresholdMs: MINERU_LOG_STALE_MS,
+    logSourceContext,
+    logSourcePath: logSource?.logSourcePath || null,
+    logSourceMtime: logSource?.logSourceMtime || null,
+    logSourceSize: logSource?.logSourceSize || null,
+    suggestion: logSourceContext === 'container-mounted-log'
+      ? 'Check container-visible log mount freshness against the host MinerU log writer.'
+      : 'Check the host MinerU tmux process and host log writer path; this observer reads the host filesystem directly.'
+  };
+
+  if (logSourceContext === 'container-mounted-log') {
+    diagnostic.containerPath = diagnostic.logSourcePath;
+    diagnostic.containerMtime = diagnostic.logSourceMtime;
+    diagnostic.containerSize = diagnostic.logSourceSize;
+  }
+
+  return diagnostic;
+}
 
 /**
  * 解析 tqdm 进度行。
@@ -248,6 +281,7 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
   for (const filePath of logPaths) {
     const logSource = {
       logSourcePath: filePath,
+      logSourceContext: getLogSourceContext(filePath),
       logSourceExists: false,
       logSourceReadable: false,
       logSourceSize: 0,
@@ -339,7 +373,7 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
           if (effectiveTime) {
             // 有效时间戳早于当前任务开始时间 → 属于旧任务，丢弃
             const effectiveMs = new Date(effectiveTime).getTime();
-            if (effectiveMs < minObservedMs) {
+            if (isBeforeMinObserved(effectiveMs, minObservedMs)) {
               continue;
             }
           } else {
@@ -573,6 +607,7 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
       logSourceSize: 0,
       logSourceMtime: null,
       logSourceAgeMs: null,
+      logSourceContext: getLogSourceContext(logPaths[1]),
       logSourceSelectedReason: 'default-fallback',
       observerCheckedAt
     };
@@ -623,7 +658,7 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
   if (minObservedAt) {
     const logTime = new Date(bestResult.logFileUpdatedAt).getTime();
     const minTime = new Date(minObservedAt).getTime();
-    if (logTime < minTime) {
+    if (isBeforeMinObserved(logTime, minTime)) {
       // 保留之前可用的信息，但修改 activityLevel 为 unattributed
       bestResult.activityLevel = 'log-observation-unattributed';
       bestResult.observationStale = true;
@@ -641,17 +676,11 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
 
   if (logAge > MINERU_LOG_STALE_MS && bestResult.activityLevel !== 'failed-confirmed') {
     bestResult.observationStale = true;
-    bestResult.observationStaleReason = 'container-visible MinerU log file is stale while MinerU API is still processing';
+    const logSourceContext = bestResult.logSource?.logSourceContext || 'unknown-log-source';
+    bestResult.observationStaleReason = `${logSourceContext} MinerU log file is stale while MinerU API is still processing`;
     bestResult.activityLevel = 'log-observation-stale';
-    // Patch 16.2.6: 挂载一致性诊断信息，帮助运维判断是 Docker bind mount 延迟还是真实停滞
-    bestResult.mountDiagnostic = {
-      logAgeMs: logAge,
-      logStaleThresholdMs: MINERU_LOG_STALE_MS,
-      containerPath: bestResult.logSource?.logSourcePath || null,
-      containerMtime: bestResult.logFileUpdatedAt,
-      containerSize: bestResult.logSource?.logSourceSize || null,
-      suggestion: 'Check host file with: ls -li /Users/concm/ops/logs/mineru-api.err.log && docker exec cms-upload-server ls -li /host/mineru-logs/mineru-api.err.log — if inode/size/mtime differ, the bind mount is not consistent. Ensure docker-compose uses :consistent flag and start-mineru-api.sh touches files before exec.'
-    };
+    bestResult.logFreshnessDiagnostic = buildLogFreshnessDiagnostic(bestResult.logSource, logAge);
+    bestResult.mountDiagnostic = bestResult.logFreshnessDiagnostic;
   } else {
     bestResult.observationStale = false;
   }

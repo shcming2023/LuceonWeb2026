@@ -1119,6 +1119,7 @@ app.get('/ops/mineru/active-task', async (req, res) => {
 
 let globalLogObservation = null;
 const MINERU_COMPLETED_OBSERVATION_GRACE_MS = 5 * 60 * 1000;
+const MINERU_OBSERVATION_START_TOLERANCE_MS = Number(process.env.MINERU_OBSERVATION_START_TOLERANCE_MS) || 1_000;
 
 function getObservationTimeMs(snapshot) {
   const candidates = [snapshot?.contextTime, snapshot?.observedAt, snapshot?.logFileUpdatedAt];
@@ -1156,7 +1157,7 @@ export function selectMineruObservationAttribution(tasks, snapshot, nowMs = Date
     const completedAtMs = new Date(t.parsedAt || t.metadata.parsedAt || t.metadata.mineruLastStatusAt || 0).getTime();
     if (!Number.isFinite(startedAtMs) || !Number.isFinite(completedAtMs) || startedAtMs <= 0 || completedAtMs <= 0) return false;
     if (nowMs - completedAtMs > MINERU_COMPLETED_OBSERVATION_GRACE_MS) return false;
-    return obsTimeMs >= startedAtMs && obsTimeMs <= completedAtMs + MINERU_COMPLETED_OBSERVATION_GRACE_MS;
+    return obsTimeMs + MINERU_OBSERVATION_START_TOLERANCE_MS >= startedAtMs && obsTimeMs <= completedAtMs + MINERU_COMPLETED_OBSERVATION_GRACE_MS;
   });
 
   if (completedCandidates.length === 1) {
@@ -1199,7 +1200,7 @@ app.post('/ops/mineru-log-observation', async (req, res) => {
   const startTimeMs = new Date(task.metadata?.mineruStartedAt || task.createdAt || 0).getTime();
   const obsTimeMs = new Date(snapshot.contextTime || snapshot.observedAt || snapshot.logFileUpdatedAt || 0).getTime();
 
-  if (obsTimeMs > 0 && obsTimeMs < startTimeMs) {
+  if (obsTimeMs > 0 && obsTimeMs + MINERU_OBSERVATION_START_TOLERANCE_MS < startTimeMs) {
     globalLogObservation = { ...snapshot, attribution: 'stale', unattributedReason: 'old context time' };
     return res.json({ ok: true, attributed: false, reason: 'old context time' });
   }
