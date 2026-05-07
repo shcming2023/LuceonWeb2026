@@ -66,15 +66,25 @@ try {
 }
 
 try {
-  const healthRes = await fetch(`${cmsBase}/__proxy/upload/ops/dependency-health`, { signal: AbortSignal.timeout(20000) });
+  const healthRes = await fetch(`${cmsBase}/__proxy/upload/ops/dependency-health?mineruSubmitProbe=true`, { signal: AbortSignal.timeout(30000) });
   const healthData = await healthRes.json();
   console.log('\n--- Backend Dependency Health ---');
   console.log(`blocking=${healthData.blocking}`);
   console.log(`minio=${healthData.dependencies?.minio?.ok}`);
   console.log(`mineru=${healthData.dependencies?.mineru?.ok}`);
+  console.log(`mineru.healthOk=${healthData.dependencies?.mineru?.healthOk}`);
+  console.log(`mineru.submitProbe.enabled=${healthData.dependencies?.mineru?.submitProbe?.enabled}`);
+  console.log(`mineru.submitProbe.ok=${healthData.dependencies?.mineru?.submitProbe?.ok}`);
+  console.log(`mineru.submitProbe.status=${healthData.dependencies?.mineru?.submitProbe?.status || healthData.dependencies?.mineru?.submitProbe?.error || 'n/a'}`);
   console.log(`ollama=${healthData.dependencies?.ollama?.ok}`);
 
-  if (healthData.blocking || !healthData.dependencies?.minio?.ok || !healthData.dependencies?.mineru?.ok || !healthData.dependencies?.ollama?.ok) {
+  if (
+    healthData.blocking ||
+    !healthData.dependencies?.minio?.ok ||
+    !healthData.dependencies?.mineru?.ok ||
+    healthData.dependencies?.mineru?.submitProbe?.ok !== true ||
+    !healthData.dependencies?.ollama?.ok
+  ) {
     console.error('FAIL backend dependency health has blocking or missing dependency');
     process.exit(1);
   }
