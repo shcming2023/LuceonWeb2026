@@ -147,6 +147,13 @@ AI repair and completed-window sidecar implementations accepted on 2026-05-07:
 - Accepted behavior: sidecar observations can be backfilled to exactly one recently completed local-MinerU task within a bounded window; ambiguous observations remain unattributed and parse state is not changed.
 - Residual test-truth task issued: `TASK-20260507-121324-P0-MinerU-Log-Progress-Smoke-Truth-Alignment`.
 
+MinerU log progress smoke truth alignment accepted on 2026-05-07:
+
+- Task: `TASK-20260507-121324-P0-MinerU-Log-Progress-Smoke-Truth-Alignment`.
+- Lucia review: `TaskAndReport/2026-05-07T12-38-25+0800_P0-MinerU-Log-Progress-Smoke-Truth-Alignment_LUCIA_REVIEW.md`.
+- Accepted behavior: confirmed MinerU execution errors now map to `failed-confirmed`; stale-log handling preserves confirmed failures.
+- Boundary: bare `Error:` style low-confidence signals remain outside confirmed-failure adjudication; no production runtime mutation or release-readiness claim is made.
+
 ## 4. Validation Ledger
 
 Commands run in this governance pass:
@@ -163,7 +170,9 @@ Commands run in this governance pass:
 | `node server/tests/worker-smoke.mjs` after AI repair hardening | PASS; strict AI mode fails fast without skeleton fallback |
 | `node server/tests/mineru-sidecar-smoke.mjs` after sidecar backfill | PASS |
 | `node server/tests/mineru-log-source-live-smoke.mjs` after sidecar backfill | PASS |
-| `node server/tests/mineru-log-progress-smoke.mjs` during Lucia review | FAIL; existing Test 4 expectation drift: expected `failed-confirmed`, actual `log-error-signal`; parser/test files were not changed by the accepted branch |
+| `node server/tests/mineru-log-progress-smoke.mjs` during Lucia pre-fix review | FAIL; existing Test 4 expectation drift: expected `failed-confirmed`, actual `log-error-signal`; parser/test files were not changed by the accepted branch |
+| `node server/tests/mineru-log-progress-smoke.mjs` after truth alignment | PASS, 118 passed / 0 failed |
+| `node server/tests/mineru-artifact-empty-retry-smoke.mjs` after truth alignment | PASS, 62 passed / 0 failed |
 | `BASE_URL=http://localhost:8081 npx pnpm@10.4.1 run tier2:standard:check` after rebuilt runtime | PASS; `mineru.healthOk=true`, `mineru.submitProbe.ok=true` |
 | `BASE_URL=http://localhost:8081 bash uat/smoke-test.sh` after rebuilt runtime | PASS, 12 passed / 0 failed / 0 skipped |
 | `node server/tests/worker-smoke.mjs` | PASS; strict AI mode fails fast without skeleton fallback |
@@ -197,7 +206,7 @@ Runtime evidence from the final pipeline run:
 | TD-008 | Mitigated | Production ops observer and dependency supervisor were missing after deployment; `luceon-supervisor` and `luceon-sidecar` have been started. | Long-term guarantee that these sessions survive deployment/restart remains open for a later ops automation task. |
 | TD-009 | Mitigated | AI metadata recognition / JSON Repair can block or time out through Ollama `qwen3.5:9b` after MinerU succeeds. | Implementation accepted on `main`: bounded repair input, deterministic draft normalization, and strict no-skeleton failure semantics. Production runtime revalidation remains a release-readiness concern. |
 | TD-010 | Mitigated | MinerU host logs can contain valid progress while fast-completing tasks fail to receive useful task-level `mineruObservedProgress`. | Implementation accepted on `main`: bounded completed-window backfill with ambiguous observations remaining unattributed. Production runtime revalidation remains a release-readiness concern. |
-| TD-011 | Open | `server/tests/mineru-log-progress-smoke.mjs` Test 4 expects `failed-confirmed`, while the current parser returns `log-error-signal`. | Follow-up task `TASK-20260507-121324-P0-MinerU-Log-Progress-Smoke-Truth-Alignment` is assigned. Do not hide this with `.skip`; align parser/test truth narrowly. |
+| TD-011 | Closed | `server/tests/mineru-log-progress-smoke.mjs` Test 4 expected `failed-confirmed`, while the parser returned `log-error-signal`. | Closed by `TASK-20260507-121324-P0-MinerU-Log-Progress-Smoke-Truth-Alignment`; confirmed execution errors now produce `failed-confirmed`, and the smoke test passes without `.skip` or weakened assertions. |
 
 ## 6. Core Asset Directory Index
 

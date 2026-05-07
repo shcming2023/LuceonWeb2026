@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260507-121324-P0-MinerU-Log-Progress-Smoke-Truth-Alignment`
+- None.
 
 Director shorthand is active:
 
