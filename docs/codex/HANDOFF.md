@@ -107,8 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260507-105616-P0-AI-Metadata-Repair-Prompt-And-Timeout-Hardening`
-- `TASK-20260507-105616-P1-MinerU-Sidecar-Completed-Window-Log-Backfill`
+- `TASK-20260507-121324-P0-MinerU-Log-Progress-Smoke-Truth-Alignment`
 
 Director shorthand is active:
 

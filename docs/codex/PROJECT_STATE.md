@@ -137,6 +137,16 @@ AI repair and sidecar attribution diagnoses accepted on 2026-05-07:
 - Accepted conclusion: host MinerU logs exist, while task-level progress can remain low-signal for fast-completing tasks because attribution currently depends on an exact-one-active-task window.
 - Follow-up implementation task issued: `TASK-20260507-105616-P1-MinerU-Sidecar-Completed-Window-Log-Backfill`.
 
+AI repair and completed-window sidecar implementations accepted on 2026-05-07:
+
+- AI repair implementation task: `TASK-20260507-105616-P0-AI-Metadata-Repair-Prompt-And-Timeout-Hardening`.
+- Lucia review: `TaskAndReport/2026-05-07T12-13-24+0800_P0-AI-Metadata-Repair-Prompt-And-Timeout-Hardening_LUCIA_REVIEW.md`.
+- Accepted behavior: AI JSON Repair now uses bounded repair input, deterministic draft normalization where safe, and expanded raw trace metadata while preserving strict no-skeleton failure semantics.
+- MinerU sidecar implementation task: `TASK-20260507-105616-P1-MinerU-Sidecar-Completed-Window-Log-Backfill`.
+- Lucia review: `TaskAndReport/2026-05-07T12-13-24+0800_P1-MinerU-Sidecar-Completed-Window-Log-Backfill_LUCIA_REVIEW.md`.
+- Accepted behavior: sidecar observations can be backfilled to exactly one recently completed local-MinerU task within a bounded window; ambiguous observations remain unattributed and parse state is not changed.
+- Residual test-truth task issued: `TASK-20260507-121324-P0-MinerU-Log-Progress-Smoke-Truth-Alignment`.
+
 ## 4. Validation Ledger
 
 Commands run in this governance pass:
@@ -147,6 +157,13 @@ Commands run in this governance pass:
 | `npx pnpm@10.4.1 exec tsc --noEmit` | PASS |
 | `npx pnpm@10.4.1 run build` | PASS; Vite reported only the existing chunk-size warning |
 | `node server/tests/dependency-health-smoke.mjs` after MinerU submit-path probe | PASS, 31 passed / 0 failed |
+| `node server/tests/ai-metadata-repair-hardening-smoke.mjs` after AI repair hardening | PASS |
+| `node server/tests/mineru-sidecar-completed-window-smoke.mjs` after sidecar backfill | PASS |
+| `node server/tests/ai-metadata-real-sample-smoke.mjs` after AI repair hardening | PASS |
+| `node server/tests/worker-smoke.mjs` after AI repair hardening | PASS; strict AI mode fails fast without skeleton fallback |
+| `node server/tests/mineru-sidecar-smoke.mjs` after sidecar backfill | PASS |
+| `node server/tests/mineru-log-source-live-smoke.mjs` after sidecar backfill | PASS |
+| `node server/tests/mineru-log-progress-smoke.mjs` during Lucia review | FAIL; existing Test 4 expectation drift: expected `failed-confirmed`, actual `log-error-signal`; parser/test files were not changed by the accepted branch |
 | `BASE_URL=http://localhost:8081 npx pnpm@10.4.1 run tier2:standard:check` after rebuilt runtime | PASS; `mineru.healthOk=true`, `mineru.submitProbe.ok=true` |
 | `BASE_URL=http://localhost:8081 bash uat/smoke-test.sh` after rebuilt runtime | PASS, 12 passed / 0 failed / 0 skipped |
 | `node server/tests/worker-smoke.mjs` | PASS; strict AI mode fails fast without skeleton fallback |
@@ -178,8 +195,9 @@ Runtime evidence from the final pipeline run:
 | TD-006 | Open | Full concurrency, large-PDF soak, permissions/security, rollback rehearsal, folder upload, and all error-path coverage are not closed by this governance run. | These are Phase 2 or release-readiness validation items. |
 | TD-007 | Open | `scripts/tier2-standard-check.mjs` can still show an unhelpful JSON parse error when `BASE_URL` points to a frontend-only route returning HTML. | Validation ergonomics debt; does not affect MinerU submit-path probe behavior. |
 | TD-008 | Mitigated | Production ops observer and dependency supervisor were missing after deployment; `luceon-supervisor` and `luceon-sidecar` have been started. | Long-term guarantee that these sessions survive deployment/restart remains open for a later ops automation task. |
-| TD-009 | Open | AI metadata recognition / JSON Repair can block or time out through Ollama `qwen3.5:9b` after MinerU succeeds. | Diagnostic task was accepted; implementation task `TASK-20260507-105616-P0-AI-Metadata-Repair-Prompt-And-Timeout-Hardening` is assigned. Strict no-skeleton semantics must be preserved. |
-| TD-010 | Open | MinerU host logs can contain valid progress while fast-completing tasks fail to receive useful task-level `mineruObservedProgress`. | Analysis task was accepted; implementation task `TASK-20260507-105616-P1-MinerU-Sidecar-Completed-Window-Log-Backfill` is assigned. Parse semantics and ambiguous-attribution behavior must remain unchanged. |
+| TD-009 | Mitigated | AI metadata recognition / JSON Repair can block or time out through Ollama `qwen3.5:9b` after MinerU succeeds. | Implementation accepted on `main`: bounded repair input, deterministic draft normalization, and strict no-skeleton failure semantics. Production runtime revalidation remains a release-readiness concern. |
+| TD-010 | Mitigated | MinerU host logs can contain valid progress while fast-completing tasks fail to receive useful task-level `mineruObservedProgress`. | Implementation accepted on `main`: bounded completed-window backfill with ambiguous observations remaining unattributed. Production runtime revalidation remains a release-readiness concern. |
+| TD-011 | Open | `server/tests/mineru-log-progress-smoke.mjs` Test 4 expects `failed-confirmed`, while the current parser returns `log-error-signal`. | Follow-up task `TASK-20260507-121324-P0-MinerU-Log-Progress-Smoke-Truth-Alignment` is assigned. Do not hide this with `.skip`; align parser/test truth narrowly. |
 
 ## 6. Core Asset Directory Index
 
