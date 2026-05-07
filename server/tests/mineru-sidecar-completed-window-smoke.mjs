@@ -72,13 +72,22 @@ async function main() {
   assertNoTask(multipleResult, /multiple completed-window/);
   console.log('Case 3 Pass: multiple completed candidates remain unattributed');
 
+  const toleratedBeforeStartResult = selectMineruObservationAttribution(
+    [makeTask({ mineruStartedAt: '2026-05-07T02:00:00.500Z' })],
+    makeSnapshot('2026-05-07T02:00:00.000Z'),
+    nowInsideGrace
+  );
+  assert.equal(toleratedBeforeStartResult.task.id, 'task-a');
+  assert.equal(toleratedBeforeStartResult.mode, 'completed-window-backfill');
+  console.log('Case 4 Pass: completed-window attribution allows second-granularity start tolerance');
+
   const beforeStartResult = selectMineruObservationAttribution(
     [makeTask()],
-    makeSnapshot('2026-05-07T01:59:59.000Z'),
+    makeSnapshot('2026-05-07T01:59:58.900Z'),
     nowInsideGrace
   );
   assertNoTask(beforeStartResult, /no matching completed-window/);
-  console.log('Case 4 Pass: observations before task start remain unattributed');
+  console.log('Case 5 Pass: observations outside start tolerance remain unattributed');
 
   const afterGraceResult = selectMineruObservationAttribution(
     [makeTask()],
@@ -86,7 +95,7 @@ async function main() {
     nowInsideGrace
   );
   assertNoTask(afterGraceResult, /no matching completed-window/);
-  console.log('Case 5 Pass: observations after grace window remain unattributed');
+  console.log('Case 6 Pass: observations after grace window remain unattributed');
 
   const oldCompletedResult = selectMineruObservationAttribution(
     [makeTask()],
@@ -94,7 +103,7 @@ async function main() {
     Date.parse('2026-05-07T02:06:00.001Z')
   );
   assertNoTask(oldCompletedResult, /no matching completed-window/);
-  console.log('Case 6 Pass: old completed tasks are not considered indefinitely');
+  console.log('Case 7 Pass: old completed tasks are not considered indefinitely');
 
   const canceledResult = selectMineruObservationAttribution(
     [makeTask({ state: 'canceled', metadata: { canceledAt: '2026-05-07T02:00:20.000Z' } })],
@@ -102,7 +111,7 @@ async function main() {
     nowInsideGrace
   );
   assertNoTask(canceledResult, /no matching completed-window/);
-  console.log('Case 7 Pass: canceled tasks are excluded');
+  console.log('Case 8 Pass: canceled tasks are excluded');
 
   console.log('--- MinerU Sidecar Completed-Window Attribution Smoke Test Passed ---');
   process.exit(0);

@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 
 export function DependencyHealthBanner() {
   const [health, setHealth] = useState<any>(null);
-  const [supervisorStatus, setSupervisorStatus] = useState<{ok: boolean, command?: string} | null>(null);
+  const [supervisorStatus, setSupervisorStatus] = useState<{ok: boolean, command?: string, services?: Record<string, boolean>, sessions?: Record<string, boolean>} | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
@@ -19,13 +19,19 @@ export function DependencyHealthBanner() {
       if (resHealth?.ok) setHealth(await resHealth.json());
       
       if (resSupervisor) {
+        const data = await resSupervisor.json().catch(() => ({}));
         if (resSupervisor.ok) {
-          setSupervisorStatus({ ok: true });
+          setSupervisorStatus({
+            ok: true,
+            services: data.services,
+            sessions: data.sessions
+          });
         } else {
-          const data = await resSupervisor.json().catch(() => ({}));
           setSupervisorStatus({ 
             ok: false, 
-            command: data.command || 'node ops/luceon-dependency-supervisor.mjs' 
+            command: data.command || 'node ops/luceon-dependency-supervisor.mjs',
+            services: data.services,
+            sessions: data.sessions
           });
         }
       }
@@ -69,19 +75,35 @@ export function DependencyHealthBanner() {
   const minioOk = health.dependencies?.minio?.ok;
   const mineruOk = health.dependencies?.mineru?.ok;
   const ollamaOk = health.dependencies?.ollama?.ok || health.dependencies?.ollama?.skipped;
+  const ollamaServiceReachable = supervisorStatus?.services?.ollamaReachable === true || health.dependencies?.ollama?.ok === true;
+  const ollamaSessionUnmanaged = ollamaServiceReachable && supervisorStatus?.sessions?.ollama === false && !health.dependencies?.ollama?.skipped;
 
-  if (health.ok && minioOk && mineruOk && ollamaOk) {
+  if (health.ok && minioOk && mineruOk && ollamaOk && !ollamaSessionUnmanaged) {
     return null; // All healthy, don't show banner to save space
   }
 
   const supervisorActive = supervisorStatus?.ok;
+  const bannerBlocking = Boolean(health.blocking);
+  const bannerTone = bannerBlocking ? 'bg-red-50 border-red-200 text-red-800' : ollamaSessionUnmanaged ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-amber-50 border-amber-200 text-amber-800';
+  const headline = bannerBlocking
+    ? '部分核心依赖未启动，任务解析可能受阻'
+    : ollamaSessionUnmanaged && health.ok
+      ? '依赖正常，部分运维会话未托管'
+      : '部分非核心依赖未就绪';
+  const ollamaLabel = health.dependencies?.ollama?.skipped
+    ? '未启用'
+    : ollamaOk
+      ? (ollamaSessionUnmanaged ? '服务正常 · 非 tmux 托管' : '正常')
+      : ollamaServiceReachable
+        ? '服务可达 · 会话未托管'
+        : 'AI 元数据识别不可用';
 
   return (
-    <div className={`px-6 py-3 border-b flex flex-col md:flex-row items-start md:items-center justify-between gap-3 ${health.blocking ? 'bg-red-50 border-red-200 text-red-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+    <div className={`px-6 py-3 border-b flex flex-col md:flex-row items-start md:items-center justify-between gap-3 ${bannerTone}`}>
       <div className="flex items-center gap-6">
         <div className="flex items-center gap-2 font-semibold text-sm">
-          {health.blocking ? <XCircle className="w-5 h-5 text-red-600" /> : <AlertTriangle className="w-5 h-5 text-amber-600" />}
-          <span>系统诊断: {health.blocking ? '部分核心依赖未启动，任务解析可能受阻' : '部分非核心依赖未就绪'}</span>
+          {bannerBlocking ? <XCircle className="w-5 h-5 text-red-600" /> : ollamaSessionUnmanaged ? <CheckCircle className="w-5 h-5 text-blue-600" /> : <AlertTriangle className="w-5 h-5 text-amber-600" />}
+          <span>系统诊断: {headline}</span>
         </div>
         
         <div className="flex items-center gap-4 text-xs">
@@ -94,8 +116,8 @@ export function DependencyHealthBanner() {
             <span>MinerU {mineruOk ? '正常' : '未启动'}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className={`w-2 h-2 rounded-full ${health.dependencies?.ollama?.skipped ? 'bg-gray-400' : ollamaOk ? 'bg-green-500' : 'bg-amber-500'}`} />
-            <span>Ollama {health.dependencies?.ollama?.skipped ? '未启用' : ollamaOk ? '正常' : 'AI 元数据识别受阻'}</span>
+            <div className={`w-2 h-2 rounded-full ${health.dependencies?.ollama?.skipped ? 'bg-gray-400' : ollamaOk ? (ollamaSessionUnmanaged ? 'bg-blue-500' : 'bg-green-500') : ollamaServiceReachable ? 'bg-blue-500' : 'bg-amber-500'}`} />
+            <span>Ollama {ollamaLabel}</span>
           </div>
         </div>
       </div>
@@ -144,7 +166,7 @@ export function DependencyHealthBanner() {
           </button>
         )}
 
-        {(!ollamaOk && !health.dependencies?.ollama?.skipped && !supervisorActive) && (
+        {(!ollamaOk && !ollamaServiceReachable && !health.dependencies?.ollama?.skipped && !supervisorActive) && (
           <div className="text-[11px] font-mono bg-white/60 px-2 py-1 rounded border border-amber-100 text-amber-700 select-all">
             ollama serve
           </div>

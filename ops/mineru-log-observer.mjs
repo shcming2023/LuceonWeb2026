@@ -2,9 +2,13 @@ import { parseLatestMineruProgress } from '../server/lib/ops-mineru-log-parser.m
 
 const UPLOAD_SERVER_URL = process.env.UPLOAD_SERVER_URL || 'http://localhost:8788';
 const INTERVAL = Number(process.env.OBSERVE_INTERVAL_MS) || 2000;
+process.env.MINERU_ERR_LOG_PATH = process.env.MINERU_ERR_LOG_PATH || '/Users/concm/ops/logs/mineru-api.err.log';
+process.env.MINERU_LOG_PATH = process.env.MINERU_LOG_PATH || '/Users/concm/ops/logs/mineru-api.log';
+process.env.MINERU_LOG_SOURCE_CONTEXT = process.env.MINERU_LOG_SOURCE_CONTEXT || 'host-filesystem';
 
 async function observeLoop() {
   console.log(`[host-observer] Starting host log observer... (interval: ${INTERVAL}ms, upload-server: ${UPLOAD_SERVER_URL})`);
+  console.log(`[host-observer] MinerU log source: ${process.env.MINERU_LOG_SOURCE_CONTEXT} err=${process.env.MINERU_ERR_LOG_PATH} out=${process.env.MINERU_LOG_PATH}`);
 
   while (true) {
     try {
