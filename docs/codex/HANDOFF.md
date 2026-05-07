@@ -63,6 +63,8 @@ BASE_URL=http://localhost:8081 npx pnpm@10.4.1 --dir uat exec playwright test te
 ## Known Open Boundaries
 
 - MinerU submit-path probing is implemented on `main` and accepted in local rebuilt-runtime Tier 2 Standard validation.
+- Production manual-review URL is `http://localhost:8081/cms/`; current follow-up is to restore `luceon-supervisor` and `luceon-sidecar` without restarting MinerU.
+- Manual-review failed task `task-1778118934116` is an AI metadata timeout after MinerU completed, not current evidence of MinerU parse failure.
 - `server/upload-server.mjs` remains a monolithic server and should not be modularized inside Phase 1 closure.
 - Legacy redirects remain for `/cms/source-materials` and `/cms/workspace`.
 - Large-PDF soak, concurrent upload, permissions/security, rollback rehearsal, folder upload, and all error-path validation remain outside this governance pass.
@@ -105,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active task:
 
-- `TASK-20260507-094405-P0-Production-Deployment-For-Manual-Review`
+- `TASK-20260507-101305-P0-Production-Ops-Sidecar-Supervisor-Recovery`
 
 Director shorthand is active:
 

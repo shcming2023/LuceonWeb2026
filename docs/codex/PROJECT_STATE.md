@@ -89,6 +89,25 @@ Rebuilt-runtime Tier 2 Standard validation accepted on 2026-05-07:
 - Result: Tier 2 Standard PASS with `mineru.healthOk=true`, `mineru.submitProbe.enabled=true`, `mineru.submitProbe.ok=true`, and UAT smoke `12 passed / 0 failed / 0 skipped`.
 - Boundary: this is local rebuilt-runtime Tier 2 validation only; production release readiness remains unclaimed.
 
+Production manual-review deployment accepted with follow-up on 2026-05-07:
+
+- Task: `TASK-20260507-094405-P0-Production-Deployment-For-Manual-Review`.
+- Lucode report: `TaskAndReport/2026-05-07T09-52-08+0800_P0-Production-Deployment-For-Manual-Review_REPORT.md`.
+- Lucia review: `TaskAndReport/2026-05-07T10-13-05+0800_P0-Production-Deployment-For-Manual-Review_LUCIA_REVIEW.md`.
+- Production URL for Director manual review: `http://localhost:8081/cms/`.
+- Deployed production HEAD: `f02684c3aee392fdc0e6a9e8fd8da911c17db892`.
+- Deployment evidence: containers healthy, dependency-health `blocking=false`, `mineru.submitProbe.ok=true`, `ollama.ok=true`, and smoke `12 passed / 0 failed / 0 skipped`.
+- Boundary: this is manual-review deployment only, not production release readiness.
+- Follow-up task issued: `TASK-20260507-101305-P0-Production-Ops-Sidecar-Supervisor-Recovery`.
+
+Manual-review incident facts recorded on 2026-05-07:
+
+- Task `task-1778118934116`, file `G7_Workbook_ready_to_print.pdf`, reached `stage=ai`, `state=failed`.
+- MinerU completed and produced parsed artifacts including `full.md`, `artifact-manifest.json`, `mineru-result.zip`; parsed files count was reported as `99`.
+- Failure cause observed in upload-server logs: Ollama provider timeout in AI metadata recognition, model `qwen3.5:9b`, duration about `299998ms`, timeout `300000ms`.
+- Strict no-skeleton behavior is preserved: the failed AI metadata stage did not silently generate skeleton metadata.
+- Ops observation gap: `luceon-supervisor` and `luceon-sidecar` / `mineru-log-observer` were not running; `/ops/dependency-repair/status` returned `SUPERVISOR_UNAVAILABLE`; `/ops/mineru/global-observation` returned `{"observation":null}`.
+
 ## 4. Validation Ledger
 
 Commands run in this governance pass:
@@ -129,6 +148,8 @@ Runtime evidence from the final pipeline run:
 | TD-005 | Open | Vite production build emits a chunk-size warning for the main bundle. | Non-blocking for Phase 1; consider route-level code splitting later. |
 | TD-006 | Open | Full concurrency, large-PDF soak, permissions/security, rollback rehearsal, folder upload, and all error-path coverage are not closed by this governance run. | These are Phase 2 or release-readiness validation items. |
 | TD-007 | Open | `scripts/tier2-standard-check.mjs` can still show an unhelpful JSON parse error when `BASE_URL` points to a frontend-only route returning HTML. | Validation ergonomics debt; does not affect MinerU submit-path probe behavior. |
+| TD-008 | Open | Production ops observer and dependency supervisor are not guaranteed to be running after deployment. | Recovery task `TASK-20260507-101305-P0-Production-Ops-Sidecar-Supervisor-Recovery` is assigned; do not restart MinerU as part of the narrow recovery unless separately authorized. |
+| TD-009 | Open | AI metadata recognition for large or difficult documents can hit the current Ollama provider timeout and leave the task failed after MinerU succeeds. | Preserve strict no-skeleton semantics; retry/re-AI behavior needs a separate scoped product decision and task. |
 
 ## 6. Core Asset Directory Index
 
