@@ -185,6 +185,19 @@ Follow-up runtime-semantics fixes accepted at code level on 2026-05-07:
 - Accepted behavior: deterministic repair success in `review-pending` is shown as completed and review-needed, actual AI failure and skeleton fallback remain distinct, and reachable Ollama without tmux management is treated as an ops-session warning rather than an AI outage.
 - Boundary: these are code-level acceptances only. Production deployment and manual-runtime validation are assigned to `TASK-20260507-133917-P0-Deploy-Followup-Fixes-And-Manual-Validation`.
 
+Follow-up fixes production deployment accepted for manual review on 2026-05-07:
+
+- Task: `TASK-20260507-133917-P0-Deploy-Followup-Fixes-And-Manual-Validation`.
+- Lucode report: `TaskAndReport/2026-05-07T13-59-14+0800_P0-Deploy-Followup-Fixes-And-Manual-Validation_REPORT.md`.
+- Lucia review: `TaskAndReport/2026-05-07T14-29-07+0800_P0-Deploy-Followup-Fixes-And-Manual-Validation_LUCIA_REVIEW.md`.
+- Production deployed code HEAD: `10a4151d3503586191b6216342a47187159ae61e`.
+- Runtime result: `http://localhost:8081/cms/` is reachable; dependency health with MinerU submit probe is non-blocking; controlled sample `task-1778133327274` reached `review-pending`.
+- Controlled sample facts: MinerU completed with `8` parsed files; AI job `ai-job-1778133335165-eee5` used `ollama` / `qwen3.5:9b`; deterministic repair succeeded; skeleton fallback was not observed.
+- Browser-visible semantics reported by Lucode: deterministic repair success is displayed as completed/review-needed and not as AI dependency blocked; reachable non-tmux Ollama is displayed as an ops-session warning.
+- Lucia read-only verification confirmed the runtime health and controlled-sample DB facts.
+- Boundary: manual review is ready with known residual observability debt. Production release readiness, staging readiness, L3 readiness, and full-site acceptance remain unclaimed.
+- Follow-up task issued: `TASK-20260507-142907-P1-Completed-Task-Observation-And-Ops-Session-Semantics`.
+
 ## 4. Validation Ledger
 
 Commands run in this governance pass:
@@ -211,6 +224,10 @@ Commands run in this governance pass:
 | `npx pnpm@10.4.1 exec tsc --noEmit` after runtime-semantics follow-up integration | PASS |
 | `npx pnpm@10.4.1 run build` after runtime-semantics follow-up integration | PASS; Vite reported only the existing chunk-size warning |
 | `BASE_URL=http://localhost:8081 bash uat/smoke-test.sh` after runtime-semantics follow-up integration | PASS, 12 passed / 0 failed / 0 skipped |
+| `curl -fsS 'http://localhost:8081/__proxy/upload/ops/dependency-health?mineruSubmitProbe=true'` during Lucia review of task 13 | PASS; `ok=true`, `blocking=false`, `mineru.submitProbe.ok=true`, `ollama.ok=true` |
+| `curl -fsS http://localhost:8081/__proxy/upload/ops/dependency-repair/status` during Lucia review of task 13 | PASS; `ok=true`, `sidecar=true`, `ollamaReachable=true`; MinerU tmux ownership residual remains |
+| `curl -fsS http://localhost:8081/__proxy/db/tasks/task-1778133327274` during Lucia review of task 13 | PASS; task remained `review-pending`, MinerU `completed`, parsed files `8` |
+| `curl -fsS 'http://localhost:8081/__proxy/db/ai-metadata-jobs?parseTaskId=task-1778133327274'` during Lucia review of task 13 | PASS; job remained `review-pending`, provider `ollama`, phase `repair-deterministic-succeeded` |
 | `BASE_URL=http://localhost:8081 npx pnpm@10.4.1 run tier2:standard:check` after rebuilt runtime | PASS; `mineru.healthOk=true`, `mineru.submitProbe.ok=true` |
 | `BASE_URL=http://localhost:8081 bash uat/smoke-test.sh` after rebuilt runtime | PASS, 12 passed / 0 failed / 0 skipped |
 | `node server/tests/worker-smoke.mjs` | PASS; strict AI mode fails fast without skeleton fallback |
@@ -245,8 +262,10 @@ Runtime evidence from the final pipeline run:
 | TD-009 | Mitigated | AI metadata recognition / JSON Repair can block or time out through Ollama `qwen3.5:9b` after MinerU succeeds. | Implementation accepted on `main`: bounded repair input, deterministic draft normalization, and strict no-skeleton failure semantics. Production runtime revalidation remains a release-readiness concern. |
 | TD-010 | Mitigated | MinerU host logs can contain valid progress while fast-completing tasks fail to receive useful task-level `mineruObservedProgress`. | Implementation accepted on `main`: bounded completed-window backfill with ambiguous observations remaining unattributed. Production runtime revalidation remains a release-readiness concern. |
 | TD-011 | Closed | `server/tests/mineru-log-progress-smoke.mjs` Test 4 expected `failed-confirmed`, while the parser returned `log-error-signal`. | Closed by `TASK-20260507-121324-P0-MinerU-Log-Progress-Smoke-Truth-Alignment`; confirmed execution errors now produce `failed-confirmed`, and the smoke test passes without `.skip` or weakened assertions. |
-| TD-012 | Pending production validation | MinerU task-level live log observation can still be unreliable in production manual review even when MinerU parse succeeds and host logs contain business progress. | Code-level implementation accepted and integrated in `da83520`; production validation is assigned to `TASK-20260507-133917-P0-Deploy-Followup-Fixes-And-Manual-Validation`. Preserve ambiguous-attribution safety and avoid destructive production operations. |
-| TD-013 | Pending production validation | UI/diagnostic wording can describe deterministic AI repair success or reachable-but-unmanaged Ollama status as AI blocked. | Code-level implementation accepted and integrated in `da83520`; production/browser validation is assigned to `TASK-20260507-133917-P0-Deploy-Followup-Fixes-And-Manual-Validation`. Do not hide real AI dependency failures. |
+| TD-012 | Mitigated | MinerU task-level live log observation can still be unreliable in production manual review even when MinerU parse succeeds and host logs contain business progress. | Production validation in `TASK-20260507-133917-P0-Deploy-Followup-Fixes-And-Manual-Validation` showed improved attribution and explicit `host-filesystem` source context for the controlled sample. Residual post-completion observation mutation is tracked as TD-014. |
+| TD-013 | Closed | UI/diagnostic wording can describe deterministic AI repair success or reachable-but-unmanaged Ollama status as AI blocked. | Closed by task 13 validation: deterministic repair success is displayed as completed/review-needed, and reachable non-tmux Ollama is displayed as an ops-session warning rather than a dependency outage. |
+| TD-014 | Open | Terminal ParseTasks can still receive misleading post-completion MinerU observation changes through completed-window backfill. | Follow-up task `TASK-20260507-142907-P1-Completed-Task-Observation-And-Ops-Session-Semantics` is assigned. Preserve useful final diagnostics while preventing terminal-state mutation or misleading processing wording. |
+| TD-015 | Open | Dependency repair status still reports missing expected tmux ownership for a reachable MinerU service. | Follow-up task `TASK-20260507-142907-P1-Completed-Task-Observation-And-Ops-Session-Semantics` is assigned. Separate service reachability from tmux session ownership and surface unmanaged sessions without treating them as outages. |
 
 ## 6. Core Asset Directory Index
 
