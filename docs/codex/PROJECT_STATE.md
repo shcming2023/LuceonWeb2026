@@ -1,6 +1,6 @@
 # Luceon2026 Project State
 
-Last updated: 2026-05-07
+Last updated: 2026-05-08
 
 ## 1. Current Repository Baseline
 
@@ -198,6 +198,17 @@ Follow-up fixes production deployment accepted for manual review on 2026-05-07:
 - Boundary: manual review is ready with known residual observability debt. Production release readiness, staging readiness, L3 readiness, and full-site acceptance remain unclaimed.
 - Follow-up task issued: `TASK-20260507-142907-P1-Completed-Task-Observation-And-Ops-Session-Semantics`.
 
+Completed-task observation and ops-session semantics accepted at code level on 2026-05-08:
+
+- Task: `TASK-20260507-142907-P1-Completed-Task-Observation-And-Ops-Session-Semantics`.
+- Lucode report: `TaskAndReport/2026-05-07T14-54-09+0800_P1-Completed-Task-Observation-And-Ops-Session-Semantics_REPORT.md`.
+- Lucia review: `TaskAndReport/2026-05-08T06-20-00+0800_P1-Completed-Task-Observation-And-Ops-Session-Semantics_LUCIA_REVIEW.md`.
+- Accepted implementation commit: `5b8d6f391a988b712416721622137c1fb151429d`; integrated main commit: `a3078b019f1abb4fc71777bc31f5b950e7ebee65`.
+- Accepted behavior: terminal local-MinerU tasks with an existing observation do not persist later completed-window backfill observations; later observations are exposed as non-mutating global diagnostics.
+- Accepted behavior: terminal stale observation wording is diagnostic and does not imply that a completed task is still processing.
+- Accepted behavior: dependency supervisor status separates managed tmux ownership from service reachability and can surface unmanaged MinerU/Ollama sessions.
+- Boundary: this is code-level acceptance only. Production deployment and runtime validation are assigned to `TASK-20260508-062000-P1-Deploy-Completed-Observation-Semantics-Validation`.
+
 ## 4. Validation Ledger
 
 Commands run in this governance pass:
@@ -228,6 +239,15 @@ Commands run in this governance pass:
 | `curl -fsS http://localhost:8081/__proxy/upload/ops/dependency-repair/status` during Lucia review of task 13 | PASS; `ok=true`, `sidecar=true`, `ollamaReachable=true`; MinerU tmux ownership residual remains |
 | `curl -fsS http://localhost:8081/__proxy/db/tasks/task-1778133327274` during Lucia review of task 13 | PASS; task remained `review-pending`, MinerU `completed`, parsed files `8` |
 | `curl -fsS 'http://localhost:8081/__proxy/db/ai-metadata-jobs?parseTaskId=task-1778133327274'` during Lucia review of task 13 | PASS; job remained `review-pending`, provider `ollama`, phase `repair-deterministic-succeeded` |
+| `node server/tests/mineru-completed-observation-semantics-smoke.mjs` during Lucia review of task 14 | PASS, 4 cases passed |
+| `node server/tests/dependency-supervisor-smoke.mjs` during Lucia review of task 14 | PASS |
+| `node server/tests/mineru-log-observation-transport-smoke.mjs` during Lucia review of task 14 | PASS, 3 cases passed |
+| `node server/tests/mineru-sidecar-completed-window-smoke.mjs` during Lucia review of task 14 | PASS, 8 cases passed |
+| `node server/tests/mineru-log-progress-smoke.mjs` during Lucia review of task 14 | PASS, 118 passed / 0 failed |
+| `node server/tests/mineru-log-source-live-smoke.mjs` during Lucia review of task 14 | PASS, 21 passed / 0 failed |
+| `npx pnpm@10.4.1 exec tsc --noEmit` during Lucia review of task 14 | PASS |
+| `npx pnpm@10.4.1 run build` during Lucia review of task 14 | PASS; Vite reported only the existing chunk-size warning |
+| `BASE_URL=http://localhost:8081 bash uat/smoke-test.sh` during Lucia review of task 14 | PASS, 12 passed / 0 failed / 0 skipped |
 | `BASE_URL=http://localhost:8081 npx pnpm@10.4.1 run tier2:standard:check` after rebuilt runtime | PASS; `mineru.healthOk=true`, `mineru.submitProbe.ok=true` |
 | `BASE_URL=http://localhost:8081 bash uat/smoke-test.sh` after rebuilt runtime | PASS, 12 passed / 0 failed / 0 skipped |
 | `node server/tests/worker-smoke.mjs` | PASS; strict AI mode fails fast without skeleton fallback |
@@ -264,8 +284,8 @@ Runtime evidence from the final pipeline run:
 | TD-011 | Closed | `server/tests/mineru-log-progress-smoke.mjs` Test 4 expected `failed-confirmed`, while the parser returned `log-error-signal`. | Closed by `TASK-20260507-121324-P0-MinerU-Log-Progress-Smoke-Truth-Alignment`; confirmed execution errors now produce `failed-confirmed`, and the smoke test passes without `.skip` or weakened assertions. |
 | TD-012 | Mitigated | MinerU task-level live log observation can still be unreliable in production manual review even when MinerU parse succeeds and host logs contain business progress. | Production validation in `TASK-20260507-133917-P0-Deploy-Followup-Fixes-And-Manual-Validation` showed improved attribution and explicit `host-filesystem` source context for the controlled sample. Residual post-completion observation mutation is tracked as TD-014. |
 | TD-013 | Closed | UI/diagnostic wording can describe deterministic AI repair success or reachable-but-unmanaged Ollama status as AI blocked. | Closed by task 13 validation: deterministic repair success is displayed as completed/review-needed, and reachable non-tmux Ollama is displayed as an ops-session warning rather than a dependency outage. |
-| TD-014 | Open | Terminal ParseTasks can still receive misleading post-completion MinerU observation changes through completed-window backfill. | Follow-up task `TASK-20260507-142907-P1-Completed-Task-Observation-And-Ops-Session-Semantics` is assigned. Preserve useful final diagnostics while preventing terminal-state mutation or misleading processing wording. |
-| TD-015 | Open | Dependency repair status still reports missing expected tmux ownership for a reachable MinerU service. | Follow-up task `TASK-20260507-142907-P1-Completed-Task-Observation-And-Ops-Session-Semantics` is assigned. Separate service reachability from tmux session ownership and surface unmanaged sessions without treating them as outages. |
+| TD-014 | Pending production validation | Terminal ParseTasks can still receive misleading post-completion MinerU observation changes through completed-window backfill. | Code-level implementation accepted and integrated in `a3078b019f1abb4fc71777bc31f5b950e7ebee65`; production validation is assigned to `TASK-20260508-062000-P1-Deploy-Completed-Observation-Semantics-Validation`. |
+| TD-015 | Pending production validation | Dependency repair status still reports missing expected tmux ownership for a reachable MinerU service. | Code-level implementation accepted and integrated in `a3078b019f1abb4fc71777bc31f5b950e7ebee65`; production validation is assigned to `TASK-20260508-062000-P1-Deploy-Completed-Observation-Semantics-Validation`. |
 
 ## 6. Core Asset Directory Index
 

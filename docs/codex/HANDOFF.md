@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260507-142907-P1-Completed-Task-Observation-And-Ops-Session-Semantics`
+- `TASK-20260508-062000-P1-Deploy-Completed-Observation-Semantics-Validation`
 
 Director shorthand is active:
 
