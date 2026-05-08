@@ -185,6 +185,32 @@ docker compose up -d --build
 - **Mac（Docker Desktop）**：默认支持 `host.docker.internal`，一般不需要在 compose 中配置 `extra_hosts`。
 - **Linux**：如需容器访问宿主机服务（例如宿主机 Ollama `http://host.docker.internal:11434`），通常需要在 compose 中添加 `extra_hosts: host.docker.internal:host-gateway`。
 
+### 生产本地 override 契约
+
+当前生产部署路径 `/Users/concm/prod_workspace/Luceon2026` 允许保留本地 `docker-compose.override.yml`，但该 override 是生产本地运行配置，不是生产发布就绪声明，也不能替代 release-candidate 的 HEAD 与配置边界确认。
+
+当前已接受的 production-local override 边界如下：
+
+| 项目 | 当前要求 | 发布边界 |
+|------|----------|----------|
+| `DISABLE_AI_SKELETON_FALLBACK=true` | 必须保留，用于 Phase 1 严格 AI 语义，避免 skeleton fallback 被当作真实 AI 识别结果。 | 属于必需运行语义；变更前需要单独任务和验证。 |
+| `OLLAMA_TIER2_MODEL=qwen3.5:9b` | 必须保留，用于当前 Standard 模型。 | 属于当前主线模型约束；变更前需要单独任务和验证。 |
+| MinIO console `19001:9001` | 仅可视为本机管理员暴露边界。 | 生产发布就绪前必须由 Director/Lucia 明确接受、改为仅本机访问，或通过单独任务移除并验证。 |
+
+Release-candidate 命名前必须同时确认：
+
+- 生产工作区的精确 Git HEAD。
+- `docker-compose.override.yml` 的实际内容和上述边界是否一致。
+- MinIO console 暴露策略已经被明确接受或变更。
+- 没有把本地 override 的存在表述为生产发布就绪。
+
+以下操作仍需单独 Director 授权和 Lucia 任务书，不得仅凭本节执行：
+
+- production sync、rebuild、restart、deploy、rollback。
+- Docker pull/build/compose 操作。
+- production `docker-compose.override.yml` 新增、删除或修改。
+- DB、MinIO、Docker volume、任务、产物、secret 或本地运行数据变更。
+
 ---
 
 ## 五、API Token 配置（Overleaf 备份）

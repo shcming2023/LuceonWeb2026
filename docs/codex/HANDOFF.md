@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-120851-P0-Production-Local-Override-Contract-Documentation`: Lucode must document the production-local override contract in repository docs. This task must not edit the production workspace, run Docker commands, mutate runtime/data/override, or claim production release readiness.
+- `TASK-20260508-120851-P0-Production-Local-Override-Contract-Documentation`: Lucode has documented the production-local override contract and reported it for Lucia review. The task did not edit the production workspace, run Docker commands, mutate runtime/data/override, or claim production release readiness.
 
 Director shorthand is active:
 
@@ -143,3 +143,5 @@ Lucia accepted task 21 at `2026-05-08T11:20:00+0800`. Standard non-destructive c
 Director approved the layered release-readiness preparation decision for task 19. Production release readiness remains unclaimed. Production restart/rebuild/deploy/rollback, Docker pull/build/compose, production data mutation, secret changes, and external/multi-user release boundary acceptance remain unauthorized without separate Director approval. Lucia issued task 22 for read-only production workspace override boundary review.
 
 Lucia accepted task 22 at `2026-05-08T12:08:51+0800`. The production override is classified as local runtime configuration with one local-admin exposure boundary: strict AI/model env should be preserved; MinIO console `19001:9001` must be documented or separately changed before release-candidate naming. Task 23 is assigned to document this contract.
+
+Lucode reported task 23 after documenting the contract in `docs/deploy/DEPLOY.md`. Lucia review is required before the documentation is accepted as project fact. Production release readiness remains unclaimed, and production sync/rebuild/restart/rollback, Docker pull/build/compose, data mutation, secret changes, and override mutation remain unauthorized without a separate Director decision and Lucia task.
