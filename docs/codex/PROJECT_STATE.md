@@ -93,6 +93,8 @@ Collaboration automation updated on 2026-05-08:
 - Mandatory before any production release-readiness claim: large-PDF soak, concurrency validation, error-path matrix, rollback/recovery rehearsal, production workspace boundary review, `docker-compose.override.yml` boundary review, Docker frontend base-image preflight, and single-operator/no-auth security boundary decision.
 - Not authorized without separate Director approval: production release-readiness declaration, production restart/rebuild/deploy/rollback, DB/MinIO/Docker volume/task/artifact/secret mutation, Docker pull/build/compose operations affecting production, and external/multi-user release boundary acceptance.
 - Production workspace override boundary review is assigned to `TASK-20260508-113500-P0-Production-Workspace-Override-Boundary-Review`.
+- Lucia accepted the production workspace override boundary review on 2026-05-08. Accepted classification: strict AI/model override values are local runtime configuration that should be preserved; MinIO console `19001:9001` is a local-admin exposure boundary that must be documented or separately changed before release-candidate naming.
+- Production-local override contract documentation is assigned to `TASK-20260508-120851-P0-Production-Local-Override-Contract-Documentation`.
 
 MinerU submit-path probe accepted on 2026-05-07:
 
