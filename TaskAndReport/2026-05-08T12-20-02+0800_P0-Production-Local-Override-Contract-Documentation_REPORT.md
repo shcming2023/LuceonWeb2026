@@ -11,7 +11,8 @@
 
 - Branch: `main`
 - Initial HEAD: `ec29aa6 docs: accept production override review`
-- Final report HEAD: `PENDING_FINAL_HEAD`
+- Docs/report commit: `696c8a9 docs: record production local override contract`
+- Final pushed HEAD is reported in Lucode's completion response after GitHub sync.
 
 ## Files Changed
 
@@ -69,7 +70,9 @@
 | `git status --short --branch` | 0 | Expected docs/report changes only before commit |
 | `git diff --name-only` | 0 | Changed tracked files limited to task-allowed docs and task list |
 | `git diff --stat` | 0 | Documentation and task-list delta reviewed |
-| `git log -1 --oneline` after commit | PENDING | To be recorded after commit |
+| `git add ... && git diff --cached --check` | 0 | Staged documentation/report changes had no whitespace errors |
+| `git commit -m "docs: record production local override contract"` | 0 | Created `696c8a9 docs: record production local override contract` |
+| `git log -1 --oneline` after commit | 0 | `696c8a9 docs: record production local override contract` |
 
 ## Checks Skipped
 
@@ -93,4 +96,4 @@
 ## GitHub Sync Status
 
 - Repository was synchronized with `origin/main` using the successful explicit ref pull command.
-- Documentation/report changes are to be committed and pushed to GitHub `main`.
+- Documentation/report changes were committed locally as `696c8a9`; final remote push status is reported in Lucode's completion response.
