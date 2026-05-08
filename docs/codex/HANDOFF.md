@@ -201,3 +201,5 @@ Lucia accepted the revised task 46 implementation at `2026-05-09T02:42:47+0800` 
 Current active task: task 47, Director decision. Director must decide whether to authorize a scoped production recovery for stuck sample 3 task `task-1778249434820` / material `mat-1778249419780`, hold recovery, or request more read-only evidence. Lucia may not autonomously authorize production write-side recovery after heartbeat waits because it can mutate production task/material/AI-job state.
 
 Heartbeat wait evidence for task 47: Lucia check 1 at `2026-05-09T03:42:47+0800` found no Director answer yet. The active next actor remains Director.
+
+Heartbeat wait evidence for task 47: Lucia check 2 at `2026-05-09T04:42:47+0800` also found no Director answer. The two-heartbeat threshold is reached, but Lucia cannot autonomously authorize production write-side recovery because it may mutate production task/material/AI-job state. The active next actor remains Director.
