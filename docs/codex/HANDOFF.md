@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-134708-P0-MinIO-Console-Local-Only-Production-Override-Implementation`: Lucode must apply and validate the scoped production-local override change from `"19001:9001"` to `"127.0.0.1:19001:9001"`. The task allows only the minimum necessary Docker/Compose operations to apply and verify this binding. Strict AI/model settings must remain unchanged. DB, MinIO data, Docker volumes, tasks, artifacts, secrets, and production release-readiness claims remain forbidden.
+- `TASK-20260508-140545-P0-Release-Readiness-Runtime-Validation-Authorization`: Director should decide whether to authorize the next staged runtime-validation wave for release-readiness evidence. Proposed categories: large-PDF soak, limited concurrency, error-path matrix, and rollback/recovery planning. Lucia may not assign production runtime validation that creates tasks/artifacts without explicit Director approval.
 
 Director shorthand is active:
 
@@ -151,3 +151,7 @@ Director closed task 24 by selecting option 2. Before release-candidate naming, 
 Lucia accepted task 25 at `2026-05-08T12:52:45+0800`. The accepted plan changes MinIO console mapping from `"19001:9001"` to `"127.0.0.1:19001:9001"` while preserving strict AI/model settings unchanged. No production mutation, Docker command, runtime/data/secret mutation, or release-readiness claim occurred.
 
 Director closed task 26 by approving a scoped implementation task. Lucia issued task 27. The approved scope is limited to the MinIO console mapping change, preservation of strict AI/model settings, and non-destructive validation. Production release readiness remains unclaimed.
+
+Lucia accepted task 27 at `2026-05-08T14:05:45+0800`. The production-local MinIO console mapping is now `"127.0.0.1:19001:9001"`, strict AI/model settings remain unchanged, listener inspection shows `127.0.0.1:19001`, local console/CMS/dependency-health checks passed, and no DB/MinIO data/Docker volume/task/artifact/secret mutation or release-readiness claim occurred.
+
+Task 28 records the next Director authorization decision before runtime-validation tasks that may create controlled upload/parse/AI artifacts.
