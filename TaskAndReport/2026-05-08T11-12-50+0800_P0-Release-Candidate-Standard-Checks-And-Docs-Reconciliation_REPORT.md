@@ -12,7 +12,8 @@
 - Development workspace: `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/3.Luceon2026`
 - Branch: `main`
 - Baseline HEAD during checks: `74881c4 docs: accept preflight evidence pack`
-- Final report commit: `PENDING_COMMIT`
+- Initial report commit: `07c5727`
+- Final pushed HEAD: reported in Lucode completion response.
 
 ## Files Changed
 
