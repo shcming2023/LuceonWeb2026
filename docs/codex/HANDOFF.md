@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-140545-P0-Release-Readiness-Runtime-Validation-Authorization`: Director should decide whether to authorize the next staged runtime-validation wave for release-readiness evidence. Proposed categories: large-PDF soak, limited concurrency, error-path matrix, and rollback/recovery planning. Lucia may not assign production runtime validation that creates tasks/artifacts without explicit Director approval.
+- `TASK-20260508-142433-P0-Large-PDF-Soak-Validation`: Lucode must run one controlled large-PDF soak validation through the production manual-review runtime and report exact terminal evidence. Controlled validation artifacts may be created and must be preserved unless separately approved. Production release readiness remains unclaimed.
 
 Director shorthand is active:
 
@@ -154,4 +154,4 @@ Director closed task 26 by approving a scoped implementation task. Lucia issued 
 
 Lucia accepted task 27 at `2026-05-08T14:05:45+0800`. The production-local MinIO console mapping is now `"127.0.0.1:19001:9001"`, strict AI/model settings remain unchanged, listener inspection shows `127.0.0.1:19001`, local console/CMS/dependency-health checks passed, and no DB/MinIO data/Docker volume/task/artifact/secret mutation or release-readiness claim occurred.
 
-Task 28 records the next Director authorization decision before runtime-validation tasks that may create controlled upload/parse/AI artifacts.
+Director closed task 28 by approving the staged runtime-validation wave. Lucia issued task 29 first: large-PDF soak validation. Still forbidden: production release-readiness declaration, DB row deletion, MinIO object deletion, Docker volume deletion/pruning, secret changes, broad deploy/rollback, and external/multi-user release boundary acceptance.
