@@ -554,7 +554,8 @@ export class ParseTaskWorker {
       // 而不需要等待 1 小时的 timeoutMs！
       const mineruTaskId = task.metadata?.mineruTaskId;
       if (mineruTaskId && task.engine === 'local-mineru') {
-        if ((now - updatedAt) > 60_000) {
+        const shouldTakeOverLocalTimeout = task.metadata?.localTimeoutOccurred === true;
+        if (shouldTakeOverLocalTimeout || (now - updatedAt) > 60_000) {
           await this._adjudicateStaleWithMineruApi(task, mineruTaskId, 'stale-running-adjudication');
         }
         continue;
@@ -1453,6 +1454,175 @@ export class ParseTaskWorker {
     }
   }
 
+  getLocalMineruEndpoint(task) {
+    const localEndpointRaw = task.optionsSnapshot?.localEndpoint;
+    if (!localEndpointRaw) return '';
+    let localEndpoint = localEndpointRaw;
+    if (localEndpoint.includes('localhost') || localEndpoint.includes('127.0.0.1')) {
+      localEndpoint = localEndpoint.replace(/localhost|127\.0\.0\.1/g, 'host.docker.internal');
+    }
+    return localEndpoint.replace(/\/+$/, '');
+  }
+
+  isCompletedMineruStatus(status) {
+    return ['done', 'success', 'completed', 'succeeded', 'finished', 'complete'].includes(String(status || '').toLowerCase());
+  }
+
+  async readMineruApiStatus(task, mineruTaskId, timeoutMs = 5000) {
+    const localEndpoint = this.getLocalMineruEndpoint(task);
+    if (!localEndpoint) return { status: '', data: null, error: 'missing-local-endpoint' };
+
+    try {
+      const tRes = await fetch(`${localEndpoint}/tasks/${mineruTaskId}`, { signal: AbortSignal.timeout(timeoutMs) });
+      if (tRes.ok) {
+        const data = await tRes.json();
+        const status = String(data.status || data.state || data.task_status || data.data?.status || data.data?.state || '').toLowerCase();
+        return { status, data, error: null };
+      }
+      if (tRes.status === 404) {
+        return { status: 'not_found', data: null, error: null };
+      }
+      return { status: '', data: null, error: `HTTP ${tRes.status}` };
+    } catch (error) {
+      return { status: '', data: null, error: error.message };
+    }
+  }
+
+  async transitionToMineruResultFetching(task, mineruTaskId, eventSource) {
+    await this.updateTaskWithRetry(task.id, {
+      state: 'running',
+      stage: 'result-fetching',
+      message: `${eventSource}: MinerU 已完成，正在拉取结果入库`,
+      updatedAt: new Date().toISOString(),
+      metadata: {
+        ...(task.metadata || {}),
+        mineruTaskId,
+        mineruStatus: 'completed',
+        localTimeoutTakeoverAt: new Date().toISOString(),
+      },
+    }, { enqueueOnFailure: true });
+
+    if (task.materialId) {
+      await this.updateMaterialWithRetry(task.materialId, {
+        status: 'processing',
+        mineruStatus: 'completed',
+        metadata: {
+          processingStage: 'result-fetching',
+          processingMsg: `${eventSource}: MinerU 已完成，正在拉取结果入库`,
+          processingUpdatedAt: new Date().toISOString(),
+        }
+      }, { enqueueOnFailure: true });
+    }
+  }
+
+  async completeResumedMineruResult(task, materialInfo, mineruTaskId, mineruResult) {
+    const markdownObjectName = mineruResult.objectName;
+    const parsedPrefix = mineruResult.parsedPrefix || `parsed/${task.materialId}/`;
+    const parsedArtifacts = Array.isArray(mineruResult.parsedArtifacts) ? mineruResult.parsedArtifacts : [];
+    const parsedFilesCount = Number(mineruResult.parsedFilesCount || parsedArtifacts.length || 1);
+    const zipObjectName = mineruResult.zipObjectName || null;
+    const artifactIncomplete = mineruResult.artifactIncomplete === true;
+    const artifactStorageMode = mineruResult.artifactStorageMode || undefined;
+    const artifactExportModes = mineruResult.artifactExportModes || undefined;
+    const primaryMarkdownPath = mineruResult.primaryMarkdownPath;
+
+    // ── P0 completed-empty 检测（resume 路径） ──
+    if (mineruResult.markdownEmpty === true) {
+      const emptyHandled = await this.handleCompletedEmpty(task, materialInfo, mineruResult);
+      if (emptyHandled) return;
+    }
+
+    await logTaskEvent({
+      taskId: task.id,
+      taskType: 'parse',
+      level: 'info',
+      event: 'artifacts-saved',
+      message: `解析产物已保存到 ${parsedPrefix} (count=${parsedFilesCount})`,
+      payload: {
+        parsedPrefix,
+        parsedFilesCount,
+        hasMineruZip: Boolean(zipObjectName),
+      },
+    });
+
+    if (artifactIncomplete) {
+      await logTaskEvent({
+        taskId: task.id,
+        taskType: 'parse',
+        level: 'warn',
+        event: 'artifact-incomplete',
+        message: 'MinerU 仅返回 Markdown，完整解析产物未入库',
+        payload: {
+          parsedPrefix,
+          parsedFilesCount,
+          markdownObjectName,
+          mineruTaskId,
+        },
+      });
+    }
+
+    // P0 OOM 修复：parsedArtifacts 写入 MinIO manifest
+    let artifactManifestObjectName = null;
+    if (parsedArtifacts.length > 0 && this.minioContext) {
+      try {
+        artifactManifestObjectName = await this.writeArtifactManifest(task.materialId, parsedArtifacts, {
+          artifactStorageMode,
+          zipObjectName,
+          markdownObjectName,
+          primaryMarkdownPath
+        });
+      } catch (e) {
+        console.warn(`[task-worker] Failed to write artifact manifest (resume): ${e.message}`);
+      }
+    }
+
+    await this.transition(task, {
+      stage: 'complete',
+      state: 'ai-pending',
+      progress: 100,
+      errorMessage: '',
+      message: 'MinerU 解析完成，产物已落库，等待 AI 元数据识别',
+      metadata: {
+        ...(task.metadata || {}),
+        markdownObjectName,
+        mineruTaskId,
+        parsedPrefix,
+        parsedFilesCount,
+        // P0 OOM: 不再写入完整 parsedArtifacts 到 DB
+        artifactManifestObjectName,
+        zipObjectName: zipObjectName || undefined,
+        artifactStorageMode,
+        artifactExportModes,
+        artifactIncomplete,
+        parsedAt: new Date().toISOString()
+      },
+      completedAt: new Date().toISOString()
+    }, 'worker-completed');
+
+    await this.updateMaterialWithRetry(task.materialId, {
+      status: 'processing',
+      mineruStatus: 'completed',
+      aiStatus: 'pending',
+      metadata: {
+        ...(materialInfo.metadata || {}),
+        mineruStatus: 'completed',
+        markdownObjectName,
+        parsedPrefix,
+        parsedFilesCount,
+        // P0 OOM: 不再写入完整 parsedArtifacts 到 DB
+        artifactManifestObjectName,
+        zipObjectName: zipObjectName || undefined,
+        artifactStorageMode,
+        artifactExportModes,
+        processingStage: 'ai',
+        processingMsg: '解析完成，等待 AI 元数据识别',
+        processingUpdatedAt: new Date().toISOString()
+      }
+    }, { enqueueOnFailure: true });
+
+    await this.tryCreateAiJob(task, markdownObjectName);
+  }
+
   /**
    * 接管已在 MinerU 端存在的任务，执行后台轮询与结果拉取。
    *
@@ -1464,131 +1634,93 @@ export class ParseTaskWorker {
     if (processingMap.has(task.id)) return;
     processingMap.add(task.id);
     console.log(`[task-worker] Resuming task: ${task.id} (mineruTaskId: ${mineruTaskId})`);
+    const materialInfo = task.optionsSnapshot?.material || {};
+    const updateProgress = async (updateInfo) => {
+      const eventName = updateInfo.stage === 'store' ? 'stage-changed' : 'progress-update';
+      await this.transition(task, updateInfo, eventName);
+
+      if (task.materialId && (updateInfo.stage || updateInfo.message || updateInfo.metadata)) {
+        await this.updateMaterialWithRetry(task.materialId, {
+          metadata: {
+            ...(materialInfo.metadata || {}),
+            ...(updateInfo.metadata || {}),
+            processingStage: updateInfo.stage || task.stage,
+            processingMsg: updateInfo.message || task.message,
+            processingUpdatedAt: new Date().toISOString()
+          }
+        }, { enqueueOnFailure: true });
+      }
+    };
 
     try {
-      const materialInfo = task.optionsSnapshot?.material || {};
-
       const mineruResult = await this.mineruResumer({
         task,
         material: materialInfo,
         mineruTaskId,
         timeoutMs: Number(task.optionsSnapshot?.localTimeout || 3600) * 1000,
         minioContext: this.minioContext,
-        updateProgress: async (updateInfo) => {
-          const eventName = updateInfo.stage === 'store' ? 'stage-changed' : 'progress-update';
-          await this.transition(task, updateInfo, eventName);
-
-          if (task.materialId && (updateInfo.stage || updateInfo.message || updateInfo.metadata)) {
-            await this.updateMaterialWithRetry(task.materialId, {
-              metadata: {
-                ...(materialInfo.metadata || {}),
-                ...(updateInfo.metadata || {}),
-                processingStage: updateInfo.stage || task.stage,
-                processingMsg: updateInfo.message || task.message,
-                processingUpdatedAt: new Date().toISOString()
-              }
-            }, { enqueueOnFailure: true });
-          }
-        }
+        updateProgress
       });
 
-      const markdownObjectName = mineruResult.objectName;
-      const parsedPrefix = mineruResult.parsedPrefix || `parsed/${task.materialId}/`;
-      const parsedArtifacts = Array.isArray(mineruResult.parsedArtifacts) ? mineruResult.parsedArtifacts : [];
-      const parsedFilesCount = Number(mineruResult.parsedFilesCount || parsedArtifacts.length || 1);
-      const zipObjectName = mineruResult.zipObjectName || null;
-      const artifactIncomplete = mineruResult.artifactIncomplete === true;
-
-      // ── P0 completed-empty 检测（resume 路径） ──
-      if (mineruResult.markdownEmpty === true) {
-        const materialInfo = task.optionsSnapshot?.material || {};
-        const emptyHandled = await this.handleCompletedEmpty(task, materialInfo, mineruResult);
-        if (emptyHandled) return; // 已处理
-      }
-
-      await logTaskEvent({
-        taskId: task.id,
-        taskType: 'parse',
-        level: 'info',
-        event: 'artifacts-saved',
-        message: `解析产物已保存到 ${parsedPrefix} (count=${parsedFilesCount})`,
-        payload: {
-          parsedPrefix,
-          parsedFilesCount,
-          hasMineruZip: Boolean(zipObjectName),
-        },
-      });
-
-      if (artifactIncomplete) {
-        await logTaskEvent({
-          taskId: task.id,
-          taskType: 'parse',
-          level: 'warn',
-          event: 'artifact-incomplete',
-          message: 'MinerU 仅返回 Markdown，完整解析产物未入库',
-          payload: {
-            parsedPrefix,
-            parsedFilesCount,
-            markdownObjectName,
-            mineruTaskId,
-          },
-        });
-      }
-
-      // P0 OOM 修复：parsedArtifacts 写入 MinIO manifest
-      let artifactManifestObjectName = null;
-      if (parsedArtifacts.length > 0 && this.minioContext) {
-        try {
-          artifactManifestObjectName = await this.writeArtifactManifest(task.materialId, parsedArtifacts);
-        } catch (e) {
-          console.warn(`[task-worker] Failed to write artifact manifest (resume): ${e.message}`);
-        }
-      }
-
-      await this.transition(task, {
-        stage: 'complete',
-        state: 'ai-pending',
-        progress: 100,
-        errorMessage: '',
-        message: 'MinerU 解析完成，产物已落库，等待 AI 元数据识别',
-        metadata: {
-          ...(task.metadata || {}),
-          markdownObjectName,
-          mineruTaskId,
-          parsedPrefix,
-          parsedFilesCount,
-          // P0 OOM: 不再写入完整 parsedArtifacts 到 DB
-          artifactManifestObjectName,
-          zipObjectName: zipObjectName || undefined,
-          artifactIncomplete,
-          parsedAt: new Date().toISOString()
-        },
-        completedAt: new Date().toISOString()
-      }, 'worker-completed');
-
-      await this.updateMaterialWithRetry(task.materialId, {
-        status: 'processing',
-        mineruStatus: 'completed',
-        aiStatus: 'pending',
-        metadata: {
-          ...(materialInfo.metadata || {}),
-          mineruStatus: 'completed',
-          markdownObjectName,
-          parsedPrefix,
-          parsedFilesCount,
-          // P0 OOM: 不再写入完整 parsedArtifacts 到 DB
-          artifactManifestObjectName,
-          zipObjectName: zipObjectName || undefined,
-          processingStage: 'ai',
-          processingMsg: '解析完成，等待 AI 元数据识别',
-          processingUpdatedAt: new Date().toISOString()
-        }
-      }, { enqueueOnFailure: true });
-
-      await this.tryCreateAiJob(task, markdownObjectName);
+      await this.completeResumedMineruResult(task, materialInfo, mineruTaskId, mineruResult);
 
     } catch (error) {
       if (error instanceof MineruStillProcessingError || error?.name === 'MineruStillProcessingError') {
+        const confirmed = await this.readMineruApiStatus(task, error.mineruTaskId || mineruTaskId, 5000);
+        if (this.isCompletedMineruStatus(confirmed.status)) {
+          const completedMineruTaskId = error.mineruTaskId || mineruTaskId;
+          console.log(`[task-worker] Task ${task.id} (resume): MinerU ${completedMineruTaskId} now completed after local timeout, taking over result ingestion`);
+          await this.transitionToMineruResultFetching(task, completedMineruTaskId, 'local-timeout-completed-takeover');
+          await logTaskEvent({
+            taskId: task.id,
+            taskType: 'parse',
+            level: 'warn',
+            event: 'local-timeout-completed-takeover',
+            message: '本地等待超时后重新确认 MinerU 已完成，开始拉取既有结果',
+            payload: { mineruTaskId: completedMineruTaskId, previousMineruStatus: error.mineruStatus },
+          });
+
+          try {
+            const mineruResult = await this.mineruResumer({
+              task,
+              material: materialInfo,
+              mineruTaskId: completedMineruTaskId,
+              timeoutMs: Number(task.optionsSnapshot?.localTimeout || 3600) * 1000,
+              minioContext: this.minioContext,
+              updateProgress
+            });
+            await this.completeResumedMineruResult(task, materialInfo, completedMineruTaskId, mineruResult);
+            return;
+          } catch (takeoverError) {
+            console.error(`[task-worker] Task ${task.id} completed-takeover result ingestion failed: ${takeoverError.message}`);
+            await this.transition(task, {
+              state: 'failed',
+              stage: 'result-fetch-failed',
+              errorMessage: takeoverError.message,
+              message: `[resume] MinerU 已完成但结果拉取/入库失败: ${takeoverError.message}`,
+              metadata: {
+                ...(task.metadata || {}),
+                mineruTaskId: completedMineruTaskId,
+                mineruStatus: 'completed',
+                resultFetchFailedAt: new Date().toISOString(),
+              }
+            }, 'worker-failed', 'error');
+            if (task.materialId) {
+              await this.updateMaterialWithRetry(task.materialId, {
+                status: 'failed',
+                mineruStatus: 'completed',
+                aiStatus: 'pending',
+                metadata: {
+                  processingStage: 'result-fetch-failed',
+                  processingMsg: `MinerU 已完成但结果拉取/入库失败: ${takeoverError.message}`,
+                  processingUpdatedAt: new Date().toISOString(),
+                }
+              }, { enqueueOnFailure: true });
+            }
+            return;
+          }
+        }
+
         // MinerU 仍在 processing/queued：保持 running，不进入 failed
         console.log(`[task-worker] Task ${task.id} (resume): MinerU ${error.mineruTaskId} 仍在 ${error.mineruStatus}，保持 running 等待后续轮询接管`);
         await this.transition(task, {
