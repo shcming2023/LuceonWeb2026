@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-183844-P0-Adaptive-Evidence-Pack-Warmup-Gated-Production-Validation`: Lucode must perform one bounded non-mutating Ollama warm-up, require warm dependency-health pass, then create at most one controlled adaptive evidence-pack validation upload. No production release-readiness claim or service/model/data/config mutation is authorized.
+- `TASK-20260508-191021-P0-Next-Release-Readiness-Validation-Scope`: Director must choose the next release-readiness validation track after adaptive evidence-pack controlled production validation passed. Lucia recommends `CONCURRENCY_VALIDATION_FIRST`, but no new upload-producing task is assigned until Director decides or heartbeat autonomy reaches the planning-only fallback.
 
 Director shorthand is active:
 
@@ -175,3 +175,5 @@ Lucia accepted task 35 at `2026-05-08T18:19:15+0800`. Diagnosis: Ollama `qwen3.5
 Lucia accepted task 36 at `2026-05-08T18:31:29+0800` as blocked evidence. Immediate pre-upload dependency health failed Ollama readiness again at about `15001ms`, and no controlled upload was created. Direct read-only chat after the stop condition loaded the model in about `6.7s` and succeeded, reinforcing cold-load/model-residency instability. Director decision task 37 is now pending: approve bounded non-mutating Ollama warm-up before a single controlled validation upload, request more diagnosis only, or hold validation.
 
 Director approved task 37 at `2026-05-08T18:38:44+0800`. Approved scope is limited to one bounded non-mutating Ollama warm-up/readiness step before validation, followed by warm dependency-health with `mineruSubmitProbe=true`; if it passes, Lucode may create at most one controlled validation upload. Still forbidden: production release-readiness declaration, deploy/fast-forward/rebuild/restart/rollback/Docker mutation, Ollama restart/kill/start/reload, model/timeout/config/secret/override changes, data/artifact/log deletion, skeleton fallback, silent degradation, or more than one controlled upload. Task 38 is assigned to Lucode.
+
+Lucia accepted task 38 at `2026-05-08T19:10:21+0800` as controlled production validation. The authorized large-PDF sample created task `task-1778237744029`, MinerU completed with `parsedFilesCount=99`, AI reached `review-pending`, and adaptive input selection used `evidence-pack-v0.3` with selected length `16261`. Production release readiness remains unclaimed. Residual risks: cold-load warm-up remains operationally important, first-pass JSON repair was still needed, and MinerU observation was stale/completed-window backfill. Director decision task 39 is pending for the next release-readiness validation track.
