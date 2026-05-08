@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-234438-P0-Sample3-MinerU-Long-Processing-Read-Only-Diagnosis`: Lucode must diagnose sample 3 `task-1778249434820` using read-only production/runtime evidence only. No service restart/stop/kill/rebuild/redeploy, Docker mutation, model/timeout/config/secret/override change, DB/MinIO/Docker volume/task/artifact/log/sample mutation or deletion, reparse/retry/new upload, signed URL persistence, or production release-readiness claim is authorized.
+- `TASK-20260509-004345-P0-MinerU-Completed-After-Local-Timeout-Takeover-Code-Fix`: Lucode must implement a code-level takeover path for local-MinerU tasks that timed out locally but later report completed through the MinerU API. This task must not mutate production task `task-1778249434820`, production DB/MinIO/logs/samples/secrets/override/Docker/services, or create production uploads/retries/reparse. Production recovery requires separate Director authorization after code-level review.
 
 Director shorthand is active:
 
@@ -191,3 +191,5 @@ Lucia accepted the revised task 42 report at `2026-05-08T21:43:25+0800`. The rev
 Director approved Option A for task 43 at `2026-05-08T21:51:38+0800`. Lucia issued task 44 for up to three controlled true-directory uploads under stage-queued rules. Next upload may start after prior upload/storage intake is durable; MinerU active parse-running and Ollama active metadata-running counts must stay `<=1`. Production release readiness, production deploy/rebuild/restart/rollback/Docker mutation, service/config/model/secret/override changes, data deletion, sample mutation/sync, skeleton fallback, and silent degradation remain forbidden.
 
 Lucia accepted task 44 at `2026-05-08T23:44:38+0800` as partial validation evidence. Samples 1 and 2 reached `review-pending`; stage-queued heavy-stage active counts stayed `<=1`; no forbidden mutation or release-readiness claim occurred. Sample 3 `task-1778249434820` remains unresolved: Lucia's read-only refresh showed `running` / `mineru-processing`, local wait timeout, stale MinerU log observation, observed page progress `714/714`, and no AI metadata job. Task 45 is assigned for read-only diagnosis only.
+
+Lucia accepted task 45 at `2026-05-09T00:43:45+0800`. Diagnosis: MinerU API says the underlying MinerU task is `completed` and the result ZIP is available, but Luceon has not ingested the result and still shows the task/material as processing with no AI job. This is a terminal-state propagation / result-ingestion stuck state after local timeout. Task 46 is assigned for code-level correction only; production write-side recovery is not authorized yet.
