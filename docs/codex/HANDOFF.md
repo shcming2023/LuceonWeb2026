@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-125245-P0-MinIO-Console-Local-Only-Implementation-Authorization`: Director should decide whether to authorize a scoped production-local override implementation task that changes MinIO console mapping from `"19001:9001"` to `"127.0.0.1:19001:9001"`. Lucia may not assign or perform the production override mutation without explicit Director approval.
+- `TASK-20260508-134708-P0-MinIO-Console-Local-Only-Production-Override-Implementation`: Lucode must apply and validate the scoped production-local override change from `"19001:9001"` to `"127.0.0.1:19001:9001"`. The task allows only the minimum necessary Docker/Compose operations to apply and verify this binding. Strict AI/model settings must remain unchanged. DB, MinIO data, Docker volumes, tasks, artifacts, secrets, and production release-readiness claims remain forbidden.
 
 Director shorthand is active:
 
@@ -150,4 +150,4 @@ Director closed task 24 by selecting option 2. Before release-candidate naming, 
 
 Lucia accepted task 25 at `2026-05-08T12:52:45+0800`. The accepted plan changes MinIO console mapping from `"19001:9001"` to `"127.0.0.1:19001:9001"` while preserving strict AI/model settings unchanged. No production mutation, Docker command, runtime/data/secret mutation, or release-readiness claim occurred.
 
-Task 26 records the required Director authorization decision before any production-local override implementation task can be issued.
+Director closed task 26 by approving a scoped implementation task. Lucia issued task 27. The approved scope is limited to the MinIO console mapping change, preservation of strict AI/model settings, and non-destructive validation. Production release readiness remains unclaimed.
