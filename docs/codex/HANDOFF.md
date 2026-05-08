@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-193439-P0-Controlled-Concurrency-Validation-Run-Authorization`: Director must decide whether to approve the exact two-upload controlled production concurrency validation run. Lucia recommends approving Option A, but no production upload is authorized until Director approves or the recorded two-heartbeat limited autonomy rule is triggered.
+- `TASK-20260508-194744-P0-Stage-Queued-Sample-Validation-Plan-And-Preflight`: Lucode must prepare a stage-queued流水 validation plan and collect non-destructive preflight evidence from the true sample directory. This task is planning/preflight only and must not create production uploads.
 
 Director shorthand is active:
 
@@ -180,4 +180,6 @@ Lucia accepted task 38 at `2026-05-08T19:10:21+0800` as controlled production va
 
 Director selected `CONCURRENCY_VALIDATION_FIRST` for task 39 at `2026-05-08T19:17:09+0800`. Lucia issued task 40 for concurrency validation planning and non-destructive preflight only. Lucode may inspect the external sample directory `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/4.XxwlAs2026/sample` as read-only inventory, but must not sync it to GitHub, modify, move, delete, or pollute samples. No production upload is authorized in task 40.
 
-Lucia accepted task 40 at `2026-05-08T19:34:39+0800` as planning/preflight evidence. Lucode reported `PLAN_READY`, active tasks/jobs `0`, MinIO/MinerU OK, initial Ollama timeout at about `14999ms`, one bounded non-mutating warm-up success, and warm dependency-health success with `ollama.durationMs=699`. The proposed first run is concurrency `2`, max uploads `2`, using the proven `G7_Workbook_ready_to_print.pdf` plus read-only external `走向成功_英语_二模卷16篇.pdf`. Because the next step creates production validation artifacts, Director decision task 41 is pending before any upload run.
+Lucia accepted task 40 at `2026-05-08T19:34:39+0800` as planning/preflight evidence. Lucode reported `PLAN_READY`, active tasks/jobs `0`, MinIO/MinerU OK, initial Ollama timeout at about `14999ms`, one bounded non-mutating warm-up success, and warm dependency-health success with `ollama.durationMs=699`. Lucia initially recorded task 41 for Director approval of a concurrency run.
+
+Director rejected concurrency for task 41 and corrected Lucia's interpretation. The intended model is stage-queued流水, not full end-to-end serial blocking: after one sample completes upload/MinIO intake, the next sample may be accepted; MinerU parsing must queue by stage; Ollama metadata recognition must queue by stage. The true sample directory is `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/4.XxwlAs2026/sample`; it is read-only inventory and must not be synced to GitHub, modified, moved, deleted, normalized, or polluted. Task 42 replaces the concurrency path with stage-queued planning/preflight only; no production upload is authorized yet.

@@ -362,7 +362,8 @@ Runtime evidence from the final pipeline run:
 | TD-016 | Documented | `docker compose up -d --build` can hang while loading frontend `nginx:1.27-alpine` metadata. | Diagnosis accepted in task 16. Treat as Docker Desktop / buildx metadata resolution for a missing local base image; preflight and pre-pull the exact base image before frontend rebuilds in release-readiness work. |
 | TD-017 | Mitigated | Medium-large parsed documents could enter AI metadata first pass through the legacy sampler with timeout-prone input size. | Code-level mitigation accepted in task 31 and controlled production validation accepted in task 38: selected input used `evidence-pack-v0.3` and was reduced from `104823` to `16261`. Broader release-readiness validation remains separate. |
 | TD-018 | Mitigated | Production Ollama `qwen3.5:9b` dependency-health chat smoke timed out before the adaptive evidence-pack controlled upload could be created. | Task 38 validated a bounded non-mutating warm-up gate: warm dependency-health passed after warm-up and the controlled upload completed to `review-pending`. Cold-load remains a release-readiness operational concern, not closed globally. |
-| TD-019 | Open | Controlled production concurrency validation has not yet been run. | Task 40 planning/preflight is accepted: active tasks/jobs were `0`, MinIO/MinerU passed, initial Ollama health timed out, bounded warm-up succeeded, and warm dependency-health passed. Director decision task 41 must approve the exact two-upload run before Lucode creates production concurrency validation artifacts. |
+| TD-019 | Superseded | Controlled production concurrency validation was considered but rejected by Director. | Director clarified local MinerU, MinIO, and Ollama deployment should use stage-queued流水 validation: upload intake can accept the next sample after MinIO intake, while MinerU and Ollama heavy work queue by stage. Task 42 replaces the concurrency route with stage-queued planning/preflight from the true sample directory. |
+| TD-020 | Open | Stage-queued validation over real samples has not yet been run. | Director clarified true samples live under `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/4.XxwlAs2026/sample`. Task 42 is planning/preflight only and must not create uploads. |
 
 ## 6. Core Asset Directory Index
 
@@ -415,4 +416,24 @@ The technically accepted first concurrency shape is concurrency `2`, maximum upl
 
 The external sample directory remains read-only input inventory and must not be synchronized to GitHub, modified, moved, renamed, deleted, normalized, or polluted.
 
-Director decision task 41 is now pending before any actual controlled concurrency upload run.
+Director rejected concurrency after this planning step. Concurrency must not be used as the validation route for this local deployment.
+
+## 2026-05-08 Director Correction: Stage-Queued Validation Only
+
+Director clarified that local MinerU, MinIO, and Ollama deployment constraints require a stage-queued流水 validation model, not full end-to-end serial blocking.
+
+The accepted validation shape is:
+
+1. A sample enters upload and is stored in MinIO.
+2. After upload/MinIO intake is complete, the intake may accept the next sample.
+3. MinerU parsing queues by stage; do not run multiple heavy MinerU parse jobs simultaneously for this local deployment validation.
+4. Ollama metadata recognition queues by stage; do not run multiple heavy Ollama metadata jobs simultaneously for this local deployment validation.
+5. Evidence must record each sample's stage transition and queue behavior.
+
+The real sample source for future validation is:
+
+`/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/4.XxwlAs2026/sample`
+
+The sample directory may be inspected as read-only inventory only. It must not be synchronized to GitHub, modified, moved, renamed, deleted, normalized, or polluted.
+
+Task 42 is assigned to Lucode for stage-queued planning/preflight only. No production upload is authorized by Task 42.
