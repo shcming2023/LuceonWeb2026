@@ -209,6 +209,19 @@ Completed-task observation and ops-session semantics accepted at code level on 2
 - Accepted behavior: dependency supervisor status separates managed tmux ownership from service reachability and can surface unmanaged MinerU/Ollama sessions.
 - Boundary: this is code-level acceptance only. Production deployment and runtime validation are assigned to `TASK-20260508-062000-P1-Deploy-Completed-Observation-Semantics-Validation`.
 
+Completed-task observation and ops-session semantics accepted in production runtime on 2026-05-08:
+
+- Task: `TASK-20260508-062000-P1-Deploy-Completed-Observation-Semantics-Validation`.
+- Lucode report: `TaskAndReport/2026-05-08T08-11-39+0800_P1-Deploy-Completed-Observation-Semantics-Validation_REPORT.md`.
+- Lucia review: `TaskAndReport/2026-05-08T08-14-14+0800_P1-Deploy-Completed-Observation-Semantics-Validation_LUCIA_REVIEW.md`.
+- Production deployed code HEAD: `4cc6d3e4d2e3ca5251cba59ffbdbb0546f1e9bdb`.
+- Runtime result: `http://localhost:8081/cms/` is reachable; dependency health with MinerU submit probe is non-blocking; controlled sample `task-1778199039640` reached `review-pending`.
+- Controlled sample facts: MinerU completed with `8` parsed files; AI job `ai-job-1778199042959-d2bf` used `ollama` / `qwen3.5:9b`; deterministic repair succeeded.
+- Production validation confirmed terminal observation non-mutation: synthetic completed-window observation returned `mutated=false` and preserved the task's existing observation.
+- Production validation confirmed dependency status separation: service reachability fields are distinct from tmux ownership fields, and unmanaged MinerU/Ollama sessions are represented without treating reachable services as outages.
+- Boundary: this is scoped production runtime validation only. Production release readiness, staging readiness, L3 readiness, and full-site acceptance remain unclaimed.
+- Residual deployment reliability debt: `docker compose up -d --build` repeatedly hung while loading frontend `nginx:1.27-alpine` metadata. Follow-up task issued: `TASK-20260508-081414-P2-Docker-Frontend-Build-Metadata-Hang-Diagnosis`.
+
 ## 4. Validation Ledger
 
 Commands run in this governance pass:
@@ -248,6 +261,10 @@ Commands run in this governance pass:
 | `npx pnpm@10.4.1 exec tsc --noEmit` during Lucia review of task 14 | PASS |
 | `npx pnpm@10.4.1 run build` during Lucia review of task 14 | PASS; Vite reported only the existing chunk-size warning |
 | `BASE_URL=http://localhost:8081 bash uat/smoke-test.sh` during Lucia review of task 14 | PASS, 12 passed / 0 failed / 0 skipped |
+| `curl -fsS 'http://localhost:8081/__proxy/upload/ops/dependency-health?mineruSubmitProbe=true'` during Lucia review of task 15 | PASS; `ok=true`, `blocking=false`, `mineru.submitProbe.ok=true`, `ollama.ok=true` |
+| `curl -fsS http://localhost:8081/__proxy/upload/ops/dependency-repair/status` during Lucia review of task 15 | PASS; reachability and ownership fields are separated |
+| `curl -fsS http://localhost:8081/__proxy/db/tasks/task-1778199039640` during Lucia review of task 15 | PASS; task remained `review-pending`, MinerU `completed`, parsed files `8` |
+| `curl -fsS 'http://localhost:8081/__proxy/db/ai-metadata-jobs?parseTaskId=task-1778199039640'` during Lucia review of task 15 | PASS; job remained `review-pending`, provider `ollama`, phase `repair-deterministic-succeeded` |
 | `BASE_URL=http://localhost:8081 npx pnpm@10.4.1 run tier2:standard:check` after rebuilt runtime | PASS; `mineru.healthOk=true`, `mineru.submitProbe.ok=true` |
 | `BASE_URL=http://localhost:8081 bash uat/smoke-test.sh` after rebuilt runtime | PASS, 12 passed / 0 failed / 0 skipped |
 | `node server/tests/worker-smoke.mjs` | PASS; strict AI mode fails fast without skeleton fallback |
@@ -284,8 +301,9 @@ Runtime evidence from the final pipeline run:
 | TD-011 | Closed | `server/tests/mineru-log-progress-smoke.mjs` Test 4 expected `failed-confirmed`, while the parser returned `log-error-signal`. | Closed by `TASK-20260507-121324-P0-MinerU-Log-Progress-Smoke-Truth-Alignment`; confirmed execution errors now produce `failed-confirmed`, and the smoke test passes without `.skip` or weakened assertions. |
 | TD-012 | Mitigated | MinerU task-level live log observation can still be unreliable in production manual review even when MinerU parse succeeds and host logs contain business progress. | Production validation in `TASK-20260507-133917-P0-Deploy-Followup-Fixes-And-Manual-Validation` showed improved attribution and explicit `host-filesystem` source context for the controlled sample. Residual post-completion observation mutation is tracked as TD-014. |
 | TD-013 | Closed | UI/diagnostic wording can describe deterministic AI repair success or reachable-but-unmanaged Ollama status as AI blocked. | Closed by task 13 validation: deterministic repair success is displayed as completed/review-needed, and reachable non-tmux Ollama is displayed as an ops-session warning rather than a dependency outage. |
-| TD-014 | Pending production validation | Terminal ParseTasks can still receive misleading post-completion MinerU observation changes through completed-window backfill. | Code-level implementation accepted and integrated in `a3078b019f1abb4fc71777bc31f5b950e7ebee65`; production validation is assigned to `TASK-20260508-062000-P1-Deploy-Completed-Observation-Semantics-Validation`. |
-| TD-015 | Pending production validation | Dependency repair status still reports missing expected tmux ownership for a reachable MinerU service. | Code-level implementation accepted and integrated in `a3078b019f1abb4fc71777bc31f5b950e7ebee65`; production validation is assigned to `TASK-20260508-062000-P1-Deploy-Completed-Observation-Semantics-Validation`. |
+| TD-014 | Closed | Terminal ParseTasks can still receive misleading post-completion MinerU observation changes through completed-window backfill. | Closed by task 15 production validation: synthetic completed-window observation returned `mutated=false` and did not mutate the terminal task's existing observation. |
+| TD-015 | Closed | Dependency repair status still reports missing expected tmux ownership for a reachable MinerU service. | Closed by task 15 production validation: service reachability and tmux ownership are reported separately, including unmanaged session details. |
+| TD-016 | Open | `docker compose up -d --build` can hang while loading frontend `nginx:1.27-alpine` metadata. | Follow-up task `TASK-20260508-081414-P2-Docker-Frontend-Build-Metadata-Hang-Diagnosis` is assigned. This did not block task 15 backend/runtime validation because backend images were rebuilt and frontend code was unchanged. |
 
 ## 6. Core Asset Directory Index
 
