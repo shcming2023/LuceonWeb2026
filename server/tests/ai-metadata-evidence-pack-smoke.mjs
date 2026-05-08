@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 import { buildEvidencePack } from '../services/ai/metadata-evidence-pack.mjs';
-import { AiMetadataWorker } from '../services/ai/metadata-worker.mjs';
+import { AiMetadataWorker, shouldUseEvidencePack } from '../services/ai/metadata-worker.mjs';
 
 async function runTests() {
   console.log('--- AI Metadata Evidence Pack Smoke Test ---');
@@ -37,6 +37,32 @@ some text
   assert.ok(filenameSignals.includes('2018'));
   console.log('Test 2 Pass ✅');
 
+  // Test 2A: Adaptive input-selection thresholds
+  console.log('Test 2A: Adaptive input-selection thresholds');
+  const mediumLargeSelection = shouldUseEvidencePack(50001, { fileSize: 1, parsedFilesCount: 1 });
+  assert.equal(mediumLargeSelection.useEvidencePack, true);
+  assert.deepEqual(mediumLargeSelection.reasons, ['markdown-length']);
+  assert.equal(mediumLargeSelection.thresholds.markdownLength, 50000);
+
+  const fileSizeSelection = shouldUseEvidencePack(1000, { fileSize: 10000001, parsedFilesCount: 1 });
+  assert.equal(fileSizeSelection.useEvidencePack, true);
+  assert.deepEqual(fileSizeSelection.reasons, ['source-file-size']);
+  assert.equal(fileSizeSelection.thresholds.fileSize, 10000000);
+
+  const parsedFilesSelection = shouldUseEvidencePack(1000, { fileSize: 1, parsedFilesCount: 51 });
+  assert.equal(parsedFilesSelection.useEvidencePack, true);
+  assert.deepEqual(parsedFilesSelection.reasons, ['parsed-files-count']);
+  assert.equal(parsedFilesSelection.thresholds.parsedFilesCount, 50);
+
+  const shortSelection = shouldUseEvidencePack(50000, { fileSize: 10000000, parsedFilesCount: 50 });
+  assert.equal(shortSelection.useEvidencePack, false);
+  assert.deepEqual(shortSelection.reasons, []);
+
+  const task29Selection = shouldUseEvidencePack(104823, { fileSize: 15157403, parsedFilesCount: 99 });
+  assert.equal(task29Selection.useEvidencePack, true);
+  assert.deepEqual(task29Selection.reasons, ['markdown-length', 'source-file-size', 'parsed-files-count']);
+  console.log('Test 2A Pass ✅');
+
   // Test 3: Worker selects evidence pack for large document
   console.log('Test 3: Worker selects evidence pack for large document');
   let workerResult = null;
@@ -59,8 +85,66 @@ some text
   assert.equal(workerResult.aiClassificationSamplingMode, 'evidence-pack-v0.3');
   assert.equal(workerResult.aiClassificationInputOriginalLength, 200000);
   assert.ok(workerResult.aiClassificationInputSampledLength < 30000);
+  assert.deepEqual(workerResult.aiClassificationInputSelectionReasons, ['markdown-length']);
+  assert.equal(workerResult.aiClassificationInputSelectionThresholds.markdownLength, 50000);
   assert.ok(workerResult.aiClassificationRawTrace.input.sections.evidenceCandidates);
+  assert.equal(workerResult.aiClassificationRawTrace.input.triggerReasons[0], 'markdown-length');
+  assert.ok(workerResult.aiClassificationRawTrace.input.inputHash.startsWith('sha256:'));
   console.log('Test 3 Pass ✅');
+
+  // Test 3A: Worker selects evidence pack for task-29-like medium-large PDF shape
+  console.log('Test 3A: Worker selects evidence pack for task-29-like medium-large PDF shape');
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    const href = String(url);
+    if (href.includes('/tasks/t29')) {
+      return { ok: true, json: async () => ({
+        id: 't29',
+        state: 'completed',
+        metadata: {
+          originalFilename: 'G7_Workbook_ready_to_print.pdf',
+          originalFileSize: 15157403,
+          objectName: 'originals/mat-task-29/source.pdf',
+          markdownObjectName: 'parsed/mat-task-29/full.md',
+          parsedFilesCount: 99,
+          mimeType: 'application/pdf'
+        }
+      }) };
+    }
+    if (href.includes('/settings')) return { ok: true, json: async () => ({}) };
+    if (href.includes('/task-events')) return { ok: true, json: async () => ({}) };
+    return { ok: true, json: async () => ({}) };
+  };
+  try {
+    const mockMinio29 = {
+      getFileStream: async () => ({ [Symbol.asyncIterator]: async function* () { yield Buffer.from('a'.repeat(104823)); } }),
+      saveObject: async () => {}
+    };
+    const worker29 = new AiMetadataWorker(mockMinio29);
+    worker29.executeWithFallback = async () => {
+      return {
+        provider: 'ollama',
+        model: 'test',
+        result: '{"classification_draft": {"domain": {"zh": "test"}}, "evidence": []}',
+        rawResponse: '{}',
+        traceDetails: { rawLooksTruncated: false },
+        usage: {}
+      };
+    };
+    worker29.transition = async (job, update) => { workerResult = update.result; };
+    await worker29.processJob({ id: 'test-job-29', parseTaskId: 't29', inputMarkdownObjectName: 'x.md' });
+    assert.equal(workerResult.aiClassificationSamplingMode, 'evidence-pack-v0.3');
+    assert.equal(workerResult.aiClassificationInputOriginalLength, 104823);
+    assert.ok(workerResult.aiClassificationInputSampledLength < 30000);
+    assert.deepEqual(workerResult.aiClassificationInputSelectionReasons, ['markdown-length', 'source-file-size', 'parsed-files-count']);
+    assert.equal(workerResult.aiClassificationRawTrace.input.observed.markdownLength, 104823);
+    assert.equal(workerResult.aiClassificationRawTrace.input.observed.fileSize, 15157403);
+    assert.equal(workerResult.aiClassificationRawTrace.input.observed.parsedFilesCount, 99);
+    assert.ok(workerResult.aiClassificationInputHash.startsWith('sha256:'));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  console.log('Test 3A Pass ✅');
 
   // Test 4: Worker uses legacy sampler for small document
   console.log('Test 4: Worker uses legacy sampler for small document');
@@ -83,6 +167,7 @@ some text
   assert.equal(workerResult.aiClassificationSamplingMode, 'legacy-sampler-v0.2');
   assert.equal(workerResult.aiClassificationInputOriginalLength, 9);
   assert.ok(workerResult.aiClassificationInputSampledLength >= 9);
+  assert.deepEqual(workerResult.aiClassificationInputSelectionReasons, []);
   console.log('Test 4 Pass ✅');
 
   // Test 5: Draft Repair

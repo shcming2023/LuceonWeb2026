@@ -25,6 +25,43 @@ const STRICT_NO_SKELETON =
   process.env.DISABLE_AI_SKELETON_FALLBACK === 'true' ||
   process.env.ALLOW_AI_SKELETON_FALLBACK === 'false';
 const REQUIRED_OLLAMA_MODEL = process.env.OLLAMA_TIER2_MODEL || 'qwen3.5:9b';
+export const EVIDENCE_PACK_MARKDOWN_LENGTH_THRESHOLD = 50000;
+export const EVIDENCE_PACK_FILE_SIZE_THRESHOLD = 10000000;
+export const EVIDENCE_PACK_PARSED_FILES_THRESHOLD = 50;
+
+export function shouldUseEvidencePack(markdownContentOrLength, sourceMeta = {}) {
+  const markdownLength = typeof markdownContentOrLength === 'number'
+    ? markdownContentOrLength
+    : String(markdownContentOrLength || '').length;
+  const fileSize = Number(sourceMeta.fileSize || 0);
+  const parsedFilesCount = Number(sourceMeta.parsedFilesCount || 0);
+  const reasons = [];
+
+  if (markdownLength > EVIDENCE_PACK_MARKDOWN_LENGTH_THRESHOLD) {
+    reasons.push('markdown-length');
+  }
+  if (fileSize > EVIDENCE_PACK_FILE_SIZE_THRESHOLD) {
+    reasons.push('source-file-size');
+  }
+  if (parsedFilesCount > EVIDENCE_PACK_PARSED_FILES_THRESHOLD) {
+    reasons.push('parsed-files-count');
+  }
+
+  return {
+    useEvidencePack: reasons.length > 0,
+    reasons,
+    thresholds: {
+      markdownLength: EVIDENCE_PACK_MARKDOWN_LENGTH_THRESHOLD,
+      fileSize: EVIDENCE_PACK_FILE_SIZE_THRESHOLD,
+      parsedFilesCount: EVIDENCE_PACK_PARSED_FILES_THRESHOLD
+    },
+    observed: {
+      markdownLength,
+      fileSize,
+      parsedFilesCount
+    }
+  };
+}
 
 // 内存队列锁
 const processingMap = new Set();
@@ -527,10 +564,17 @@ export class AiMetadataWorker {
       let sampledContent = '';
       let inputHash = '';
       let samplingMode = '';
+      let inputSelectionReasons = [];
+      let inputSelectionThresholds = {};
+      let inputSelectionObserved = {};
       let isTruncated = false;
       let packResult = null;
+      const evidencePackSelection = shouldUseEvidencePack(originalLength, sourceMeta);
+      inputSelectionReasons = evidencePackSelection.reasons;
+      inputSelectionThresholds = evidencePackSelection.thresholds;
+      inputSelectionObserved = evidencePackSelection.observed;
 
-      if (originalLength > 150000 || (sourceMeta.parsedFilesCount || 0) > 1000) {
+      if (evidencePackSelection.useEvidencePack) {
         try {
           packResult = buildEvidencePack(markdownContent, sourceMeta);
           sampledContent = packResult.content;
@@ -558,7 +602,16 @@ export class AiMetadataWorker {
           event: 'ai-content-truncated',
           level: 'info',
           message: `Markdown 内容过长已按策略抽样截断 (${originalLength} -> ${sampledContent.length} 字符)`,
-          payload: { originalLength, truncatedLength: sampledContent.length }
+          payload: {
+            samplingMode,
+            originalLength,
+            selectedLength: sampledContent.length,
+            truncatedLength: sampledContent.length,
+            triggerReasons: inputSelectionReasons,
+            inputHash,
+            thresholds: inputSelectionThresholds,
+            observed: inputSelectionObserved
+          }
         });
       }
 
@@ -594,6 +647,9 @@ export class AiMetadataWorker {
           originalLength,
           sampledLength: sampledContent.length,
           inputHash,
+          triggerReasons: inputSelectionReasons,
+          thresholds: inputSelectionThresholds,
+          observed: inputSelectionObserved,
           sections: packResult ? packResult.sections : undefined
         }
       };
@@ -961,6 +1017,8 @@ export class AiMetadataWorker {
       result.aiClassificationInputOriginalLength = originalLength;
       result.aiClassificationInputSampledLength = sampledContent.length;
       result.aiClassificationInputHash = inputHash;
+      result.aiClassificationInputSelectionReasons = inputSelectionReasons;
+      result.aiClassificationInputSelectionThresholds = inputSelectionThresholds;
       result.aiClassificationV02 = resultV02;
 
       result.aiClassificationRawTrace = rawTrace;

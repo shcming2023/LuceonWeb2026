@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-145945-P0-Adaptive-Evidence-Pack-First-Pass-For-Large-AI-Metadata-Inputs`: Lucode must implement adaptive first-pass AI metadata input selection so medium-large documents use evidence-pack mode under approved thresholds. This is code-level implementation only; production runtime mutation and production release readiness remain unclaimed.
+- `TASK-20260508-151145-P0-Adaptive-Evidence-Pack-Production-Validation-Authorization`: Director must decide whether Lucia may issue a scoped Lucode production validation task for the accepted adaptive evidence-pack code. Production release readiness remains unclaimed.
 
 Director shorthand is active:
 
@@ -159,3 +159,5 @@ Director closed task 28 by approving the staged runtime-validation wave. Lucia i
 Lucia accepted task 29 as failed evidence at `2026-05-08T14:48:15+0800`. The preferred large PDF `G7_Workbook_ready_to_print.pdf` reached terminal `failed` at AI stage. MinerU and MinIO succeeded; Ollama `qwen3.5:9b` timed out after about `300000ms`; strict no-skeleton fallback was preserved. Task 30 is assigned for non-destructive AI large-input timeout diagnosis and remediation planning.
 
 Lucia accepted task 30 at `2026-05-08T14:59:45+0800`. The accepted diagnosis is that task 29 failed primarily because the first-pass AI metadata input remained on the legacy sampler path and reached about `83k` prompt payload characters. Task 31 is assigned to implement adaptive evidence-pack first-pass selection with thresholds of Markdown length greater than `50000`, source file size greater than `10000000` bytes, or parsed files count greater than `50`. Strict no-skeleton behavior must remain unchanged, and production runtime validation must be assigned separately after code-level acceptance.
+
+Lucia accepted task 31 at `2026-05-08T15:11:45+0800` as code-level implementation. The accepted code selects evidence-pack mode for Markdown length greater than `50000`, source file size greater than `10000000` bytes, or parsed files count greater than `50`; short documents remain on legacy sampling; strict no-skeleton behavior remains unchanged. Lucia independently reran the focused evidence-pack smoke, real-sample smoke, dependency-health smoke, TypeScript check, production build, and diff check. Task 32 records the Director decision required before scoped production deployment/runtime validation.
