@@ -108,7 +108,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 Current active tasks:
 
 - `TASK-20260508-104137-P0-Director-Release-Readiness-Scope-Decisions`: Director decision pending for release route, mandatory validation scope, production override boundary, future restart/rebuild/rollback authorization, and single-operator/no-auth release boundary.
-- `TASK-20260508-104137-P0-Release-Candidate-Non-Destructive-Preflight-And-Evidence-Pack`: Lucode must execute read-only release-candidate preflight checks and produce an evidence pack. This task must not deploy, rebuild, restart, rollback, mutate production data, or claim production release readiness.
+- `TASK-20260508-110044-P0-Release-Candidate-Standard-Checks-And-Docs-Reconciliation`: Lucode must run non-destructive standard checks and documentation drift inspection. This task must not deploy, rebuild, restart, run Docker pull/build/compose, mutate production data, create production upload tasks, or claim production release readiness.
 
 Director shorthand is active:
 
@@ -136,3 +136,5 @@ When all executable tasks are closed, Lucia must either create the next bounded 
 At `2026-05-08T10:19:44+0800`, the Director decision row reached two unanswered Lucia heartbeat checks. Lucia applied the conservative default and issued `TASK-20260508-101944-P0-Production-Release-Readiness-Gap-Matrix-And-Validation-Plan` to Lucode.
 
 Lucia accepted that gap matrix at `2026-05-08T10:41:37+0800`. Director-owned release-scope decisions are now recorded in task 19, and non-destructive release-candidate preflight evidence collection is assigned to Lucode in task 20.
+
+Lucia accepted the task 20 evidence pack at `2026-05-08T11:00:44+0800`. Director task 19 remains pending and reached two heartbeat checks; Lucia fallback is limited to non-destructive validation/docs. Task 21 is assigned to Lucode for standard checks and documentation drift inspection.
