@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-144815-P0-AI-Large-Input-Timeout-Diagnosis-And-Remediation-Plan`: Lucode must diagnose the accepted large-PDF AI timeout and produce a remediation plan. This is non-destructive diagnosis/planning only. Strict no-skeleton semantics must remain preserved, silent fallback must not be proposed, and production release readiness remains unclaimed.
+- `TASK-20260508-145945-P0-Adaptive-Evidence-Pack-First-Pass-For-Large-AI-Metadata-Inputs`: Lucode must implement adaptive first-pass AI metadata input selection so medium-large documents use evidence-pack mode under approved thresholds. This is code-level implementation only; production runtime mutation and production release readiness remain unclaimed.
 
 Director shorthand is active:
 
@@ -157,3 +157,5 @@ Lucia accepted task 27 at `2026-05-08T14:05:45+0800`. The production-local MinIO
 Director closed task 28 by approving the staged runtime-validation wave. Lucia issued task 29 first: large-PDF soak validation. Still forbidden: production release-readiness declaration, DB row deletion, MinIO object deletion, Docker volume deletion/pruning, secret changes, broad deploy/rollback, and external/multi-user release boundary acceptance.
 
 Lucia accepted task 29 as failed evidence at `2026-05-08T14:48:15+0800`. The preferred large PDF `G7_Workbook_ready_to_print.pdf` reached terminal `failed` at AI stage. MinerU and MinIO succeeded; Ollama `qwen3.5:9b` timed out after about `300000ms`; strict no-skeleton fallback was preserved. Task 30 is assigned for non-destructive AI large-input timeout diagnosis and remediation planning.
+
+Lucia accepted task 30 at `2026-05-08T14:59:45+0800`. The accepted diagnosis is that task 29 failed primarily because the first-pass AI metadata input remained on the legacy sampler path and reached about `83k` prompt payload characters. Task 31 is assigned to implement adaptive evidence-pack first-pass selection with thresholds of Markdown length greater than `50000`, source file size greater than `10000000` bytes, or parsed files count greater than `50`. Strict no-skeleton behavior must remain unchanged, and production runtime validation must be assigned separately after code-level acceptance.
