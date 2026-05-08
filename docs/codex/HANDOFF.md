@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-142433-P0-Large-PDF-Soak-Validation`: Lucode must run one controlled large-PDF soak validation through the production manual-review runtime and report exact terminal evidence. Controlled validation artifacts may be created and must be preserved unless separately approved. Production release readiness remains unclaimed.
+- `TASK-20260508-144815-P0-AI-Large-Input-Timeout-Diagnosis-And-Remediation-Plan`: Lucode must diagnose the accepted large-PDF AI timeout and produce a remediation plan. This is non-destructive diagnosis/planning only. Strict no-skeleton semantics must remain preserved, silent fallback must not be proposed, and production release readiness remains unclaimed.
 
 Director shorthand is active:
 
@@ -155,3 +155,5 @@ Director closed task 26 by approving a scoped implementation task. Lucia issued 
 Lucia accepted task 27 at `2026-05-08T14:05:45+0800`. The production-local MinIO console mapping is now `"127.0.0.1:19001:9001"`, strict AI/model settings remain unchanged, listener inspection shows `127.0.0.1:19001`, local console/CMS/dependency-health checks passed, and no DB/MinIO data/Docker volume/task/artifact/secret mutation or release-readiness claim occurred.
 
 Director closed task 28 by approving the staged runtime-validation wave. Lucia issued task 29 first: large-PDF soak validation. Still forbidden: production release-readiness declaration, DB row deletion, MinIO object deletion, Docker volume deletion/pruning, secret changes, broad deploy/rollback, and external/multi-user release boundary acceptance.
+
+Lucia accepted task 29 as failed evidence at `2026-05-08T14:48:15+0800`. The preferred large PDF `G7_Workbook_ready_to_print.pdf` reached terminal `failed` at AI stage. MinerU and MinIO succeeded; Ollama `qwen3.5:9b` timed out after about `300000ms`; strict no-skeleton fallback was preserved. Task 30 is assigned for non-destructive AI large-input timeout diagnosis and remediation planning.
