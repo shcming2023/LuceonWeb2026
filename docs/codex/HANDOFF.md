@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-181915-P0-Adaptive-Evidence-Pack-Production-Validation-Retry`: Lucode must re-attempt one scoped adaptive evidence-pack production validation upload only if immediate warm dependency health passes. No production deploy, fast-forward, rebuild, restart, rollback, Docker mutation, model/timeout/config/secret/override change, data deletion, silent fallback, more than one controlled upload, or release-readiness claim is authorized.
+- `TASK-20260508-183129-P0-Ollama-Warmup-Before-Validation-Authorization`: Director must decide whether Lucia may authorize bounded non-mutating Ollama warm-up before one controlled adaptive evidence-pack validation upload. Until then, no further upload validation retry is assigned.
 
 Director shorthand is active:
 
@@ -171,3 +171,5 @@ Director approved task 32 at `2026-05-08T17:31:00+0800`. Lucia issued task 34 fo
 Lucia accepted task 34 at `2026-05-08T18:09:49+0800` as blocked evidence. Production reached `8092965`, upload-server was rebuilt, strict AI/model and MinIO local-only override boundaries were preserved, CMS/DB/MinIO/MinerU submit probe passed, active tasks/jobs were `0`, and the preferred sample size/hash matched. The controlled upload was not created because pre-upload dependency health reported Ollama `qwen3.5:9b` chat-smoke timeout. Task 35 is assigned for non-destructive Ollama readiness diagnosis and recovery planning.
 
 Lucia accepted task 35 at `2026-05-08T18:19:15+0800`. Diagnosis: Ollama `qwen3.5:9b` exists and became ready without mutation; cold probes spent about `8.9s` loading and `9.7s` to `10.6s` total, while warm chat dropped to about `1.35s` and warm dependency health to `793ms`. This supports transient cold-load/readiness behavior under memory pressure rather than model absence. Task 36 is assigned for one scoped validation retry, gated by immediate warm dependency-health pass.
+
+Lucia accepted task 36 at `2026-05-08T18:31:29+0800` as blocked evidence. Immediate pre-upload dependency health failed Ollama readiness again at about `15001ms`, and no controlled upload was created. Direct read-only chat after the stop condition loaded the model in about `6.7s` and succeeded, reinforcing cold-load/model-residency instability. Director decision task 37 is now pending: approve bounded non-mutating Ollama warm-up before a single controlled validation upload, request more diagnosis only, or hold validation.
