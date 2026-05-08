@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-095802-P0-Phase-1-Next-Iteration-Route-Decision`: Director decision pending. If unanswered after two Lucia heartbeat checks, Lucia may choose the conservative default and issue a Lucode task for a non-destructive production release-readiness gap matrix and validation plan.
+- `TASK-20260508-101944-P0-Production-Release-Readiness-Gap-Matrix-And-Validation-Plan`: Lucode must produce a non-destructive production release-readiness gap matrix and validation plan. This task must not claim production release readiness or mutate production runtime state.
 
 Director shorthand is active:
 
@@ -131,3 +131,5 @@ Any autonomous decision must be recorded in the task row notes and in the releva
 The task ledger must not have Director, Lucia, and Lucode all idle unless Director explicitly closes the iteration stream and that closure is recorded.
 
 When all executable tasks are closed, Lucia must either create the next bounded Lucode task or record a Director decision row. The current active decision row asks Director to choose the next Phase 1-to-next-iteration route.
+
+At `2026-05-08T10:19:44+0800`, the Director decision row reached two unanswered Lucia heartbeat checks. Lucia applied the conservative default and issued `TASK-20260508-101944-P0-Production-Release-Readiness-Gap-Matrix-And-Validation-Plan` to Lucode.
