@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-123816-P0-MinIO-Console-Local-Only-Binding-Change-Plan`: Lucode must produce a non-destructive plan for narrowing MinIO console exposure to local-only binding. The task must not edit production workspace or override files, run Docker commands, mutate runtime/data/secrets, or claim production release readiness.
+- `TASK-20260508-125245-P0-MinIO-Console-Local-Only-Implementation-Authorization`: Director should decide whether to authorize a scoped production-local override implementation task that changes MinIO console mapping from `"19001:9001"` to `"127.0.0.1:19001:9001"`. Lucia may not assign or perform the production override mutation without explicit Director approval.
 
 Director shorthand is active:
 
@@ -148,4 +148,6 @@ Lucia accepted task 23 at `2026-05-08T12:30:45+0800`. `docs/deploy/DEPLOY.md` no
 
 Director closed task 24 by selecting option 2. Before release-candidate naming, MinIO console exposure must be narrowed to local-only binding; current `19001:9001` exposure is not accepted as-is; complete removal is not required now. Strict AI/model settings remain in production-local `docker-compose.override.yml` for now. Actual production override mutation still requires separate Director approval.
 
-Lucia issued task 25 for a non-destructive local-only binding change plan, validation plan, and rollback plan.
+Lucia accepted task 25 at `2026-05-08T12:52:45+0800`. The accepted plan changes MinIO console mapping from `"19001:9001"` to `"127.0.0.1:19001:9001"` while preserving strict AI/model settings unchanged. No production mutation, Docker command, runtime/data/secret mutation, or release-readiness claim occurred.
+
+Task 26 records the required Director authorization decision before any production-local override implementation task can be issued.
