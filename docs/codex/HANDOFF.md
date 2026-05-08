@@ -108,6 +108,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 Current active tasks:
 
 - `TASK-20260508-151145-P0-Adaptive-Evidence-Pack-Production-Validation-Authorization`: Director must decide whether Lucia may issue a scoped Lucode production validation task for the accepted adaptive evidence-pack code. Production release readiness remains unclaimed.
+- `TASK-20260508-154115-P0-Adaptive-Evidence-Pack-Production-Validation-Runbook-And-Preflight`: Lucode must prepare a non-destructive validation runbook and read-only preflight evidence while Director authorization remains pending.
 
 Director shorthand is active:
 
@@ -161,3 +162,5 @@ Lucia accepted task 29 as failed evidence at `2026-05-08T14:48:15+0800`. The pre
 Lucia accepted task 30 at `2026-05-08T14:59:45+0800`. The accepted diagnosis is that task 29 failed primarily because the first-pass AI metadata input remained on the legacy sampler path and reached about `83k` prompt payload characters. Task 31 is assigned to implement adaptive evidence-pack first-pass selection with thresholds of Markdown length greater than `50000`, source file size greater than `10000000` bytes, or parsed files count greater than `50`. Strict no-skeleton behavior must remain unchanged, and production runtime validation must be assigned separately after code-level acceptance.
 
 Lucia accepted task 31 at `2026-05-08T15:11:45+0800` as code-level implementation. The accepted code selects evidence-pack mode for Markdown length greater than `50000`, source file size greater than `10000000` bytes, or parsed files count greater than `50`; short documents remain on legacy sampling; strict no-skeleton behavior remains unchanged. Lucia independently reran the focused evidence-pack smoke, real-sample smoke, dependency-health smoke, TypeScript check, production build, and diff check. Task 32 records the Director decision required before scoped production deployment/runtime validation.
+
+Task 32 reached two Lucia heartbeat checks without a Director decision at `2026-05-08T15:41:15+0800`. Lucia did not authorize production validation autonomously. To prevent task-flow stalling, Lucia issued task 33 for non-destructive production validation runbook and read-only preflight preparation only.
