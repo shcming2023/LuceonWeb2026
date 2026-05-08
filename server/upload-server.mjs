@@ -44,7 +44,7 @@ import os from 'os';
 import { registerConsistencyRoutes } from './lib/consistency-routes.mjs';
 import { registerTaskActionRoutes } from './lib/task-actions-routes.mjs';
 import { taskEventBus } from './lib/task-events-bus.mjs';
-import { registerMineruDiagnosticsRoutes } from './lib/ops-mineru-diagnostics.mjs';
+import { classifyMineruActiveTasks, registerMineruDiagnosticsRoutes } from './lib/ops-mineru-diagnostics.mjs';
 import { ParseTaskWorker } from './services/queue/task-worker.mjs';
 import { AiMetadataWorker } from './services/ai/metadata-worker.mjs';
 import { logTaskEvent } from './services/logging/task-events.mjs';
@@ -998,54 +998,14 @@ app.get('/ops/mineru/active-task', async (req, res) => {
     if (!tRes.ok) return res.status(500).json({ error: 'db error' });
     const tasks = await tRes.json();
 
-    // 1. 正常活跃任务：state=running + mineruTaskId + 符合条件的 stage
-    const runningWithMineru = tasks.filter(t =>
-      t.engine === 'local-mineru' &&
-      t.state === 'running' &&
-      !t.metadata?.canceledAt &&
-      t.metadata?.mineruTaskId &&
-      ['mineru-processing', 'mineru-queued', 'result-fetching'].includes(t.stage)
-    );
-
-    // 2. 漂移任务：state=pending 或 state=running+stage=upload 但有 mineruTaskId
-    const driftTasks = tasks.filter(t =>
-      t.engine === 'local-mineru' &&
-      !t.metadata?.canceledAt &&
-      t.metadata?.mineruTaskId &&
-      (
-        t.state === 'pending' ||
-        (t.state === 'running' && (t.stage === 'upload' || t.stage === 'process'))
-      )
-    );
-
-    // 3. MinerU completed 但 Luceon 未接管结果（parsedFilesCount 为空或 0），包含误判 failed 的任务
-    const completedButNotIngested = tasks.filter(t =>
-      t.engine === 'local-mineru' &&
-      t.state !== 'canceled' &&
-      !t.metadata?.canceledAt &&
-      t.metadata?.mineruTaskId &&
-      t.metadata?.mineruStatus === 'completed' &&
-      (!t.metadata?.parsedFilesCount || t.metadata.parsedFilesCount === 0)
-    );
-
-    // 4. 提交 MinerU 失败且可重试的任务
-    const submitRetryableTasks = tasks.filter(t =>
-      t.engine === 'local-mineru' &&
-      t.state !== 'canceled' &&
-      !t.metadata?.canceledAt &&
-      (t.stage === 'submit-failed-retryable' || t.message?.includes('可重试'))
-    );
-
-    // 5. 需要主动接管的任务（MinerU API 已 completed 但仍需我们接管，或漂移，或卡在 failed 的可自愈任务）
-    const takeoverRequiredTasks = tasks.filter(t =>
-      t.engine === 'local-mineru' &&
-      t.state !== 'canceled' &&
-      !t.metadata?.canceledAt &&
-      (
-        (t.state === 'failed' && t.metadata?.mineruTaskId && t.metadata?.mineruStatus === 'completed') ||
-        (t.state === 'running' && t.stage === 'mineru-processing' && t.metadata?.mineruStatus === 'completed')
-      )
-    );
+    const {
+      runningWithMineru,
+      driftTasks,
+      completedButNotIngestedTasks,
+      submitRetryableTasks,
+      takeoverRequiredTasks,
+      historicalAiFailureTasks,
+    } = classifyMineruActiveTasks(tasks);
 
     // 兼容旧接口：activeTask 仍指向首个 running 任务
     let activeTask = null;
@@ -1067,10 +1027,11 @@ app.get('/ops/mineru/active-task', async (req, res) => {
           return String(a.id).localeCompare(String(b.id));
         })
         .map(t => ({ id: t.id, mineruTaskId: t.metadata?.mineruTaskId })),
-      completedButNotIngestedTasks: completedButNotIngested.map(t => ({ id: t.id, mineruTaskId: t.metadata?.mineruTaskId, state: t.state, stage: t.stage })),
+      completedButNotIngestedTasks: completedButNotIngestedTasks.map(t => ({ id: t.id, mineruTaskId: t.metadata?.mineruTaskId, state: t.state, stage: t.stage })),
       driftTasks: driftTasks.map(t => ({ id: t.id, mineruTaskId: t.metadata?.mineruTaskId, state: t.state, stage: t.stage })),
       submitRetryableTasks: submitRetryableTasks.map(t => ({ id: t.id, state: t.state, stage: t.stage, retries: t.metadata?.submitRetries })),
       takeoverRequiredTasks: takeoverRequiredTasks.map(t => ({ id: t.id, mineruTaskId: t.metadata?.mineruTaskId, state: t.state, stage: t.stage })),
+      historicalAiFailureTasks: historicalAiFailureTasks.map(t => ({ id: t.id, mineruTaskId: t.metadata?.mineruTaskId, state: t.state, stage: t.stage })),
     };
 
     // 可选：查询 MinerU API 获取 ground truth
@@ -1090,7 +1051,7 @@ app.get('/ops/mineru/active-task', async (req, res) => {
 
       const apiChecks = [];
       const allMineruTaskIds = [...new Set(
-        [...runningWithMineru, ...driftTasks, ...completedButNotIngested]
+        [...runningWithMineru, ...driftTasks, ...completedButNotIngestedTasks]
           .map(t => t.metadata?.mineruTaskId)
           .filter(Boolean)
       )];

@@ -1,6 +1,6 @@
 # Codex Handoff
 
-Last updated: 2026-05-08
+Last updated: 2026-05-09
 
 ## Current Entry Point
 
@@ -208,4 +208,8 @@ Director approved scoped production recovery for task 47 at `2026-05-09T05:20:30
 
 Lucia accepted task 48 at `2026-05-09T06:24:41+0800` as `ACCEPTED_MANUAL_REVIEW_READY_WITH_RESIDUAL_DEBT`. Target sample 3 is recovered to manual review state: task `task-1778249434820` is `review-pending`, material `mat-1778249419780` is `reviewing`, and AI job `ai-job-1778278172782-303b` is `review-pending`. Production release readiness remains unclaimed. Current active task: task 49, Lucode read-only residual diagnostics for Ollama dependency-health timeout behavior and three unrelated historical takeover-required tasks.
 
-Lucia accepted task 49 at `2026-05-09T06:37:09+0800` as `ACCEPTED_DIAGNOSTIC_EVIDENCE_WITH_CODE_LEVEL_FOLLOW_UP_REQUIRED`. Current active task: task 50, Lucode code-level diagnostic classification fix. Goal: `/ops/mineru/active-task` should not label historical terminal AI failures as `takeoverRequiredTasks`, while actionable MinerU takeover cases remain visible. No production mutation or release-readiness claim is authorized.
+Lucia accepted task 49 at `2026-05-09T06:37:09+0800` as `ACCEPTED_DIAGNOSTIC_EVIDENCE_WITH_CODE_LEVEL_FOLLOW_UP_REQUIRED`.
+
+Lucia accepted task 50 at `2026-05-09T07:47:37+0800` as `ACCEPTED_CODE_LEVEL` and integrated the diagnostic classification fix into main. `/ops/mineru/active-task` and `/ops/mineru/diagnostics` now separate historical terminal AI failures into `historicalAiFailureTasks`, while actionable completed-but-not-ingested or running-completed MinerU cases remain visible in `takeoverRequiredTasks`. Lucia independently reran focused classification smoke, MinerU diagnostics smoke, MinerU no-resubmit smoke, TypeScript, build, and diff-check, and restored smoke coverage for log observation structure.
+
+Current active task: task 51, Director decision. Director must decide whether to authorize scoped production deployment/read-only validation of the Task 50 diagnostic classification fix or hold it on main. Lucia may not autonomously deploy or restart production after heartbeat waits; the allowed fallback is hold-only. Production release readiness remains unclaimed.

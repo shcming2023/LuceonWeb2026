@@ -1,6 +1,6 @@
 # Luceon2026 Project State
 
-Last updated: 2026-05-08
+Last updated: 2026-05-09
 
 ## 1. Current Repository Baseline
 
@@ -470,3 +470,5 @@ This did not by itself authorize production recovery for the existing stuck task
 Lucia accepted Task 48 at `2026-05-09T06:24:41+0800`. Confirmed production facts: target task `task-1778249434820` is `review-pending`, material `mat-1778249419780` is `reviewing`, AI job `ai-job-1778278172782-303b` is `review-pending`, and parsed artifacts exist under `parsed/mat-1778249419780/`. The recovery used existing MinerU task `ec9452cc-94e4-4b36-bb64-efba86f38cf6`; no new upload, second target MinerU submission, manual DB edit, cleanup, or release-readiness claim occurred. Residual diagnostics remain for Ollama dependency-health timeout and three unrelated historical takeover-required tasks.
 
 Lucia accepted Task 49 at `2026-05-09T06:37:09+0800` as read-only diagnostic evidence. The three takeover-required tasks are historical terminal AI failures, not active MinerU ingestion work. Task 50 is assigned to correct the diagnostic classification so these historical AI failures are no longer surfaced as `takeoverRequiredTasks`. Ollama dependency-health warm/cold timeout behavior remains release-readiness debt; no production mutation is authorized by Task 50.
+
+Lucia accepted Task 50 at `2026-05-09T07:47:37+0800` as `ACCEPTED_CODE_LEVEL` and integrated the diagnostic classification fix into `main`. Accepted behavior: `/ops/mineru/active-task` and `/ops/mineru/diagnostics` share `classifyMineruActiveTasks()`, historical terminal AI failures with completed MinerU status and parsed artifacts are surfaced in `historicalAiFailureTasks`, and actionable completed-but-not-ingested or running-completed MinerU cases remain in `takeoverRequiredTasks`. Lucia independently reran focused classification smoke, MinerU diagnostics smoke, MinerU no-resubmit smoke, TypeScript, build, and diff-check; Lucia also restored diagnostics smoke coverage for the richer log observation structure. This remains code-level acceptance only. Production deployment/validation requires Director decision task 51, and production release readiness remains unclaimed.

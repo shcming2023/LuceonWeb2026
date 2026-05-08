@@ -1,5 +1,82 @@
 import { parseLatestMineruProgress } from './ops-mineru-log-parser.mjs';
 
+function isLocalMineruTask(task) {
+  return task?.engine === 'local-mineru' && task.state !== 'canceled' && !task.metadata?.canceledAt;
+}
+
+function hasMineruParsedArtifacts(task) {
+  const metadata = task?.metadata || {};
+  return Number(metadata.parsedFilesCount || 0) > 0 ||
+    Boolean(metadata.markdownObjectName) ||
+    Boolean(metadata.zipObjectName) ||
+    Boolean(metadata.artifactManifestObjectName);
+}
+
+function isHistoricalTerminalAiFailure(task) {
+  if (!isLocalMineruTask(task)) return false;
+  if (task.state !== 'failed') return false;
+  if (task.metadata?.mineruStatus !== 'completed') return false;
+  if (!task.metadata?.mineruTaskId) return false;
+  if (!hasMineruParsedArtifacts(task)) return false;
+
+  return task.stage === 'ai' ||
+    task.stage === 'ai-running' ||
+    task.stage === 'ai-pending' ||
+    Boolean(task.aiJobId || task.metadata?.aiJobId) ||
+    String(task.message || '').includes('AI');
+}
+
+export function classifyMineruActiveTasks(tasks = []) {
+  const runningWithMineru = tasks.filter(t =>
+    isLocalMineruTask(t) &&
+    t.state === 'running' &&
+    t.metadata?.mineruTaskId &&
+    ['mineru-processing', 'mineru-queued', 'result-fetching'].includes(t.stage)
+  );
+
+  const driftTasks = tasks.filter(t =>
+    isLocalMineruTask(t) &&
+    t.metadata?.mineruTaskId &&
+    (
+      t.state === 'pending' ||
+      (t.state === 'running' && (t.stage === 'upload' || t.stage === 'process'))
+    )
+  );
+
+  const completedButNotIngestedTasks = tasks.filter(t =>
+    isLocalMineruTask(t) &&
+    t.metadata?.mineruTaskId &&
+    t.metadata?.mineruStatus === 'completed' &&
+    !hasMineruParsedArtifacts(t)
+  );
+
+  const submitRetryableTasks = tasks.filter(t =>
+    isLocalMineruTask(t) &&
+    (t.stage === 'submit-failed-retryable' || t.message?.includes('可重试'))
+  );
+
+  const historicalAiFailureTasks = tasks.filter(isHistoricalTerminalAiFailure);
+
+  const takeoverRequiredTasks = tasks.filter(t =>
+    isLocalMineruTask(t) &&
+    t.metadata?.mineruTaskId &&
+    !isHistoricalTerminalAiFailure(t) &&
+    (
+      (t.state === 'failed' && t.metadata?.mineruStatus === 'completed') ||
+      (t.state === 'running' && t.stage === 'mineru-processing' && t.metadata?.mineruStatus === 'completed')
+    )
+  );
+
+  return {
+    runningWithMineru,
+    driftTasks,
+    completedButNotIngestedTasks,
+    submitRetryableTasks,
+    historicalAiFailureTasks,
+    takeoverRequiredTasks,
+  };
+}
+
 export function registerMineruDiagnosticsRoutes(app, getDbBaseUrl) {
   app.get('/ops/mineru/diagnostics', async (req, res) => {
     const dbBaseUrl = getDbBaseUrl();
@@ -25,6 +102,7 @@ export function registerMineruDiagnosticsRoutes(app, getDbBaseUrl) {
       diagnosis: { status: 'unknown', kind: 'unknown', message: '', blockingMineruTaskId: null, safeToAutoRecover: false },
       logObservation: null,
       takeoverRequiredTasks: [],
+      historicalAiFailureTasks: [],
       completedButNotIngestedTasks: [],
       submitRetryableTasks: []
     };
@@ -57,14 +135,16 @@ export function registerMineruDiagnosticsRoutes(app, getDbBaseUrl) {
       if (tasksRes.ok) {
         const tasks = await tasksRes.json();
         const activeStates = ['pending', 'running', 'result-store', 'ai-pending', 'ai-running'];
-        
+        const classifiedTasks = classifyMineruActiveTasks(tasks);
+
         result.luceon.activeTasks = tasks.filter(t => activeStates.includes(t.state)).map(t => t.id);
         result.luceon.mineruQueuedTasks = tasks.filter(t => t.stage === 'mineru-queued').map(t => t.id);
         result.luceon.mineruProcessingTasks = tasks.filter(t => t.stage === 'mineru-processing').map(t => t.id);
-        
-        result.completedButNotIngestedTasks = tasks.filter(t => t.state === 'failed' && t.metadata?.mineruTaskId && t.metadata?.mineruStatus === 'completed' && !t.metadata?.parsedFilesCount).map(t => t.id);
-        result.submitRetryableTasks = tasks.filter(t => (t.state === 'failed' || t.state === 'pending') && !t.metadata?.mineruTaskId && (t.stage === 'submit-failed-retryable' || t.message?.includes('可重试'))).map(t => t.id);
-        result.takeoverRequiredTasks = tasks.filter(t => t.state === 'failed' && t.metadata?.mineruTaskId && !['failed', 'completed', 'not_found', 'artifact-empty'].includes(t.metadata?.mineruStatus)).map(t => t.id);
+
+        result.completedButNotIngestedTasks = classifiedTasks.completedButNotIngestedTasks.map(t => t.id);
+        result.submitRetryableTasks = classifiedTasks.submitRetryableTasks.map(t => t.id);
+        result.takeoverRequiredTasks = classifiedTasks.takeoverRequiredTasks.map(t => t.id);
+        result.historicalAiFailureTasks = classifiedTasks.historicalAiFailureTasks.map(t => t.id);
         
         if (result.luceon.mineruProcessingTasks.length > 0) {
           const targetTaskId = result.luceon.mineruProcessingTasks[0];
