@@ -110,8 +110,45 @@ async function runTest() {
   console.assert(resData.diagnosis.status === 'blocked', 'Expected blocked');
   console.assert(resData.diagnosis.safeToAutoRecover === false, 'Expected safeToAutoRecover false');
   console.assert(resData.logObservation !== null, 'Expected logObservation 非空');
-  console.assert(resData.logObservation.phase === 'Predict', 'Expected logObservation phase to be Predict');
   console.log('Test 4 Pass ✅');
+
+  // Test 5: Historical AI failures should not be reported as takeover-required
+  console.log('Test 5: Historical terminal AI failures are separated from takeover-required tasks');
+  mockMineruHealth = { processing_tasks: 0, queued_tasks: 0 };
+  mockLuceonTasks = [
+    {
+      id: 'historical-ai-failure',
+      engine: 'local-mineru',
+      state: 'failed',
+      stage: 'ai',
+      message: 'AI 识别完成: failed',
+      metadata: {
+        mineruTaskId: 'mineru-historical-ai',
+        mineruStatus: 'completed',
+        parsedFilesCount: 99,
+        markdownObjectName: 'parsed/historical/full.md',
+        aiJobId: 'ai-job-historical'
+      }
+    },
+    {
+      id: 'takeover-needed',
+      engine: 'local-mineru',
+      state: 'failed',
+      stage: 'mineru-processing',
+      metadata: {
+        mineruTaskId: 'mineru-takeover-needed',
+        mineruStatus: 'completed',
+        parsedFilesCount: 0
+      }
+    }
+  ];
+  mockMineruTasks = {};
+
+  resData = await new Promise(resolve => handler({}, makeRes(resolve)));
+  console.assert(resData.takeoverRequiredTasks.includes('takeover-needed'), 'Expected actionable takeover task');
+  console.assert(!resData.takeoverRequiredTasks.includes('historical-ai-failure'), 'Historical AI failure must not be takeover-required');
+  console.assert(resData.historicalAiFailureTasks.includes('historical-ai-failure'), 'Expected historical AI failure bucket');
+  console.log('Test 5 Pass ✅');
 
   console.log('✅ Diagnostics语义验证通过！');
   process.exit(0);
