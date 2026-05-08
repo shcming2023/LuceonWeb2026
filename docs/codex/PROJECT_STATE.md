@@ -89,6 +89,10 @@ Collaboration automation updated on 2026-05-08:
 - Non-destructive standard checks and documentation drift inspection are assigned to `TASK-20260508-110044-P0-Release-Candidate-Standard-Checks-And-Docs-Reconciliation`.
 - Lucia accepted task 21 on 2026-05-08. Accepted evidence: TypeScript, build, dependency-health smoke, Tier 2 Standard, UAT smoke, dependency-health with MinerU submit probe, dependency repair status, and DB health passed under non-destructive constraints.
 - `docs/reviews/PHASE1_ACCEPTANCE_SUMMARY.md` is marked as a dated 2026-05-06 snapshot; current technical-debt and release-readiness status remain governed by this project state ledger and `TaskAndReport/`.
+- Director approved continuing toward production release-readiness preparation, while keeping production release readiness unclaimed.
+- Mandatory before any production release-readiness claim: large-PDF soak, concurrency validation, error-path matrix, rollback/recovery rehearsal, production workspace boundary review, `docker-compose.override.yml` boundary review, Docker frontend base-image preflight, and single-operator/no-auth security boundary decision.
+- Not authorized without separate Director approval: production release-readiness declaration, production restart/rebuild/deploy/rollback, DB/MinIO/Docker volume/task/artifact/secret mutation, Docker pull/build/compose operations affecting production, and external/multi-user release boundary acceptance.
+- Production workspace override boundary review is assigned to `TASK-20260508-113500-P0-Production-Workspace-Override-Boundary-Review`.
 
 MinerU submit-path probe accepted on 2026-05-07:
 

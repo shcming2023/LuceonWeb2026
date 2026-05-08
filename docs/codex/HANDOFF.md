@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-104137-P0-Director-Release-Readiness-Scope-Decisions`: Director decision pending for release route, mandatory validation scope, production override boundary, future restart/rebuild/rollback authorization, and single-operator/no-auth release boundary.
+- `TASK-20260508-113500-P0-Production-Workspace-Override-Boundary-Review`: Lucode must perform a read-only review of production workspace divergence and local `docker-compose.override.yml`. This task must not pull/reset/checkout/stash/clean the production workspace, edit the override, run Docker commands, restart/rebuild/deploy/rollback, mutate data, or claim production release readiness.
 
 Director shorthand is active:
 
@@ -139,3 +139,5 @@ Lucia accepted that gap matrix at `2026-05-08T10:41:37+0800`. Director-owned rel
 Lucia accepted the task 20 evidence pack at `2026-05-08T11:00:44+0800`. Director task 19 remains pending and reached two heartbeat checks; Lucia fallback is limited to non-destructive validation/docs. Task 21 is assigned to Lucode for standard checks and documentation drift inspection.
 
 Lucia accepted task 21 at `2026-05-08T11:20:00+0800`. Standard non-destructive checks passed, including TypeScript, build, dependency-health smoke, Tier 2 Standard, UAT smoke, and read-only runtime health checks. `docs/reviews/PHASE1_ACCEPTANCE_SUMMARY.md` is now explicitly marked as a dated 2026-05-06 snapshot; current status remains in `PROJECT_STATE.md` and `TaskAndReport/`. Production release readiness remains unclaimed.
+
+Director approved the layered release-readiness preparation decision for task 19. Production release readiness remains unclaimed. Production restart/rebuild/deploy/rollback, Docker pull/build/compose, production data mutation, secret changes, and external/multi-user release boundary acceptance remain unauthorized without separate Director approval. Lucia issued task 22 for read-only production workspace override boundary review.
