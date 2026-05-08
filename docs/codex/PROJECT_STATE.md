@@ -363,7 +363,7 @@ Runtime evidence from the final pipeline run:
 | TD-017 | Mitigated | Medium-large parsed documents could enter AI metadata first pass through the legacy sampler with timeout-prone input size. | Code-level mitigation accepted in task 31 and controlled production validation accepted in task 38: selected input used `evidence-pack-v0.3` and was reduced from `104823` to `16261`. Broader release-readiness validation remains separate. |
 | TD-018 | Mitigated | Production Ollama `qwen3.5:9b` dependency-health chat smoke timed out before the adaptive evidence-pack controlled upload could be created. | Task 38 validated a bounded non-mutating warm-up gate: warm dependency-health passed after warm-up and the controlled upload completed to `review-pending`. Cold-load remains a release-readiness operational concern, not closed globally. |
 | TD-019 | Superseded | Controlled production concurrency validation was considered but rejected by Director. | Director clarified local MinerU, MinIO, and Ollama deployment should use stage-queued流水 validation: upload intake can accept the next sample after MinIO intake, while MinerU and Ollama heavy work queue by stage. Task 42 replaces the concurrency route with stage-queued planning/preflight from the true sample directory. |
-| TD-020 | Open | Stage-queued validation over real samples has not yet been run. | Director clarified true samples live under `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/4.XxwlAs2026/sample`. Task 42 revised plan is accepted, but actual production validation requires Director decision task 43. No upload is currently authorized. |
+| TD-020 | In progress | Stage-queued validation over real samples has not yet been reviewed. | Director approved Option A for task 43. Task 44 authorizes up to three controlled true-directory uploads under stage-queued rules. This is validation artifact creation only, not production release readiness. |
 
 ## 6. Core Asset Directory Index
 
@@ -448,3 +448,5 @@ Lucia accepted the revised Task 42 report at `2026-05-08T21:43:25+0800`. Accepte
 - Ollama active metadata/Ollama-running count must stay `<=1`.
 - The true sample directory remains read-only and must not be synchronized to GitHub, modified, moved, renamed, deleted, normalized, or polluted.
 - Actual production validation is not authorized by Task 42. Director decision task 43 is pending.
+
+Director approved Option A for task 43 at `2026-05-08T21:51:38+0800`: up to three controlled true-directory samples may be used for a stage-queued production validation artifact run. Lucia issued task 44. This authorization does not include production release readiness, production deploy/rebuild/restart/rollback/Docker mutation, service/config/model/secret/override changes, data deletion, sample mutation/sync, skeleton fallback, or silent degradation.
