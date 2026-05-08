@@ -1,6 +1,6 @@
 # Codex Handoff
 
-Last updated: 2026-05-07
+Last updated: 2026-05-08
 
 ## Current Entry Point
 
@@ -115,3 +115,13 @@ Director shorthand is active:
 - `Lucode, check task`: inspect `TaskAndReport/` for rows with `Next Actor=Lucode`.
 - If a row names the role as `Next Actor`, execute `Next Action` or write a blocked report; state-only replies are not sufficient.
 - If no actionable task/report exists for that role, report no new item and wait.
+
+## 2026-05-08 Director Decision And Heartbeat Autonomy Update
+
+Director decision waits must be recorded in `TaskAndReport/TASK_TRACKING_LIST.md` with `Status=挂起`, `Next Actor=Director`, a specific `Next Action`, and a concrete `Required Output`.
+
+Lucia heartbeat checks must inspect both `Next Actor=Lucia` rows and recorded `Next Actor=Director` decision rows. If a Director decision remains unanswered after two Lucia heartbeat checks, or Lucia detects a task-flow deadlock, Lucia may make the smallest responsible decision needed to continue iteration.
+
+This autonomy cannot be used for production release approval, destructive production operations, secret changes, DB/MinIO/Docker-volume deletion or mutation, broad architecture rewrites, or material product-scope expansion. Those items remain Director-owned.
+
+Any autonomous decision must be recorded in the task row notes and in the relevant review, task, project-state, or handoff document before assigning the next actor.

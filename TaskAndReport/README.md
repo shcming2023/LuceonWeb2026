@@ -1,6 +1,6 @@
 # Luceon2026 Task And Report Registry
 
-Last updated: 2026-05-07
+Last updated: 2026-05-08
 
 `TaskAndReport/` is the mandatory handoff folder for Lucia-issued task briefs and Lucode completion reports.
 
@@ -44,7 +44,7 @@ Use these status values in `TASK_TRACKING_LIST.md`:
 - `完成关闭`: Lucia has accepted the report and closed the task.
 - `失败关闭`: Lucia has reviewed the report and closed the task as failed.
 - `取消`: Lucia or Director has canceled the task before completion.
-- `挂起`: the task is intentionally paused pending dependency, decision, or evidence.
+- `挂起`: the task is intentionally paused pending dependency, Director decision, or evidence.
 
 ## Tracking Columns
 
@@ -57,6 +57,8 @@ Use these status values in `TASK_TRACKING_LIST.md`:
 
 These fields are mandatory. A non-closed task must always have a non-empty `Next Actor`, `Next Action`, and `Required Output`.
 
+When `Next Actor=Director`, the row must represent a specific decision point, not a general wait. The `Next Action` must state the exact decision needed, and `Required Output` must state the expected Director response or the authorized Lucia fallback after the waiting threshold. The `Notes` field must record the decision-request timestamp, heartbeat wait evidence, decision boundary, and any later Lucia autonomous decision.
+
 ## Workflow
 
 1. Lucia writes the task brief file in this folder.
@@ -66,6 +68,23 @@ These fields are mandatory. A non-closed task must always have a non-empty `Next
 5. Lucode updates the task row with report path, GitHub branch/HEAD, status `已回报待审` or `修正回报待审`, and `Next Actor=Lucia`.
 6. Lucia reads the report file from this folder, reviews the evidence, and updates status, next actor, next action, and required output.
 
+## Director Decision Rows
+
+If a task cannot continue without Director judgment, Lucia must update the task row to:
+
+- `Status=挂起`
+- `Next Actor=Director`
+- `Next Action=<specific decision question>`
+- `Required Output=<Director decision, or Lucia bounded autonomous decision after two unanswered heartbeat checks>`
+
+Lucia must not rely on chat memory alone for Director decision waits.
+
+If the current thread's `lucia` heartbeat wakes twice while a Director-decision row remains unanswered, or if Lucia detects a task-flow deadlock, Lucia may make the smallest responsible decision needed to continue. The decision must follow the project objective, PRD, accepted evidence, and conservative engineering practice.
+
+This fallback cannot be used for production release approval, destructive production operations, secret changes, DB/MinIO/Docker-volume deletion or mutation, broad architecture rewrites, or material product-scope expansion. Those cases remain `Next Actor=Director`.
+
+When this fallback is used, Lucia must update the row's `Notes` and create or update the appropriate `*_LUCIA_REVIEW.md`, `*_TASK.md`, `docs/codex/PROJECT_STATE.md`, or `docs/codex/HANDOFF.md` record.
+
 ## Check Task Shortcut
 
 When Director says `Lucia, check task`, Lucia must:
@@ -74,7 +93,9 @@ When Director says `Lucia, check task`, Lucia must:
 2. Find rows with `Next Actor=Lucia`.
 3. If a Lucia-owned action exists, perform the `Next Action` according to `docs/codex/roles/lucia.md`.
 4. If a report review is required, write a `*_LUCIA_REVIEW.md` file and update the row.
-5. If no row has `Next Actor=Lucia`, state that no new Lucia task/report is available and wait for the next instruction.
+5. Also inspect rows with `Next Actor=Director` for recorded decision waits.
+6. If a Director-decision row has reached two unanswered Lucia heartbeat checks, or the workflow is otherwise deadlocked, apply the Director Decision Rows rule.
+7. If no row has `Next Actor=Lucia` and no Director-decision row has reached the fallback threshold, state that no new Lucia task/report is available and wait for the next instruction.
 
 When Director says `Lucode, check task`, Lucode must:
 

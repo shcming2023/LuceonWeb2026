@@ -1,6 +1,6 @@
 # Luceon2026 Team Contract
 
-Last updated: 2026-05-07
+Last updated: 2026-05-08
 
 ## 1. Purpose
 
@@ -66,6 +66,7 @@ Lucode must not expand scope, rewrite architecture, alter role contracts, change
 7. Lucia reviews the report, code diff, tests, and evidence from the repository.
 8. Lucia either accepts the result, returns a correction task with `Next Actor=Lucode`, or records the remaining risk as known technical debt.
 9. Director makes final product or release decisions when the boundary requires owner judgment.
+10. When a Director decision is required to continue, Lucia records that decision point in `TaskAndReport/TASK_TRACKING_LIST.md` instead of leaving it only in chat or an implicit waiting state.
 
 ## 4.1 Check Task Shortcut
 
@@ -83,6 +84,22 @@ Required task-tracking columns:
 - task brief link
 - report or review link
 - branch and HEAD
+
+## 4.2 Director Decision And Deadlock Rule
+
+Any item requiring Director decision must be represented in `TaskAndReport/TASK_TRACKING_LIST.md` with:
+
+- `Status=挂起`
+- `Next Actor=Director`
+- A concrete `Next Action` that states the exact decision needed.
+- A concrete `Required Output` that states the expected Director decision, or the authorized Lucia fallback after the waiting threshold.
+- `Notes` that record the decision-request timestamp, heartbeat wait evidence, decision boundary, and any autonomous decision made by Lucia.
+
+If Lucia wakes in the current thread through the `lucia` heartbeat two times while the Director decision remains unanswered, or if Lucia detects that the workflow has entered a task-flow deadlock, Lucia may make the smallest responsible decision needed to keep iteration moving. Lucia must base that decision on the current task objective, PRD, accepted repository facts, verified evidence, known constraints, and conservative engineering practice.
+
+This autonomy is bounded. Lucia must not use it to approve production release readiness, delete or mutate production data, change secrets, perform destructive DB/MinIO/Docker-volume operations, make broad architecture rewrites, or materially expand product scope. Those boundaries remain Director-owned unless the Director gives explicit approval.
+
+When Lucia uses this rule, Lucia must document the decision in the relevant task row and in a `*_LUCIA_REVIEW.md`, `*_TASK.md`, or other appropriate repository record before assigning the next action.
 
 ## 5. Source Of Truth
 
