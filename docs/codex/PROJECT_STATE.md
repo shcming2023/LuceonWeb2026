@@ -95,7 +95,8 @@ Collaboration automation updated on 2026-05-08:
 - Production workspace override boundary review is assigned to `TASK-20260508-113500-P0-Production-Workspace-Override-Boundary-Review`.
 - Lucia accepted the production workspace override boundary review on 2026-05-08. Accepted classification: strict AI/model override values are local runtime configuration that should be preserved; MinIO console `19001:9001` is a local-admin exposure boundary that must be documented or separately changed before release-candidate naming.
 - Production-local override contract documentation is assigned to `TASK-20260508-120851-P0-Production-Local-Override-Contract-Documentation`.
-- Lucode documented the production-local override contract in `docs/deploy/DEPLOY.md` and reported task 23 for Lucia review. This documentation does not claim production release readiness and does not authorize production sync, rebuild, restart, rollback, Docker operations, data mutation, or override mutation.
+- Lucia accepted task 23 on 2026-05-08. `docs/deploy/DEPLOY.md` now records the production-local override contract: strict AI/model override values are required runtime semantics, MinIO console `19001:9001` is a local-admin exposure boundary, and release-candidate naming requires exact production HEAD plus override-boundary confirmation. This documentation does not claim production release readiness and does not authorize production sync, rebuild, restart, rollback, Docker operations, data mutation, or override mutation.
+- Director decision row `TASK-20260508-123045-P0-Production-Override-Release-Boundary-Decision` is open for the remaining release-boundary decision: accept, narrow, or remove MinIO console exposure before release-candidate naming, and decide where strict AI/model configuration should live.
 
 MinerU submit-path probe accepted on 2026-05-07:
 

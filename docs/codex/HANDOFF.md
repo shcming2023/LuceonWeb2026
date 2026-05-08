@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-120851-P0-Production-Local-Override-Contract-Documentation`: Lucode has documented the production-local override contract and reported it for Lucia review. The task did not edit the production workspace, run Docker commands, mutate runtime/data/override, or claim production release readiness.
+- `TASK-20260508-123045-P0-Production-Override-Release-Boundary-Decision`: Director should decide the production-local override release boundary before release-candidate naming. The open decision is whether MinIO console `19001:9001` is accepted for the intended boundary, narrowed to local-only, or removed, and whether strict AI/model settings remain in local override, move to `.env`, or become committed deployment configuration.
 
 Director shorthand is active:
 
@@ -144,4 +144,6 @@ Director approved the layered release-readiness preparation decision for task 19
 
 Lucia accepted task 22 at `2026-05-08T12:08:51+0800`. The production override is classified as local runtime configuration with one local-admin exposure boundary: strict AI/model env should be preserved; MinIO console `19001:9001` must be documented or separately changed before release-candidate naming. Task 23 is assigned to document this contract.
 
-Lucode reported task 23 after documenting the contract in `docs/deploy/DEPLOY.md`. Lucia review is required before the documentation is accepted as project fact. Production release readiness remains unclaimed, and production sync/rebuild/restart/rollback, Docker pull/build/compose, data mutation, secret changes, and override mutation remain unauthorized without a separate Director decision and Lucia task.
+Lucia accepted task 23 at `2026-05-08T12:30:45+0800`. `docs/deploy/DEPLOY.md` now records the production-local override contract. Production release readiness remains unclaimed, and production sync/rebuild/restart/rollback, Docker pull/build/compose, data mutation, secret changes, and override mutation remain unauthorized without a separate Director decision and Lucia task.
+
+Task 24 records the next Director-owned release-boundary decision. Lucia recommends narrowing MinIO console exposure to local-only before any release-candidate naming if operational access remains needed, while preserving strict AI/model values as explicit runtime configuration until a separate deployment-configuration cleanup is authorized.
