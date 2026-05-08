@@ -199,3 +199,5 @@ Lucia returned the first task 46 implementation at `2026-05-09T01:44:51+0800`. I
 Lucia accepted the revised task 46 implementation at `2026-05-09T02:42:47+0800` as `ACCEPTED_CODE_LEVEL`. The accepted code explicitly writes final task metadata `mineruStatus='completed'` in the completed-after-local-timeout takeover path, and focused smokes assert that final task metadata in both new paths. Lucia independently reran diff-check, `mineru-no-resubmit-smoke`, `mineru-timeout-adjudication-smoke`, TypeScript, and build.
 
 Current active task: task 47, Director decision. Director must decide whether to authorize a scoped production recovery for stuck sample 3 task `task-1778249434820` / material `mat-1778249419780`, hold recovery, or request more read-only evidence. Lucia may not autonomously authorize production write-side recovery after heartbeat waits because it can mutate production task/material/AI-job state.
+
+Heartbeat wait evidence for task 47: Lucia check 1 at `2026-05-09T03:42:47+0800` found no Director answer yet. The active next actor remains Director.
