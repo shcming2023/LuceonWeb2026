@@ -2,6 +2,8 @@
 
 Last updated: 2026-05-06
 
+Snapshot note: this file is a dated governance snapshot from 2026-05-06. Later task-level changes, technical-debt closures, release-readiness evidence, and active status are tracked in `docs/codex/PROJECT_STATE.md` and `TaskAndReport/TASK_TRACKING_LIST.md`.
+
 ## Scope
 
 This summary records the confirmed first-phase state after repository governance. It is not a production release declaration.
@@ -72,3 +74,5 @@ The current runtime baseline is local conda MinerU, Docker MinIO, host Ollama `q
 ## Governance Boundary
 
 The 2026-05-06 governance pass archived historical plans and review reports, aligned active documents and tests, removed confirmed obsolete code/assets, and preserved the Phase 1 external behavior. It does not claim production release readiness.
+
+Later status note: TD-001 was closed after this snapshot by the MinerU submit-path probe work recorded in `docs/codex/PROJECT_STATE.md` and `TaskAndReport/`.

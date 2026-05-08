@@ -87,6 +87,8 @@ Collaboration automation updated on 2026-05-08:
 - Accepted evidence: development TypeScript/build/dependency-health-smoke passed; read-only runtime dependency-health with MinerU submit probe and DB health passed; production workspace remains behind `origin/main` with local `docker-compose.override.yml` modification.
 - Director task 19 reached two unanswered Lucia heartbeat checks. Lucia fallback remains limited to non-destructive validation/docs and does not authorize production release approval, restart/rebuild/rollback, production mutation, secret changes, or release-scope acceptance.
 - Non-destructive standard checks and documentation drift inspection are assigned to `TASK-20260508-110044-P0-Release-Candidate-Standard-Checks-And-Docs-Reconciliation`.
+- Lucia accepted task 21 on 2026-05-08. Accepted evidence: TypeScript, build, dependency-health smoke, Tier 2 Standard, UAT smoke, dependency-health with MinerU submit probe, dependency repair status, and DB health passed under non-destructive constraints.
+- `docs/reviews/PHASE1_ACCEPTANCE_SUMMARY.md` is marked as a dated 2026-05-06 snapshot; current technical-debt and release-readiness status remain governed by this project state ledger and `TaskAndReport/`.
 
 MinerU submit-path probe accepted on 2026-05-07:
 
