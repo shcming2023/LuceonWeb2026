@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-180949-P0-Ollama-Readiness-Timeout-Diagnosis-And-Recovery-Plan`: Lucode must diagnose the production Ollama `qwen3.5:9b` readiness timeout using read-only/non-mutating checks only, then report a recovery recommendation. No production upload, Docker mutation, Ollama restart/kill/start, model/timeout/config/secret change, data deletion, or release-readiness claim is authorized.
+- `TASK-20260508-181915-P0-Adaptive-Evidence-Pack-Production-Validation-Retry`: Lucode must re-attempt one scoped adaptive evidence-pack production validation upload only if immediate warm dependency health passes. No production deploy, fast-forward, rebuild, restart, rollback, Docker mutation, model/timeout/config/secret/override change, data deletion, silent fallback, more than one controlled upload, or release-readiness claim is authorized.
 
 Director shorthand is active:
 
@@ -169,3 +169,5 @@ Lucia accepted task 33 at `2026-05-08T16:02:45+0800`. Accepted preflight facts: 
 Director approved task 32 at `2026-05-08T17:31:00+0800`. Lucia issued task 34 for one scoped production validation only. Authorized scope: apply accepted `main` code to production as needed, preserve production-local override boundaries, use minimum necessary Docker/Compose action, run preflight checks, and create at most one controlled large-PDF validation upload if preflight passes. Still forbidden: production release-readiness declaration, DB row deletion, MinIO object deletion, Docker volume deletion/pruning, secret changes, broad rollback, model/timeout changes, skeleton fallback, silent degradation, and external/multi-user release boundary acceptance.
 
 Lucia accepted task 34 at `2026-05-08T18:09:49+0800` as blocked evidence. Production reached `8092965`, upload-server was rebuilt, strict AI/model and MinIO local-only override boundaries were preserved, CMS/DB/MinIO/MinerU submit probe passed, active tasks/jobs were `0`, and the preferred sample size/hash matched. The controlled upload was not created because pre-upload dependency health reported Ollama `qwen3.5:9b` chat-smoke timeout. Task 35 is assigned for non-destructive Ollama readiness diagnosis and recovery planning.
+
+Lucia accepted task 35 at `2026-05-08T18:19:15+0800`. Diagnosis: Ollama `qwen3.5:9b` exists and became ready without mutation; cold probes spent about `8.9s` loading and `9.7s` to `10.6s` total, while warm chat dropped to about `1.35s` and warm dependency health to `793ms`. This supports transient cold-load/readiness behavior under memory pressure rather than model absence. Task 36 is assigned for one scoped validation retry, gated by immediate warm dependency-health pass.
