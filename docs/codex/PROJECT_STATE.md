@@ -362,6 +362,7 @@ Runtime evidence from the final pipeline run:
 | TD-016 | Documented | `docker compose up -d --build` can hang while loading frontend `nginx:1.27-alpine` metadata. | Diagnosis accepted in task 16. Treat as Docker Desktop / buildx metadata resolution for a missing local base image; preflight and pre-pull the exact base image before frontend rebuilds in release-readiness work. |
 | TD-017 | Mitigated | Medium-large parsed documents could enter AI metadata first pass through the legacy sampler with timeout-prone input size. | Code-level mitigation accepted in task 31 and controlled production validation accepted in task 38: selected input used `evidence-pack-v0.3` and was reduced from `104823` to `16261`. Broader release-readiness validation remains separate. |
 | TD-018 | Mitigated | Production Ollama `qwen3.5:9b` dependency-health chat smoke timed out before the adaptive evidence-pack controlled upload could be created. | Task 38 validated a bounded non-mutating warm-up gate: warm dependency-health passed after warm-up and the controlled upload completed to `review-pending`. Cold-load remains a release-readiness operational concern, not closed globally. |
+| TD-019 | Open | Controlled production concurrency validation has not yet been run. | Task 40 planning/preflight is accepted: active tasks/jobs were `0`, MinIO/MinerU passed, initial Ollama health timed out, bounded warm-up succeeded, and warm dependency-health passed. Director decision task 41 must approve the exact two-upload run before Lucode creates production concurrency validation artifacts. |
 
 ## 6. Core Asset Directory Index
 
@@ -392,3 +393,26 @@ Runtime evidence from the final pipeline run:
 - Current Phase 1 status is local real-runtime PASS for the upload -> MinerU -> MinIO -> Ollama metadata -> review path.
 - This record does not promote staging readiness, production release readiness, or full-site acceptance.
 - Future changes must preserve full-text reasoning as the chapter-preprocessing direction if chapter preprocessing is reintroduced or extended; heuristic chapter preprocessing such as `chapterPreprocessV2.ts` must not be restored as a main path.
+
+## 2026-05-08 Controlled Concurrency Validation Planning
+
+Lucia accepted Task 40 as `ACCEPTED_PLANNING_AND_PREFLIGHT_WITH_DIRECTOR_DECISION_REQUIRED`.
+
+Confirmed planning/preflight facts from Lucode report:
+
+- Result classification: `PLAN_READY`.
+- No production upload was created.
+- No production release-readiness claim occurred.
+- No production deploy, fast-forward, rebuild, restart, rollback, Docker mutation, Ollama restart/start/stop/kill/reload, model/timeout/config/secret/override change, DB row deletion, MinIO object deletion, Docker volume deletion, sample mutation, GitHub sample sync, skeleton fallback, or silent degradation was reported.
+- Production override boundary was reported present: `DISABLE_AI_SKELETON_FALLBACK=true`, `OLLAMA_TIER2_MODEL=qwen3.5:9b`, and MinIO console mapping `127.0.0.1:19001:9001`.
+- Active parse/task states and active AI metadata jobs were `0`.
+- Initial dependency-health with MinerU submit probe passed MinIO/MinerU but timed out Ollama at about `14999ms`; one bounded non-mutating Ollama warm-up succeeded; warm dependency-health passed with `ollama.durationMs=699`.
+
+The technically accepted first concurrency shape is concurrency `2`, maximum uploads `2`, using:
+
+- `/Users/concm/prod_workspace/Luceon2026/testpdf/G7_Workbook_ready_to_print.pdf`
+- `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/4.XxwlAs2026/sample/走向成功_英语_二模卷16篇.pdf`
+
+The external sample directory remains read-only input inventory and must not be synchronized to GitHub, modified, moved, renamed, deleted, normalized, or polluted.
+
+Director decision task 41 is now pending before any actual controlled concurrency upload run.

@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-191709-P0-Controlled-Concurrency-Validation-Plan-And-Preflight`: Lucode must prepare a bounded concurrency validation plan and collect non-destructive preflight evidence. This task is planning/preflight only and must not create production uploads.
+- `TASK-20260508-193439-P0-Controlled-Concurrency-Validation-Run-Authorization`: Director must decide whether to approve the exact two-upload controlled production concurrency validation run. Lucia recommends approving Option A, but no production upload is authorized until Director approves or the recorded two-heartbeat limited autonomy rule is triggered.
 
 Director shorthand is active:
 
@@ -179,3 +179,5 @@ Director approved task 37 at `2026-05-08T18:38:44+0800`. Approved scope is limit
 Lucia accepted task 38 at `2026-05-08T19:10:21+0800` as controlled production validation. The authorized large-PDF sample created task `task-1778237744029`, MinerU completed with `parsedFilesCount=99`, AI reached `review-pending`, and adaptive input selection used `evidence-pack-v0.3` with selected length `16261`. Production release readiness remains unclaimed. Residual risks: cold-load warm-up remains operationally important, first-pass JSON repair was still needed, and MinerU observation was stale/completed-window backfill. Director decision task 39 is pending for the next release-readiness validation track.
 
 Director selected `CONCURRENCY_VALIDATION_FIRST` for task 39 at `2026-05-08T19:17:09+0800`. Lucia issued task 40 for concurrency validation planning and non-destructive preflight only. Lucode may inspect the external sample directory `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/4.XxwlAs2026/sample` as read-only inventory, but must not sync it to GitHub, modify, move, delete, or pollute samples. No production upload is authorized in task 40.
+
+Lucia accepted task 40 at `2026-05-08T19:34:39+0800` as planning/preflight evidence. Lucode reported `PLAN_READY`, active tasks/jobs `0`, MinIO/MinerU OK, initial Ollama timeout at about `14999ms`, one bounded non-mutating warm-up success, and warm dependency-health success with `ollama.durationMs=699`. The proposed first run is concurrency `2`, max uploads `2`, using the proven `G7_Workbook_ready_to_print.pdf` plus read-only external `走向成功_英语_二模卷16篇.pdf`. Because the next step creates production validation artifacts, Director decision task 41 is pending before any upload run.
