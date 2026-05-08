@@ -222,6 +222,16 @@ Completed-task observation and ops-session semantics accepted in production runt
 - Boundary: this is scoped production runtime validation only. Production release readiness, staging readiness, L3 readiness, and full-site acceptance remain unclaimed.
 - Residual deployment reliability debt: `docker compose up -d --build` repeatedly hung while loading frontend `nginx:1.27-alpine` metadata. Follow-up task issued: `TASK-20260508-081414-P2-Docker-Frontend-Build-Metadata-Hang-Diagnosis`.
 
+Docker frontend build metadata diagnosis accepted on 2026-05-08:
+
+- Task: `TASK-20260508-081414-P2-Docker-Frontend-Build-Metadata-Hang-Diagnosis`.
+- Lucode report: `TaskAndReport/2026-05-08T08-22-40+0800_P2-Docker-Frontend-Build-Metadata-Hang-Diagnosis_REPORT.md`.
+- Lucia review: `TaskAndReport/2026-05-08T08-24-14+0800_P2-Docker-Frontend-Build-Metadata-Hang-Diagnosis_LUCIA_REVIEW.md`.
+- Accepted conclusion: the hang is bounded to Docker Desktop / buildx metadata resolution for missing local image `nginx:1.27-alpine`, not invalid compose config or a failing Vite frontend build.
+- Evidence summary: `docker compose config`, `docker compose build --dry-run`, and `npx pnpm@10.4.1 run build` passed; direct metadata inspection and frontend build hung while loading `nginx:1.27-alpine` metadata.
+- Operator boundary: no repository change was made. Before any deployment that must rebuild the frontend image, preflight exact base-image metadata resolution and pre-pull `nginx:1.27-alpine` when Docker Desktop / registry access is healthy.
+- Boundary: this is a bounded deployment-reliability diagnosis only. Production release readiness remains unclaimed.
+
 ## 4. Validation Ledger
 
 Commands run in this governance pass:
@@ -303,7 +313,7 @@ Runtime evidence from the final pipeline run:
 | TD-013 | Closed | UI/diagnostic wording can describe deterministic AI repair success or reachable-but-unmanaged Ollama status as AI blocked. | Closed by task 13 validation: deterministic repair success is displayed as completed/review-needed, and reachable non-tmux Ollama is displayed as an ops-session warning rather than a dependency outage. |
 | TD-014 | Closed | Terminal ParseTasks can still receive misleading post-completion MinerU observation changes through completed-window backfill. | Closed by task 15 production validation: synthetic completed-window observation returned `mutated=false` and did not mutate the terminal task's existing observation. |
 | TD-015 | Closed | Dependency repair status still reports missing expected tmux ownership for a reachable MinerU service. | Closed by task 15 production validation: service reachability and tmux ownership are reported separately, including unmanaged session details. |
-| TD-016 | Open | `docker compose up -d --build` can hang while loading frontend `nginx:1.27-alpine` metadata. | Follow-up task `TASK-20260508-081414-P2-Docker-Frontend-Build-Metadata-Hang-Diagnosis` is assigned. This did not block task 15 backend/runtime validation because backend images were rebuilt and frontend code was unchanged. |
+| TD-016 | Documented | `docker compose up -d --build` can hang while loading frontend `nginx:1.27-alpine` metadata. | Diagnosis accepted in task 16. Treat as Docker Desktop / buildx metadata resolution for a missing local base image; preflight and pre-pull the exact base image before frontend rebuilds in release-readiness work. |
 
 ## 6. Core Asset Directory Index
 

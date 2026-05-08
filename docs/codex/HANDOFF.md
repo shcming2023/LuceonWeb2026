@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-081414-P2-Docker-Frontend-Build-Metadata-Hang-Diagnosis`
+- None.
 
 Director shorthand is active:
 
