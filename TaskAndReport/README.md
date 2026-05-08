@@ -14,6 +14,7 @@ This folder provides traceable project execution records. Lucia no longer relies
 - `*_TASK.md`: Lucia task brief files.
 - `*_REPORT.md`: Lucode completion report files.
 - `*_LUCIA_REVIEW.md`: Lucia review records when a report is accepted, rejected, or returned for correction.
+- `*_DECISION.md`: Lucia-authored Director decision request files when owner judgment is required before the next task.
 
 ## File Naming Rule
 
@@ -23,6 +24,7 @@ Use timestamp plus task name:
 YYYY-MM-DDTHH-MM-SS+0800_<Task-Name>_TASK.md
 YYYY-MM-DDTHH-MM-SS+0800_<Task-Name>_REPORT.md
 YYYY-MM-DDTHH-MM-SS+0800_<Task-Name>_LUCIA_REVIEW.md
+YYYY-MM-DDTHH-MM-SS+0800_<Task-Name>_DECISION.md
 ```
 
 Task names must use ASCII-safe hyphenated words. Example:
@@ -57,6 +59,8 @@ Use these status values in `TASK_TRACKING_LIST.md`:
 
 These fields are mandatory. A non-closed task must always have a non-empty `Next Actor`, `Next Action`, and `Required Output`.
 
+The ledger must not have all current rows closed with no active next actor unless Director has explicitly closed the iteration stream and the closure is recorded in the latest row notes.
+
 When `Next Actor=Director`, the row must represent a specific decision point, not a general wait. The `Next Action` must state the exact decision needed, and `Required Output` must state the expected Director response or the authorized Lucia fallback after the waiting threshold. The `Notes` field must record the decision-request timestamp, heartbeat wait evidence, decision boundary, and any later Lucia autonomous decision.
 
 ## Workflow
@@ -84,6 +88,18 @@ If the current thread's `lucia` heartbeat wakes twice while a Director-decision 
 This fallback cannot be used for production release approval, destructive production operations, secret changes, DB/MinIO/Docker-volume deletion or mutation, broad architecture rewrites, or material product-scope expansion. Those cases remain `Next Actor=Director`.
 
 When this fallback is used, Lucia must update the row's `Notes` and create or update the appropriate `*_LUCIA_REVIEW.md`, `*_TASK.md`, `docs/codex/PROJECT_STATE.md`, or `docs/codex/HANDOFF.md` record.
+
+## No-Idle Ledger Rule
+
+At least one row must represent the current project next step until Director explicitly closes the iteration stream.
+
+If all previous tasks are closed, Lucia must do one of the following:
+
+- Add a new `*_TASK.md` and tracking row for Lucode when the next work can proceed safely within existing PRD and project boundaries.
+- Add a `*_DECISION.md` and tracking row with `Next Actor=Director` when the next work requires owner judgment.
+- Record the Director-approved iteration closure in the latest row notes.
+
+The valid steady states are therefore: Lucode executing, Lucia reviewing or drafting, Director deciding, or Director-approved closure. A silent no-task state is not valid.
 
 ## Check Task Shortcut
 

@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- None.
+- `TASK-20260508-095802-P0-Phase-1-Next-Iteration-Route-Decision`: Director decision pending. If unanswered after two Lucia heartbeat checks, Lucia may choose the conservative default and issue a Lucode task for a non-destructive production release-readiness gap matrix and validation plan.
 
 Director shorthand is active:
 
@@ -125,3 +125,9 @@ Lucia heartbeat checks must inspect both `Next Actor=Lucia` rows and recorded `N
 This autonomy cannot be used for production release approval, destructive production operations, secret changes, DB/MinIO/Docker-volume deletion or mutation, broad architecture rewrites, or material product-scope expansion. Those items remain Director-owned.
 
 Any autonomous decision must be recorded in the task row notes and in the relevant review, task, project-state, or handoff document before assigning the next actor.
+
+## 2026-05-08 No-Idle Ledger Update
+
+The task ledger must not have Director, Lucia, and Lucode all idle unless Director explicitly closes the iteration stream and that closure is recorded.
+
+When all executable tasks are closed, Lucia must either create the next bounded Lucode task or record a Director decision row. The current active decision row asks Director to choose the next Phase 1-to-next-iteration route.

@@ -67,6 +67,7 @@ Lucode must not expand scope, rewrite architecture, alter role contracts, change
 8. Lucia either accepts the result, returns a correction task with `Next Actor=Lucode`, or records the remaining risk as known technical debt.
 9. Director makes final product or release decisions when the boundary requires owner judgment.
 10. When a Director decision is required to continue, Lucia records that decision point in `TaskAndReport/TASK_TRACKING_LIST.md` instead of leaving it only in chat or an implicit waiting state.
+11. The task ledger must not enter a state where Director, Lucia, and Lucode all have no next action. If no Lucia or Lucode task exists, Lucia must either create the next bounded task or record the next Director decision.
 
 ## 4.1 Check Task Shortcut
 
@@ -100,6 +101,18 @@ If Lucia wakes in the current thread through the `lucia` heartbeat two times whi
 This autonomy is bounded. Lucia must not use it to approve production release readiness, delete or mutate production data, change secrets, perform destructive DB/MinIO/Docker-volume operations, make broad architecture rewrites, or materially expand product scope. Those boundaries remain Director-owned unless the Director gives explicit approval.
 
 When Lucia uses this rule, Lucia must document the decision in the relevant task row and in a `*_LUCIA_REVIEW.md`, `*_TASK.md`, or other appropriate repository record before assigning the next action.
+
+## 4.3 No-Idle Ledger Rule
+
+`TaskAndReport/TASK_TRACKING_LIST.md` must always preserve a visible next step until the Director explicitly closes an iteration stream.
+
+If all executable tasks are closed, Lucia must perform one of these actions during the next `check task` or heartbeat:
+
+- Create a scoped Lucode task when the next action is an implementation, validation, diagnosis, or documentation-execution task that does not require new Director judgment.
+- Record a Director decision row when the next action requires owner judgment about priority, release boundary, product scope, or strategic route.
+- Record `Next Actor=Director` with `Status=挂起` if the only valid next step is a Director choice.
+
+An all-closed ledger with no active next actor is valid only when the Director has explicitly closed the iteration stream and the closure is recorded in the task ledger notes.
 
 ## 5. Source Of Truth
 

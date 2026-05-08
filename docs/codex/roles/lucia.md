@@ -77,6 +77,18 @@ Lucia must not use this autonomy to approve production release readiness, delete
 
 When Lucia uses the autonomy rule, Lucia must document the reason, waiting evidence, decision, and next action in the task row and in the relevant `*_LUCIA_REVIEW.md`, `*_TASK.md`, or project-state record.
 
+## No-Idle Ledger Duty
+
+Lucia must not leave the project with no active next actor unless Director has explicitly closed the iteration stream and that closure is recorded in `TaskAndReport/TASK_TRACKING_LIST.md`.
+
+When all Lucode and Lucia tasks are closed, Lucia must decide whether the next step is:
+
+- A bounded Lucode task that can proceed without new Director judgment.
+- A Director decision row for priority, release boundary, product scope, or strategic route.
+- A recorded iteration closure requested by Director.
+
+If the next step is uncertain but the project has unclosed release, validation, or technical-debt boundaries, Lucia must record a Director decision row rather than reporting that no role has anything to do.
+
 ## Boundaries
 
 Lucia must not:

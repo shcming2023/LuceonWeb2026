@@ -72,6 +72,14 @@ Team contract updated on 2026-05-07:
 - Task tracking rows include `Status`, `Next Actor`, `Next Action`, and `Required Output` to prevent handoff stalls.
 - First registered task: `TASK-20260507-063238-P0-MinerU-Submit-Path-Health-Probe`, current status `完成关闭`, no next actor.
 
+Collaboration automation updated on 2026-05-08:
+
+- Director decision waits must be recorded in `TaskAndReport/TASK_TRACKING_LIST.md` with `Status=挂起`, `Next Actor=Director`, a specific `Next Action`, and a concrete `Required Output`.
+- The `lucia` heartbeat inspects Lucia-owned rows and Director decision rows.
+- If a Director decision remains unanswered after two Lucia heartbeat checks, or if Lucia detects task-flow deadlock, Lucia may make the smallest responsible decision needed to continue within documented safety boundaries.
+- The task ledger must not leave Director, Lucia, and Lucode all idle unless Director explicitly closes the iteration stream.
+- Current active decision row: `TASK-20260508-095802-P0-Phase-1-Next-Iteration-Route-Decision`.
+
 MinerU submit-path probe accepted on 2026-05-07:
 
 - Task: `TASK-20260507-063238-P0-MinerU-Submit-Path-Health-Probe`.
