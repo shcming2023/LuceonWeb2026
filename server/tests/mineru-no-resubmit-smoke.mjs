@@ -593,6 +593,7 @@ async function runTest() {
     assert(resumeCalled, '7: resumeWithLocalMinerU should fetch existing completed result');
     assert(taskUpdates.some(u => u.stage === 'result-fetching'), '7: Task should enter result-fetching immediately despite fresh updatedAt');
     assert(taskUpdates.some(u => u.state === 'ai-pending'), '7: Task should reach ai-pending after completed result ingestion');
+    assert(taskUpdates.find(u => u.state === 'ai-pending')?.metadata?.mineruStatus === 'completed', '7: Final task metadata.mineruStatus should be completed');
     assert(materialUpdates.some(u => u.mineruStatus === 'completed'), '7: Material.mineruStatus should be completed');
 
     globalThis.fetch = originalFetch;
@@ -676,6 +677,7 @@ async function runTest() {
     assert(resumeCalls === 2, `8: resumeWithLocalMinerU should be retried once for existing result (got ${resumeCalls})`);
     assert(taskUpdates.some(u => u.stage === 'result-fetching'), '8: Task should enter result-fetching after completed confirmation');
     assert(taskUpdates.some(u => u.state === 'ai-pending'), '8: Task should reach ai-pending after rescued result ingestion');
+    assert(taskUpdates.find(u => u.state === 'ai-pending')?.metadata?.mineruStatus === 'completed', '8: Final task metadata.mineruStatus should be completed');
     assert(!taskUpdates.some(u => u.state === 'failed'), '8: Completed takeover should not fail when result ingestion succeeds');
     assert(materialUpdates.some(u => u.mineruStatus === 'completed'), '8: Material.mineruStatus should be completed');
 

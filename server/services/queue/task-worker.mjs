@@ -1584,6 +1584,7 @@ export class ParseTaskWorker {
       message: 'MinerU 解析完成，产物已落库，等待 AI 元数据识别',
       metadata: {
         ...(task.metadata || {}),
+        mineruStatus: 'completed',
         markdownObjectName,
         mineruTaskId,
         parsedPrefix,
