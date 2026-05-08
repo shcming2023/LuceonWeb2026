@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-123045-P0-Production-Override-Release-Boundary-Decision`: Director should decide the production-local override release boundary before release-candidate naming. The open decision is whether MinIO console `19001:9001` is accepted for the intended boundary, narrowed to local-only, or removed, and whether strict AI/model settings remain in local override, move to `.env`, or become committed deployment configuration.
+- `TASK-20260508-123816-P0-MinIO-Console-Local-Only-Binding-Change-Plan`: Lucode must produce a non-destructive plan for narrowing MinIO console exposure to local-only binding. The task must not edit production workspace or override files, run Docker commands, mutate runtime/data/secrets, or claim production release readiness.
 
 Director shorthand is active:
 
@@ -146,4 +146,6 @@ Lucia accepted task 22 at `2026-05-08T12:08:51+0800`. The production override is
 
 Lucia accepted task 23 at `2026-05-08T12:30:45+0800`. `docs/deploy/DEPLOY.md` now records the production-local override contract. Production release readiness remains unclaimed, and production sync/rebuild/restart/rollback, Docker pull/build/compose, data mutation, secret changes, and override mutation remain unauthorized without a separate Director decision and Lucia task.
 
-Task 24 records the next Director-owned release-boundary decision. Lucia recommends narrowing MinIO console exposure to local-only before any release-candidate naming if operational access remains needed, while preserving strict AI/model values as explicit runtime configuration until a separate deployment-configuration cleanup is authorized.
+Director closed task 24 by selecting option 2. Before release-candidate naming, MinIO console exposure must be narrowed to local-only binding; current `19001:9001` exposure is not accepted as-is; complete removal is not required now. Strict AI/model settings remain in production-local `docker-compose.override.yml` for now. Actual production override mutation still requires separate Director approval.
+
+Lucia issued task 25 for a non-destructive local-only binding change plan, validation plan, and rollback plan.
