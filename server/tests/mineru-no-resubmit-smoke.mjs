@@ -10,11 +10,14 @@
  * 4. stale running + mineruTaskId + MinerU completed → 进入 result-fetching
  * 5. 同一 task 不会生成第二个 mineruTaskId
  * 6. active-task 在 worker 内存为空时仍能从 DB + MinerU API 重建事实
+ * 7. localTimeoutOccurred + fresh updatedAt + MinerU completed → 立即接管，不等 60s
+ * 8. resume 路径遇到 StillProcessingError 后再次确认 completed → 拉取既有结果，不重提交
  *
  * 执行方式: node server/tests/mineru-no-resubmit-smoke.mjs
  */
 
 import { ParseTaskWorker } from '../services/queue/task-worker.mjs';
+import { MineruStillProcessingError } from '../services/mineru/local-adapter.mjs';
 
 let testsPassed = 0;
 let testsFailed = 0;
@@ -512,6 +515,174 @@ async function runTest() {
     assert(activeTask === null, '6: activeTask should be null when multiple running tasks exist');
 
     console.log('Test 6 Pass ✅\n');
+  }
+
+  // ─── Test 7: localTimeoutOccurred + fresh updatedAt + completed → 不等 60s 接管 ───
+  console.log('Test 7: localTimeoutOccurred + fresh updatedAt + MinerU completed → 立即接管');
+  {
+    const taskUpdates = [];
+    const materialUpdates = [];
+    let postTasksCalled = false;
+    let resumeCalled = false;
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url, opts) => {
+      const urlStr = url.toString();
+      if (opts?.method === 'POST' && urlStr.endsWith('/tasks')) {
+        postTasksCalled = true;
+        return { ok: true, status: 200, json: async () => ({ task_id: 'should-not-resubmit-7' }) };
+      }
+      if (urlStr.includes('/tasks/mineru-local-timeout-completed-7')) {
+        return { ok: true, status: 200, json: async () => ({ status: 'completed', completed_at: '2026-05-09T00:00:00Z' }) };
+      }
+      return originalFetch(url, opts);
+    };
+
+    const mockTaskClient = {
+      getAllTasks: async () => [],
+      updateTask: async (_id, update) => { taskUpdates.push(update); return true; },
+      updateMaterial: async (_id, update) => { materialUpdates.push(update); return true; },
+    };
+
+    const worker = new ParseTaskWorker({
+      minioContext: { getFileStream: async () => ({}), saveMarkdown: async () => {}, saveObject: async () => {} },
+      taskClient: mockTaskClient,
+      mineruProcessor: async () => {
+        postTasksCalled = true;
+        throw new Error('Should not be called');
+      },
+      mineruResumer: async () => {
+        resumeCalled = true;
+        return {
+          objectName: 'parsed/mat-7/full.md',
+          mineruTaskId: 'mineru-local-timeout-completed-7',
+          parsedPrefix: 'parsed/mat-7/',
+          parsedFilesCount: 12,
+          parsedArtifacts: [{ objectName: 'parsed/mat-7/full.md', relativePath: 'full.md', size: 1024 }],
+          zipObjectName: 'parsed/mat-7/mineru-result.zip',
+          artifactIncomplete: false,
+          markdown: '# Completed After Timeout'
+        };
+      },
+    });
+
+    const freshTimeoutTask = {
+      id: 'test-local-timeout-completed-7',
+      engine: 'local-mineru',
+      state: 'running',
+      stage: 'mineru-processing',
+      progress: 90,
+      materialId: 'mat-7',
+      updatedAt: new Date().toISOString(),
+      optionsSnapshot: {
+        localTimeout: 3600,
+        localEndpoint: 'http://localhost:8083',
+        material: { fileName: 'large.pdf', mimeType: 'application/pdf', metadata: { objectName: 'originals/mat-7/source.pdf' } }
+      },
+      metadata: {
+        mineruTaskId: 'mineru-local-timeout-completed-7',
+        mineruStatus: 'processing',
+        localTimeoutOccurred: true
+      },
+    };
+
+    await worker.recoverStaleRunningTasks([freshTimeoutTask]);
+    await new Promise(r => setTimeout(r, 300));
+
+    assert(!postTasksCalled, '7: POST /tasks should NOT be called during local-timeout completed takeover');
+    assert(resumeCalled, '7: resumeWithLocalMinerU should fetch existing completed result');
+    assert(taskUpdates.some(u => u.stage === 'result-fetching'), '7: Task should enter result-fetching immediately despite fresh updatedAt');
+    assert(taskUpdates.some(u => u.state === 'ai-pending'), '7: Task should reach ai-pending after completed result ingestion');
+    assert(taskUpdates.find(u => u.state === 'ai-pending')?.metadata?.mineruStatus === 'completed', '7: Final task metadata.mineruStatus should be completed');
+    assert(materialUpdates.some(u => u.mineruStatus === 'completed'), '7: Material.mineruStatus should be completed');
+
+    globalThis.fetch = originalFetch;
+    console.log('Test 7 Pass ✅\n');
+  }
+
+  // ─── Test 8: resume StillProcessingError 后确认 completed → 拉取结果，不重提交 ───
+  console.log('Test 8: resume StillProcessingError + API completed → takeover result ingestion');
+  {
+    const taskUpdates = [];
+    const materialUpdates = [];
+    let postTasksCalled = false;
+    let resumeCalls = 0;
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url, opts) => {
+      const urlStr = url.toString();
+      if (opts?.method === 'POST' && urlStr.endsWith('/tasks')) {
+        postTasksCalled = true;
+        return { ok: true, status: 200, json: async () => ({ task_id: 'should-not-resubmit-8' }) };
+      }
+      if (urlStr.includes('/tasks/mineru-resume-completed-8')) {
+        return { ok: true, status: 200, json: async () => ({ status: 'completed', completed_at: '2026-05-09T00:01:00Z' }) };
+      }
+      return originalFetch(url, opts);
+    };
+
+    const mockTaskClient = {
+      getAllTasks: async () => [],
+      updateTask: async (_id, update) => { taskUpdates.push(update); return true; },
+      updateMaterial: async (_id, update) => { materialUpdates.push(update); return true; },
+    };
+
+    const worker = new ParseTaskWorker({
+      minioContext: { getFileStream: async () => ({}), saveMarkdown: async () => {}, saveObject: async () => {} },
+      taskClient: mockTaskClient,
+      mineruProcessor: async () => {
+        postTasksCalled = true;
+        throw new Error('Should not be called');
+      },
+      mineruResumer: async () => {
+        resumeCalls += 1;
+        if (resumeCalls === 1) {
+          throw new MineruStillProcessingError('mineru-resume-completed-8', 'processing');
+        }
+        return {
+          objectName: 'parsed/mat-8/full.md',
+          mineruTaskId: 'mineru-resume-completed-8',
+          parsedPrefix: 'parsed/mat-8/',
+          parsedFilesCount: 20,
+          parsedArtifacts: [{ objectName: 'parsed/mat-8/full.md', relativePath: 'full.md', size: 2048 }],
+          zipObjectName: 'parsed/mat-8/mineru-result.zip',
+          artifactIncomplete: false,
+          markdown: '# Rescued Completed Result'
+        };
+      },
+    });
+
+    const task = {
+      id: 'test-resume-completed-8',
+      engine: 'local-mineru',
+      state: 'running',
+      stage: 'mineru-processing',
+      progress: 80,
+      materialId: 'mat-8',
+      optionsSnapshot: {
+        localTimeout: 3600,
+        localEndpoint: 'http://localhost:8083',
+        material: { fileName: 'large.pdf', mimeType: 'application/pdf', metadata: { objectName: 'originals/mat-8/source.pdf' } }
+      },
+      metadata: {
+        mineruTaskId: 'mineru-resume-completed-8',
+        mineruStatus: 'processing',
+        localTimeoutOccurred: true
+      },
+    };
+
+    await worker.resumeMineruTask(task, 'mineru-resume-completed-8');
+
+    assert(!postTasksCalled, '8: POST /tasks should NOT be called during resume completed takeover');
+    assert(resumeCalls === 2, `8: resumeWithLocalMinerU should be retried once for existing result (got ${resumeCalls})`);
+    assert(taskUpdates.some(u => u.stage === 'result-fetching'), '8: Task should enter result-fetching after completed confirmation');
+    assert(taskUpdates.some(u => u.state === 'ai-pending'), '8: Task should reach ai-pending after rescued result ingestion');
+    assert(taskUpdates.find(u => u.state === 'ai-pending')?.metadata?.mineruStatus === 'completed', '8: Final task metadata.mineruStatus should be completed');
+    assert(!taskUpdates.some(u => u.state === 'failed'), '8: Completed takeover should not fail when result ingestion succeeds');
+    assert(materialUpdates.some(u => u.mineruStatus === 'completed'), '8: Material.mineruStatus should be completed');
+
+    globalThis.fetch = originalFetch;
+    console.log('Test 8 Pass ✅\n');
   }
 
   // ─── Summary ───
