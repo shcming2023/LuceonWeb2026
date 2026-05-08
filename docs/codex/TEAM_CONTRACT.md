@@ -19,6 +19,9 @@ The objective is to improve project iteration speed, engineering quality, docume
 - Handoff: `docs/codex/HANDOFF.md`
 - Task brief template: `docs/codex/TASK_BRIEF_TEMPLATE.md`
 - Task and report registry: `TaskAndReport/`
+- Local test sample library: `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/4.XxwlAs2026/sample`
+
+The local test sample library is a read-only input source for validation tasks. It is not part of the Luceon2026 repository and must not be synchronized to GitHub. Roles may use files from it for assigned tests and may record paths, sizes, hashes, task IDs, and validation evidence in reports, but must not delete, move, rename, modify, or contaminate the original sample files.
 
 ## 3. Active Roles
 

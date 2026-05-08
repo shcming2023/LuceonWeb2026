@@ -71,6 +71,7 @@ Team contract updated on 2026-05-07:
 - Task briefs and reports are stored in `TaskAndReport/` and tracked in `TaskAndReport/TASK_TRACKING_LIST.md`.
 - Task tracking rows include `Status`, `Next Actor`, `Next Action`, and `Required Output` to prevent handoff stalls.
 - First registered task: `TASK-20260507-063238-P0-MinerU-Submit-Path-Health-Probe`, current status `完成关闭`, no next actor.
+- Local test sample library: `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/4.XxwlAs2026/sample`. This external directory may be used as a read-only source of validation inputs, may receive additional samples over time, must not be synchronized to GitHub, and must not be deleted, moved, renamed, modified, or polluted during Luceon testing. Reports may record paths, sizes, hashes, and validation evidence.
 
 Collaboration automation updated on 2026-05-08:
 

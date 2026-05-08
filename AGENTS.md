@@ -1,6 +1,6 @@
 # Luceon2026 Codex Operating Rules
 
-Last updated: 2026-05-07
+Last updated: 2026-05-08
 
 This repository is the durable operating record for Luceon2026. Chat history can provide working context, but GitHub, repository documents, source code, and verified runtime evidence are the project truth sources.
 
@@ -12,6 +12,9 @@ This repository is the durable operating record for Luceon2026. Chat history can
 - Active branch: `main`
 - Package manager: `npx pnpm@10.4.1`
 - Task and report registry: `TaskAndReport/`
+- Local test sample library: `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/4.XxwlAs2026/sample`
+
+The local test sample library may be used as a read-only source of validation inputs. It is outside this repository, may continue to receive new samples, must not be synchronized to GitHub, and must not be deleted, moved, renamed, modified, or polluted during Luceon testing.
 
 Before material project work, synchronize with GitHub and inspect the current repository state:
 
@@ -89,3 +92,4 @@ Every new role thread must read these files before acting:
 - Do not treat partial local checks as UAT, L2, L3, or production acceptance.
 - Do not promote pending, failed, or unreviewed evidence into confirmed project facts.
 - Keep GitHub synchronized before and after completed work that changes repository files.
+- Do not copy local sample-library files into the repository for commit. Reports may reference sample paths, sizes, hashes, and observed validation results, but the source sample files must remain external and unchanged.

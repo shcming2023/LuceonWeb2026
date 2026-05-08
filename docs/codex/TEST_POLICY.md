@@ -1,6 +1,21 @@
 # Luceon2026 Validation Policy
 
-Last updated: 2026-05-07
+Last updated: 2026-05-08
+
+## Local Test Sample Library
+
+Local validation tasks may use sample files from:
+
+`/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/4.XxwlAs2026/sample`
+
+Rules:
+
+- Treat the directory as a read-only sample source.
+- The directory is outside this repository and must not be synchronized to GitHub.
+- Do not delete, move, rename, modify, normalize, or otherwise pollute original sample files.
+- Do not copy sample files into the repository for commit.
+- Validation reports may record absolute paths, file sizes, hashes, task IDs, produced artifacts, and observed results.
+- If a task needs to create derived files, temporary copies, or transformed samples, the task brief must specify a separate output location and cleanup/preservation rule.
 
 ## Validation Levels
 
