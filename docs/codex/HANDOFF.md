@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260509-004345-P0-MinerU-Completed-After-Local-Timeout-Takeover-Code-Fix`: Lucode must implement a code-level takeover path for local-MinerU tasks that timed out locally but later report completed through the MinerU API. This task must not mutate production task `task-1778249434820`, production DB/MinIO/logs/samples/secrets/override/Docker/services, or create production uploads/retries/reparse. Production recovery requires separate Director authorization after code-level review.
+- `TASK-20260509-004345-P0-MinerU-Completed-After-Local-Timeout-Takeover-Code-Fix`: returned to Lucode for correction. Lucode must explicitly set final task metadata `mineruStatus='completed'` in the resumed/takeover completion path and add focused assertions for final task metadata in both new takeover paths. This task must not mutate production task `task-1778249434820`, production DB/MinIO/logs/samples/secrets/override/Docker/services, or create production uploads/retries/reparse. Production recovery requires separate Director authorization after code-level review.
 
 Director shorthand is active:
 
@@ -193,3 +193,5 @@ Director approved Option A for task 43 at `2026-05-08T21:51:38+0800`. Lucia issu
 Lucia accepted task 44 at `2026-05-08T23:44:38+0800` as partial validation evidence. Samples 1 and 2 reached `review-pending`; stage-queued heavy-stage active counts stayed `<=1`; no forbidden mutation or release-readiness claim occurred. Sample 3 `task-1778249434820` remains unresolved: Lucia's read-only refresh showed `running` / `mineru-processing`, local wait timeout, stale MinerU log observation, observed page progress `714/714`, and no AI metadata job. Task 45 is assigned for read-only diagnosis only.
 
 Lucia accepted task 45 at `2026-05-09T00:43:45+0800`. Diagnosis: MinerU API says the underlying MinerU task is `completed` and the result ZIP is available, but Luceon has not ingested the result and still shows the task/material as processing with no AI job. This is a terminal-state propagation / result-ingestion stuck state after local timeout. Task 46 is assigned for code-level correction only; production write-side recovery is not authorized yet.
+
+Lucia returned the first task 46 implementation at `2026-05-09T01:44:51+0800`. Independent checks passed, but the final resumed/takeover completion metadata can still omit `mineruStatus='completed'` on the task record. Lucode must correct that and add focused assertions before Lucia can accept code-level integration. No implementation was merged to main.
