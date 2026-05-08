@@ -107,7 +107,8 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-101944-P0-Production-Release-Readiness-Gap-Matrix-And-Validation-Plan`: Lucode must produce a non-destructive production release-readiness gap matrix and validation plan. This task must not claim production release readiness or mutate production runtime state.
+- `TASK-20260508-104137-P0-Director-Release-Readiness-Scope-Decisions`: Director decision pending for release route, mandatory validation scope, production override boundary, future restart/rebuild/rollback authorization, and single-operator/no-auth release boundary.
+- `TASK-20260508-104137-P0-Release-Candidate-Non-Destructive-Preflight-And-Evidence-Pack`: Lucode must execute read-only release-candidate preflight checks and produce an evidence pack. This task must not deploy, rebuild, restart, rollback, mutate production data, or claim production release readiness.
 
 Director shorthand is active:
 
@@ -133,3 +134,5 @@ The task ledger must not have Director, Lucia, and Lucode all idle unless Direct
 When all executable tasks are closed, Lucia must either create the next bounded Lucode task or record a Director decision row. The current active decision row asks Director to choose the next Phase 1-to-next-iteration route.
 
 At `2026-05-08T10:19:44+0800`, the Director decision row reached two unanswered Lucia heartbeat checks. Lucia applied the conservative default and issued `TASK-20260508-101944-P0-Production-Release-Readiness-Gap-Matrix-And-Validation-Plan` to Lucode.
+
+Lucia accepted that gap matrix at `2026-05-08T10:41:37+0800`. Director-owned release-scope decisions are now recorded in task 19, and non-destructive release-candidate preflight evidence collection is assigned to Lucode in task 20.

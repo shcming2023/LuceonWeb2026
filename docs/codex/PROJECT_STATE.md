@@ -81,6 +81,9 @@ Collaboration automation updated on 2026-05-08:
 - Director decision row `TASK-20260508-095802-P0-Phase-1-Next-Iteration-Route-Decision` reached two unanswered Lucia heartbeat checks on 2026-05-08.
 - Lucia applied the conservative default and issued `TASK-20260508-101944-P0-Production-Release-Readiness-Gap-Matrix-And-Validation-Plan`.
 - This autonomous action authorizes analysis and planning only. It does not approve production release readiness, destructive production operations, secret changes, DB/MinIO/Docker volume mutation, broad architecture rewrite, or material product-scope expansion.
+- Lucia accepted the release-readiness gap matrix on 2026-05-08. Accepted boundary: manual-review readiness has supporting evidence, while production release readiness remains unclaimed.
+- Director-owned release-scope decisions are tracked in `TASK-20260508-104137-P0-Director-Release-Readiness-Scope-Decisions`.
+- Non-destructive release-candidate preflight evidence collection is assigned to `TASK-20260508-104137-P0-Release-Candidate-Non-Destructive-Preflight-And-Evidence-Pack`.
 
 MinerU submit-path probe accepted on 2026-05-07:
 
