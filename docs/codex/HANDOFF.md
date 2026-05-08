@@ -203,3 +203,5 @@ Current active task: task 47, Director decision. Director must decide whether to
 Heartbeat wait evidence for task 47: Lucia check 1 at `2026-05-09T03:42:47+0800` found no Director answer yet. The active next actor remains Director.
 
 Heartbeat wait evidence for task 47: Lucia check 2 at `2026-05-09T04:42:47+0800` also found no Director answer. The two-heartbeat threshold is reached, but Lucia cannot autonomously authorize production write-side recovery because it may mutate production task/material/AI-job state. The active next actor remains Director.
+
+Director approved scoped production recovery for task 47 at `2026-05-09T05:20:30+0800`. Lucia issued task 48 to Lucode. Current active task: task 48, Lucode execution. Scope is limited to recovering only production task `task-1778249434820` / material `mat-1778249419780` using the accepted Task 46 fix and existing MinerU task/result. Production release readiness remains unclaimed, and broad deploy/rebuild/restart/rollback, data deletion, secret/model/config/override changes, unrelated task recovery, new upload creation, or a second MinerU submission remain forbidden.
