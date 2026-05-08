@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-194744-P0-Stage-Queued-Sample-Validation-Plan-And-Preflight`: Lucode must revise the first report. The correction must implement stage-queued流水 correctly: next upload may start after prior upload/storage intake is durable, while MinerU and Ollama heavy stages remain queued/single-worker. This remains planning/preflight only and must not create production uploads.
+- `TASK-20260508-214325-P0-Stage-Queued-Sample-Validation-Run-Authorization`: Director must decide whether to approve the controlled stage-queued production validation run. Lucia recommends approving at least Option B: first two true-directory samples only, with stage-queued upload intake and MinerU/Ollama heavy-stage active counts `<=1`.
 
 Director shorthand is active:
 
@@ -185,3 +185,5 @@ Lucia accepted task 40 at `2026-05-08T19:34:39+0800` as planning/preflight evide
 Director rejected concurrency for task 41 and corrected Lucia's interpretation. The intended model is stage-queued流水, not full end-to-end serial blocking: after one sample completes upload/MinIO intake, the next sample may be accepted; MinerU parsing must queue by stage; Ollama metadata recognition must queue by stage. The true sample directory is `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/4.XxwlAs2026/sample`; it is read-only inventory and must not be synced to GitHub, modified, moved, deleted, normalized, or polluted. Task 42 replaces the concurrency path with stage-queued planning/preflight only; no production upload is authorized yet.
 
 Lucia returned the first task 42 report at `2026-05-08T20:39:35+0800`. The report's preflight evidence is useful, but its proposed plan incorrectly required per-sample terminal state before the next upload. That is full end-to-end serial blocking, not Director's intended stage-queued流水. Lucode must revise the report before Lucia can issue any validation-run task.
+
+Lucia accepted the revised task 42 report at `2026-05-08T21:43:25+0800`. The revised plan now correctly uses upload/storage intake durability as the next-upload handoff and requires MinerU/Ollama heavy-stage active counts to stay `<=1`. Because the next run would create production validation artifacts, Director decision task 43 is pending before Lucode may execute it. If unanswered after two Lucia heartbeat checks, Lucia's allowed fallback is only Option B: first two samples under the same stage-queued boundaries, with no release-readiness claim or destructive/service/config/data mutation.
