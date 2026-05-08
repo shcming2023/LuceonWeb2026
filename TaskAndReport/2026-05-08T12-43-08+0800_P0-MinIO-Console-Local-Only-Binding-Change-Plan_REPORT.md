@@ -11,7 +11,8 @@
 
 - Branch: `main`
 - Initial HEAD: `a688863 docs: correct minio binding task head`
-- Final report HEAD: `PENDING_FINAL_HEAD`
+- Report commit: `a6cba56 docs: plan minio console local binding`
+- Final pushed HEAD is reported in Lucode's completion response after GitHub sync.
 
 ## Files Changed
 
@@ -166,6 +167,9 @@ Rollback should also require explicit authorization if performed against product
 | `git status --short --branch` | 0 | Expected task-list/report changes only |
 | `git diff --name-only` | 0 | Tracked change limited to `TaskAndReport/TASK_TRACKING_LIST.md`; new report file visible in `git status` |
 | `git diff --stat` | 0 | Task-list tracked delta reviewed |
+| `git add ... && git diff --cached --check` | 0 | Staged report/task-list update had no whitespace errors |
+| `git commit -m "docs: plan minio console local binding"` | 0 | Created `a6cba56 docs: plan minio console local binding` |
+| `git log -1 --oneline` | 0 | `a6cba56 docs: plan minio console local binding` |
 
 ## Checks Skipped
 
@@ -191,4 +195,4 @@ Rollback should also require explicit authorization if performed against product
 
 ## GitHub Sync Status
 
-- Report and task-list update are to be committed and pushed to GitHub `main`.
+- Report and task-list update were committed locally as `a6cba56`; final remote push status is reported in Lucode's completion response.
