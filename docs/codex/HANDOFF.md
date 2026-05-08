@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-173100-P0-Adaptive-Evidence-Pack-Scoped-Production-Validation`: Lucode must execute one scoped production validation using the accepted runbook and strict stop conditions. Production release readiness remains unclaimed.
+- `TASK-20260508-180949-P0-Ollama-Readiness-Timeout-Diagnosis-And-Recovery-Plan`: Lucode must diagnose the production Ollama `qwen3.5:9b` readiness timeout using read-only/non-mutating checks only, then report a recovery recommendation. No production upload, Docker mutation, Ollama restart/kill/start, model/timeout/config/secret change, data deletion, or release-readiness claim is authorized.
 
 Director shorthand is active:
 
@@ -167,3 +167,5 @@ Task 32 reached two Lucia heartbeat checks without a Director decision at `2026-
 Lucia accepted task 33 at `2026-05-08T16:02:45+0800`. Accepted preflight facts: production workspace remains at `4cc6d3e` behind `origin/main c882e2b`, production override preserves strict AI/model and `127.0.0.1:19001:9001`, preferred large-PDF sample size/hash match prior evidence, active tasks/jobs were `0`, DB health was OK, and dependency health was non-blocking but Ollama was false. No production mutation or release-readiness claim occurred. Task 32 remains the active Director decision before any scoped production validation.
 
 Director approved task 32 at `2026-05-08T17:31:00+0800`. Lucia issued task 34 for one scoped production validation only. Authorized scope: apply accepted `main` code to production as needed, preserve production-local override boundaries, use minimum necessary Docker/Compose action, run preflight checks, and create at most one controlled large-PDF validation upload if preflight passes. Still forbidden: production release-readiness declaration, DB row deletion, MinIO object deletion, Docker volume deletion/pruning, secret changes, broad rollback, model/timeout changes, skeleton fallback, silent degradation, and external/multi-user release boundary acceptance.
+
+Lucia accepted task 34 at `2026-05-08T18:09:49+0800` as blocked evidence. Production reached `8092965`, upload-server was rebuilt, strict AI/model and MinIO local-only override boundaries were preserved, CMS/DB/MinIO/MinerU submit probe passed, active tasks/jobs were `0`, and the preferred sample size/hash matched. The controlled upload was not created because pre-upload dependency health reported Ollama `qwen3.5:9b` chat-smoke timeout. Task 35 is assigned for non-destructive Ollama readiness diagnosis and recovery planning.
