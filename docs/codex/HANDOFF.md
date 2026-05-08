@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-191021-P0-Next-Release-Readiness-Validation-Scope`: Director must choose the next release-readiness validation track after adaptive evidence-pack controlled production validation passed. Lucia recommends `CONCURRENCY_VALIDATION_FIRST`, but no new upload-producing task is assigned until Director decides or heartbeat autonomy reaches the planning-only fallback.
+- `TASK-20260508-191709-P0-Controlled-Concurrency-Validation-Plan-And-Preflight`: Lucode must prepare a bounded concurrency validation plan and collect non-destructive preflight evidence. This task is planning/preflight only and must not create production uploads.
 
 Director shorthand is active:
 
@@ -177,3 +177,5 @@ Lucia accepted task 36 at `2026-05-08T18:31:29+0800` as blocked evidence. Immedi
 Director approved task 37 at `2026-05-08T18:38:44+0800`. Approved scope is limited to one bounded non-mutating Ollama warm-up/readiness step before validation, followed by warm dependency-health with `mineruSubmitProbe=true`; if it passes, Lucode may create at most one controlled validation upload. Still forbidden: production release-readiness declaration, deploy/fast-forward/rebuild/restart/rollback/Docker mutation, Ollama restart/kill/start/reload, model/timeout/config/secret/override changes, data/artifact/log deletion, skeleton fallback, silent degradation, or more than one controlled upload. Task 38 is assigned to Lucode.
 
 Lucia accepted task 38 at `2026-05-08T19:10:21+0800` as controlled production validation. The authorized large-PDF sample created task `task-1778237744029`, MinerU completed with `parsedFilesCount=99`, AI reached `review-pending`, and adaptive input selection used `evidence-pack-v0.3` with selected length `16261`. Production release readiness remains unclaimed. Residual risks: cold-load warm-up remains operationally important, first-pass JSON repair was still needed, and MinerU observation was stale/completed-window backfill. Director decision task 39 is pending for the next release-readiness validation track.
+
+Director selected `CONCURRENCY_VALIDATION_FIRST` for task 39 at `2026-05-08T19:17:09+0800`. Lucia issued task 40 for concurrency validation planning and non-destructive preflight only. Lucode may inspect the external sample directory `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/4.XxwlAs2026/sample` as read-only inventory, but must not sync it to GitHub, modify, move, delete, or pollute samples. No production upload is authorized in task 40.
