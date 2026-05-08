@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-183129-P0-Ollama-Warmup-Before-Validation-Authorization`: Director must decide whether Lucia may authorize bounded non-mutating Ollama warm-up before one controlled adaptive evidence-pack validation upload. Until then, no further upload validation retry is assigned.
+- `TASK-20260508-183844-P0-Adaptive-Evidence-Pack-Warmup-Gated-Production-Validation`: Lucode must perform one bounded non-mutating Ollama warm-up, require warm dependency-health pass, then create at most one controlled adaptive evidence-pack validation upload. No production release-readiness claim or service/model/data/config mutation is authorized.
 
 Director shorthand is active:
 
@@ -173,3 +173,5 @@ Lucia accepted task 34 at `2026-05-08T18:09:49+0800` as blocked evidence. Produc
 Lucia accepted task 35 at `2026-05-08T18:19:15+0800`. Diagnosis: Ollama `qwen3.5:9b` exists and became ready without mutation; cold probes spent about `8.9s` loading and `9.7s` to `10.6s` total, while warm chat dropped to about `1.35s` and warm dependency health to `793ms`. This supports transient cold-load/readiness behavior under memory pressure rather than model absence. Task 36 is assigned for one scoped validation retry, gated by immediate warm dependency-health pass.
 
 Lucia accepted task 36 at `2026-05-08T18:31:29+0800` as blocked evidence. Immediate pre-upload dependency health failed Ollama readiness again at about `15001ms`, and no controlled upload was created. Direct read-only chat after the stop condition loaded the model in about `6.7s` and succeeded, reinforcing cold-load/model-residency instability. Director decision task 37 is now pending: approve bounded non-mutating Ollama warm-up before a single controlled validation upload, request more diagnosis only, or hold validation.
+
+Director approved task 37 at `2026-05-08T18:38:44+0800`. Approved scope is limited to one bounded non-mutating Ollama warm-up/readiness step before validation, followed by warm dependency-health with `mineruSubmitProbe=true`; if it passes, Lucode may create at most one controlled validation upload. Still forbidden: production release-readiness declaration, deploy/fast-forward/rebuild/restart/rollback/Docker mutation, Ollama restart/kill/start/reload, model/timeout/config/secret/override changes, data/artifact/log deletion, skeleton fallback, silent degradation, or more than one controlled upload. Task 38 is assigned to Lucode.
