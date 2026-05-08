@@ -363,7 +363,7 @@ Runtime evidence from the final pipeline run:
 | TD-017 | Mitigated | Medium-large parsed documents could enter AI metadata first pass through the legacy sampler with timeout-prone input size. | Code-level mitigation accepted in task 31 and controlled production validation accepted in task 38: selected input used `evidence-pack-v0.3` and was reduced from `104823` to `16261`. Broader release-readiness validation remains separate. |
 | TD-018 | Mitigated | Production Ollama `qwen3.5:9b` dependency-health chat smoke timed out before the adaptive evidence-pack controlled upload could be created. | Task 38 validated a bounded non-mutating warm-up gate: warm dependency-health passed after warm-up and the controlled upload completed to `review-pending`. Cold-load remains a release-readiness operational concern, not closed globally. |
 | TD-019 | Superseded | Controlled production concurrency validation was considered but rejected by Director. | Director clarified local MinerU, MinIO, and Ollama deployment should use stage-queued流水 validation: upload intake can accept the next sample after MinIO intake, while MinerU and Ollama heavy work queue by stage. Task 42 replaces the concurrency route with stage-queued planning/preflight from the true sample directory. |
-| TD-020 | Open | Stage-queued validation over real samples has not yet been run. | Director clarified true samples live under `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/4.XxwlAs2026/sample`. Task 42 is planning/preflight only and must not create uploads. |
+| TD-020 | Open | Stage-queued validation over real samples has not yet been run. | Director clarified true samples live under `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/4.XxwlAs2026/sample`. Task 42 was returned for correction because Lucode's first report incorrectly reverted to full per-sample terminal blocking. No upload is authorized. |
 
 ## 6. Core Asset Directory Index
 
@@ -437,3 +437,5 @@ The real sample source for future validation is:
 The sample directory may be inspected as read-only inventory only. It must not be synchronized to GitHub, modified, moved, renamed, deleted, normalized, or polluted.
 
 Task 42 is assigned to Lucode for stage-queued planning/preflight only. No production upload is authorized by Task 42.
+
+Lucia reviewed the first Task 42 report at `2026-05-08T20:39:35+0800` and returned it for correction. Accepted preflight facts: true sample inventory was read-only, active parse/task states and active AI jobs were `0`, dependency-health with MinerU submit probe passed, and Ollama was OK but slow at `12740ms`. Blocking issue: the proposed plan required each sample to reach terminal state before the next upload, which contradicts Director's stage-queued model. Lucode must revise the plan so the next upload may start after prior upload/storage intake is durable, while MinerU and Ollama heavy stages remain queued/single-worker.

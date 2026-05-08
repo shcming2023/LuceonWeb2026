@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-194744-P0-Stage-Queued-Sample-Validation-Plan-And-Preflight`: Lucode must prepare a stage-queued流水 validation plan and collect non-destructive preflight evidence from the true sample directory. This task is planning/preflight only and must not create production uploads.
+- `TASK-20260508-194744-P0-Stage-Queued-Sample-Validation-Plan-And-Preflight`: Lucode must revise the first report. The correction must implement stage-queued流水 correctly: next upload may start after prior upload/storage intake is durable, while MinerU and Ollama heavy stages remain queued/single-worker. This remains planning/preflight only and must not create production uploads.
 
 Director shorthand is active:
 
@@ -183,3 +183,5 @@ Director selected `CONCURRENCY_VALIDATION_FIRST` for task 39 at `2026-05-08T19:1
 Lucia accepted task 40 at `2026-05-08T19:34:39+0800` as planning/preflight evidence. Lucode reported `PLAN_READY`, active tasks/jobs `0`, MinIO/MinerU OK, initial Ollama timeout at about `14999ms`, one bounded non-mutating warm-up success, and warm dependency-health success with `ollama.durationMs=699`. Lucia initially recorded task 41 for Director approval of a concurrency run.
 
 Director rejected concurrency for task 41 and corrected Lucia's interpretation. The intended model is stage-queued流水, not full end-to-end serial blocking: after one sample completes upload/MinIO intake, the next sample may be accepted; MinerU parsing must queue by stage; Ollama metadata recognition must queue by stage. The true sample directory is `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/4.XxwlAs2026/sample`; it is read-only inventory and must not be synced to GitHub, modified, moved, deleted, normalized, or polluted. Task 42 replaces the concurrency path with stage-queued planning/preflight only; no production upload is authorized yet.
+
+Lucia returned the first task 42 report at `2026-05-08T20:39:35+0800`. The report's preflight evidence is useful, but its proposed plan incorrectly required per-sample terminal state before the next upload. That is full end-to-end serial blocking, not Director's intended stage-queued流水. Lucode must revise the report before Lucia can issue any validation-run task.
