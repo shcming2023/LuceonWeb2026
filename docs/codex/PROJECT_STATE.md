@@ -108,6 +108,7 @@ Collaboration automation updated on 2026-05-08:
 - Production validation authorization for the accepted adaptive evidence-pack code is recorded in `TASK-20260508-151145-P0-Adaptive-Evidence-Pack-Production-Validation-Authorization`. Production release readiness remains unclaimed.
 - Task 32 reached two Lucia heartbeat checks without Director decision on 2026-05-08. Lucia did not authorize production validation autonomously. Non-destructive runbook and read-only preflight preparation is assigned to `TASK-20260508-154115-P0-Adaptive-Evidence-Pack-Production-Validation-Runbook-And-Preflight`.
 - Lucia accepted the task 33 runbook and read-only preflight on 2026-05-08. Accepted facts: production workspace remains behind accepted `main`, production override preserves strict AI/model and MinIO console local-only binding, preferred large-PDF sample size/hash match prior evidence, active tasks/jobs were `0`, DB health was OK, and dependency health was non-blocking but Ollama reported false. Actual production validation remains blocked on Director task 32.
+- Director approved scoped production validation in `TASK-20260508-151145-P0-Adaptive-Evidence-Pack-Production-Validation-Authorization` on 2026-05-08. Lucia issued `TASK-20260508-173100-P0-Adaptive-Evidence-Pack-Scoped-Production-Validation` to Lucode. The authorization covers only minimum necessary production apply and one controlled large-PDF validation upload if preflight passes; production release readiness remains unclaimed.
 
 MinerU submit-path probe accepted on 2026-05-07:
 

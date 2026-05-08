@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260508-151145-P0-Adaptive-Evidence-Pack-Production-Validation-Authorization`: Director must decide whether Lucia may issue a scoped Lucode production validation task for the accepted adaptive evidence-pack code. Production release readiness remains unclaimed.
+- `TASK-20260508-173100-P0-Adaptive-Evidence-Pack-Scoped-Production-Validation`: Lucode must execute one scoped production validation using the accepted runbook and strict stop conditions. Production release readiness remains unclaimed.
 
 Director shorthand is active:
 
@@ -165,3 +165,5 @@ Lucia accepted task 31 at `2026-05-08T15:11:45+0800` as code-level implementatio
 Task 32 reached two Lucia heartbeat checks without a Director decision at `2026-05-08T15:41:15+0800`. Lucia did not authorize production validation autonomously. To prevent task-flow stalling, Lucia issued task 33 for non-destructive production validation runbook and read-only preflight preparation only.
 
 Lucia accepted task 33 at `2026-05-08T16:02:45+0800`. Accepted preflight facts: production workspace remains at `4cc6d3e` behind `origin/main c882e2b`, production override preserves strict AI/model and `127.0.0.1:19001:9001`, preferred large-PDF sample size/hash match prior evidence, active tasks/jobs were `0`, DB health was OK, and dependency health was non-blocking but Ollama was false. No production mutation or release-readiness claim occurred. Task 32 remains the active Director decision before any scoped production validation.
+
+Director approved task 32 at `2026-05-08T17:31:00+0800`. Lucia issued task 34 for one scoped production validation only. Authorized scope: apply accepted `main` code to production as needed, preserve production-local override boundaries, use minimum necessary Docker/Compose action, run preflight checks, and create at most one controlled large-PDF validation upload if preflight passes. Still forbidden: production release-readiness declaration, DB row deletion, MinIO object deletion, Docker volume deletion/pruning, secret changes, broad rollback, model/timeout changes, skeleton fallback, silent degradation, and external/multi-user release boundary acceptance.
