@@ -16,9 +16,11 @@ No production release-readiness declaration is made in this report.
 
 - Development branch: `lucode/p0-parsed-zip-user-export-production-revalidation`
 - Development HEAD before report commit: `86a0d0e3c6b902557a707f78bf164567bd9b0d63`
+- Final report commit on `main`: `56c5aa1f6aa596031eaae5f010804323614dd02e`
 - Production path: `/Users/concm/prod_workspace/Luceon2026`
-- Production HEAD after fast-forward: `86a0d0e3c6b902557a707f78bf164567bd9b0d63`
-- Production commit: `86a0d0e fix: slim parsed zip user export`
+- Production code HEAD used for deploy/rebuild: `86a0d0e3c6b902557a707f78bf164567bd9b0d63`
+- Production final Git HEAD after report-only sync: `56c5aa1f6aa596031eaae5f010804323614dd02e`
+- Production deployed code commit: `86a0d0e fix: slim parsed zip user export`
 - Production local dirty file preserved: `docker-compose.override.yml`
 
 ## Files Changed
@@ -30,8 +32,9 @@ No source-code files were changed by this task. The accepted code-level fix was 
 
 ## Deployment Summary
 
-- Fast-forwarded production from `fc74d664a96b72bbea30a41b050b5f0109e4ad92` to `86a0d0e3c6b902557a707f78bf164567bd9b0d63`.
+- Fast-forwarded production from `fc74d664a96b72bbea30a41b050b5f0109e4ad92` to `86a0d0e3c6b902557a707f78bf164567bd9b0d63`, then after the report-only commit was pushed, fast-forwarded production Git state to `56c5aa1f6aa596031eaae5f010804323614dd02e`.
 - Rebuilt and restarted only `upload-server` with `docker compose up -d --build upload-server`.
+- No second rebuild was needed after the report-only sync because no runtime source changed after `86a0d0e`.
 - `cms-upload-server` was healthy after restart.
 - Production dependency health with `mineruSubmitProbe=true` returned `blocking=false`; MinIO, MinerU submit probe, and Ollama were OK.
 
