@@ -7,6 +7,8 @@
 - Next Actor: Director
 - Related review: `TaskAndReport/2026-05-09T09-29-35+0800_P0-Container-To-Host-Ollama-Chat-Timeout-Revision-2_LUCIA_REVIEW.md`
 - Production release readiness: not claimed
+- Director decision: Option A approved at 2026-05-09T09:43:56+0800
+- Director clarification: "本地只有一个 Ollama server"
 
 ## Decision Needed
 
@@ -67,3 +69,8 @@ Decision boundary: local runtime service ownership/listener changes may require 
 
 Autonomy rule: if unanswered after heartbeat checks, Lucia may only issue read-only evidence collection or record `NO_GO/HOLD`; Lucia may not authorize process stop/restart/disable, service ownership change, model operation, production release readiness, or destructive data/Docker/MinIO/DB actions.
 
+## Director Response
+
+At 2026-05-09T09:43:56+0800, Director selected Option A and clarified that the intended local state is one Ollama server.
+
+Lucia issued `TASK-20260509-094356-P0-Ollama-Runtime-Ownership-Standardization` to Lucode. This task may standardize local Ollama runtime/listener ownership within the scoped boundaries, but still may not claim production release readiness or run validation pass 3.

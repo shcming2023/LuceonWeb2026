@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260509-092935-P0-Ollama-Runtime-Ownership-Standardization-Decision`: assigned to Director. Director must decide whether to authorize scoped local Ollama runtime standardization, hold release-candidate validation as `NO_GO`, or request more read-only evidence. Production release readiness remains unclaimed.
+- `TASK-20260509-094356-P0-Ollama-Runtime-Ownership-Standardization`: assigned to Lucode. Director selected Option A and clarified the intended local state is one Ollama server. Lucode must standardize host-local and container-facing Ollama endpoints to the same intended effective runtime, then verify version/tags/no-think chat/dependency-health. Production release readiness remains unclaimed.
 
 Director shorthand is active:
 
@@ -221,3 +221,5 @@ Lucia accepted task 53 at `2026-05-09T09:01:38+0800` as code-level implementatio
 Lucia accepted task 54 at `2026-05-09T09:12:21+0800` as `BLOCKED_AFTER_PASS_2_NO_GO_FOR_RELEASE_READY`. Validation pass 2 of 2 was used; no controlled upload was created because dependency-health still failed on container-to-host Ollama `/api/chat` timeout. Non-Ollama gates passed, and diagnostics classification remained healthy/idle. Production release readiness remains unclaimed.
 
 Lucia accepted task 55 at `2026-05-09T09:29:35+0800` as `ACCEPTED_NO_CODE_RUNTIME_DECISION_REQUIRED`. Lucode's read-only diagnosis and Lucia's independent verification agree that the remaining blocker is a local Ollama runtime ownership/listener split: host `localhost:11434` reaches Ollama `0.23.1` and can complete no-think chat, while container-facing `host.docker.internal:11434` / `192.168.65.254:11434` reaches Ollama `0.22.1`, can list tags, but times out on `/api/chat` before headers. Two `ollama serve` listeners are present on `127.0.0.1:11434` and `*:11434`. Both validation passes and both revision cycles in the Director timebox are exhausted. Current active task: task 56, Director decision. Lucia may not autonomously authorize Ollama process stop/restart/disable/service ownership changes; if unanswered, Lucia may only record hold/no-go or request more read-only evidence.
+
+Director selected Option A for task 56 at `2026-05-09T09:43:56+0800` and clarified that the intended local state is one Ollama server. Lucia issued task 57 to Lucode for scoped local Ollama runtime/listener standardization. Task 57 may perform only the minimum necessary local Ollama runtime/service/process action after identifying the exact target and rollback condition. It may not declare production release readiness, run validation pass 3, create uploads, change model selection/timeout/secrets/production override, pull/delete/reload models, delete or mutate DB/MinIO/Docker volumes/tasks/artifacts/logs/samples, or run broad production deploy/rebuild/restart/rollback.
