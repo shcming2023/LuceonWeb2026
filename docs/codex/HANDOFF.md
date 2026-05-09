@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260509-091221-P0-Container-To-Host-Ollama-Chat-Timeout-Revision-2`: assigned to Lucode. This is revision cycle 2 of 2, not validation pass 3. Lucode must diagnose and, if safely possible, fix the container-to-host Ollama `/api/chat` timeout path, or return a Director decision request/final no-go recommendation. Production release readiness remains unclaimed.
+- `TASK-20260509-092935-P0-Ollama-Runtime-Ownership-Standardization-Decision`: assigned to Director. Director must decide whether to authorize scoped local Ollama runtime standardization, hold release-candidate validation as `NO_GO`, or request more read-only evidence. Production release readiness remains unclaimed.
 
 Director shorthand is active:
 
@@ -220,4 +220,4 @@ Lucia accepted task 53 at `2026-05-09T09:01:38+0800` as code-level implementatio
 
 Lucia accepted task 54 at `2026-05-09T09:12:21+0800` as `BLOCKED_AFTER_PASS_2_NO_GO_FOR_RELEASE_READY`. Validation pass 2 of 2 was used; no controlled upload was created because dependency-health still failed on container-to-host Ollama `/api/chat` timeout. Non-Ollama gates passed, and diagnostics classification remained healthy/idle. Production release readiness remains unclaimed.
 
-Current active task: task 55, Lucode execution. This is revision cycle 2 of 2. Lucode may run read-only host/container diagnostics and implement a focused repository code fix only if safe. Lucode must not run validation pass 3, create uploads, change model/timeout/secret/override settings, restart/kill/reload Ollama, mutate DB/MinIO/Docker/log/task/sample data, or claim production release readiness.
+Lucia accepted task 55 at `2026-05-09T09:29:35+0800` as `ACCEPTED_NO_CODE_RUNTIME_DECISION_REQUIRED`. Lucode's read-only diagnosis and Lucia's independent verification agree that the remaining blocker is a local Ollama runtime ownership/listener split: host `localhost:11434` reaches Ollama `0.23.1` and can complete no-think chat, while container-facing `host.docker.internal:11434` / `192.168.65.254:11434` reaches Ollama `0.22.1`, can list tags, but times out on `/api/chat` before headers. Two `ollama serve` listeners are present on `127.0.0.1:11434` and `*:11434`. Both validation passes and both revision cycles in the Director timebox are exhausted. Current active task: task 56, Director decision. Lucia may not autonomously authorize Ollama process stop/restart/disable/service ownership changes; if unanswered, Lucia may only record hold/no-go or request more read-only evidence.
