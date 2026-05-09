@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260509-090138-P0-Release-Candidate-Two-Pass-Validation-Pass-2`: assigned to Lucode. Lucode must run production-candidate validation pass 2 after the accepted dependency-health Ollama smoke alignment. This may return `PRODUCTION_RELEASE_CANDIDATE_READY_FOR_LUCIA_REVIEW` if all gates pass, or `BLOCKED_AFTER_PASS_2` with a go/no-go recommendation if blockers remain. Lucode must not declare production release readiness.
+- `TASK-20260509-091221-P0-Container-To-Host-Ollama-Chat-Timeout-Revision-2`: assigned to Lucode. This is revision cycle 2 of 2, not validation pass 3. Lucode must diagnose and, if safely possible, fix the container-to-host Ollama `/api/chat` timeout path, or return a Director decision request/final no-go recommendation. Production release readiness remains unclaimed.
 
 Director shorthand is active:
 
@@ -218,4 +218,6 @@ Lucia accepted task 52 at `2026-05-09T08:46:29+0800` as blocked pass-1 evidence.
 
 Lucia accepted task 53 at `2026-05-09T09:01:38+0800` as code-level implementation and integrated branch `lucode/p0-ollama-dependency-health-smoke-alignment-revision-1` at `9063a14`. The dependency-health Ollama smoke now uses no-thinking request semantics aligned with the production provider. Lucia independently reran focused dependency-health smoke, TypeScript, build, and diff-check. This used revision cycle 1 of 2 but did not itself validate production release readiness.
 
-Current active task: task 54, Lucode execution. This is validation pass 2 of 2 under the Director timebox. Lucode may sync/apply accepted main to production if needed, preserve override boundaries, run dependency and diagnostics gates, and create up to two controlled stage-queued validation uploads only if gates pass. Production release readiness remains unclaimed until Lucia reviews the pass-2 evidence.
+Lucia accepted task 54 at `2026-05-09T09:12:21+0800` as `BLOCKED_AFTER_PASS_2_NO_GO_FOR_RELEASE_READY`. Validation pass 2 of 2 was used; no controlled upload was created because dependency-health still failed on container-to-host Ollama `/api/chat` timeout. Non-Ollama gates passed, and diagnostics classification remained healthy/idle. Production release readiness remains unclaimed.
+
+Current active task: task 55, Lucode execution. This is revision cycle 2 of 2. Lucode may run read-only host/container diagnostics and implement a focused repository code fix only if safe. Lucode must not run validation pass 3, create uploads, change model/timeout/secret/override settings, restart/kill/reload Ollama, mutate DB/MinIO/Docker/log/task/sample data, or claim production release readiness.
