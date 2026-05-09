@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260509-084629-P0-Ollama-Dependency-Health-Smoke-Alignment-Revision-1`: assigned to Lucode. Lucode must align, or prove no code change is needed for, dependency-health Ollama smoke behavior against production no-think provider semantics before validation pass 2. This is a code-level revision task only; it does not authorize production release readiness, production deploy/rebuild/restart/rollback, Ollama restart/kill/reload, model/timeout/secret/override changes, DB/MinIO/Docker volume/sample mutation, production uploads, skeleton fallback, or silent degradation.
+- `TASK-20260509-090138-P0-Release-Candidate-Two-Pass-Validation-Pass-2`: assigned to Lucode. Lucode must run production-candidate validation pass 2 after the accepted dependency-health Ollama smoke alignment. This may return `PRODUCTION_RELEASE_CANDIDATE_READY_FOR_LUCIA_REVIEW` if all gates pass, or `BLOCKED_AFTER_PASS_2` with a go/no-go recommendation if blockers remain. Lucode must not declare production release readiness.
 
 Director shorthand is active:
 
@@ -216,4 +216,6 @@ Director closed task 51 at `2026-05-09T08:28:54+0800` by approving accelerated p
 
 Lucia accepted task 52 at `2026-05-09T08:46:29+0800` as blocked pass-1 evidence. The actual candidate pass failed the Ollama `qwen3.5:9b` dependency-health gate on cold and bounded-warm checks, so no controlled validation upload was created. Lucia's later independent checks showed the current warmed runtime can pass dependency-health, including MinerU submit probe, but this only narrows the issue to readiness-smoke / cold-load stability; it does not establish production release readiness.
 
-Current active task: task 53, Lucode execution. Lucode must complete a smallest-scope dependency-health Ollama smoke alignment revision, or provide a no-code evidence report, before Lucia can issue validation pass 2. Validation pass count remains 1 of 2; revision cycle count becomes 1 of 2 only if the revision task applies code/task changes.
+Lucia accepted task 53 at `2026-05-09T09:01:38+0800` as code-level implementation and integrated branch `lucode/p0-ollama-dependency-health-smoke-alignment-revision-1` at `9063a14`. The dependency-health Ollama smoke now uses no-thinking request semantics aligned with the production provider. Lucia independently reran focused dependency-health smoke, TypeScript, build, and diff-check. This used revision cycle 1 of 2 but did not itself validate production release readiness.
+
+Current active task: task 54, Lucode execution. This is validation pass 2 of 2 under the Director timebox. Lucode may sync/apply accepted main to production if needed, preserve override boundaries, run dependency and diagnostics gates, and create up to two controlled stage-queued validation uploads only if gates pass. Production release readiness remains unclaimed until Lucia reviews the pass-2 evidence.
