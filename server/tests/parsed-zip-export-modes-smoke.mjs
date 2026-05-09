@@ -121,16 +121,20 @@ async function runTest() {
   const userFiles = Object.keys(userZip.files).filter(k => !userZip.files[k].dir);
   // mineru-result.zip should NOT be present
   assert.ok(!userFiles.includes('mineru-result.zip'));
-  // primary md inside zip is filtered, root full.md and the OCR directory are kept
-  assert.ok(userFiles.includes('full.md'));
+  // primary md inside zip is filtered; the default export is one material folder
+  // containing root full.md plus the contents of the MinerU ocr/ directory.
+  assert.ok(!userFiles.includes('full.md'));
+  assert.ok(userFiles.includes('book/full.md'));
   assert.ok(!userFiles.includes('images/1.jpg'));
   assert.ok(!userFiles.includes('images/2.jpg'));
   assert.ok(!userFiles.includes('artifact-manifest.json'));
   assert.ok(!userFiles.includes('auto/full.md'));
-  assert.ok(userFiles.includes('book/ocr/book.md'));
-  assert.ok(userFiles.includes('book/ocr/images/1.jpg'));
-  assert.ok(userFiles.includes('book/ocr/images/2.jpg'));
-  assert.ok(userFiles.includes('book/ocr/book_middle.json'));
+  assert.ok(!userFiles.includes('book/ocr/book.md'));
+  assert.ok(userFiles.includes('book/book.md'));
+  assert.ok(userFiles.includes('book/images/1.jpg'));
+  assert.ok(userFiles.includes('book/images/2.jpg'));
+  assert.ok(userFiles.includes('book/book_middle.json'));
+  assert.ok(!userFiles.some(f => f.startsWith('__MACOSX/') || f.endsWith('/.DS_Store') || f === '.DS_Store'));
   
   const filesCount = Number(resUser.headers['X-Parsed-Files-Count']);
   assert.equal(filesCount, userFiles.length, 'X-Parsed-Files-Count header match');
@@ -163,8 +167,10 @@ async function runTest() {
   assert.equal(resDedup.status, 200);
   const dedupZip = await JSZip.loadAsync(resDedup.buffer);
   const dedupFiles = Object.keys(dedupZip.files).filter(k => !dedupZip.files[k].dir);
-  assert.ok(dedupFiles.includes('full.md'), 'root full.md should be kept');
+  assert.ok(dedupFiles.includes('book/full.md'), 'material-folder full.md should be kept');
   assert.ok(!dedupFiles.includes('auto/full.md'), 'inner zip primary should be deduped');
+  assert.ok(!dedupFiles.includes('book/ocr/book.md'), 'ocr directory segment should be stripped');
+  assert.ok(dedupFiles.includes('book/book.md'), 'ocr contents should be exported under material folder');
   console.log('✅ Dynamic deduplication completed');
 
   console.log('Pass ✅');

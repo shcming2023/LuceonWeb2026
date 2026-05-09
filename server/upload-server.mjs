@@ -3930,10 +3930,44 @@ function sanitizeZipRelativePath(input) {
   return safe.join('/');
 }
 
-function isUserOcrArtifactPath(relativePath) {
+function sanitizeZipFolderName(input) {
+  const cleaned = String(input || '')
+    .replace(/[\\/:*?"<>|]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned || 'parsed-output';
+}
+
+function deriveUserExportRoot(objects, prefix, innerZip, fallbackName) {
+  const candidates = [];
+  if (innerZip) {
+    for (const [name, entry] of Object.entries(innerZip.files)) {
+      if (entry.dir) continue;
+      candidates.push(sanitizeZipRelativePath(name));
+    }
+  }
+  for (const obj of objects) {
+    candidates.push(sanitizeZipRelativePath(obj.name.slice(prefix.length)));
+  }
+
+  for (const candidate of candidates) {
+    const parts = candidate.split('/').filter(Boolean);
+    const ocrIndex = parts.indexOf('ocr');
+    if (ocrIndex > 0) return sanitizeZipFolderName(parts[ocrIndex - 1]);
+  }
+
+  return sanitizeZipFolderName(fallbackName);
+}
+
+function toUserExportPath(relativePath, rootFolder) {
   const safe = sanitizeZipRelativePath(relativePath);
-  if (!safe) return false;
-  return safe.split('/').includes('ocr');
+  if (!safe) return '';
+  const parts = safe.split('/').filter(Boolean);
+  const ocrIndex = parts.indexOf('ocr');
+  if (ocrIndex < 0) return '';
+  const insideOcr = parts.slice(ocrIndex + 1);
+  if (insideOcr.length === 0) return '';
+  return path.posix.join(rootFolder, ...insideOcr);
 }
 
 // ─── 接口：POST /parsed-zip ────────────────────────────────────
@@ -4039,6 +4073,8 @@ export async function parsedZipHandler(req, res) {
     const addedToZip = new Set();
     let rootFullMdBuffer = null;
     let dynamicPrimaryMarkdownPath = primaryMarkdownPath;
+    let userExportRoot = null;
+    let userFullMdPath = null;
 
     if (mode === 'user') {
       const mineruZipObj = objects.find(o => o.name === `${prefix}mineru-result.zip`);
@@ -4091,23 +4127,32 @@ export async function parsedZipHandler(req, res) {
         }
       }
 
+      userExportRoot = deriveUserExportRoot(
+        objects,
+        prefix,
+        innerZip,
+        material?.title || relatedTask?.title || materialId
+      );
+      userFullMdPath = path.posix.join(userExportRoot, 'full.md');
+
       if (!rootFullMdBuffer && innerZip && dynamicPrimaryMarkdownPath && innerZip.files[dynamicPrimaryMarkdownPath]) {
         rootFullMdBuffer = await innerZip.files[dynamicPrimaryMarkdownPath].async('nodebuffer');
       }
 
       if (rootFullMdBuffer) {
-        zip.file('full.md', rootFullMdBuffer);
-        addedToZip.add('full.md');
+        zip.file(userFullMdPath, rootFullMdBuffer);
+        addedToZip.add(userFullMdPath);
       }
 
       if (innerZip) {
         for (const [name, entry] of Object.entries(innerZip.files)) {
           if (entry.dir) continue;
           const safeRelativePath = sanitizeZipRelativePath(name);
-          if (!isUserOcrArtifactPath(safeRelativePath)) continue;
-          if (addedToZip.has(safeRelativePath)) continue;
-          zip.file(safeRelativePath, entry.async('nodebuffer'));
-          addedToZip.add(safeRelativePath);
+          const exportPath = toUserExportPath(safeRelativePath, userExportRoot);
+          if (!exportPath) continue;
+          if (addedToZip.has(exportPath)) continue;
+          zip.file(exportPath, entry.async('nodebuffer'));
+          addedToZip.add(exportPath);
         }
       }
     } else if (mode === 'diagnostic') {
@@ -4135,19 +4180,20 @@ export async function parsedZipHandler(req, res) {
       if (relativePath === 'mineru-result.zip') continue; // handled above
 
       if (mode === 'user') {
-        if (addedToZip.has(relativePath)) continue;
+        const exportPath = toUserExportPath(relativePath, userExportRoot);
+        if (exportPath && addedToZip.has(exportPath)) continue;
         if (relativePath === 'full.md' && rootFullMdBuffer) continue;
 
         if (!rootFullMdBuffer && relativePath === 'full.md') {
           const stream = await client.getObject(parsedBucket, obj.name);
-          zip.file(relativePath, stream);
-          addedToZip.add(relativePath);
+          zip.file(userFullMdPath, stream);
+          addedToZip.add(userFullMdPath);
         }
 
-        if (isUserOcrArtifactPath(relativePath)) {
+        if (exportPath) {
           const stream = await client.getObject(parsedBucket, obj.name);
-          zip.file(relativePath, stream);
-          addedToZip.add(relativePath);
+          zip.file(exportPath, stream);
+          addedToZip.add(exportPath);
         }
 
         continue;
