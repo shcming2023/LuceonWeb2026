@@ -541,7 +541,11 @@ async function checkDependencyHealth(minioBucket, options = {}) {
                    model: targetModel,
                    messages: [{ role: 'user', content: 'hello' }],
                    stream: false,
-                   options: { num_predict: 2 } // Extremely low token budget for healthcheck
+                   think: false,
+                   options: {
+                     think: false,
+                     num_predict: 1
+                   }
                  }),
 	                 signal: AbortSignal.timeout(15000)
                });

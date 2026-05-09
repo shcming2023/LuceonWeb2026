@@ -30,11 +30,14 @@ async function runTest() {
   // But first, we create dummy db-server, mineru-server, and ollama-server
   
   const dummyApp = express();
+  dummyApp.use(express.json());
   let mineruOk = false;
   let mineruSubmitOk = false;
   let mineruSubmitCalls = 0;
   let ollamaOk = false;
   let ollamaChatOk = true;
+  let ollamaModels = [{ name: 'qwen3.5:9b' }];
+  let lastOllamaChatBody = null;
 
   // DB Server settings mock
   dummyApp.get('/settings', (req, res) => {
@@ -63,10 +66,11 @@ async function runTest() {
 
   // Ollama Mock
   dummyApp.get('/ollama/api/tags', (req, res) => {
-    if (ollamaOk) res.json({ models: [{name: 'qwen3.5:9b'}] });
+    if (ollamaOk) res.json({ models: ollamaModels });
     else res.sendStatus(503);
   });
   dummyApp.post('/ollama/api/chat', (req, res) => {
+    lastOllamaChatBody = req.body;
     if (ollamaOk && ollamaChatOk) res.json({ message: { content: 'mock' } });
     else res.sendStatus(503);
   });
@@ -120,6 +124,9 @@ async function runTest() {
       UPLOAD_PORT: String(uploadPort),
       DB_BASE_URL: `http://127.0.0.1:${dbPort}`,
       STORAGE_BACKEND: 'tmpfiles', // bypass MinIO actual bucket check for this test since we focus on mineru/ollama logic blocking
+      DISABLE_AI_SKELETON_FALLBACK: 'true',
+      OLLAMA_API_URL: `http://127.0.0.1:${dummyPort}/ollama`,
+      OLLAMA_TIER2_MODEL: 'qwen3.5:9b',
       ALLOW_LOCAL_AI_ENDPOINT: 'true',
       MINIO_ENDPOINT: '127.0.0.1',
       MINIO_PORT: String(dummyPort),
@@ -155,6 +162,7 @@ async function runTest() {
     // Test 1: dependency-health reports mineru down
     mineruOk = false;
     ollamaOk = true;
+    ollamaModels = [{ name: 'qwen3.5:9b' }];
     let res = await fetch(`${uploadBase}/ops/dependency-health`);
     let data = await res.json();
     assertEqual(data.ok, false, 'health.ok should be false when mineru is down');
@@ -166,6 +174,8 @@ async function runTest() {
     mineruOk = true;
     mineruSubmitOk = false;
     ollamaOk = true;
+    ollamaModels = [{ name: 'qwen3.5:9b' }];
+    lastOllamaChatBody = null;
     mineruSubmitCalls = 0;
     res = await fetch(`${uploadBase}/ops/dependency-health`);
     data = await res.json();
@@ -173,6 +183,11 @@ async function runTest() {
     assertEqual(data.dependencies.mineru.submitProbe.enabled, false, 'mineru submit probe should be disabled by default');
     assertEqual(data.dependencies.mineru.ok, true, 'mineru.ok should use cheap /health result by default');
     assertEqual(mineruSubmitCalls, 0, 'default dependency-health should not call MinerU /tasks');
+    assertEqual(lastOllamaChatBody?.model, 'qwen3.5:9b', 'ollama smoke should use required model');
+    assertEqual(lastOllamaChatBody?.stream, false, 'ollama smoke should disable streaming');
+    assertEqual(lastOllamaChatBody?.think, false, 'ollama smoke should disable top-level thinking');
+    assertEqual(lastOllamaChatBody?.options?.think, false, 'ollama smoke should disable options thinking');
+    assertEqual(lastOllamaChatBody?.options?.num_predict, 1, 'ollama smoke should use a minimal token budget');
 
     // Test 1c: /health OK but /tasks submit fails with submit probe enabled
     res = await fetch(`${uploadBase}/ops/dependency-health?mineruSubmitProbe=true`);
@@ -221,6 +236,7 @@ async function runTest() {
     // Test 4: ollama down does not block parse but is reported
     mineruOk = true;
     ollamaOk = false;
+    ollamaModels = [{ name: 'qwen3.5:9b' }];
     let resOllamaDown = await fetch(`${uploadBase}/ops/dependency-health`);
     let dataOllamaDown = await resOllamaDown.json();
     assertEqual(dataOllamaDown.dependencies.mineru.ok, true, 'mineru.ok should be true');
@@ -239,12 +255,25 @@ async function runTest() {
     // Test 5: ollama tags ok but chat fails
     mineruOk = true;
     ollamaOk = true;
+    ollamaModels = [{ name: 'qwen3.5:9b' }];
     ollamaChatOk = false;
     let resChatDown = await fetch(`${uploadBase}/ops/dependency-health`);
     let dataChatDown = await resChatDown.json();
     assertEqual(dataChatDown.dependencies.ollama.ok, false, 'ollama.ok should be false when chat fails');
     assertEqual(dataChatDown.dependencies.ollama.chatOk, false, 'ollama.chatOk should be false');
     assertEqual(dataChatDown.dependencies.ollama.error.includes('Smoke test HTTP 503'), true, 'Should include smoke test error');
+
+    // Test 6: strict no-skeleton mode fails when required Ollama model is missing
+    ollamaOk = true;
+    ollamaChatOk = true;
+    ollamaModels = [{ name: 'qwen3.5:0.8b' }];
+    lastOllamaChatBody = null;
+    let resMissingModel = await fetch(`${uploadBase}/ops/dependency-health`);
+    let dataMissingModel = await resMissingModel.json();
+    assertEqual(dataMissingModel.dependencies.ollama.ok, false, 'ollama.ok should be false when required model is missing');
+    assertEqual(dataMissingModel.dependencies.ollama.error, 'Missing required Ollama model: qwen3.5:9b', 'missing model error should name required model');
+    assertEqual(lastOllamaChatBody, null, 'ollama smoke should not run when required model is missing');
+    assertEqual(dataMissingModel.blocking, false, 'missing ollama model should not block parse');
 
   } finally {
     child.kill();
