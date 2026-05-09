@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260509-004345-P0-MinerU-Completed-After-Local-Timeout-Takeover-Code-Fix`: returned to Lucode for correction. Lucode must explicitly set final task metadata `mineruStatus='completed'` in the resumed/takeover completion path and add focused assertions for final task metadata in both new takeover paths. This task must not mutate production task `task-1778249434820`, production DB/MinIO/logs/samples/secrets/override/Docker/services, or create production uploads/retries/reparse. Production recovery requires separate Director authorization after code-level review.
+- `TASK-20260509-084629-P0-Ollama-Dependency-Health-Smoke-Alignment-Revision-1`: assigned to Lucode. Lucode must align, or prove no code change is needed for, dependency-health Ollama smoke behavior against production no-think provider semantics before validation pass 2. This is a code-level revision task only; it does not authorize production release readiness, production deploy/rebuild/restart/rollback, Ollama restart/kill/reload, model/timeout/secret/override changes, DB/MinIO/Docker volume/sample mutation, production uploads, skeleton fallback, or silent degradation.
 
 Director shorthand is active:
 
@@ -214,4 +214,6 @@ Lucia accepted task 50 at `2026-05-09T07:47:37+0800` as `ACCEPTED_CODE_LEVEL` an
 
 Director closed task 51 at `2026-05-09T08:28:54+0800` by approving accelerated production-candidate validation under a maximum two-validation-pass and two-revision-cycle timebox. This is not a production release-readiness declaration and does not lower evidence standards.
 
-Current active task: task 52, Lucode execution. Lucode must run production-candidate validation pass 1: apply current main as needed, preserve production-local override boundaries, validate Task 50 diagnostic classification in production, run dependency and stage-queued validation gates, and return a release-candidate evidence matrix. If blockers remain, Lucode must report `BLOCKED_WITH_REVISION_CANDIDATE` and stop; repairs require a new Lucia task. Production release readiness remains unclaimed.
+Lucia accepted task 52 at `2026-05-09T08:46:29+0800` as blocked pass-1 evidence. The actual candidate pass failed the Ollama `qwen3.5:9b` dependency-health gate on cold and bounded-warm checks, so no controlled validation upload was created. Lucia's later independent checks showed the current warmed runtime can pass dependency-health, including MinerU submit probe, but this only narrows the issue to readiness-smoke / cold-load stability; it does not establish production release readiness.
+
+Current active task: task 53, Lucode execution. Lucode must complete a smallest-scope dependency-health Ollama smoke alignment revision, or provide a no-code evidence report, before Lucia can issue validation pass 2. Validation pass count remains 1 of 2; revision cycle count becomes 1 of 2 only if the revision task applies code/task changes.
