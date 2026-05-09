@@ -8,8 +8,11 @@ async function runTest() {
 
   // 1. Create a fake memory MinerU ZIP
   const fakeMineruZip = new JSZip();
-  fakeMineruZip.file('auto/full.md', Buffer.from('# I am inside zip', 'utf-8'));
+  fakeMineruZip.file('auto/full.md', Buffer.from('# I am inside zip\n\n![](images/1.jpg)', 'utf-8'));
   fakeMineruZip.file('images/1.jpg', Buffer.from('fake image', 'utf-8'));
+  fakeMineruZip.file('book/ocr/book.md', Buffer.from('# OCR markdown', 'utf-8'));
+  fakeMineruZip.file('book/ocr/images/1.jpg', Buffer.from('ocr image', 'utf-8'));
+  fakeMineruZip.file('book/ocr/book_middle.json', Buffer.from('{"diagnostic":true}', 'utf-8'));
   fakeMineruZip.file('mineru-result.json', Buffer.from('{"ok":true}', 'utf-8'));
   const fakeZipBuffer = await fakeMineruZip.generateAsync({ type: 'nodebuffer' });
 
@@ -19,7 +22,8 @@ async function runTest() {
       { name: `${prefix}mineru-result.zip`, size: fakeZipBuffer.length },
       { name: `${prefix}full.md`, size: 100 },
       { name: `${prefix}images/1.jpg`, size: 10 }, // legacy expanded duplicate
-      { name: `${prefix}images/2.jpg`, size: 10 }  // legacy expanded unique
+      { name: `${prefix}images/2.jpg`, size: 10 },  // legacy expanded non-ocr
+      { name: `${prefix}book/ocr/images/2.jpg`, size: 10 }
     ];
     if (!prefix.includes('test-mat-fallback') && !prefix.includes('test-mat-dedup')) {
       list.push({ name: `${prefix}artifact-manifest.json`, size: 200 });
@@ -46,7 +50,7 @@ async function runTest() {
         }
         stream.end(Buffer.from(JSON.stringify(fakeManifest)));
       } else if (name.endsWith('full.md')) {
-        stream.end(Buffer.from('# I am inside zip', 'utf-8'));
+        stream.end(Buffer.from('# I am inside zip\n\n![](images/1.jpg)', 'utf-8'));
       } else {
         stream.end(Buffer.from('fake content for ' + name));
       }
@@ -117,10 +121,16 @@ async function runTest() {
   const userFiles = Object.keys(userZip.files).filter(k => !userZip.files[k].dir);
   // mineru-result.zip should NOT be present
   assert.ok(!userFiles.includes('mineru-result.zip'));
-  // primary md inside zip is filtered, but MinIO full.md is kept
+  // primary md inside zip is filtered, root full.md and the OCR directory are kept
   assert.ok(userFiles.includes('full.md'));
-  assert.ok(userFiles.includes('images/1.jpg'));
-  assert.ok(userFiles.includes('images/2.jpg'));
+  assert.ok(!userFiles.includes('images/1.jpg'));
+  assert.ok(!userFiles.includes('images/2.jpg'));
+  assert.ok(!userFiles.includes('artifact-manifest.json'));
+  assert.ok(!userFiles.includes('auto/full.md'));
+  assert.ok(userFiles.includes('book/ocr/book.md'));
+  assert.ok(userFiles.includes('book/ocr/images/1.jpg'));
+  assert.ok(userFiles.includes('book/ocr/images/2.jpg'));
+  assert.ok(userFiles.includes('book/ocr/book_middle.json'));
   
   const filesCount = Number(resUser.headers['X-Parsed-Files-Count']);
   assert.equal(filesCount, userFiles.length, 'X-Parsed-Files-Count header match');
