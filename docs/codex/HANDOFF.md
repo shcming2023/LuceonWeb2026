@@ -107,7 +107,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260509-101633-P0-Post-Ollama-Standardization-Production-Candidate-Validation`: assigned to Lucode. Lucode may run one bounded post-standardization validation pass: preflight, warm dependency-health with MinerU submit probe, and at most one controlled validation upload if gates pass. Production release readiness remains unclaimed until Lucia reviews the report.
+- `TASK-20260509-104053-P0-Production-Release-Readiness-Final-Decision`: assigned to Director. Director must decide whether to approve production release readiness for the local single-operator boundary, approve manual-review-ready candidate only, or hold for additional validation.
 
 Director shorthand is active:
 
@@ -227,3 +227,5 @@ Director selected Option A for task 56 at `2026-05-09T09:43:56+0800` and clarifi
 Lucia accepted task 57 at `2026-05-09T10:12:45+0800` as `ACCEPTED_RUNTIME_STANDARDIZED_READY_FOR_VALIDATION_DECISION`. The duplicate host-only Ollama listener PID `665` was terminated, and one wildcard listener PID `59391` remains on `*:11434`. Host-local and container-facing endpoints now report Ollama `0.23.1`, `qwen3.5:9b` is present, host/container no-think chat passes, and dependency-health with MinerU submit probe passes. No validation upload or production release-readiness claim occurred. Current active task: task 58, Director decision. Because the previous two-pass/two-revision timebox is exhausted, Director must decide whether to authorize one post-standardization validation pass, hold, or request more read-only evidence.
 
 Director authorized Option A for task 58 at `2026-05-09T10:16:33+0800`. Lucia issued task 59 to Lucode. Task 59 permits one bounded post-standardization production-candidate validation pass only: preflight, warm dependency-health with MinerU submit probe, and at most one controlled validation upload if gates pass. Lucode may not declare production release readiness, create more than one upload, change source code, change model/timeout/secret/production override settings, perform model operations, delete or mutate DB/MinIO/Docker volume/task/artifact/log/sample data, or run broad production deploy/rebuild/restart/rollback.
+
+Lucia accepted task 59 at `2026-05-09T10:40:53+0800` as `ACCEPTED_PRODUCTION_CANDIDATE_KEY_PATH_READY_FOR_DIRECTOR_RELEASE_DECISION`. The post-standardization validation passed the critical Phase 1 path with one controlled external read-only sample: upload -> MinIO intake -> local MinerU -> parsed artifacts -> Ollama `qwen3.5:9b` AI metadata -> operator `review-pending`. Final diagnostics were idle with no takeover-required tasks, and post dependency-health with MinerU submit probe passed. Production release readiness remains pending Director task 60; Lucia may not autonomously approve production release readiness after heartbeat waits.
