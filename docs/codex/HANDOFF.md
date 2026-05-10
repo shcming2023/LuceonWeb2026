@@ -108,7 +108,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 Current active tasks:
 
 - `TASK-20260509-104053-P0-Production-Release-Readiness-Final-Decision`: assigned to Director. This remains blocked pending MinerU submit-path recovery evidence and a later Director release decision.
-- `TASK-20260510-142045-P0-Local-Production-Service-Ownership-Unification`: assigned to Lucode. Lucode must unify and document the effective local production service ownership and endpoint contract before entry-circuit work proceeds.
+- `TASK-20260510-144315-P0-Apply-Production-Runtime-Env-Ownership-Contract`: assigned to Lucode. Lucode must apply the accepted runtime env contract to production upload-server and prove explicit env truth before entry-circuit work proceeds.
 - `TASK-20260510-142045-P1-Entry-Circuit-And-Durable-Admission-State`: staged and assigned to Lucia for activation only after Task 69 is accepted.
 
 Director shorthand is active:
@@ -232,6 +232,8 @@ Lucia accepted task 68 at `2026-05-10T14:20:45+0800` as local runtime recovery e
 - P3 later: Ollama transport retry and keep-alive stability refinement.
 
 Manual pressure testing and production release readiness remain blocked.
+
+Lucia accepted Task 69 at `2026-05-10T14:43:15+0800` as an ownership contract baseline but did not activate P1. The running production upload-server still lacks explicit `LOCAL_MINERU_ENDPOINT`, `OLLAMA_API_URL`, and `ALLOW_AI_SKELETON_FALLBACK=false`, and dependency-health still reports the MinerU endpoint as `http://192.168.31.33:8083`. Current active Lucode task is Task 71, a narrow production upload-server env contract application step. Task 70 remains staged until Task 71 is accepted.
 
 Lucia accepted task 54 at `2026-05-09T09:12:21+0800` as `BLOCKED_AFTER_PASS_2_NO_GO_FOR_RELEASE_READY`. Validation pass 2 of 2 was used; no controlled upload was created because dependency-health still failed on container-to-host Ollama `/api/chat` timeout. Non-Ollama gates passed, and diagnostics classification remained healthy/idle. Production release readiness remains unclaimed.
 
