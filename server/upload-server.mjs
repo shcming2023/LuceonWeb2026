@@ -48,6 +48,13 @@ import { classifyMineruActiveTasks, registerMineruDiagnosticsRoutes } from './li
 import { ParseTaskWorker } from './services/queue/task-worker.mjs';
 import { AiMetadataWorker } from './services/ai/metadata-worker.mjs';
 import { logTaskEvent } from './services/logging/task-events.mjs';
+import {
+  MINERU_ADMISSION_MESSAGE,
+  isMineruAdmissionCircuitOpen,
+  readMineruAdmissionCircuit,
+  recordMineruSubmitProbeForAdmission,
+  summarizeAdmissionCounts,
+} from './services/mineru/admission-circuit.mjs';
 
 const app = express();
 const port = Number(process.env.UPLOAD_PORT || 8788);
@@ -354,6 +361,62 @@ async function probeMineruSubmitPath(localEndpoint) {
   }
 }
 
+async function buildMineruActiveTaskSnapshot() {
+  const result = {
+    activeTask: null,
+    currentProcessingTask: null,
+    queuedTasks: [],
+    completedButNotIngestedTasks: [],
+    driftTasks: [],
+    submitRetryableTasks: [],
+    takeoverRequiredTasks: [],
+    historicalAiFailureTasks: [],
+    counts: { parsePending: 0, parseRunning: 0, aiPending: 0, aiRunning: 0 },
+  };
+
+  const [tasksRes, jobsRes] = await Promise.all([
+    fetch(`${DB_BASE_URL}/tasks`, { signal: AbortSignal.timeout(3000) }).catch(() => null),
+    fetch(`${DB_BASE_URL}/ai-metadata-jobs`, { signal: AbortSignal.timeout(3000) }).catch(() => null),
+  ]);
+
+  const tasks = tasksRes?.ok ? await tasksRes.json().catch(() => []) : [];
+  const aiJobs = jobsRes?.ok ? await jobsRes.json().catch(() => []) : [];
+  const classifiedTasks = classifyMineruActiveTasks(Array.isArray(tasks) ? tasks : []);
+  const runningWithMineru = classifiedTasks.runningWithMineru;
+
+  result.activeTask = runningWithMineru[0] || null;
+  result.currentProcessingTask = runningWithMineru.find(t => t.stage === 'mineru-processing') || null;
+  result.queuedTasks = runningWithMineru
+    .filter(t => t.stage === 'mineru-queued')
+    .map(t => ({ id: t.id, mineruTaskId: t.metadata?.mineruTaskId }));
+  result.completedButNotIngestedTasks = classifiedTasks.completedButNotIngestedTasks.map(t => ({ id: t.id, mineruTaskId: t.metadata?.mineruTaskId, state: t.state, stage: t.stage }));
+  result.driftTasks = classifiedTasks.driftTasks.map(t => ({ id: t.id, mineruTaskId: t.metadata?.mineruTaskId, state: t.state, stage: t.stage }));
+  result.submitRetryableTasks = classifiedTasks.submitRetryableTasks.map(t => ({ id: t.id, state: t.state, stage: t.stage, retries: t.metadata?.submitRetries || 0 }));
+  result.takeoverRequiredTasks = classifiedTasks.takeoverRequiredTasks.map(t => ({ id: t.id, mineruTaskId: t.metadata?.mineruTaskId, state: t.state, stage: t.stage }));
+  result.historicalAiFailureTasks = classifiedTasks.historicalAiFailureTasks.map(t => ({ id: t.id, mineruTaskId: t.metadata?.mineruTaskId, state: t.state, stage: t.stage }));
+  result.counts = summarizeAdmissionCounts({ tasks: Array.isArray(tasks) ? tasks : [], aiJobs: Array.isArray(aiJobs) ? aiJobs : [] });
+  return result;
+}
+
+async function buildMineruAdmissionCircuitEvidence() {
+  const [circuit, activeSnapshot] = await Promise.all([
+    readMineruAdmissionCircuit(DB_BASE_URL),
+    buildMineruActiveTaskSnapshot().catch(() => null),
+  ]);
+  return {
+    ...circuit,
+    counts: activeSnapshot?.counts || circuit.counts,
+    activeTaskClean: activeSnapshot
+      ? !activeSnapshot.activeTask &&
+        !activeSnapshot.currentProcessingTask &&
+        activeSnapshot.queuedTasks.length === 0 &&
+        activeSnapshot.completedButNotIngestedTasks.length === 0 &&
+        activeSnapshot.driftTasks.length === 0 &&
+        activeSnapshot.takeoverRequiredTasks.length === 0
+      : circuit.closeCriteria?.activeTaskClean !== false,
+  };
+}
+
 async function checkDependencyHealth(minioBucket, options = {}) {
   const mineruSubmitProbeEnabled = options.mineruSubmitProbe === true || isTruthyEnv(process.env.DEPENDENCY_HEALTH_MINERU_SUBMIT_PROBE);
   const result = {
@@ -580,6 +643,23 @@ async function checkDependencyHealth(minioBucket, options = {}) {
     result.blocking = (!result.dependencies.minio.ok || !result.dependencies.mineru.ok);
     result.ok = result.dependencies.minio.ok && result.dependencies.mineru.ok && (result.dependencies.ollama.skipped || result.dependencies.ollama.ok);
 
+    if (mineruSubmitProbeEnabled && !ONLINE_MINERU_MODE) {
+      const activeSnapshot = await buildMineruActiveTaskSnapshot().catch(() => null);
+      const circuitWrite = await recordMineruSubmitProbeForAdmission(DB_BASE_URL, {
+        submitProbe: result.dependencies.mineru.submitProbe,
+        activeSnapshot,
+        dependencyBlockingClear: result.dependencies.minio.ok === true &&
+          result.dependencies.mineru.healthOk === true &&
+          result.dependencies.mineru.submitProbe?.ok === true,
+        counts: activeSnapshot?.counts,
+      });
+      result.dependencies.mineru.admissionCircuit = circuitWrite.state;
+      result.dependencies.mineru.admissionCircuit.persisted = circuitWrite.ok;
+      if (!circuitWrite.ok) result.dependencies.mineru.admissionCircuit.persistError = circuitWrite.error;
+    } else if (!ONLINE_MINERU_MODE) {
+      result.dependencies.mineru.admissionCircuit = await buildMineruAdmissionCircuitEvidence().catch(() => null);
+    }
+
   } catch (err) {
     result.error = err.message;
     result.blocking = true;
@@ -592,6 +672,20 @@ app.get('/ops/dependency-health', async (req, res) => {
     mineruSubmitProbe: isTruthyQuery(req.query.mineruSubmitProbe),
   });
   res.json(result);
+});
+
+app.get('/ops/mineru/admission-circuit', async (req, res) => {
+  try {
+    const circuit = await buildMineruAdmissionCircuitEvidence();
+    res.json({
+      ok: true,
+      circuit,
+      open: isMineruAdmissionCircuitOpen(circuit),
+      message: isMineruAdmissionCircuitOpen(circuit) ? MINERU_ADMISSION_MESSAGE : null,
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
 });
 
 // ─── 依赖修复控制面 (Supervisor Proxy) ───────────────────────
@@ -2847,8 +2941,14 @@ app.post('/tasks', upload.single('file'), async (req, res) => {
     });
 
     // -1. 依赖健康门禁检查 (Requirement: 硬门禁)
-    const health = await checkDependencyHealth();
-    if (health.blocking) {
+    // 非 Markdown 入口依赖 MinerU submit path，可用性不能只看 /health。
+    const requiresMineruSubmitAdmission = extLower !== 'md';
+    const health = await checkDependencyHealth(undefined, {
+      mineruSubmitProbe: requiresMineruSubmitAdmission,
+    });
+    const admissionCircuit = health.dependencies?.mineru?.admissionCircuit || await buildMineruAdmissionCircuitEvidence().catch(() => null);
+    const admissionOpen = requiresMineruSubmitAdmission && isMineruAdmissionCircuitOpen(admissionCircuit);
+    if (health.blocking || admissionOpen) {
       if (req.file) cleanupTempFile(req.file);
       const blockingDep = Object.keys(health.dependencies).find(k =>
         health.dependencies[k].ok === false &&
@@ -2857,15 +2957,16 @@ app.post('/tasks', upload.single('file'), async (req, res) => {
       );
 
       let message = '核心依赖不健康，无法执行解析';
-      if (blockingDep === 'mineru') message = 'MinerU API 未启动，请先启动本地解析服务';
+      if (admissionOpen || blockingDep === 'mineru') message = MINERU_ADMISSION_MESSAGE;
       else if (blockingDep === 'minio') message = 'MinIO 存储未就绪，无法上传文件';
 
       return res.status(503).json({
         ok: false,
-        code: 'DEPENDENCY_UNHEALTHY',
-        blockingDependency: blockingDep,
+        code: admissionOpen ? 'MINERU_ADMISSION_CIRCUIT_OPEN' : 'DEPENDENCY_UNHEALTHY',
+        blockingDependency: admissionOpen ? 'mineru' : blockingDep,
         message,
-        health
+        health,
+        admissionCircuit,
       });
     }
 

@@ -11,6 +11,7 @@ import { getAllTasks, updateTask, updateMaterial } from '../tasks/task-client.mj
 import { logTaskEvent } from '../logging/task-events.mjs';
 import { processWithLocalMinerU, resumeWithLocalMinerU, MineruStillProcessingError, MineruSubmitUnreachableError } from '../mineru/local-adapter.mjs';
 import { processWithOnlineMinerU, resumeWithOnlineMinerU } from '../mineru/v4-online-adapter.mjs';
+import { isMineruAdmissionCircuitOpen, openMineruAdmissionCircuit, readMineruAdmissionCircuit } from '../mineru/admission-circuit.mjs';
 import { createAiMetadataJob } from '../ai/metadata-job-client.mjs';
 import { parseLatestMineruProgress } from '../../lib/ops-mineru-log-parser.mjs';
 
@@ -58,6 +59,10 @@ export class ParseTaskWorker {
     this.mineruSubmitCircuitOpenUntil = 0;
     this.mineruSubmitCircuitReason = '';
     this.mineruSubmitCircuitLoggedUntil = 0;
+    this.mineruAdmissionCircuitStore = options.mineruAdmissionCircuitStore || {
+      read: () => readMineruAdmissionCircuit(process.env.DB_BASE_URL || 'http://localhost:8789'),
+      open: (reason, details) => openMineruAdmissionCircuit(process.env.DB_BASE_URL || 'http://localhost:8789', reason, details),
+    };
   }
 
   /** 将 ReadableStream 转换为 Buffer */
@@ -169,7 +174,7 @@ export class ParseTaskWorker {
     for (const task of pendingTasks) {
       if (started >= available) break;
       if (processingMap.has(task.id)) continue;
-      if (this.isMineruSubmitCircuitOpenFor(task)) {
+      if (await this.isMineruSubmitCircuitOpenFor(task)) {
         await this.markPendingTaskBlockedByMineruSubmitCircuit(task);
         break;
       }
@@ -1420,12 +1425,20 @@ export class ParseTaskWorker {
     }
   }
 
-  isMineruSubmitCircuitOpenFor(task) {
-    if (Date.now() >= this.mineruSubmitCircuitOpenUntil) return false;
+  async isMineruSubmitCircuitOpenFor(task) {
     if (task.engine !== 'local-mineru') return false;
     if (task.metadata?.mineruTaskId) return false;
     if (this.isMarkdownPassthroughTask(task)) return false;
-    return true;
+    if (Date.now() < this.mineruSubmitCircuitOpenUntil) return true;
+    const circuit = await this.mineruAdmissionCircuitStore.read().catch(() => null);
+    if (isMineruAdmissionCircuitOpen(circuit)) {
+      this.mineruSubmitCircuitReason = circuit.reason || 'MinerU submit path unavailable';
+      this.mineruSubmitCircuitOpenUntil = circuit.cooldownUntil
+        ? Math.max(Date.now() + 1, new Date(circuit.cooldownUntil).getTime())
+        : Date.now() + 60_000;
+      return true;
+    }
+    return false;
   }
 
   isMarkdownPassthroughTask(task) {
@@ -1435,10 +1448,23 @@ export class ParseTaskWorker {
     return fileName.endsWith('.md') || mimeType === 'text/markdown';
   }
 
-  openMineruSubmitCircuit(error) {
+  async openMineruSubmitCircuit(error) {
     const retryAfterMs = Math.max(10_000, Number(error?.retryAfterMs || 60_000));
     this.mineruSubmitCircuitOpenUntil = Math.max(this.mineruSubmitCircuitOpenUntil, Date.now() + retryAfterMs);
     this.mineruSubmitCircuitReason = error?.message || 'MinerU submit path unavailable';
+    await this.mineruAdmissionCircuitStore.open(this.mineruSubmitCircuitReason, {
+      activeTaskClean: false,
+      dependencyBlockingClear: false,
+      lastSubmitProbe: {
+        enabled: false,
+        ok: false,
+        status: error?.status || null,
+        error: error?.message || 'MinerU submit path unavailable',
+        endpoint: error?.endpoint || '',
+      },
+    }).catch((storeError) => {
+      console.warn(`[task-worker] failed to persist MinerU admission circuit: ${storeError.message}`);
+    });
   }
 
   async markPendingTaskBlockedByMineruSubmitCircuit(task) {
@@ -1493,7 +1519,7 @@ export class ParseTaskWorker {
     const retries = (task.metadata?.submitRetries || 0) + 1;
 
     if (dependencyBlocking) {
-      this.openMineruSubmitCircuit(error);
+      await this.openMineruSubmitCircuit(error);
       const nextRetryAt = new Date(this.mineruSubmitCircuitOpenUntil).toISOString();
       const statusSuffix = error?.status ? `HTTP ${error.status}` : 'unreachable';
       const message = `MinerU 提交路径不可用 (${statusSuffix})，已暂停队列提交，等待依赖恢复后重试`;

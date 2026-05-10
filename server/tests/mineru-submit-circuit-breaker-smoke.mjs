@@ -52,6 +52,20 @@ async function runSmoke() {
   const taskUpdates = [];
   const materialUpdates = [];
   let mineruProcessorCalls = 0;
+  let durableCircuit = { state: 'closed' };
+  const admissionCircuitStore = {
+    read: async () => durableCircuit,
+    open: async (reason, details = {}) => {
+      durableCircuit = {
+        state: 'open',
+        reason,
+        message: 'MinerU 当前不可接收新任务，文件未收取，请稍后重试。',
+        cooldownUntil: new Date(Date.now() + 60_000).toISOString(),
+        lastSubmitProbe: details.lastSubmitProbe || null,
+      };
+      return { ok: true, state: durableCircuit };
+    },
+  };
 
   const taskClient = {
     getAllTasks: async () => tasks,
@@ -86,6 +100,7 @@ async function runSmoke() {
         retryAfterMs: 60_000,
       });
     },
+    mineruAdmissionCircuitStore: admissionCircuitStore,
   });
 
   await worker.processTask(task1);
@@ -94,10 +109,25 @@ async function runSmoke() {
   assert(task1.stage === 'dependency-blocked', 'first task is marked dependency-blocked');
   assert(task1.metadata.submitDependencyBlocked === true, 'first task records submit dependency block');
   assert(task1.metadata.nextSubmitRetryAt, 'first task records next submit retry time');
+  assert(durableCircuit.state === 'open', 'submit-path 500 opens durable MinerU admission circuit');
   assert(!taskUpdates.some(({ patch }) => patch.state === 'failed'), 'submit-path 500 does not mark task failed');
   assert(materialUpdates.some(({ id, patch }) => id === 'mat-submit-500-1' && patch.mineruStatus === 'blocked'), 'material is normalized to blocked, not failed');
 
-  await worker.scanAndProcess();
+  const workerAfterRestart = new ParseTaskWorker({
+    minioContext: {
+      getFileStream: async () => ({}),
+      saveMarkdown: async () => {},
+      saveObject: async () => {},
+    },
+    taskClient,
+    mineruProcessor: async () => {
+      mineruProcessorCalls += 1;
+      throw new Error('durable circuit should prevent this submission');
+    },
+    mineruAdmissionCircuitStore: admissionCircuitStore,
+  });
+
+  await workerAfterRestart.scanAndProcess();
 
   assert(mineruProcessorCalls === 1, 'circuit breaker prevents submitting another pending task');
   assert(task2.state === 'pending', 'second task remains pending');

@@ -1020,6 +1020,7 @@ const ALLOWED_SETTINGS_KEYS = new Set([
   'batchProcessing',
   'batchProcessingUpdatedAt',
   'serverBatchQueue',
+  'mineruAdmissionCircuit',
 ]);
 
 app.get('/settings', (_req, res) => {
