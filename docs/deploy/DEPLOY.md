@@ -1,5 +1,7 @@
 # EduAsset CMS — Docker 部署说明
 
+> Current Phase 1 note: the standard path is local MinerU FastAPI + Docker MinIO + host Ollama `qwen3.5:9b`. Online MinerU, Kimi/Moonshot, and tmpfiles routes remain compatibility surfaces unless a task explicitly assigns them.
+
 ## 一、架构概览
 
 ```
@@ -10,15 +12,15 @@
 │   ├── /__proxy/upload/   → upload-server:8788
 │   ├── /__proxy/db/       → db-server:8789
 │   ├── /api/              → host.docker.internal:3001（备份后端，可选）
-│   ├── /__proxy/mineru-cdn/ → cdn-mineru.openxlab.org.cn
-│   ├── /__proxy/mineru/   → mineru.net
-│   ├── /__proxy/kimi/     → api.kimi.ai
-│   ├── /__proxy/moonshot/ → api.moonshot.cn
-│   └── /__proxy/tmpfiles/ → tmpfiles.org（MinIO 降级 fallback）
+│   ├── /__proxy/mineru-cdn/ → cdn-mineru.openxlab.org.cn（compatibility）
+│   ├── /__proxy/mineru/   → mineru.net（compatibility）
+│   ├── /__proxy/kimi/     → api.kimi.ai（compatibility）
+│   ├── /__proxy/moonshot/ → api.moonshot.cn（compatibility）
+│   └── /__proxy/tmpfiles/ → tmpfiles.org（legacy）
 │
 ├── Docker: upload-server（Node.js，内部端口 8788）
 │   ├── 接收文件上传（最大 200 MB），基于磁盘缓冲防 OOM，转存到 MinIO
-│   ├── MinIO 不可用时自动降级到 tmpfiles.org
+│   ├── 当前主线转存到 MinIO；core parse/AI 路径不允许 silent fallback
 │   ├── 提供 MinerU 解析结果转存接口
 │   └── 支持优雅停机（Graceful Shutdown）防数据损坏
 │
@@ -61,12 +63,14 @@
 
 | 服务 | 地址 | 用途 | 配置方式 |
 |------|------|------|---------|
-| MinerU API | `https://mineru.net` | PDF/文档 OCR 解析 | 系统设置页面 → MinerU 配置 |
-| Kimi/Moonshot | `https://api.moonshot.cn` | AI 识别与标注 | 系统设置页面 → AI 配置 |
+| Local MinerU FastAPI | `http://host.docker.internal:8083` | 当前主线 PDF/文档解析 | 运行环境 `LOCAL_MINERU_ENDPOINT` |
+| Host Ollama | `http://host.docker.internal:11434` | 当前主线 AI 元数据识别，模型 `qwen3.5:9b` | 运行环境 `OLLAMA_API_URL` / `OLLAMA_TIER2_MODEL` |
+| Online MinerU | `https://mineru.net` | compatibility-only | 仅在显式任务中启用 |
+| Kimi/Moonshot | `https://api.moonshot.cn` | compatibility-only | 系统设置页面或环境变量 |
 | MinIO | `minio:9000`（内部） | 持久化文件存储 | `.env` 中配置，upload-server 自动使用 |
-| tmpfiles.org | `https://tmpfiles.org` | 临时文件中转（MinIO 降级方案） | 自动切换，无需配置 |
+| tmpfiles.org | `https://tmpfiles.org` | legacy 临时文件中转 | 当前主线不依赖 |
 
-> MinerU API Key 和 Kimi API Key 在系统设置页面配置，保存到浏览器 localStorage，**不写入代码仓库**。
+> Online MinerU API Key 和 Kimi API Key 属于兼容路径配置，**不得写入代码仓库**。当前生产运行口径以环境变量和 `docs/deploy/PRODUCTION_RUNTIME_OWNERSHIP.md` 为准。
 
 ### 2.2 Overleaf 备份系统
 
@@ -173,12 +177,15 @@ docker compose up -d --build
 | `HOST_BACKUP_PATH` | — | 备份文件宿主机存储路径（绝对路径） |
 | `OVERLEAF_ACCESS_TOKEN` | — | 备份系统 API Token（见第五节） |
 
-### AI 服务（前端直连，非容器内）
+### AI / Parser 兼容配置
 
 | 变量名 | 说明 |
 |--------|------|
-| `MINERU_API_KEY` | MinerU API Key，也可在系统设置页面配置 |
-| `KIMI_API_KEY` | Kimi/Moonshot API Key，也可在系统设置页面配置 |
+| `LOCAL_MINERU_ENDPOINT` | 当前主线本机 MinerU FastAPI endpoint |
+| `OLLAMA_API_URL` | 当前主线本机 Ollama endpoint |
+| `OLLAMA_TIER2_MODEL` | 当前主线模型，当前为 `qwen3.5:9b` |
+| `MINERU_API_KEY` | 在线 MinerU compatibility-only 配置 |
+| `KIMI_API_KEY` | Kimi/Moonshot compatibility-only 配置 |
 
 ### Mac vs Linux：host.docker.internal 与 extra_hosts
 
@@ -197,7 +204,7 @@ docker compose up -d --build
 |------|----------|----------|
 | `DISABLE_AI_SKELETON_FALLBACK=true` | 必须保留，用于 Phase 1 严格 AI 语义，避免 skeleton fallback 被当作真实 AI 识别结果。 | 属于必需运行语义；变更前需要单独任务和验证。 |
 | `OLLAMA_TIER2_MODEL=qwen3.5:9b` | 必须保留，用于当前 Standard 模型。 | 属于当前主线模型约束；变更前需要单独任务和验证。 |
-| MinIO console `19001:9001` | 仅可视为本机管理员暴露边界。 | 生产发布就绪前必须由 Director/Lucia 明确接受、改为仅本机访问，或通过单独任务移除并验证。 |
+| MinIO console | 生产本地要求 local-only 绑定，例如 `127.0.0.1:19001:9001`。 | 发布边界确认必须检查实际 production override；仓库根 override 不能替代生产事实。 |
 
 Release-candidate 命名前必须同时确认：
 
@@ -260,7 +267,7 @@ docker compose restart cms-frontend
 ## 七、生产环境安全建议
 
 1. **修改 MinIO 默认密钥**：将 `.env` 中 `MINIO_ACCESS_KEY` 和 `MINIO_SECRET_KEY` 替换为强密钥（随机字符串）
-2. **MinIO 控制台端口**：如不需要对外暴露，可在 `docker-compose.yml` 中移除 `9001` 端口映射
+2. **MinIO 控制台端口**：生产本地应使用 local-only 绑定，例如 `127.0.0.1:19001:9001`
 3. **HTTPS**：建议在 Docker 前面加 Caddy 或 Nginx 反向代理处理 HTTPS：
    ```
    Internet → Caddy（443）→ Docker cms-frontend（8080）
@@ -317,32 +324,32 @@ docker compose restart cms-frontend
 A: 检查 `docker compose logs cms-frontend`，确认 Nginx 启动正常。打开浏览器 Console 查看 JS 错误。
 
 **Q: 文件上传失败？**
-A: 检查 `docker compose logs upload-server`。访问 `http://localhost:8080/__proxy/upload/health` 验证服务健康。
+A: 检查 `docker compose logs upload-server`。当前本地 UAT 常用 `http://localhost:8081/__proxy/upload/health` 验证服务健康；如使用其他 `CMS_PORT`，请替换端口。
 
 **Q: MinIO 无法启动？**
 A: 检查 `docker compose logs minio`，确认数据卷 `cms-minio-data` 可用。MinIO 默认密钥为 `minioadmin`，请通过 `.env` 修改。
 
 **Q: 文件上传时 MinIO 连接失败？**
-A: 确认 `docker compose ps minio` 显示 healthy。MinIO 不可用时 upload-server 会自动降级到 tmpfiles.org（临时存储，有效期 24 小时）。
+A: 确认 `docker compose ps minio` 显示 healthy，并检查 upload-server 日志。当前主线依赖 MinIO 持久化对象存储，不应把 tmpfiles legacy fallback 当作核心链路成功。
 
 **Q: 如何访问 MinIO Web 控制台？**
-A: 浏览器访问 `http://localhost:9001`，使用 `.env` 中配置的 `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` 登录。
+A: 本地/UAT 通常访问 `http://localhost:19001`，使用 `.env` 中配置的 `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` 登录。生产发布边界要求控制台 local-only。
 
 **Q: 如何切换存储后端？**
-A: 修改 `.env` 中 `STORAGE_BACKEND=minio`（MinIO）或 `STORAGE_BACKEND=tmpfiles`（临时存储），然后 `docker compose restart upload-server`。
+A: 当前主线使用 `STORAGE_BACKEND=minio`。`tmpfiles` 仅为 legacy compatibility，启用前需要单独任务说明和验证。
 
 **Q: MinerU 解析超时？**
-A: 在系统设置页面增大 MinerU 超时时间（默认 1200 秒），或检查宿主机网络是否能访问 `https://mineru.net`。
+A: 当前主线优先检查本机 MinerU FastAPI、submit-probe、host/container endpoint 口径和 MinerU 日志；在线 MinerU 超时排查仅适用于 compatibility 路径。
 
-**Q: MinerU 解析返回 401 "user authenticate failed"？**
+**Q: 在线 MinerU 解析返回 401 "user authenticate failed"？**
 A: 这是 MinerU 鉴权失败，检查以下配置：
    1. 系统设置页面的 MinerU API Key 是否正确
    2. API Key 是否带 `Bearer ` 前缀（不应该）
    3. API Key 是否含引号或空格（不应该）
    4. 可用 `curl` 直测验证 Key 有效性（见下方命令）
 
-**Q: 如何验证 MinerU API Key 是否有效？**
-A: 在宿主机运行以下命令（替换 `YOUR_KEY` 为真实 key）：
+**Q: 如何验证在线 MinerU API Key 是否有效？**
+A: 仅在 online compatibility 路径中需要。在宿主机运行以下命令（替换 `YOUR_KEY` 为真实 key）：
 ```bash
 curl -i https://mineru.net/api/v4/file-urls/batch \
   -H 'Content-Type: application/json' \
@@ -377,10 +384,11 @@ Mac Mini 宿主机 :8081 → Docker: cms-frontend (Nginx:80)
                             ├─ /__proxy/upload/     → upload-server:8788
                             ├─ /__proxy/db/         → db-server:8789
                             ├─ /minio/              → minio:9000
-                            └─ /__proxy/mineru/ 等  → 外部 API
+                            ├─ /__proxy/mineru-local → host MinerU :8083
+                            └─ host Ollama           → :11434
 ```
 
-> MinIO 控制台单独暴露：`http://192.168.31.33:9001`
+> MinIO 控制台本地管理入口通常为：`http://127.0.0.1:19001`
 
 ### 9.2 部署步骤
 

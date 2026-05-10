@@ -1,9 +1,9 @@
 /**
  * 全局应用 Context
  *
- * 数据持久化策略（三级降级）：
+ * 数据持久化策略（三级降级）。生产事实以 db-server / MinIO / 任务队列为准：
  *   1. 主存储：db-server（通过 /__proxy/db/ REST API，JSON 文件持久化）
- *   2. 次存储：localStorage（降级兜底，同步写）
+ *   2. 次存储：localStorage（本地渲染与降级兜底，同步写）
  *   3. 内存 fallback：seedData 初始数据（全量 API 失败时）
  *
  * 启动流程：

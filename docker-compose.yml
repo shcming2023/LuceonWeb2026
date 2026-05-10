@@ -53,8 +53,8 @@ services:
       start_period: 15s
 
    # ── 文件上传代理服务 ─────────────────
-  # 接收前端上传的文件，优先转发到 MinIO（持久化存储），失败时降级到 tmpfiles.org（临时存储）
-  # 供 MinerU URL 模式解析使用
+  # 接收前端上传的文件，当前主线转存到 MinIO（持久化存储）
+  # tmpfiles / MinerU URL 模式仅保留 legacy compatibility，不作为当前主线降级路径
   # 同时包含后端批处理队列引擎，支持浏览器无关的不间断 PDF 处理
   upload-server:
     build:
@@ -156,10 +156,11 @@ services:
       retries: 3
       start_period: 10s
 
-  # ── MinIO 对象存储服务 ───────────────────────────────────  # 提供持久化文件存储，替代 tmpfiles.org 临时存储
+  # ── MinIO 对象存储服务 ───────────────────────────────────
+  # 提供当前主线的持久化文件存储。
   # ⚠️ 生产环境安全建议：将 ports 注释掉，仅通过内部网络访问
   # 如需外部访问控制台，使用 Nginx 反向代理而非直接暴露端口
-  # 控制台访问（开发环境）：http://localhost:9001
+  # 控制台访问（开发/UAT override）：通常映射到 http://localhost:19001
   minio:
     image: minio/minio:latest
     container_name: cms-minio
@@ -175,7 +176,7 @@ services:
     # ports:
     #   - "9000:9000"  # API 端口（通过 Nginx /minio/ 代理访问，无需直接暴露）
     #   - "19001:9001"  # Web 控制台端口
-    # UAT/开发环境如需开启 9001 控制台端口，请在 docker-compose.override.yml 中单独暴露
+    # UAT/开发环境如需开启控制台端口，请在 docker-compose.override.yml 中单独暴露
     networks:
       - cms-network
     environment:

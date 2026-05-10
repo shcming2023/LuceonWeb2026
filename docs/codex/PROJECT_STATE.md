@@ -1,12 +1,12 @@
 # Luceon2026 Project State
 
-Last updated: 2026-05-10
+Last updated: 2026-05-11
 
 ## 1. Current Repository Baseline
 
 - Active workspace: `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/3.Luceon2026`
 - Branch: `main`
-- Remote sync baseline before this governance pass: `origin/main` at `22857e9d83f7598e508f4b2827480c2ec166b96d`
+- Current synchronized baseline: `origin/main` at `9db0054` (`Merge Ollama keep-alive health semantics`)
 - Package manager: `npx pnpm@10.4.1`
 - Root lockfile: `pnpm-lock.yaml`
 - Removed lockfile class: root `package-lock.json` and UAT-local `package-lock.json`
@@ -47,7 +47,9 @@ Current runtime dependencies:
 - Task `TASK-20260510-154254-P0-Entry-Circuit-Production-Deployment-And-Non-Destructive-Runtime-Validation` was accepted at `2026-05-10T15:50:52+0800`: production deployed accepted code at `cf0466a`, dependency-health submit-probe passed, admission circuit was closed, active parse/AI queues were empty, and Ollama `qwen3.5:9b` was resident. This is non-destructive runtime-surface evidence only.
 - Director selected Option B at `2026-05-10T15:54:51+0800`.
 - Task `TASK-20260510-155451-P0-Bounded-24-PDF-Pressure-Restart-Under-Entry-Circuit` was accepted as inconclusive at `2026-05-10T16:13:43+0800`: samples 1-20 created tasks, sample 21 stopped before HTTP request due to local curl file-read exit 26, and samples 22-24 were not attempted. This is not pressure PASS or circuit PASS.
-- Active task `TASK-20260510-161343-P0-Pressure-Restart-Created-Tasks-Read-Only-Terminal-Observation` is limited to read-only observation of the 20 created validation tasks. It does not authorize new uploads, retries, failed-task repair, cleanup, destructive operations, config/model/secret/override mutation, broad restart/rollback, or sample-library mutation.
+- The bounded 24-PDF pressure restart remains inconclusive, not a pressure PASS: 20 tasks were created, later read-only observation timed out with one long MinerU parse active and the rest pending/upload.
+- Task-page MinerU progress semantics restoration was accepted at code level and merged into `main`; production deployment/runtime validation remains separate.
+- Ollama keep-alive and cold/warm health semantics are present in current `main` at `9db0054`, but this record does not claim production deployment, pressure PASS, L3, or production release readiness.
 - Production release readiness remains unclaimed.
 
 ## 3. Governance Closure Summary
@@ -524,7 +526,7 @@ Director approved scoped MinerU runtime recovery for Task 67 at `2026-05-10T08:3
 
 Lucia accepted Task 68 at `2026-05-10T14:20:45+0800` as `ACCEPTED_LOCAL_RUNTIME_RECOVERED_GOVERNANCE_REQUIRED`. Confirmed facts: scoped MinerU-only tmux restart cleared the immediate submit-path blocker; after recovery, upload health was OK, MinerU `/health` was OK, dependency-health with `mineruSubmitProbe=true` returned MinerU submit probe HTTP `202` and `blocking=false`, and active-task diagnostics were clean. This is accepted only as local runtime recovery evidence. Director reclassified the broader problem as `LOCAL_LONG_RUNNING_PRODUCTION_LINE_GOVERNANCE_PROBLEM`: the PRD mainline upload -> MinIO -> local MinerU -> parsed artifacts -> Ollama `qwen3.5:9b` -> AI metadata -> operator review remains valid, but local long-running operation lacks a unified contract for intake admission, worker readiness, dependency health, service ownership, and resource pressure. The next governance sequence is P0 service ownership unification, then P1 durable entry circuit/admission state. P2 queue-pressure observability and P3 Ollama stability refinement are recorded as follow-up layers. Manual pressure testing and production release readiness remain blocked until governance evidence is accepted.
 
-Lucia accepted Task 69 at `2026-05-10T14:43:15+0800` as `ACCEPTED_CONTRACT_WITH_RUNTIME_APPLICATION_GAP`. Accepted facts: `docker-compose.yml`, `docs/deploy/PRODUCTION_RUNTIME_OWNERSHIP.md`, `docs/deploy/DEPLOY.md`, and `ops/runtime-ownership-status.sh` now define the repository-backed production runtime ownership contract. Effective ownership: MinerU is host tmux `mineru_api`; Ollama is host Ollama app/runtime; MinIO and upload-server are Docker Compose services; DB settings are application data and not production runtime truth; supervisor/sidecar are optional helpers and not owners. Blocking residual: the currently running production `cms-upload-server` still lacks `LOCAL_MINERU_ENDPOINT`, `OLLAMA_API_URL`, and `ALLOW_AI_SKELETON_FALLBACK=false`, and dependency-health still reports MinerU endpoint `http://192.168.31.33:8083`. Task 70 remains staged. Task 71 is assigned to apply the runtime env contract to production upload-server before P1 activation.
+Lucia accepted Task 69 at `2026-05-10T14:43:15+0800` as `ACCEPTED_CONTRACT_WITH_RUNTIME_APPLICATION_GAP`. Accepted facts: `docker-compose.yml`, `docs/deploy/PRODUCTION_RUNTIME_OWNERSHIP.md`, `docs/deploy/DEPLOY.md`, and `ops/runtime-ownership-status.sh` now define the repository-backed production runtime ownership contract. Effective ownership: MinerU is host tmux `luceon-mineru`; Ollama is host Ollama app/runtime; MinIO and upload-server are Docker Compose services; DB settings are application data and not production runtime truth; supervisor/sidecar are optional helpers and not owners. Blocking residual at that time: the running production `cms-upload-server` still lacked `LOCAL_MINERU_ENDPOINT`, `OLLAMA_API_URL`, and `ALLOW_AI_SKELETON_FALLBACK=false`, and dependency-health still reported MinerU endpoint `http://192.168.31.33:8083`. Task 71 later applied the runtime env contract before P1 activation.
 
 Lucia accepted Task 71 at `2026-05-10T15:11:28+0800` as `ACCEPTED_RUNTIME_ENV_CONTRACT_APPLIED_READY_FOR_P1`. Confirmed facts: production `cms-upload-server` now has explicit env values `LOCAL_MINERU_ENDPOINT=http://host.docker.internal:8083`, `OLLAMA_API_URL=http://host.docker.internal:11434`, `OLLAMA_TIER2_MODEL=qwen3.5:9b`, `DISABLE_AI_SKELETON_FALLBACK=true`, and `ALLOW_AI_SKELETON_FALLBACK=false`. Lucia independently confirmed dependency-health with MinerU submit probe returns `ok=true`, `blocking=false`, MinerU endpoint `http://host.docker.internal:8083`, and Ollama endpoint `http://host.docker.internal:11434`. Active-task diagnostics have no active/queued/takeover-required task, though historical submit-retryable and AI-failure rows remain. Task 70 is activated for P1 entry-circuit and durable admission-state work. Production release readiness remains unclaimed.
 

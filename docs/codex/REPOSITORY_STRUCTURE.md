@@ -10,7 +10,7 @@ Allowed root files:
 
 | Category | Files |
 | --- | --- |
-| Agent and repo entrypoints | `AGENTS.md`, `CHANGELOG.md` |
+| Agent and repo entrypoints | `AGENTS.md`, `README.md`, `CHANGELOG.md` |
 | Package and build tools | `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `index.html`, `vite.config.ts`, `tsconfig.json`, `postcss.config.mjs` |
 | Docker and environment tools | `Dockerfile`, `docker-compose*.yml`, `.dockerignore`, `.env.example` |
 | Git and ignore rules | `.gitignore` |

@@ -113,7 +113,7 @@ export const initialAiProviders: AiProvider[] = [
   },
 ];
 
-/** AI 识别配置（默认值） */
+/** AI 识别配置（UI seed 默认值；当前 worker 标准模型以 OLLAMA_TIER2_MODEL 为准） */
 export const initialAiConfig: AiConfig = {
   providers: initialAiProviders,
   apiEndpoint: 'http://host.docker.internal:11434/v1/chat/completions',
@@ -135,7 +135,7 @@ export const initialAiConfig: AiConfig = {
   },
 };
 
-/** MinerU API 配置（默认值） */
+/** MinerU 配置（UI seed 默认值；当前主线是本机 conda MinerU FastAPI） */
 export const initialMinerUConfig: MinerUConfig = {
   engine: 'local',
   localEndpoint: '',

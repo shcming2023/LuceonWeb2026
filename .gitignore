@@ -47,6 +47,12 @@ blob-report/
 
 # 本地运行时数据
 server/db-data.json
+server/db-data.json.*
+server/secrets.json
+server/secrets.json.*
+secrets.json
+*.secrets.json
+.uat-pids
 
 # UAT 产物
 uat/package-lock.json

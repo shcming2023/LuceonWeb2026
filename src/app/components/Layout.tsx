@@ -135,7 +135,7 @@ export function Layout({ children }: LayoutProps) {
                 </button>
               );
             })}
-            <div className="mt-2 px-3 text-[10px] text-slate-300">v0.2.0</div>
+            <div className="mt-2 px-3 text-[10px] text-slate-300">v0.7.0</div>
           </div>
         </aside>
 

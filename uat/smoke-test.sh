@@ -42,6 +42,7 @@ check() {
 
   local http_code
   local body
+  rm -f /tmp/smoke_body
   body=$(curl -s -o /tmp/smoke_body -w "%{http_code}" \
     --max-time 10 \
     --connect-timeout 5 \
@@ -123,8 +124,8 @@ check "MinIO health via Nginx" \
 echo ""
 
 # ── 5. MinIO 控制台（直接端口，仅 UAT 环境）─────────────────
-echo -e "${CYAN}【5】MinIO 控制台（UAT 环境 9001 端口）${RESET}"
-MINIO_CONSOLE_URL="${MINIO_CONSOLE_URL:-http://localhost:9001}"
+echo -e "${CYAN}【5】MinIO 控制台（UAT 环境，可通过 MINIO_CONSOLE_URL 覆盖）${RESET}"
+MINIO_CONSOLE_URL="${MINIO_CONSOLE_URL:-http://localhost:19001}"
 printf "  %-52s" "[MinIO 控制台 $MINIO_CONSOLE_URL]"
 http_code=$(curl -s -o /dev/null -w "%{http_code}" \
   --max-time 5 \

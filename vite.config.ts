@@ -53,7 +53,7 @@ export default defineConfig({
               } catch { /* not json */ }
               console.log('\n\x1b[36m[MinerU Proxy] ➜ Request\x1b[0m');
               console.log(`  ${req.method} ${req.url}`);
-              console.log(`  Authorization: ${proxyReq.getHeader('authorization')?.toString().slice(0, 20)}…`);
+              console.log(`  Authorization: ${proxyReq.getHeader('authorization') ? '<redacted>' : '<none>'}`);
               if (display && display !== '{}') console.log('  Body:', display.slice(0, 600));
             });
           });

@@ -1,6 +1,6 @@
 # Codex Handoff
 
-Last updated: 2026-05-10
+Last updated: 2026-05-11
 
 ## Current Entry Point
 
@@ -62,9 +62,10 @@ BASE_URL=http://localhost:8081 npx pnpm@10.4.1 --dir uat exec playwright test te
 
 ## Known Open Boundaries
 
-- MinerU submit-path probing is implemented on `main` and accepted in local rebuilt-runtime Tier 2 Standard validation.
-- Production manual-review URL is `http://localhost:8081/cms/`; current follow-up is to restore `luceon-supervisor` and `luceon-sidecar` without restarting MinerU.
-- Manual-review failed task `task-1778118934116` is an AI metadata timeout after MinerU completed, not current evidence of MinerU parse failure.
+- MinerU submit-path probing and durable admission-circuit code are implemented on `main`; production release readiness is still unclaimed.
+- Production manual-review URL is `http://localhost:8081/cms/`.
+- The bounded 24-PDF pressure restart remains inconclusive, not a pressure PASS or release-readiness signal.
+- Historical manual-review failed task `task-1778118934116` is an AI metadata timeout after MinerU completed, not current evidence of MinerU parse failure.
 - `server/upload-server.mjs` remains a monolithic server and should not be modularized inside Phase 1 closure.
 - Legacy redirects remain for `/cms/source-materials` and `/cms/workspace`.
 - Large-PDF soak, concurrent upload, permissions/security, rollback rehearsal, folder upload, and all error-path validation remain outside this governance pass.
@@ -107,8 +108,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260509-104053-P0-Production-Release-Readiness-Final-Decision`: assigned to Director. This remains blocked pending MinerU submit-path recovery evidence and a later Director release decision.
-- `TASK-20260510-225807-P1-Ollama-Keep-Alive-And-Cold-Warm-Health-Semantics`: assigned to Lucode. Lucode must make Ollama keep-alive and cold/warm dependency-health semantics explicit and testable. This is code/config semantics only: no model operation, upload, pressure retry, production override mutation, production data mutation, broad restart, pressure PASS, L3, or release-readiness claim is authorized.
+- `TASK-20260510-225807-P1-Ollama-Keep-Alive-And-Cold-Warm-Health-Semantics`: Lucode report exists and current `main` contains the code changes via `9db0054`; the task ledger still records Lucia review as the next governance step. This does not claim production deployment, validation upload, pressure PASS, L3, or production release readiness.
 
 Director shorthand is active:
 

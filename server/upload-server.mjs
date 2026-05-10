@@ -4,8 +4,8 @@
  * 端口：8788（通过 UPLOAD_PORT 环境变量覆盖）
  *
  * 存储后端（通过 STORAGE_BACKEND 环境变量切换，可在运行时通过 /settings/storage 接口更新）：
- *   minio    — MinIO 私有对象存储（默认），返回预签名 URL
- *   tmpfiles — tmpfiles.org 公开临时存储（降级 fallback）
+ *   minio    — MinIO 私有对象存储（当前主线），返回预签名 URL
+ *   tmpfiles — tmpfiles.org 公开临时存储（legacy compatibility only）
  *
  * 路由总览：
  *   GET    /health                      → 健康检查
@@ -13,7 +13,7 @@
  *   POST   /upload-multiple             → 上传多文件（最多 20 个），返回 results[]
  *   GET    /parse/status/:taskId        → 查询 MinerU 解析任务状态
  *   POST   /parse/download              → 下载 MinerU 解析结果（ZIP）并转存到 MinIO
- *   POST   /parse/analyze               → 解析已上传文件（MinerU OCR + MD 提取），支持多策略 AI fallback
+ *   POST   /parse/analyze               → legacy 解析入口；当前主线使用 /tasks 队列和 strict no-skeleton AI
  *   POST   /parsed-zip                  → 将 parsed/{materialId}/ 目录打包成 ZIP 返回
  *   GET    /settings/storage            → 读取当前 MinIO 配置（密钥脱敏）
  *   PUT    /settings/storage            → 更新运行时 MinIO 配置并持久化到 db-server
@@ -21,7 +21,7 @@
  *
  * 环境变量（详见 .env.example）：
  *   UPLOAD_PORT              — 服务端口（默认 8788）
- *   STORAGE_BACKEND          — 存储后端（minio | tmpfiles，默认 tmpfiles）
+ *   STORAGE_BACKEND          — 存储后端（minio | tmpfiles，当前主线为 minio）
  *   MINIO_ENDPOINT           — MinIO 端点（默认 minio）
  *   MINIO_PORT               — MinIO API 端口（默认 9000）
  *   MINIO_ACCESS_KEY         — MinIO 访问密钥
