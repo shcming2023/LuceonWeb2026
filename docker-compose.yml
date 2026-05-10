@@ -100,6 +100,13 @@ services:
       # 允许访问本地/私网 AI endpoint（Ollama 本地模式必须开启）
       # Docker 容器内访问宿主机 Ollama 地址：http://host.docker.internal:11434
       - ALLOW_LOCAL_AI_ENDPOINT=${ALLOW_LOCAL_AI_ENDPOINT:-true}
+      # Phase 1 production-line runtime truth: these endpoints are owned by runtime env/compose,
+      # not by DB settings. Keep host services reachable from Docker containers via host.docker.internal.
+      - LOCAL_MINERU_ENDPOINT=${LOCAL_MINERU_ENDPOINT:-http://host.docker.internal:8083}
+      - OLLAMA_API_URL=${OLLAMA_API_URL:-http://host.docker.internal:11434}
+      - OLLAMA_TIER2_MODEL=${OLLAMA_TIER2_MODEL:-qwen3.5:9b}
+      - DISABLE_AI_SKELETON_FALLBACK=${DISABLE_AI_SKELETON_FALLBACK:-true}
+      - ALLOW_AI_SKELETON_FALLBACK=${ALLOW_AI_SKELETON_FALLBACK:-false}
       # Node.js 内存限制：与 deploy.resources.limits.memory 匹配
       - NODE_OPTIONS=--max-old-space-size=3072
       - TZ=Asia/Shanghai

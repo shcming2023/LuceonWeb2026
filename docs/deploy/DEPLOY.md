@@ -189,6 +189,8 @@ docker compose up -d --build
 
 当前生产部署路径 `/Users/concm/prod_workspace/Luceon2026` 允许保留本地 `docker-compose.override.yml`，但该 override 是生产本地运行配置，不是生产发布就绪声明，也不能替代 release-candidate 的 HEAD 与配置边界确认。
 
+生产运行所有权和 endpoint truth 见 `docs/deploy/PRODUCTION_RUNTIME_OWNERSHIP.md`。其中 `LOCAL_MINERU_ENDPOINT`、`OLLAMA_API_URL`、`OLLAMA_TIER2_MODEL` 与 strict AI fallback 开关必须由运行环境或 compose 固定；DB settings 不能作为生产运行口径。
+
 当前已接受的 production-local override 边界如下：
 
 | 项目 | 当前要求 | 发布边界 |
