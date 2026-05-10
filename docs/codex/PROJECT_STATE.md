@@ -46,7 +46,8 @@ Current runtime dependencies:
 - Director approved narrow Option A for production deployment/runtime validation of the accepted P1 circuit at `2026-05-10T15:42:54+0800`.
 - Task `TASK-20260510-154254-P0-Entry-Circuit-Production-Deployment-And-Non-Destructive-Runtime-Validation` was accepted at `2026-05-10T15:50:52+0800`: production deployed accepted code at `cf0466a`, dependency-health submit-probe passed, admission circuit was closed, active parse/AI queues were empty, and Ollama `qwen3.5:9b` was resident. This is non-destructive runtime-surface evidence only.
 - Director selected Option B at `2026-05-10T15:54:51+0800`.
-- Active task `TASK-20260510-155451-P0-Bounded-24-PDF-Pressure-Restart-Under-Entry-Circuit` authorizes exactly one bounded restart of the previously failed 24-PDF pressure-validation track under the deployed durable admission circuit and explicit stop rules. It does not authorize release readiness, failed-task repair, cleanup, destructive operations, config/model/secret/override mutation, broad restart/rollback, or sample-library mutation.
+- Task `TASK-20260510-155451-P0-Bounded-24-PDF-Pressure-Restart-Under-Entry-Circuit` was accepted as inconclusive at `2026-05-10T16:13:43+0800`: samples 1-20 created tasks, sample 21 stopped before HTTP request due to local curl file-read exit 26, and samples 22-24 were not attempted. This is not pressure PASS or circuit PASS.
+- Active task `TASK-20260510-161343-P0-Pressure-Restart-Created-Tasks-Read-Only-Terminal-Observation` is limited to read-only observation of the 20 created validation tasks. It does not authorize new uploads, retries, failed-task repair, cleanup, destructive operations, config/model/secret/override mutation, broad restart/rollback, or sample-library mutation.
 - Production release readiness remains unclaimed.
 
 ## 3. Governance Closure Summary
