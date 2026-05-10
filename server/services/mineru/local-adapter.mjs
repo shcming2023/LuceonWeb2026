@@ -43,9 +43,13 @@ export class MineruStillProcessingError extends Error {
  * 用于区分 "提交失败，可重试" 和普通的解析失败。
  */
 export class MineruSubmitUnreachableError extends Error {
-  constructor(message) {
+  constructor(message, options = {}) {
     super(message);
     this.name = 'MineruSubmitUnreachableError';
+    this.status = options.status ?? null;
+    this.endpoint = options.endpoint || '';
+    this.dependencyBlocking = options.dependencyBlocking === true;
+    this.retryAfterMs = Number.isFinite(options.retryAfterMs) ? options.retryAfterMs : 60_000;
   }
 }
 
@@ -133,7 +137,10 @@ export async function processWithLocalMinerU({ task, material, fileStream, fileN
     duplex: 'half',
     signal: AbortSignal.timeout(submitTimeoutMs),
   }).catch(err => {
-    throw new MineruSubmitUnreachableError(`本地 MinerU 提交通讯失败: ${err.message}`);
+    throw new MineruSubmitUnreachableError(`本地 MinerU 提交通讯失败: ${err.message}`, {
+      endpoint: `${localEndpoint}/tasks`,
+      dependencyBlocking: true,
+    });
   });
 
   if (fastApiResponse.status !== 404 && fastApiResponse.status !== 405) {
@@ -148,10 +155,20 @@ export async function processWithLocalMinerU({ task, material, fileStream, fileN
     if (!fastApiResponse.ok) {
       const errorDetail = payload?.error || payload?.message || rawBody.slice(0, 500);
       const configInfo = `backend=${effectiveBackend}, parse_method=${finalParseMethod}, zip=${responseFormatZip}`;
-      throw new Error(`MinerU 提交失败: ${fastApiResponse.status} | Endpoint: ${localEndpoint}/tasks | Body: ${errorDetail} | Config: ${configInfo}`);
+      throw new MineruSubmitUnreachableError(`MinerU 提交失败: ${fastApiResponse.status} | Endpoint: ${localEndpoint}/tasks | Body: ${errorDetail} | Config: ${configInfo}`, {
+        status: fastApiResponse.status,
+        endpoint: `${localEndpoint}/tasks`,
+        dependencyBlocking: fastApiResponse.status >= 500,
+      });
     }
     mineruTaskId = payload?.task_id || payload?.taskid || payload?.taskId || '';
-    if (!mineruTaskId) throw new Error('MinerU 未返回任务 id');
+    if (!mineruTaskId) {
+      throw new MineruSubmitUnreachableError('MinerU 未返回任务 id', {
+        status: fastApiResponse.status,
+        endpoint: `${localEndpoint}/tasks`,
+        dependencyBlocking: true,
+      });
+    }
 
     // P0 Task 1: 拿到 mineruTaskId 后立即更新 metadata
     const executionProfile = {

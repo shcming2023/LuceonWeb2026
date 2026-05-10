@@ -55,6 +55,9 @@ export class ParseTaskWorker {
     this.mineruResumer = options.mineruResumer || (ONLINE_MINERU_MODE ? resumeWithOnlineMinerU : resumeWithLocalMinerU);
     this.pendingTaskPatches = new Map();
     this.pendingMaterialPatches = new Map();
+    this.mineruSubmitCircuitOpenUntil = 0;
+    this.mineruSubmitCircuitReason = '';
+    this.mineruSubmitCircuitLoggedUntil = 0;
   }
 
   /** 将 ReadableStream 转换为 Buffer */
@@ -166,6 +169,10 @@ export class ParseTaskWorker {
     for (const task of pendingTasks) {
       if (started >= available) break;
       if (processingMap.has(task.id)) continue;
+      if (this.isMineruSubmitCircuitOpenFor(task)) {
+        await this.markPendingTaskBlockedByMineruSubmitCircuit(task);
+        break;
+      }
       // 异步处理，不阻塞 tick 扫描下一个
       this.processTask(task);
       started += 1;
@@ -1373,49 +1380,8 @@ export class ParseTaskWorker {
       }
 
       if (error instanceof MineruSubmitUnreachableError || error?.name === 'MineruSubmitUnreachableError') {
-        const retries = (task.metadata?.submitRetries || 0) + 1;
-        const maxRetries = 5;
-        if (retries <= maxRetries) {
-          console.log(`[task-worker] Task ${task.id}: 提交 MinerU 不可达，第 ${retries} 次重试`);
-          await this.transition(task, {
-            state: 'pending',
-            stage: 'upload',
-            message: `MinerU 提交不可达，可重试 (已重试 ${retries}/${maxRetries} 次)`,
-            metadata: {
-              ...(task.metadata || {}),
-              submitRetries: retries,
-              lastSubmitError: error.message
-            }
-          }, 'submit-unreachable-retry', 'warn');
-          return;
-        } else {
-          console.log(`[task-worker] Task ${task.id}: 提交 MinerU 不可达，超过最大重试次数 ${maxRetries}`);
-          // 超过上限才 failed，failed message 包含 submit unreachable after retries
-          await this.transition(task, {
-            state: 'failed',
-            stage: 'submit-failed-retryable',
-            errorMessage: `submit unreachable after retries: ${error.message}`,
-            message: `MinerU 提交不可达，可重试`,
-            metadata: {
-              ...(task.metadata || {}),
-              submitRetries: retries,
-              lastSubmitError: error.message
-            }
-          }, 'worker-failed', 'error');
-          if (task.materialId) {
-            await this.updateMaterialWithRetry(task.materialId, {
-              status: 'failed',
-              mineruStatus: 'pending',
-              aiStatus: 'pending',
-              metadata: {
-                processingStage: 'submit-failed-retryable',
-                processingMsg: `提交 MinerU 失败: ${error.message}`,
-                processingUpdatedAt: new Date().toISOString(),
-              }
-            }, { enqueueOnFailure: true });
-          }
-          return;
-        }
+        await this.handleMineruSubmitUnreachable(task, error, modeLabel);
+        return;
       }
 
       console.error(`[task-worker] Task ${task.id} failed: ${error.message}`);
@@ -1451,6 +1417,159 @@ export class ParseTaskWorker {
       }
     } finally {
       processingMap.delete(task.id);
+    }
+  }
+
+  isMineruSubmitCircuitOpenFor(task) {
+    if (Date.now() >= this.mineruSubmitCircuitOpenUntil) return false;
+    if (task.engine !== 'local-mineru') return false;
+    if (task.metadata?.mineruTaskId) return false;
+    if (this.isMarkdownPassthroughTask(task)) return false;
+    return true;
+  }
+
+  isMarkdownPassthroughTask(task) {
+    const materialInfo = task.optionsSnapshot?.material || {};
+    const fileName = String(materialInfo.fileName || materialInfo.metadata?.fileName || '').toLowerCase();
+    const mimeType = String(materialInfo.mimeType || materialInfo.metadata?.mimeType || '').toLowerCase();
+    return fileName.endsWith('.md') || mimeType === 'text/markdown';
+  }
+
+  openMineruSubmitCircuit(error) {
+    const retryAfterMs = Math.max(10_000, Number(error?.retryAfterMs || 60_000));
+    this.mineruSubmitCircuitOpenUntil = Math.max(this.mineruSubmitCircuitOpenUntil, Date.now() + retryAfterMs);
+    this.mineruSubmitCircuitReason = error?.message || 'MinerU submit path unavailable';
+  }
+
+  async markPendingTaskBlockedByMineruSubmitCircuit(task) {
+    const now = Date.now();
+    if (now < this.mineruSubmitCircuitLoggedUntil) return;
+    this.mineruSubmitCircuitLoggedUntil = Math.min(this.mineruSubmitCircuitOpenUntil, now + 10_000);
+    const nextRetryAt = new Date(this.mineruSubmitCircuitOpenUntil).toISOString();
+    const message = `MinerU 提交路径暂不可用，队列暂停提交，等待依赖恢复后重试 (${nextRetryAt})`;
+    await this.updateTaskWithRetry(task.id, {
+      state: 'pending',
+      stage: 'dependency-blocked',
+      message,
+      metadata: {
+        ...(task.metadata || {}),
+        submitDependencyBlocked: true,
+        submitDependency: 'mineru-submit-path',
+        submitDependencyBlockedReason: this.mineruSubmitCircuitReason,
+        nextSubmitRetryAt: nextRetryAt,
+        lastSubmitCircuitObservedAt: new Date().toISOString(),
+      }
+    }, { enqueueOnFailure: true });
+
+    if (task.materialId) {
+      await this.updateMaterialWithRetry(task.materialId, {
+        status: 'processing',
+        mineruStatus: 'blocked',
+        aiStatus: 'pending',
+        metadata: {
+          processingStage: 'dependency-blocked',
+          processingMsg: message,
+          processingUpdatedAt: new Date().toISOString(),
+        }
+      }, { enqueueOnFailure: true });
+    }
+
+    await logTaskEvent({
+      taskId: task.id,
+      taskType: 'parse',
+      level: 'warn',
+      event: 'mineru-submit-circuit-open',
+      message,
+      payload: {
+        dependency: 'mineru-submit-path',
+        reason: this.mineruSubmitCircuitReason,
+        nextSubmitRetryAt: nextRetryAt,
+      }
+    });
+  }
+
+  async handleMineruSubmitUnreachable(task, error, modeLabel = 'local-mineru') {
+    const dependencyBlocking = error?.dependencyBlocking === true || Number(error?.status || 0) >= 500;
+    const retries = (task.metadata?.submitRetries || 0) + 1;
+
+    if (dependencyBlocking) {
+      this.openMineruSubmitCircuit(error);
+      const nextRetryAt = new Date(this.mineruSubmitCircuitOpenUntil).toISOString();
+      const statusSuffix = error?.status ? `HTTP ${error.status}` : 'unreachable';
+      const message = `MinerU 提交路径不可用 (${statusSuffix})，已暂停队列提交，等待依赖恢复后重试`;
+      console.log(`[task-worker] Task ${task.id}: ${message}`);
+      await this.transition(task, {
+        state: 'pending',
+        stage: 'dependency-blocked',
+        errorMessage: '',
+        message,
+        metadata: {
+          ...(task.metadata || {}),
+          submitRetries: retries,
+          lastSubmitError: error.message,
+          submitDependencyBlocked: true,
+          submitDependency: 'mineru-submit-path',
+          submitDependencyBlockedAt: new Date().toISOString(),
+          nextSubmitRetryAt: nextRetryAt,
+          mineruSubmitStatus: error?.status || null,
+          mineruSubmitEndpoint: error?.endpoint || '',
+        }
+      }, 'mineru-submit-dependency-blocked', 'warn');
+
+      if (task.materialId) {
+        await this.updateMaterialWithRetry(task.materialId, {
+          status: 'processing',
+          mineruStatus: 'blocked',
+          aiStatus: 'pending',
+          metadata: {
+            processingStage: 'dependency-blocked',
+            processingMsg: message,
+            processingUpdatedAt: new Date().toISOString(),
+          }
+        }, { enqueueOnFailure: true });
+      }
+      return;
+    }
+
+    const maxRetries = 5;
+    if (retries <= maxRetries) {
+      console.log(`[task-worker] Task ${task.id}: 提交 MinerU 不可达，第 ${retries} 次重试`);
+      await this.transition(task, {
+        state: 'pending',
+        stage: 'upload',
+        message: `MinerU 提交不可达，可重试 (已重试 ${retries}/${maxRetries} 次)`,
+        metadata: {
+          ...(task.metadata || {}),
+          submitRetries: retries,
+          lastSubmitError: error.message
+        }
+      }, 'submit-unreachable-retry', 'warn');
+      return;
+    }
+
+    console.log(`[task-worker] Task ${task.id}: 提交 MinerU 不可达，超过最大重试次数 ${maxRetries}`);
+    await this.transition(task, {
+      state: 'failed',
+      stage: 'submit-failed-retryable',
+      errorMessage: `submit unreachable after retries: ${error.message}`,
+      message: `MinerU 提交不可达，可重试`,
+      metadata: {
+        ...(task.metadata || {}),
+        submitRetries: retries,
+        lastSubmitError: error.message
+      }
+    }, 'worker-failed', 'error');
+    if (task.materialId) {
+      await this.updateMaterialWithRetry(task.materialId, {
+        status: 'failed',
+        mineruStatus: 'pending',
+        aiStatus: 'pending',
+        metadata: {
+          processingStage: 'submit-failed-retryable',
+          processingMsg: `提交 MinerU 失败: ${error.message}`,
+          processingUpdatedAt: new Date().toISOString(),
+        }
+      }, { enqueueOnFailure: true });
     }
   }
 
@@ -1741,48 +1860,8 @@ export class ParseTaskWorker {
       }
 
       if (error instanceof MineruSubmitUnreachableError || error?.name === 'MineruSubmitUnreachableError') {
-        const retries = (task.metadata?.submitRetries || 0) + 1;
-        const maxRetries = 5;
-        if (retries <= maxRetries) {
-          console.log(`[task-worker] Task ${task.id} (resume): 提交 MinerU 不可达，第 ${retries} 次重试`);
-          await this.transition(task, {
-            state: 'pending',
-            stage: 'upload',
-            message: `MinerU 提交不可达，可重试 (已重试 ${retries}/${maxRetries} 次)`,
-            metadata: {
-              ...(task.metadata || {}),
-              submitRetries: retries,
-              lastSubmitError: error.message
-            }
-          }, 'submit-unreachable-retry', 'warn');
-          return;
-        } else {
-          console.log(`[task-worker] Task ${task.id} (resume): 提交 MinerU 不可达，超过最大重试次数 ${maxRetries}`);
-          await this.transition(task, {
-            state: 'failed',
-            stage: 'submit-failed-retryable',
-            errorMessage: `submit unreachable after retries: ${error.message}`,
-            message: `MinerU 提交不可达，可重试`,
-            metadata: {
-              ...(task.metadata || {}),
-              submitRetries: retries,
-              lastSubmitError: error.message
-            }
-          }, 'worker-failed', 'error');
-          if (task.materialId) {
-            await this.updateMaterialWithRetry(task.materialId, {
-              status: 'failed',
-              mineruStatus: 'pending',
-              aiStatus: 'pending',
-              metadata: {
-                processingStage: 'submit-failed-retryable',
-                processingMsg: `提交 MinerU 失败: ${error.message}`,
-                processingUpdatedAt: new Date().toISOString(),
-              }
-            }, { enqueueOnFailure: true });
-          }
-          return;
-        }
+        await this.handleMineruSubmitUnreachable(task, error, 'resume');
+        return;
       }
 
       console.error(`[task-worker] Task ${task.id} failed during resume: ${error.message}`);
