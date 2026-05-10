@@ -45,7 +45,8 @@ Current runtime dependencies:
 - `/health` HTTP 200 alone is not sufficient to close MinerU intake. Closing the circuit requires submit-probe success, cooldown elapsed, active-task clean, and dependency blocking clear.
 - Director approved narrow Option A for production deployment/runtime validation of the accepted P1 circuit at `2026-05-10T15:42:54+0800`.
 - Task `TASK-20260510-154254-P0-Entry-Circuit-Production-Deployment-And-Non-Destructive-Runtime-Validation` was accepted at `2026-05-10T15:50:52+0800`: production deployed accepted code at `cf0466a`, dependency-health submit-probe passed, admission circuit was closed, active parse/AI queues were empty, and Ollama `qwen3.5:9b` was resident. This is non-destructive runtime-surface evidence only.
-- Active Director decision `TASK-20260510-155052-P0-Next-Validation-Step-After-Entry-Circuit-Deployment` must decide whether to authorize one controlled validation upload, a bounded pressure-test restart, or hold. No upload, pressure test, failed-task repair, or release-readiness promotion is authorized yet.
+- Director selected Option B at `2026-05-10T15:54:51+0800`.
+- Active task `TASK-20260510-155451-P0-Bounded-24-PDF-Pressure-Restart-Under-Entry-Circuit` authorizes exactly one bounded restart of the previously failed 24-PDF pressure-validation track under the deployed durable admission circuit and explicit stop rules. It does not authorize release readiness, failed-task repair, cleanup, destructive operations, config/model/secret/override mutation, broad restart/rollback, or sample-library mutation.
 - Production release readiness remains unclaimed.
 
 ## 3. Governance Closure Summary

@@ -108,7 +108,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 Current active tasks:
 
 - `TASK-20260509-104053-P0-Production-Release-Readiness-Final-Decision`: assigned to Director. This remains blocked pending MinerU submit-path recovery evidence and a later Director release decision.
-- `TASK-20260510-155052-P0-Next-Validation-Step-After-Entry-Circuit-Deployment`: assigned to Director. Director must decide whether the next step is one controlled validation upload, a bounded pressure-test restart, or hold for more read-only preparation.
+- `TASK-20260510-155451-P0-Bounded-24-PDF-Pressure-Restart-Under-Entry-Circuit`: assigned to Lucode. Lucode must run exactly one bounded restart of the previously failed 24-PDF pressure-validation track under the deployed durable admission circuit and explicit stop rules.
 
 Director shorthand is active:
 
@@ -224,6 +224,8 @@ Lucia accepted task 70 at `2026-05-10T15:31:54+0800` as `ACCEPTED_CODE_LEVEL_PRO
 Director approved task 72 at `2026-05-10T15:42:54+0800` with only narrow Option A. Lucia issued task 73 to Lucode for minimum necessary production apply/rebuild and non-destructive runtime validation only. Not authorized: validation upload, pressure test, failed-task repair, release-readiness declaration, DB/MinIO/Docker volume mutation, secret/model/timeout/config/override mutation, broad restart, rollback, or unrelated recovery.
 
 Lucia accepted task 73 at `2026-05-10T15:50:52+0800` as `ACCEPTED_PRODUCTION_DEPLOYED_NON_DESTRUCTIVE_RUNTIME_SURFACES_PASS`. Production deployed accepted code at `cf0466a`; submit-probe dependency-health passed with HTTP `202`; admission circuit was closed; active parse/AI queues were empty; and Ollama `qwen3.5:9b` was resident. Historical failed tasks remain unmodified. This is not production release readiness, L3, validation upload permission, pressure-test restart permission, failed-task repair permission, or manual pressure-test readiness. Director decision task 74 is now active.
+
+Director selected Option B for task 74 at `2026-05-10T15:54:51+0800`. Lucia issued task 75 for one bounded restart of the previously failed 24-PDF pressure-validation track. Scope is max 24 PDFs, same pressure set only, one run, no retry/repair/cleanup, and stop immediately if dependency blocks, admission circuit opens, upload/admission returns 503, submit probe fails, heavy-stage active count exceeds 1, service becomes unreachable, or forbidden action would be required.
 
 Lucia accepted task 66 at `2026-05-10T08:31:41+0800` as `ACCEPTED_DEPLOYED_BUT_RUNTIME_BLOCKED`. Production upload-server deployment of the MinerU submit circuit-breaker code succeeded and upload-server is healthy, but MinerU submit probe still returns HTTP 500 with `blocking=true` while MinerU `/health` remains OK. Manual PDF testing should not restart as a normal validation pass. Current active decision: task 67, Director-owned scoped MinerU runtime recovery authorization. Production release readiness remains unclaimed and blocked.
 

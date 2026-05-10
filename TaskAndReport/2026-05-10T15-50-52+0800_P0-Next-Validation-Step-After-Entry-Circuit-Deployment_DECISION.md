@@ -3,8 +3,8 @@
 - Decision ID: `TASK-20260510-155052-P0-Next-Validation-Step-After-Entry-Circuit-Deployment`
 - Created At: `2026-05-10T15:50:52+0800`
 - Created By: Lucia
-- Status: 挂起
-- Next Actor: Director
+- Status: 完成关闭
+- Next Actor: -
 - Basis: Task 73 accepted as deployed and non-destructive runtime surfaces pass.
 
 ## Decision Needed
@@ -18,6 +18,16 @@ The durable MinerU admission circuit is now deployed in production, and non-dest
 - Ollama `qwen3.5:9b` is resident.
 
 Director must decide the next validation step.
+
+## Director Decision
+
+At `2026-05-10T15:54:51+0800`, Director selected `Option B`.
+
+Lucia interprets this as authorization for one bounded restart of the previously failed 24-PDF pressure-validation track under the deployed durable admission circuit and explicit stop rules.
+
+This decision authorizes exactly one controlled pressure-validation run with a maximum of 24 PDFs from the same pressure-validation set. If Lucode cannot identify the same 24-PDF set from the previous pressure-validation evidence, Lucode must stop and report blocked instead of substituting other samples.
+
+This decision still does not authorize production release readiness, failed-task repair, data cleanup, destructive operations, broad restart/rollback, secret/model/config/override mutation, or sample-library mutation.
 
 ## Options
 
@@ -56,4 +66,4 @@ Reason: the admission circuit is newly deployed and should first be validated on
 
 ## Autonomy Rule
 
-If this Director decision remains unanswered after two Lucia heartbeat checks, Lucia may only issue non-destructive read-only preflight or planning. Lucia may not autonomously authorize validation upload, pressure-test restart, failed-task repair, destructive operations, or production release readiness.
+Director has answered. Lucia issued `TASK-20260510-155451-P0-Bounded-24-PDF-Pressure-Restart-Under-Entry-Circuit` to Lucode.
