@@ -37,6 +37,8 @@ async function runTest() {
   let ollamaOk = false;
   let ollamaChatOk = true;
   let ollamaModels = [{ name: 'qwen3.5:9b' }];
+  let ollamaResidentModels = [{ name: 'qwen3.5:9b' }];
+  let ollamaChatHangs = false;
   let lastOllamaChatBody = null;
   const settingsStore = {
     mineruConfig: { localEndpoint: null },
@@ -74,8 +76,13 @@ async function runTest() {
     if (ollamaOk) res.json({ models: ollamaModels });
     else res.sendStatus(503);
   });
+  dummyApp.get('/ollama/api/ps', (req, res) => {
+    if (ollamaOk) res.json({ models: ollamaResidentModels });
+    else res.sendStatus(503);
+  });
   dummyApp.post('/ollama/api/chat', (req, res) => {
     lastOllamaChatBody = req.body;
+    if (ollamaChatHangs) return;
     if (ollamaOk && ollamaChatOk) res.json({ message: { content: 'mock' } });
     else res.sendStatus(503);
   });
@@ -137,10 +144,12 @@ async function runTest() {
       DISABLE_AI_SKELETON_FALLBACK: 'true',
       OLLAMA_API_URL: `http://127.0.0.1:${dummyPort}/ollama`,
       OLLAMA_TIER2_MODEL: 'qwen3.5:9b',
+      OLLAMA_KEEP_ALIVE: '24h',
       ALLOW_LOCAL_AI_ENDPOINT: 'true',
       MINIO_ENDPOINT: '127.0.0.1',
       MINIO_PORT: String(dummyPort),
       DEPENDENCY_HEALTH_REWRITE_LOCAL_ENDPOINTS: 'false',
+      DEPENDENCY_HEALTH_OLLAMA_CHAT_TIMEOUT_MS: '200',
       MINERU_ADMISSION_CIRCUIT_COOLDOWN_MS: '0'
     }
   });
@@ -174,6 +183,8 @@ async function runTest() {
     mineruOk = false;
     ollamaOk = true;
     ollamaModels = [{ name: 'qwen3.5:9b' }];
+    ollamaResidentModels = [{ name: 'qwen3.5:9b' }];
+    ollamaChatHangs = false;
     let res = await fetch(`${uploadBase}/ops/dependency-health`);
     let data = await res.json();
     assertEqual(data.ok, false, 'health.ok should be false when mineru is down');
@@ -186,6 +197,8 @@ async function runTest() {
     mineruSubmitOk = false;
     ollamaOk = true;
     ollamaModels = [{ name: 'qwen3.5:9b' }];
+    ollamaResidentModels = [{ name: 'qwen3.5:9b' }];
+    ollamaChatHangs = false;
     lastOllamaChatBody = null;
     mineruSubmitCalls = 0;
     res = await fetch(`${uploadBase}/ops/dependency-health`);
@@ -197,8 +210,14 @@ async function runTest() {
     assertEqual(lastOllamaChatBody?.model, 'qwen3.5:9b', 'ollama smoke should use required model');
     assertEqual(lastOllamaChatBody?.stream, false, 'ollama smoke should disable streaming');
     assertEqual(lastOllamaChatBody?.think, false, 'ollama smoke should disable top-level thinking');
+    assertEqual(lastOllamaChatBody?.keep_alive, '24h', 'ollama smoke should keep qwen3.5:9b warm');
     assertEqual(lastOllamaChatBody?.options?.think, false, 'ollama smoke should disable options thinking');
     assertEqual(lastOllamaChatBody?.options?.num_predict, 1, 'ollama smoke should use a minimal token budget');
+    assertEqual(data.dependencies.ollama.serviceReachable, true, 'ollama serviceReachable should be true when /api/tags responds');
+    assertEqual(data.dependencies.ollama.tagsOk, true, 'ollama tagsOk should be true when /api/tags succeeds');
+    assertEqual(data.dependencies.ollama.modelPresent, true, 'ollama modelPresent should be true when required model is listed');
+    assertEqual(data.dependencies.ollama.residency.beforeChat.modelResident, true, 'ollama residency should report resident model before warm chat');
+    assertEqual(data.dependencies.ollama.warmState, 'resident-before-chat', 'ollama warmState should report resident-before-chat');
 
     // Test 1c: /health OK but /tasks submit fails with submit probe enabled
     res = await fetch(`${uploadBase}/ops/dependency-health?mineruSubmitProbe=true`);
@@ -270,6 +289,8 @@ async function runTest() {
     mineruOk = true;
     ollamaOk = false;
     ollamaModels = [{ name: 'qwen3.5:9b' }];
+    ollamaResidentModels = [];
+    ollamaChatHangs = false;
     let resOllamaDown = await fetch(`${uploadBase}/ops/dependency-health`);
     let dataOllamaDown = await resOllamaDown.json();
     assertEqual(dataOllamaDown.dependencies.mineru.ok, true, 'mineru.ok should be true');
@@ -289,17 +310,48 @@ async function runTest() {
     mineruOk = true;
     ollamaOk = true;
     ollamaModels = [{ name: 'qwen3.5:9b' }];
+    ollamaResidentModels = [{ name: 'qwen3.5:9b' }];
     ollamaChatOk = false;
+    ollamaChatHangs = false;
     let resChatDown = await fetch(`${uploadBase}/ops/dependency-health`);
     let dataChatDown = await resChatDown.json();
     assertEqual(dataChatDown.dependencies.ollama.ok, false, 'ollama.ok should be false when chat fails');
     assertEqual(dataChatDown.dependencies.ollama.chatOk, false, 'ollama.chatOk should be false');
     assertEqual(dataChatDown.dependencies.ollama.error.includes('Smoke test HTTP 503'), true, 'Should include smoke test error');
+    assertEqual(dataChatDown.dependencies.ollama.failureKind, 'chat-http-error', 'ollama HTTP chat failure should be classified');
+
+    // Test 5b: cold model chat timeout is explicit
+    ollamaOk = true;
+    ollamaModels = [{ name: 'qwen3.5:9b' }];
+    ollamaResidentModels = [];
+    ollamaChatOk = true;
+    ollamaChatHangs = true;
+    let resColdTimeout = await fetch(`${uploadBase}/ops/dependency-health`);
+    let dataColdTimeout = await resColdTimeout.json();
+    assertEqual(dataColdTimeout.dependencies.ollama.ok, false, 'ollama.ok should be false when cold chat times out');
+    assertEqual(dataColdTimeout.dependencies.ollama.chatOk, false, 'ollama.chatOk should be false when cold chat times out');
+    assertEqual(dataColdTimeout.dependencies.ollama.warmState, 'cold-before-chat', 'cold timeout should preserve cold-before-chat warmState');
+    assertEqual(dataColdTimeout.dependencies.ollama.coldStartChatTimeout, true, 'cold timeout should set coldStartChatTimeout');
+    assertEqual(dataColdTimeout.dependencies.ollama.failureKind, 'cold-start-chat-timeout', 'cold timeout should be classified separately');
+
+    // Test 5c: resident model chat timeout is not labeled as cold start
+    ollamaResidentModels = [{ name: 'qwen3.5:9b' }];
+    let resWarmTimeout = await fetch(`${uploadBase}/ops/dependency-health`);
+    let dataWarmTimeout = await resWarmTimeout.json();
+    assertEqual(dataWarmTimeout.dependencies.ollama.ok, false, 'ollama.ok should be false when warm chat times out');
+    assertEqual(dataWarmTimeout.dependencies.ollama.warmState, 'resident-before-chat', 'warm timeout should preserve resident-before-chat warmState');
+    assertEqual(dataWarmTimeout.dependencies.ollama.warmChatTimeout, true, 'warm timeout should set warmChatTimeout');
+    assertEqual(dataWarmTimeout.dependencies.ollama.coldStartChatTimeout, false, 'warm timeout should not be labeled as cold start');
+    assertEqual(dataWarmTimeout.dependencies.ollama.failureKind, 'warm-chat-timeout', 'warm timeout should be classified separately');
+    ollamaChatHangs = false;
+    ollamaChatOk = true;
 
     // Test 6: strict no-skeleton mode fails when required Ollama model is missing
     ollamaOk = true;
     ollamaChatOk = true;
+    ollamaChatHangs = false;
     ollamaModels = [{ name: 'qwen3.5:0.8b' }];
+    ollamaResidentModels = [{ name: 'qwen3.5:9b' }];
     lastOllamaChatBody = null;
     let resMissingModel = await fetch(`${uploadBase}/ops/dependency-health`);
     let dataMissingModel = await resMissingModel.json();

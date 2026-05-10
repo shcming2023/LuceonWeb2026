@@ -735,14 +735,17 @@ async function runTests() {
   console.log('Test 1: Ollama request always sends think:false');
   const { OllamaProvider } = await import('../services/ai/providers/ollama.mjs');
   let requestedThink = null;
+  let requestedKeepAlive = null;
   globalThis.fetch = async (url, options) => {
     const body = JSON.parse(options.body);
     requestedThink = body.think;
+    requestedKeepAlive = body.keep_alive;
     return { ok: true, json: async () => ({ message: { content: '{"a":1}' } }) };
   };
   const ollama1 = new OllamaProvider();
   await ollama1.extractMetadata('test', { expectJson: true, options: { think: true } });
   assert.equal(requestedThink, false);
+  assert.equal(requestedKeepAlive, '24h');
   console.log('Test 1 Pass ✅');
 
   // Test 2: think 内容不落盘

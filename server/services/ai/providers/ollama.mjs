@@ -13,6 +13,7 @@ export class OllamaProvider extends BaseProvider {
     this.baseUrl = (config.baseUrl || 'http://localhost:11434').replace(/\/$/, '');
     this.model = config.model || 'qwen3.5:9b';
     this.temperature = config.temperature ?? 0.1;
+    this.keepAlive = config.keepAlive || process.env.OLLAMA_KEEP_ALIVE || '24h';
   }
 
   get id() {
@@ -40,6 +41,7 @@ export class OllamaProvider extends BaseProvider {
         { role: 'user', content: markdownContent }
       ],
       stream: false,
+      keep_alive: this.keepAlive,
       think: false,   // 禁用思考模式（当前 Luceon 生产链路需要稳定 JSON，禁止 thinking 输出污染业务解析）
       options: {
         think: false, // 不允许由外部 settings 覆盖

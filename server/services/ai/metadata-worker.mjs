@@ -1247,7 +1247,8 @@ export class AiMetadataWorker {
       return new OllamaProvider({
         baseUrl: url,
         model,
-        timeoutMs
+        timeoutMs,
+        keepAlive: aiSettings.ollamaKeepAlive || aiSettings.keepAlive || process.env.OLLAMA_KEEP_ALIVE || '24h'
       });
     }
 
