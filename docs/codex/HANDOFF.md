@@ -108,7 +108,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 Current active tasks:
 
 - `TASK-20260509-104053-P0-Production-Release-Readiness-Final-Decision`: assigned to Director. This remains blocked pending MinerU submit-path recovery evidence and a later Director release decision.
-- `TASK-20260510-142045-P1-Entry-Circuit-And-Durable-Admission-State`: assigned to Lucode. Lucode must implement shared durable admission/circuit state based on MinerU submit-probe and intake readiness.
+- `TASK-20260510-153154-P0-Entry-Circuit-Production-Deployment-Validation-Authorization`: assigned to Director. Director must decide whether to authorize scoped production deployment and non-destructive runtime validation of the accepted P1 durable admission circuit.
 
 Director shorthand is active:
 
@@ -218,6 +218,8 @@ Director closed task 51 at `2026-05-09T08:28:54+0800` by approving accelerated p
 Lucia accepted task 52 at `2026-05-09T08:46:29+0800` as blocked pass-1 evidence. The actual candidate pass failed the Ollama `qwen3.5:9b` dependency-health gate on cold and bounded-warm checks, so no controlled validation upload was created. Lucia's later independent checks showed the current warmed runtime can pass dependency-health, including MinerU submit probe, but this only narrows the issue to readiness-smoke / cold-load stability; it does not establish production release readiness.
 
 Lucia accepted task 53 at `2026-05-09T09:01:38+0800` as code-level implementation and integrated branch `lucode/p0-ollama-dependency-health-smoke-alignment-revision-1` at `9063a14`. The dependency-health Ollama smoke now uses no-thinking request semantics aligned with the production provider. Lucia independently reran focused dependency-health smoke, TypeScript, build, and diff-check. This used revision cycle 1 of 2 but did not itself validate production release readiness.
+
+Lucia accepted task 70 at `2026-05-10T15:31:54+0800` as `ACCEPTED_CODE_LEVEL_PRODUCTION_DEPLOYMENT_REQUIRED` and integrated the durable MinerU admission circuit into `main` at `98339b6`. Accepted behavior: non-Markdown MinerU-bound intake now checks submit-path admission before MinIO/Material/ParseTask creation, open circuit returns `503` with `MINERU_ADMISSION_CIRCUIT_OPEN`, `/health` alone cannot close the circuit, and worker/frontend/ops surfaces read the shared circuit state. Lucia independently reran diff-check, syntax checks, focused smokes, TypeScript, and build. Production deployment/runtime validation is not yet authorized; Director decision task 72 is active.
 
 Lucia accepted task 66 at `2026-05-10T08:31:41+0800` as `ACCEPTED_DEPLOYED_BUT_RUNTIME_BLOCKED`. Production upload-server deployment of the MinerU submit circuit-breaker code succeeded and upload-server is healthy, but MinerU submit probe still returns HTTP 500 with `blocking=true` while MinerU `/health` remains OK. Manual PDF testing should not restart as a normal validation pass. Current active decision: task 67, Director-owned scoped MinerU runtime recovery authorization. Production release readiness remains unclaimed and blocked.
 

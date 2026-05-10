@@ -1,6 +1,6 @@
 # Luceon2026 Project State
 
-Last updated: 2026-05-09
+Last updated: 2026-05-10
 
 ## 1. Current Repository Baseline
 
@@ -36,6 +36,15 @@ Current runtime dependencies:
 | AI | Host Ollama, required model `qwen3.5:9b` |
 | Strict AI mode | `DISABLE_AI_SKELETON_FALLBACK=true`, `ALLOW_AI_SKELETON_FALLBACK=false` |
 | Online MinerU | Compatibility-only; not part of the current main gate unless explicitly assigned |
+
+## 2.1 Current Production-Line Governance Status
+
+- The current incident class is `LOCAL_LONG_RUNNING_PRODUCTION_LINE_GOVERNANCE_PROBLEM`, not a single-point bug.
+- P0 service ownership unification has been accepted: production runtime truth must come from the explicit runtime env contract for MinerU, Ollama, strict AI fallback flags, and local override boundary, not from ambiguous DB settings.
+- P1 durable MinerU admission circuit has been accepted at code level and integrated into `main` at `98339b6`. The circuit persists shared state under `mineruAdmissionCircuit`, opens on submit-path failure evidence, and blocks non-Markdown MinerU intake before MinIO/Material/ParseTask creation when MinerU is not truly able to accept work.
+- `/health` HTTP 200 alone is not sufficient to close MinerU intake. Closing the circuit requires submit-probe success, cooldown elapsed, active-task clean, and dependency blocking clear.
+- Production deployment/runtime validation of the accepted P1 circuit is not yet authorized and is tracked by `TASK-20260510-153154-P0-Entry-Circuit-Production-Deployment-Validation-Authorization`.
+- Production release readiness remains unclaimed.
 
 ## 3. Governance Closure Summary
 
