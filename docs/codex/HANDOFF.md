@@ -1,6 +1,6 @@
 # Codex Handoff
 
-Last updated: 2026-05-09
+Last updated: 2026-05-10
 
 ## Current Entry Point
 
@@ -107,7 +107,8 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 
 Current active tasks:
 
-- `TASK-20260509-104053-P0-Production-Release-Readiness-Final-Decision`: assigned to Director. Director must decide whether to approve production release readiness for the local single-operator boundary, approve manual-review-ready candidate only, or hold for additional validation.
+- `TASK-20260509-104053-P0-Production-Release-Readiness-Final-Decision`: assigned to Director. This remains blocked pending MinerU submit-path recovery evidence and a later Director release decision.
+- `TASK-20260510-083141-P0-MinerU-Runtime-Submit-500-Recovery-Authorization`: assigned to Director. Director must decide whether to authorize scoped MinerU runtime recovery, request more read-only evidence, or hold the release-readiness track.
 
 Director shorthand is active:
 
@@ -217,6 +218,8 @@ Director closed task 51 at `2026-05-09T08:28:54+0800` by approving accelerated p
 Lucia accepted task 52 at `2026-05-09T08:46:29+0800` as blocked pass-1 evidence. The actual candidate pass failed the Ollama `qwen3.5:9b` dependency-health gate on cold and bounded-warm checks, so no controlled validation upload was created. Lucia's later independent checks showed the current warmed runtime can pass dependency-health, including MinerU submit probe, but this only narrows the issue to readiness-smoke / cold-load stability; it does not establish production release readiness.
 
 Lucia accepted task 53 at `2026-05-09T09:01:38+0800` as code-level implementation and integrated branch `lucode/p0-ollama-dependency-health-smoke-alignment-revision-1` at `9063a14`. The dependency-health Ollama smoke now uses no-thinking request semantics aligned with the production provider. Lucia independently reran focused dependency-health smoke, TypeScript, build, and diff-check. This used revision cycle 1 of 2 but did not itself validate production release readiness.
+
+Lucia accepted task 66 at `2026-05-10T08:31:41+0800` as `ACCEPTED_DEPLOYED_BUT_RUNTIME_BLOCKED`. Production upload-server deployment of the MinerU submit circuit-breaker code succeeded and upload-server is healthy, but MinerU submit probe still returns HTTP 500 with `blocking=true` while MinerU `/health` remains OK. Manual PDF testing should not restart as a normal validation pass. Current active decision: task 67, Director-owned scoped MinerU runtime recovery authorization. Production release readiness remains unclaimed and blocked.
 
 Lucia accepted task 54 at `2026-05-09T09:12:21+0800` as `BLOCKED_AFTER_PASS_2_NO_GO_FOR_RELEASE_READY`. Validation pass 2 of 2 was used; no controlled upload was created because dependency-health still failed on container-to-host Ollama `/api/chat` timeout. Non-Ollama gates passed, and diagnostics classification remained healthy/idle. Production release readiness remains unclaimed.
 
