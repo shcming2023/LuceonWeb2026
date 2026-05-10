@@ -231,6 +231,9 @@ export async function processWithLocalMinerU({ task, material, fileStream, fileN
           } catch (e) {
             // ignore
           }
+          if (observation?.progressSemantics?.message) {
+            msg = observation.progressSemantics.message;
+          }
         }
 
         await updateProgress({
@@ -553,6 +556,9 @@ export async function resumeWithLocalMinerU({ task, material, mineruTaskId, time
         );
       } catch (e) {
         // ignore
+      }
+      if (observation?.progressSemantics?.message) {
+        msg = observation.progressSemantics.message;
       }
     }
 

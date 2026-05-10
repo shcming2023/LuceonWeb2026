@@ -94,6 +94,10 @@ export function parseTqdmLine(line) {
 
 /** Hybrid processing window 信号 */
 const RE_WINDOW = /Hybrid processing window\s+(\d+)\/(\d+):\s*pages\s+(\d+)-(\d+)\/(\d+)/i;
+/** Pipeline processing window 信号 */
+const RE_PIPELINE_WINDOW = /Pipeline processing window batch\s+(\d+)\/(\d+):\s*(\d+)\/(\d+)\s+pages,\s*batch_pages=(\d+)(?:,\s*doc_slices=([^\r\n]+))?/i;
+/** Pipeline multi-file run 文档结构信号 */
+const RE_PIPELINE_RUN = /Pipeline processing-window multi-file run\.\s*doc_count=(\d+),\s*total_pages=(\d+),\s*window_size=(\d+),\s*total_batches=(\d+)/i;
 /** 文档结构信号 */
 const RE_DOC_SHAPE = /page_count\s*=\s*(\d+)|window_size\s*=\s*(\d+)|total_windows\s*=\s*(\d+)/i;
 /** 引擎/批处理配置信号 */
@@ -106,6 +110,103 @@ const RE_ERROR_CONFIRMED = /\b(?:RuntimeError|Exception|Traceback|OutOfMemoryErr
 const RE_ERROR_BARE = /^\s*(?:Error|ERROR)\s*:/;
 /** 日志行时间戳 */
 const RE_TIMESTAMP = /(\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}:\d{2})/;
+
+function parsePipelineDocSlices(raw) {
+  if (!raw) return null;
+  const firstSlice = raw.match(/\b[\w.-]+:(\d+)-(\d+)/);
+  if (!firstSlice) return null;
+  return {
+    pageStart: parseInt(firstSlice[1], 10),
+    pageEnd: parseInt(firstSlice[2], 10),
+    raw: raw.trim()
+  };
+}
+
+function phaseLabelZh(phase) {
+  if (!phase) return null;
+  const p = String(phase).toLowerCase();
+  if (p.includes('mfr')) return '公式/版面模型识别';
+  if (p.includes('table-ocr')) return '表格识别';
+  if (p.includes('ocr-det')) return 'OCR 检测';
+  if (p.includes('ocr-rec')) return 'OCR 识别';
+  if (p.includes('layout')) return '版面识别';
+  if (p.includes('processing pages')) return '页面处理';
+  if (p.includes('predict')) return '模型识别';
+  if (p.includes('pack') || p.includes('artifact')) return '解析产物打包';
+  return phase;
+}
+
+function freshnessFromActivity(activityLevel, observationStale) {
+  if (activityLevel === 'log-observation-missing') return 'missing';
+  if (activityLevel === 'log-observation-unreadable' || activityLevel === 'log-observation-unavailable') return 'missing';
+  if (activityLevel === 'log-observation-stale' || observationStale) return 'stale';
+  if (activityLevel === 'api-alive-only' || activityLevel === 'log-observation-no-business-signal') return 'missing';
+  if (activityLevel === 'failed-confirmed') return 'recent';
+  if (activityLevel === 'active-progress') return 'live';
+  if (activityLevel === 'active-stage-change' || activityLevel === 'active-business-log') return 'recent';
+  return 'recent';
+}
+
+function buildOperatorMessage(semantics) {
+  const parts = [];
+  if (semantics.backend) parts.push(`backend=${semantics.backend}`);
+  if (semantics.phaseLabel || semantics.phase) parts.push(`相位 ${semantics.phaseLabel || semantics.phase}`);
+  if (semantics.batch?.current != null && semantics.batch?.total != null) {
+    parts.push(`批次 ${semantics.batch.current}/${semantics.batch.total}`);
+  }
+  if (semantics.pages?.current != null && semantics.pages?.total != null) {
+    parts.push(`页 ${semantics.pages.current}/${semantics.pages.total}`);
+  } else if (semantics.pages?.start != null && semantics.pages?.end != null && semantics.pages?.total != null) {
+    parts.push(`页 ${semantics.pages.start}-${semantics.pages.end}/${semantics.pages.total}`);
+  }
+
+  const prefix = semantics.freshness === 'stale'
+    ? 'MinerU 正在处理，但日志观测滞后'
+    : semantics.freshness === 'missing'
+      ? 'MinerU 已提交/正在处理，但暂无可归因业务日志'
+      : 'MinerU 正在解析';
+
+  return parts.length ? `${prefix}：${parts.join('，')}` : prefix;
+}
+
+function attachProgressSemantics(result) {
+  if (!result) return result;
+  const stage = result.stage || null;
+  const win = result.window || null;
+  const freshness = freshnessFromActivity(result.activityLevel, result.observationStale);
+  const phase = stage?.rawPhase || result.phase || null;
+  const pageCurrent = result.document?.currentPages ?? win?.pageEnd ?? null;
+  const pageTotal = result.document?.totalPages ?? win?.pageTotal ?? null;
+  const semantics = {
+    backend: result.backendProfile || null,
+    phase,
+    phaseLabel: phaseLabelZh(phase),
+    freshness,
+    activityLevel: result.activityLevel || null,
+    batch: win ? {
+      current: win.index ?? null,
+      total: win.total ?? null
+    } : null,
+    pages: {
+      current: pageCurrent,
+      total: pageTotal,
+      start: win?.pageStart ?? null,
+      end: win?.pageEnd ?? null
+    },
+    stage: stage ? {
+      current: stage.current ?? null,
+      total: stage.total ?? null,
+      percent: stage.percent ?? null,
+      unitType: stage.unitType || null
+    } : null,
+    lastObservedAt: result.lastProgressObservedAt || result.contextTime || result.observedAt || null,
+    logUpdatedAt: result.logFileUpdatedAt || result.logSource?.logSourceMtime || null,
+    source: result.observer || 'host-mineru-log-observer'
+  };
+  semantics.message = buildOperatorMessage(semantics);
+  result.progressSemantics = semantics;
+  return result;
+}
 
 /**
  * 对单行日志进行结构化信号分类。
@@ -147,6 +248,48 @@ export function classifyLogLine(line) {
         pageStart: parseInt(windowMatch[3], 10),
         pageEnd: parseInt(windowMatch[4], 10),
         pageTotal: parseInt(windowMatch[5], 10)
+      },
+      timestamp
+    };
+  }
+
+  // 3.5 Pipeline window 信号
+  const pipelineWindowMatch = line.match(RE_PIPELINE_WINDOW);
+  if (pipelineWindowMatch) {
+    const docSlice = parsePipelineDocSlices(pipelineWindowMatch[6]);
+    const currentPages = parseInt(pipelineWindowMatch[3], 10);
+    const pageTotal = parseInt(pipelineWindowMatch[4], 10);
+    const batchPages = parseInt(pipelineWindowMatch[5], 10);
+    const fallbackPageStart = Math.max(1, currentPages - batchPages + 1);
+    return {
+      signalType: 'window',
+      detail: {
+        backendProfile: 'pipeline',
+        windowCurrent: parseInt(pipelineWindowMatch[1], 10),
+        windowTotal: parseInt(pipelineWindowMatch[2], 10),
+        pageStart: docSlice?.pageStart ?? fallbackPageStart,
+        pageEnd: docSlice?.pageEnd ?? currentPages,
+        pageCurrent: currentPages,
+        pageTotal,
+        batchPages,
+        docSlices: docSlice?.raw || null
+      },
+      timestamp
+    };
+  }
+
+  // 3.6 Pipeline run 文档结构信号
+  const pipelineRunMatch = line.match(RE_PIPELINE_RUN);
+  if (pipelineRunMatch) {
+    return {
+      signalType: 'document-shape',
+      detail: {
+        backendProfile: 'pipeline',
+        docCount: parseInt(pipelineRunMatch[1], 10),
+        totalPages: parseInt(pipelineRunMatch[2], 10),
+        windowSize: parseInt(pipelineRunMatch[3], 10),
+        totalBatches: parseInt(pipelineRunMatch[4], 10),
+        rawLine: line.trim()
       },
       timestamp
     };
@@ -329,6 +472,7 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
       let lastBusinessSignalTime = null;
       let lastContextTime = null;
       let previousPhase = previousObservation?.phase || null;
+      let observedBackendProfile = null;
       const businessSignals = [];
 
       const minObservedMs = minObservedAt ? new Date(minObservedAt).getTime() : 0;
@@ -344,6 +488,7 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
               windowTotal: previousObservation.window.total,
               pageStart: previousObservation.window.pageStart,
               pageEnd: previousObservation.window.pageEnd,
+              pageCurrent: previousObservation.window.pageCurrent ?? previousObservation.window.pageEnd,
               pageTotal: previousObservation.window.pageTotal
             };
           }
@@ -404,6 +549,7 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
 
           case 'window':
             businessLogCount++;
+            if (classified.detail?.backendProfile) observedBackendProfile = classified.detail.backendProfile;
             latestWindow = classified.detail;
             lastBusinessSignalTime = classified.timestamp || lastContextTime;
             businessSignals.push({ type: 'window', ...classified.detail });
@@ -412,8 +558,9 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
           case 'document-shape':
           case 'engine-config':
             businessLogCount++;
+            if (classified.detail?.backendProfile) observedBackendProfile = classified.detail.backendProfile;
             lastBusinessSignalTime = classified.timestamp || lastContextTime;
-            businessSignals.push({ type: classified.signalType, raw: classified.detail?.rawLine });
+            businessSignals.push({ type: classified.signalType, raw: classified.detail?.rawLine, ...classified.detail });
             break;
 
           case 'error':
@@ -446,7 +593,7 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
         activityLevel = 'log-observation-no-business-signal';
       }
 
-      let backendProfile = executionProfile?.backendEffective || executionProfile?.backendRequested || executionProfile?.backend || 'pipeline';
+      let backendProfile = observedBackendProfile || executionProfile?.backendEffective || executionProfile?.backendRequested || executionProfile?.backend || 'pipeline';
 
       let document = {
         totalPages: null,
@@ -458,9 +605,14 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
       }
       if (latestWindow && latestWindow.pageTotal) {
         document.totalPages = latestWindow.pageTotal;
+        document.currentPages = latestWindow.pageCurrent ?? latestWindow.pageEnd ?? document.currentPages;
       } else {
         for (let i = businessSignals.length - 1; i >= 0; i--) {
           const sig = businessSignals[i];
+          if (sig.totalPages) {
+            document.totalPages = sig.totalPages;
+            break;
+          }
           if (sig.type === 'document-shape' && sig.raw) {
             const m = sig.raw.match(/page_count\s*=\s*(\d+)/i);
             if (m) {
@@ -531,7 +683,9 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
              total: latestWindow.windowTotal,
              pageStart: latestWindow.pageStart,
              pageEnd: latestWindow.pageEnd,
-             pageTotal: latestWindow.pageTotal
+             pageCurrent: latestWindow.pageCurrent ?? latestWindow.pageEnd,
+             pageTotal: latestWindow.pageTotal,
+             batchPages: latestWindow.batchPages ?? null
          };
       }
 
@@ -623,13 +777,13 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
       observationStaleReason = 'log file is unreadable or empty';
     }
 
-    return {
+    return attachProgressSemantics({
       activityLevel,
       observationStale: true,
       observationStaleReason,
       logSource: finalLogSource,
       observerCheckedAt
-    };
+    });
   }
 
   // 计算 lastProgressObservedAt（只看业务信号时间，不看 API 噪声时间）
@@ -665,7 +819,7 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
       bestResult.observationStaleReason = 'log file mtime is older than task start time, likely from previous task';
       bestResult.logSource = selectedLogSource;
       bestResult.observerCheckedAt = observerCheckedAt;
-      return bestResult;
+      return attachProgressSemantics(bestResult);
     }
   }
 
@@ -685,5 +839,5 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
     bestResult.observationStale = false;
   }
 
-  return bestResult;
+  return attachProgressSemantics(bestResult);
 }

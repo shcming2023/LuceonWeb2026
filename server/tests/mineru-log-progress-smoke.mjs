@@ -943,6 +943,44 @@ async function run() {
     console.log('Test 29 Pass ✅\n');
   }
 
+  // ─── Test 30: Pipeline 批次/页码/相位语义恢复 ───
+  console.log('Test 30: Pipeline 批次/页码/相位语义恢复');
+  {
+    const mockLog = path.join(scratchPath, 'mineru-api.log');
+    const mockErrLog = path.join(scratchPath, 'mineru-api.err.log');
+    const lines = [
+      '2026-05-10 17:30:00 | INFO | Pipeline processing-window multi-file run. doc_count=1, total_pages=632, window_size=64, total_batches=10',
+      '2026-05-10 17:30:01 | INFO | Pipeline processing window batch 2/10: 128/632 pages, batch_pages=64, doc_slices=doc0:65-128',
+      'OCR-det:  39%|███▉      | 25/64 [01:40<02:36,  4.00s/it]',
+      'Table-ocr rec ch:  12%|█▏        | 6/50 [00:30<03:40,  5.00s/it]'
+    ];
+    fs.writeFileSync(mockLog, lines.join('\n'));
+    fs.writeFileSync(mockErrLog, '');
+    process.env.MINERU_LOG_PATH = mockLog;
+    process.env.MINERU_ERR_LOG_PATH = mockErrLog;
+
+    const result = await parseLatestMineruProgress('2026-05-10T09:00:00.000Z', null, { backendRequested: 'pipeline' });
+
+    assert(result !== null, 'Should return pipeline result');
+    assert(result.backendProfile === 'pipeline', `Backend should be pipeline, got ${result.backendProfile}`);
+    assert(result.window?.index === 2, `Batch index should be 2, got ${result.window?.index}`);
+    assert(result.window?.total === 10, `Batch total should be 10, got ${result.window?.total}`);
+    assert(result.window?.pageStart === 65, `Page start should be 65, got ${result.window?.pageStart}`);
+    assert(result.window?.pageCurrent === 128, `Page current should be 128, got ${result.window?.pageCurrent}`);
+    assert(result.window?.pageTotal === 632, `Page total should be 632, got ${result.window?.pageTotal}`);
+    assert(result.document?.totalPages === 632, `Document totalPages should be 632, got ${result.document?.totalPages}`);
+    assert(result.document?.currentPages === 128, `Document currentPages should be 128, got ${result.document?.currentPages}`);
+    assert(result.stage?.rawPhase === 'Table-ocr rec ch', `Latest phase should be Table-ocr rec ch, got ${result.stage?.rawPhase}`);
+    assert(result.progressSemantics?.freshness === 'live', `Freshness should be live, got ${result.progressSemantics?.freshness}`);
+    assert(result.progressSemantics?.batch?.current === 2, 'progressSemantics should expose batch 2/10');
+    assert(result.progressSemantics?.pages?.current === 128, 'progressSemantics should expose 128 current pages');
+    assert(result.progressSemantics?.message?.includes('批次 2/10'), 'Operator message should include batch 2/10');
+    assert(result.progressSemantics?.message?.includes('页 128/632'), 'Operator message should include page 128/632');
+    assert(!JSON.stringify(result.progressSemantics).includes('/Users/concm/ops/logs'), 'Operator semantics must not expose host log paths');
+
+    console.log('Test 30 Pass ✅\n');
+  }
+
 
   // ── 环境恢复 ──
   if (origLogPath !== undefined) process.env.MINERU_LOG_PATH = origLogPath;

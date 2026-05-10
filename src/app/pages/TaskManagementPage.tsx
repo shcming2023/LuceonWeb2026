@@ -18,7 +18,7 @@ import {
   FolderPlus,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { deriveTaskBucket, ParseTask, TaskBucket } from '../utils/taskView';
+import { deriveMineruProgressLine, deriveTaskBucket, deriveTaskDisplayStatus, ParseTask, TaskBucket } from '../utils/taskView';
 import { TASK_ACTION_TERMS, TASK_ACTION_TOOLTIPS, getTaskStatusLabel } from '../utils/taskTerms';
 import { useFileUpload } from '../hooks/useFileUpload';
 
@@ -68,22 +68,9 @@ function zhLabelForState(state: string | undefined): string {
 function getTaskMainLabel(t: any): string {
   if (t.state === 'completed') return '已完成';
   if (t.state === 'review-pending') return '待复核';
-  if (t.state === 'failed') {
-    if (t.metadata?.mineruTaskId && t.metadata?.mineruStatus === 'completed' && !t.metadata?.parsedFilesCount) {
-      return 'MinerU 已完成，结果待接管';
-    }
-    if (t.stage === 'submit-failed-retryable' || t.message?.includes('可重试')) {
-      return '提交 MinerU 失败，可重试';
-    }
-    return '失败';
-  }
   if (t.state === 'canceled') return '已取消';
-
-  if (t.stage === 'mineru-queued') return 'MinerU 排队中';
-  if (t.stage === 'mineru-processing') return 'MinerU 正在解析';
   if (t.stage === 'mineru-unreachable') return '服务不可达';
-
-  return zhLabelForState(t.state);
+  return deriveTaskDisplayStatus(t) || zhLabelForState(t.state);
 }
 
 export function TaskManagementPage() {
@@ -657,26 +644,11 @@ export function TaskManagementPage() {
                             )}
                           </div>
                           {(() => {
-                            if (t.state === 'completed' || t.state === 'review-pending') return null;
-                            const obs = t.metadata?.mineruObservedProgress as any;
-                            if (!obs) return null;
-                            const level = obs.activityLevel || t.metadata?.mineruProgressHealth || '';
-                            if (level === 'api-alive-only' || level === 'no-business-signal' || level === 'log-observation-stale') return null;
-
-                            let phaseText = '';
-                            if (obs.stage && obs.stage.rawPhase) {
-                               let st = obs.stage.rawPhase;
-                               if (obs.stage.current != null && obs.stage.total != null) st += ` ${obs.stage.current}/${obs.stage.total}`;
-                               phaseText = st;
-                            } else if (obs.phase) {
-                               let st = obs.phase;
-                               if (obs.current != null && obs.total != null) st += ` ${obs.current}/${obs.total}`;
-                               phaseText = st;
-                            }
-                            if (!phaseText) return null;
+                            const line = deriveMineruProgressLine(t);
+                            if (!line) return null;
                             return (
-                              <p className="text-[11px] text-slate-500 font-mono">
-                                最后观测相位：{phaseText}
+                              <p className="text-[11px] text-slate-500 line-clamp-2 max-w-[360px]" title={line}>
+                                {line}
                               </p>
                             );
                           })()}

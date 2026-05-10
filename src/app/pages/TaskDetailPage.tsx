@@ -11,6 +11,7 @@ import { MetadataTab } from '../components/MetadataTab';
 import { PDFPreviewPanel } from '../components/PDFPreviewPanel';
 import { renderMarkdown } from '../utils/markdown';
 import { TASK_ACTION_TERMS, TASK_ACTION_TOOLTIPS, getTaskStatusLabel } from '../utils/taskTerms';
+import { deriveMineruProgressLine } from '../utils/taskView';
 
 /**
  * ParseTask 详情数据结构
@@ -880,12 +881,23 @@ export function TaskDetailPage() {
                 {/* MinerU 当前日志语义 */}
                 {task.metadata?.mineruObservedProgress && (() => {
                   const obs = task.metadata.mineruObservedProgress as any;
+                  const operatorLine = deriveMineruProgressLine(task as any) || obs.progressSemantics?.message || null;
+                  const semantics = obs.progressSemantics || {};
                   return (
                     <div className="mt-4 pt-4 border-t border-slate-100">
                       <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-2">
                         当前日志语义
                       </h3>
                       <div className="bg-slate-50 rounded-lg p-3 border border-slate-100 space-y-2">
+                        {operatorLine && (
+                          <div className="p-2.5 bg-white rounded-md border border-slate-200">
+                            <p className="text-sm font-medium text-slate-800">{operatorLine}</p>
+                            <p className="text-xs text-slate-500 mt-1">
+                              新鲜度：{semantics.freshness || (obs.observationStale ? 'stale' : 'recent')}
+                              {semantics.lastObservedAt && ` · 最近观测 ${new Date(String(semantics.lastObservedAt)).toLocaleString()}`}
+                            </p>
+                          </div>
+                        )}
                         <div className="flex justify-between items-center pb-2 border-b border-slate-200">
                           <span className="text-xs text-slate-500">观测来源</span>
                           <span className="text-sm font-medium text-slate-800">
@@ -916,9 +928,11 @@ export function TaskDetailPage() {
 
                             {obs.logSource && (
                               <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-xs border-t border-amber-100/50 pt-2">
-                                <div className="col-span-2">
-                                  <span className="text-slate-500">日志路径: </span>
-                                  <span className="text-slate-700 font-mono break-all">{obs.logSource.logSourcePath || '—'}</span>
+                                <div>
+                                  <span className="text-slate-500">日志状态: </span>
+                                  <span className="text-slate-700">
+                                    {obs.logSource.logSourceExists ? (obs.logSource.logSourceReadable ? '可读取' : '不可读取') : '未找到'}
+                                  </span>
                                 </div>
                                 <div>
                                   <span className="text-slate-500">最后更新: </span>
@@ -1000,11 +1014,12 @@ export function TaskDetailPage() {
                         {/* Hybrid 窗口 */}
                         {(obs.window || obs.latestWindow) && (() => {
                           const w = obs.window || obs.latestWindow;
+                          const pageCurrent = w.pageCurrent ?? w.pageEnd;
                           return (
                             <div className="flex justify-between items-center">
-                              <span className="text-xs text-slate-500">窗口 / 页码</span>
+                              <span className="text-xs text-slate-500">批次 / 页码</span>
                               <span className="text-sm font-medium text-slate-800">
-                                窗口 {w.index ?? w.windowCurrent ?? '—'}/{w.total ?? w.windowTotal ?? '—'} · 页 {w.pageStart ?? '—'}-{w.pageEnd ?? '—'}/{w.pageTotal ?? '—'}
+                                批次 {w.index ?? w.windowCurrent ?? '—'}/{w.total ?? w.windowTotal ?? '—'} · 页 {pageCurrent ?? '—'}/{w.pageTotal ?? '—'}
                               </span>
                             </div>
                           );

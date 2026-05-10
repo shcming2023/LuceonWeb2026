@@ -25,6 +25,62 @@ export interface ParseTask {
  */
 export type TaskBucket = 'queued' | 'processing' | 'reviewing' | 'completed' | 'failed' | 'canceled' | 'unknown';
 
+function formatMineruProgressSemantics(obs: any): string | null {
+  if (!obs) return null;
+  const semantics = obs.progressSemantics;
+  if (semantics?.message) return String(semantics.message);
+
+  const level = obs.activityLevel || '';
+  const phase = obs.stage?.rawPhase || obs.phase || '';
+  const current = obs.stage?.current ?? obs.current;
+  const total = obs.stage?.total ?? obs.total;
+  const win = obs.window || obs.latestWindow;
+  const pageCurrent = win?.pageCurrent ?? win?.pageEnd ?? obs.document?.currentPages;
+  const pageTotal = win?.pageTotal ?? obs.document?.totalPages;
+  const pieces: string[] = [];
+
+  if (obs.backendProfile) pieces.push(`backend=${obs.backendProfile}`);
+  if (phase) pieces.push(`相位 ${phase}${current != null && total != null ? ` ${current}/${total}` : ''}`);
+  if (win?.index != null && win?.total != null) pieces.push(`批次 ${win.index}/${win.total}`);
+  if (pageCurrent != null && pageTotal != null) pieces.push(`页 ${pageCurrent}/${pageTotal}`);
+
+  if (level === 'api-alive-only') return 'MinerU API 可达，但未见可归因业务进展';
+  if (level === 'log-observation-stale' || obs.observationStale) {
+    return pieces.length ? `MinerU 正在解析，但日志观测滞后：${pieces.join('，')}` : 'MinerU 正在解析，但日志观测滞后/不可用';
+  }
+  if (level === 'log-observation-missing' || level === 'log-observation-unavailable' || level === 'log-observation-no-business-signal') {
+    return 'MinerU 已提交/正在处理，但暂无可归因业务日志';
+  }
+  if (pieces.length) return `MinerU 正在解析：${pieces.join('，')}`;
+  return null;
+}
+
+export function deriveTaskDisplayStatus(task: ParseTask | null | undefined): string {
+  if (!task) return '待处理';
+  if (task.state === 'failed') {
+    if (task.metadata?.mineruTaskId && task.metadata?.mineruStatus === 'completed' && !task.metadata?.parsedFilesCount) {
+      return 'MinerU 已完成，结果待接管';
+    }
+    if (task.stage === 'submit-failed-retryable' || task.message?.includes('可重试')) {
+      return '提交 MinerU 失败，可重试';
+    }
+  }
+
+  if (task.stage === 'mineru-queued') return 'MinerU 排队中';
+  if (task.stage === 'mineru-processing') {
+    return formatMineruProgressSemantics(task.metadata?.mineruObservedProgress) || task.message || 'MinerU 正在解析';
+  }
+  if (task.stage === 'result-store') return '解析产物同步中';
+  if (task.state === 'ai-pending') return 'AI 元数据识别待执行';
+  if (task.state === 'ai-running') return 'AI 元数据识别中';
+  return STATE_LABELS[task.state || ''] || '未知';
+}
+
+export function deriveMineruProgressLine(task: ParseTask | null | undefined): string | null {
+  if (!task || task.state === 'completed' || task.state === 'review-pending') return null;
+  return formatMineruProgressSemantics(task.metadata?.mineruObservedProgress);
+}
+
 /**
  * 根据任务状态派生展示桶 (PRD v0.4 §6.3)
  */
@@ -141,9 +197,7 @@ export function deriveMaterialTaskView(
     latestTask: currentTask,
     taskState: currentTask?.state,
     bucket,
-    displayStatus: currentTask?.stage === 'mineru-queued' ? 'MinerU 排队中' :
-                   currentTask?.stage === 'mineru-processing' ? 'MinerU 正在解析' :
-                   (STATE_LABELS[currentTask?.state || ''] || (currentTask ? '未知' : '待处理')),
+    displayStatus: currentTask ? deriveTaskDisplayStatus(currentTask) : '待处理',
     failureMessage: currentTask?.errorMessage || currentTask?.message,
     taskUrl: currentTask ? `/tasks/${currentTask.id}` : undefined,
     hasStateDrift: false,
