@@ -108,7 +108,8 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 Current active tasks:
 
 - `TASK-20260509-104053-P0-Production-Release-Readiness-Final-Decision`: assigned to Director. This remains blocked pending MinerU submit-path recovery evidence and a later Director release decision.
-- `TASK-20260510-083554-P0-MinerU-Runtime-Submit-500-Controlled-Recovery`: assigned to Lucode. Lucode must execute scoped MinerU runtime recovery and report before/after health, dependency-health submit probe, and active-task evidence.
+- `TASK-20260510-142045-P0-Local-Production-Service-Ownership-Unification`: assigned to Lucode. Lucode must unify and document the effective local production service ownership and endpoint contract before entry-circuit work proceeds.
+- `TASK-20260510-142045-P1-Entry-Circuit-And-Durable-Admission-State`: staged and assigned to Lucia for activation only after Task 69 is accepted.
 
 Director shorthand is active:
 
@@ -222,6 +223,15 @@ Lucia accepted task 53 at `2026-05-09T09:01:38+0800` as code-level implementatio
 Lucia accepted task 66 at `2026-05-10T08:31:41+0800` as `ACCEPTED_DEPLOYED_BUT_RUNTIME_BLOCKED`. Production upload-server deployment of the MinerU submit circuit-breaker code succeeded and upload-server is healthy, but MinerU submit probe still returns HTTP 500 with `blocking=true` while MinerU `/health` remains OK. Manual PDF testing should not restart as a normal validation pass. Current active decision: task 67, Director-owned scoped MinerU runtime recovery authorization. Production release readiness remains unclaimed and blocked.
 
 Director approved scoped MinerU runtime recovery at `2026-05-10T08:35:54+0800`. Current active task: task 68 for Lucode. Scope is limited to read-only diagnosis first, then minimum necessary MinerU runtime/API recovery if needed, followed by submit-probe, upload-health, and active-task verification. No new validation upload, failed pressure-task repair, DB/MinIO/Docker volume mutation, source code change, secret/model/timeout/override change, broad stack restart, or release-readiness declaration is authorized.
+
+Lucia accepted task 68 at `2026-05-10T14:20:45+0800` as local runtime recovery evidence only. A MinerU-only tmux restart cleared the immediate submit-path blocker, but Director reclassified the broader issue as a local long-running production-line governance problem. Current governance sequence:
+
+- P0 active: service ownership unification for MinerU/Ollama/MinIO-Docker/upload-server/supervisor and explicit runtime endpoints.
+- P1 staged: durable entry circuit/admission state based on MinerU submit-probe, activated only after P0 acceptance.
+- P2 later: queue-pressure observability for Director.
+- P3 later: Ollama transport retry and keep-alive stability refinement.
+
+Manual pressure testing and production release readiness remain blocked.
 
 Lucia accepted task 54 at `2026-05-09T09:12:21+0800` as `BLOCKED_AFTER_PASS_2_NO_GO_FOR_RELEASE_READY`. Validation pass 2 of 2 was used; no controlled upload was created because dependency-health still failed on container-to-host Ollama `/api/chat` timeout. Non-Ollama gates passed, and diagnostics classification remained healthy/idle. Production release readiness remains unclaimed.
 
