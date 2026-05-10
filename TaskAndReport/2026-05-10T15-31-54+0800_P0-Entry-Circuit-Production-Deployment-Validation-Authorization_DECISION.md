@@ -3,8 +3,8 @@
 - Decision ID: `TASK-20260510-153154-P0-Entry-Circuit-Production-Deployment-Validation-Authorization`
 - Created At: `2026-05-10T15:31:54+0800`
 - Created By: Lucia
-- Status: 挂起
-- Next Actor: Director
+- Status: 完成关闭
+- Next Actor: -
 - Related Accepted Task: `TASK-20260510-142045-P1-Entry-Circuit-And-Durable-Admission-State`
 
 ## Decision Needed
@@ -22,6 +22,28 @@ Director also confirmed the boundary: Task 70 must not be upgraded to production
 If Option A is later approved, Lucode's report must include both `dependency-health?mineruSubmitProbe=true` and `/ops/mineru/admission-circuit`; ordinary health-green evidence alone is insufficient.
 
 This review note is not an Option A approval. Task 72 remains pending Director deployment/validation authorization.
+
+## Director Decision
+
+At `2026-05-10T15:42:54+0800`, Director approved Task 72 with only Option A narrow scope.
+
+Approved scope:
+
+- Lucode may perform the minimum necessary production apply/rebuild for the accepted P1 durable admission-circuit code.
+- Lucode may run non-destructive runtime validation only.
+- Lucode must report both `dependency-health?mineruSubmitProbe=true` and `/ops/mineru/admission-circuit`.
+- Lucode must preserve strict AI/model env, MinIO console local-only boundary, production override semantics, data, secrets, samples, Docker volumes, and existing artifacts.
+
+Still not approved:
+
+- validation upload;
+- pressure test;
+- failed task recovery or repair;
+- release-readiness declaration;
+- DB row deletion or manual DB state repair;
+- MinIO object deletion, Docker volume deletion/pruning, secret/model/timeout/config/override mutation, broad stack restart, rollback, or unrelated task recovery.
+
+Lucia issued `TASK-20260510-154254-P0-Entry-Circuit-Production-Deployment-And-Non-Destructive-Runtime-Validation` to Lucode.
 
 ## Recommended Option
 
@@ -51,4 +73,4 @@ Required evidence for Option A:
 
 This decision is about deploying and validating the accepted P1 intake-safety control. It is not a release-readiness decision.
 
-If Director does not answer after two Lucia heartbeat checks, Lucia may only issue non-destructive read-only preflight or documentation tasks. Lucia may not autonomously approve production deployment, production upload validation, destructive operations, or production release readiness.
+Director has answered. The decision is closed as narrow Option A approval only.

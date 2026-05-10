@@ -43,7 +43,8 @@ Current runtime dependencies:
 - P0 service ownership unification has been accepted: production runtime truth must come from the explicit runtime env contract for MinerU, Ollama, strict AI fallback flags, and local override boundary, not from ambiguous DB settings.
 - P1 durable MinerU admission circuit has been accepted at code level and integrated into `main` at `98339b6`. The circuit persists shared state under `mineruAdmissionCircuit`, opens on submit-path failure evidence, and blocks non-Markdown MinerU intake before MinIO/Material/ParseTask creation when MinerU is not truly able to accept work.
 - `/health` HTTP 200 alone is not sufficient to close MinerU intake. Closing the circuit requires submit-probe success, cooldown elapsed, active-task clean, and dependency blocking clear.
-- Production deployment/runtime validation of the accepted P1 circuit is not yet authorized and is tracked by `TASK-20260510-153154-P0-Entry-Circuit-Production-Deployment-Validation-Authorization`.
+- Director approved narrow Option A for production deployment/runtime validation of the accepted P1 circuit at `2026-05-10T15:42:54+0800`.
+- Active task `TASK-20260510-154254-P0-Entry-Circuit-Production-Deployment-And-Non-Destructive-Runtime-Validation` is limited to minimum necessary production apply/rebuild and non-destructive runtime validation. It does not authorize validation upload, pressure test, failed-task repair, release-readiness declaration, or destructive/config/model/secret/override mutation.
 - Production release readiness remains unclaimed.
 
 ## 3. Governance Closure Summary
