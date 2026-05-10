@@ -69,6 +69,9 @@ const ONLINE_MINERU_MODE =
   process.env.MINERU_MODE === 'online' ||
   process.env.MINERU_ONLINE_ENABLED === 'true';
 const REQUIRED_OLLAMA_MODEL = process.env.OLLAMA_TIER2_MODEL || 'qwen3.5:9b';
+const OLLAMA_KEEP_ALIVE = process.env.OLLAMA_KEEP_ALIVE || '24h';
+const DEPENDENCY_HEALTH_OLLAMA_CHAT_TIMEOUT_MS =
+  Number(process.env.DEPENDENCY_HEALTH_OLLAMA_CHAT_TIMEOUT_MS) || 15000;
 
 const debugLogs = [];
 
@@ -361,6 +364,44 @@ async function probeMineruSubmitPath(localEndpoint) {
   }
 }
 
+function isAbortTimeout(error) {
+  return error?.name === 'TimeoutError' ||
+    error?.name === 'AbortError' ||
+    String(error?.message || '').includes('aborted') ||
+    String(error?.message || '').includes('timeout');
+}
+
+async function probeOllamaResidency(base, targetModel) {
+  const startedAt = Date.now();
+  try {
+    const psRes = await fetch(`${base}/api/ps`, { signal: AbortSignal.timeout(3000) });
+    const durationMs = Date.now() - startedAt;
+    if (!psRes.ok) {
+      return { ok: false, status: psRes.status, durationMs, modelResident: false, models: [], error: `HTTP ${psRes.status}` };
+    }
+    const data = await psRes.json();
+    const models = Array.isArray(data.models)
+      ? data.models.map((model) => model?.name || model?.model || '').filter(Boolean)
+      : [];
+    return {
+      ok: true,
+      status: psRes.status,
+      durationMs,
+      modelResident: models.some((name) => name.includes(targetModel)),
+      models
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: null,
+      durationMs: Date.now() - startedAt,
+      modelResident: false,
+      models: [],
+      error: error.message || 'Ollama residency probe failed'
+    };
+  }
+}
+
 async function buildMineruActiveTaskSnapshot() {
   const result = {
     activeTask: null,
@@ -432,7 +473,25 @@ async function checkDependencyHealth(minioBucket, options = {}) {
         error: null,
         submitProbe: { enabled: mineruSubmitProbeEnabled, ok: null, status: null, durationMs: null, taskId: null, error: null }
       },
-      ollama: { ok: false, requiredFor: ['ai'], blockingParse: false, endpoint: null, error: null }
+      ollama: {
+        ok: false,
+        requiredFor: ['ai'],
+        blockingParse: false,
+        endpoint: null,
+        serviceReachable: false,
+        tagsOk: false,
+        modelPresent: false,
+        modelResident: false,
+        chatOk: null,
+        coldStartChatTimeout: false,
+        warmChatTimeout: false,
+        failureKind: null,
+        keepAlive: {
+          value: OLLAMA_KEEP_ALIVE,
+          source: process.env.OLLAMA_KEEP_ALIVE ? 'env:OLLAMA_KEEP_ALIVE' : 'default:24h'
+        },
+        error: null
+      }
     },
     commands: {
       mineru: "bash ops/start-mineru-api.sh",
@@ -584,16 +643,29 @@ async function checkDependencyHealth(minioBucket, options = {}) {
        try {
          const base = checkOllamaEndpoint.replace(/\/v1\/?$/, '');
          const ollamaRes = await fetch(`${base}/api/tags`, { signal: AbortSignal.timeout(3000) });
+         result.dependencies.ollama.serviceReachable = true;
          if (ollamaRes.ok) {
+           result.dependencies.ollama.tagsOk = true;
            const data = await ollamaRes.json();
            const modelNames = (data.models || []).map(m => m.name);
            const targetModel = REQUIRED_OLLAMA_MODEL;
            const hasTarget = modelNames.some(n => n.includes(targetModel));
+           result.dependencies.ollama.model = targetModel;
+           result.dependencies.ollama.models = modelNames;
+           result.dependencies.ollama.modelPresent = hasTarget;
 
            if (!hasTarget && STRICT_NO_SKELETON) {
              result.dependencies.ollama.error = `Missing required Ollama model: ${targetModel}`;
+             result.dependencies.ollama.failureKind = 'model-missing';
              result.dependencies.ollama.ok = false;
            } else {
+             const residencyBeforeChat = await probeOllamaResidency(base, targetModel);
+             result.dependencies.ollama.residency = { beforeChat: residencyBeforeChat, afterChat: null };
+             result.dependencies.ollama.modelResident = residencyBeforeChat.modelResident;
+             result.dependencies.ollama.warmState = residencyBeforeChat.ok
+               ? (residencyBeforeChat.modelResident ? 'resident-before-chat' : 'cold-before-chat')
+               : 'unknown';
+
              // 5. Lightweight smoke test to ensure actual generation works, not just tags
              const smokeStart = Date.now();
              try {
@@ -605,38 +677,57 @@ async function checkDependencyHealth(minioBucket, options = {}) {
                    messages: [{ role: 'user', content: 'hello' }],
                    stream: false,
                    think: false,
+                   keep_alive: OLLAMA_KEEP_ALIVE,
                    options: {
                      think: false,
                      num_predict: 1
                    }
                  }),
-	                 signal: AbortSignal.timeout(15000)
+	                 signal: AbortSignal.timeout(DEPENDENCY_HEALTH_OLLAMA_CHAT_TIMEOUT_MS)
                });
 
                result.dependencies.ollama.durationMs = Date.now() - smokeStart;
-               result.dependencies.ollama.model = targetModel;
 
                if (smokeRes.ok) {
                  result.dependencies.ollama.chatOk = true;
                  result.dependencies.ollama.ok = true;
+                 result.dependencies.ollama.failureKind = null;
                } else {
                  result.dependencies.ollama.chatOk = false;
                  result.dependencies.ollama.error = `Smoke test HTTP ${smokeRes.status}`;
+                 result.dependencies.ollama.failureKind = 'chat-http-error';
                  result.dependencies.ollama.ok = false;
                }
+               result.dependencies.ollama.residency.afterChat = await probeOllamaResidency(base, targetModel);
+               result.dependencies.ollama.modelResident = result.dependencies.ollama.residency.afterChat.modelResident;
              } catch (se) {
                result.dependencies.ollama.chatOk = false;
                result.dependencies.ollama.durationMs = Date.now() - smokeStart;
-               result.dependencies.ollama.model = targetModel;
                result.dependencies.ollama.error = `Smoke test failed: ${se.message}`;
+               const timedOut = isAbortTimeout(se);
+               if (timedOut && residencyBeforeChat.ok && !residencyBeforeChat.modelResident) {
+                 result.dependencies.ollama.coldStartChatTimeout = true;
+                 result.dependencies.ollama.failureKind = 'cold-start-chat-timeout';
+               } else if (timedOut && residencyBeforeChat.ok && residencyBeforeChat.modelResident) {
+                 result.dependencies.ollama.warmChatTimeout = true;
+                 result.dependencies.ollama.failureKind = 'warm-chat-timeout';
+               } else if (timedOut) {
+                 result.dependencies.ollama.failureKind = 'chat-timeout';
+               } else {
+                 result.dependencies.ollama.failureKind = 'chat-error';
+               }
                result.dependencies.ollama.ok = false;
+               result.dependencies.ollama.residency.afterChat = await probeOllamaResidency(base, targetModel);
+               result.dependencies.ollama.modelResident = result.dependencies.ollama.residency.afterChat.modelResident;
              }
            }
          } else {
            result.dependencies.ollama.error = `HTTP ${ollamaRes.status}`;
+           result.dependencies.ollama.failureKind = 'tags-http-error';
          }
        } catch (e) {
          result.dependencies.ollama.error = e.cause?.code === 'ECONNREFUSED' ? 'connect ECONNREFUSED' : (e.message || 'connect ECONNREFUSED');
+         result.dependencies.ollama.failureKind = e.cause?.code === 'ECONNREFUSED' ? 'service-unreachable' : 'tags-error';
        }
     }
 
