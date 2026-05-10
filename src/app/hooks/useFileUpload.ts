@@ -51,7 +51,17 @@ export function useFileUpload() {
     if (list.length === 0) return;
 
     try {
-      const healthRes = await fetch('/__proxy/upload/ops/dependency-health');
+      const [healthRes, admissionRes] = await Promise.all([
+        fetch('/__proxy/upload/ops/dependency-health'),
+        fetch('/__proxy/upload/ops/mineru/admission-circuit').catch(() => null),
+      ]);
+      if (admissionRes?.ok) {
+        const admission = await admissionRes.json();
+        if (admission.open) {
+          toast.error(admission.message || 'MinerU 当前不可接收新任务，文件未收取，请稍后重试。');
+          return;
+        }
+      }
       if (healthRes.ok) {
         const health = await healthRes.json();
         if (health.blocking) {

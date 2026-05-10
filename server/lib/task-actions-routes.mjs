@@ -520,6 +520,7 @@ export function registerTaskActionRoutes(app, deps = {}) {
     getMinioBucket: deps.getMinioBucket || (() => 'eduassets'),
     getStorageBackend: deps.getStorageBackend || (() => 'tmpfiles'),
     getParsedBucket: deps.getParsedBucket || (() => 'eduassets-parsed'),
+    checkDependencyHealth: deps.checkDependencyHealth,
   };
 
   async function loadTask(req, res) {
@@ -547,7 +548,7 @@ export function registerTaskActionRoutes(app, deps = {}) {
   app.post('/tasks/batch/retry', async (req, res) => {
     try {
       if (safeDeps.checkDependencyHealth) {
-        const health = await safeDeps.checkDependencyHealth();
+        const health = await safeDeps.checkDependencyHealth(undefined, { mineruSubmitProbe: true });
         if (health.blocking) {
           const blockingDep = Object.keys(health.dependencies).find(k =>
             health.dependencies[k].ok === false &&
@@ -593,7 +594,7 @@ export function registerTaskActionRoutes(app, deps = {}) {
   app.post('/tasks/:id/retry', async (req, res) => {
     try {
       if (safeDeps.checkDependencyHealth) {
-        const health = await safeDeps.checkDependencyHealth();
+        const health = await safeDeps.checkDependencyHealth(undefined, { mineruSubmitProbe: true });
         if (health.blocking) {
           const blockingDep = Object.keys(health.dependencies).find(k =>
             health.dependencies[k].ok === false &&
@@ -623,7 +624,7 @@ export function registerTaskActionRoutes(app, deps = {}) {
   app.post('/tasks/:id/reparse', async (req, res) => {
     try {
       if (safeDeps.checkDependencyHealth) {
-        const health = await safeDeps.checkDependencyHealth();
+        const health = await safeDeps.checkDependencyHealth(undefined, { mineruSubmitProbe: true });
         if (health.blocking) {
           const blockingDep = Object.keys(health.dependencies).find(k =>
             health.dependencies[k].ok === false &&

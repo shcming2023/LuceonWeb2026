@@ -38,6 +38,11 @@ async function runTest() {
   let ollamaChatOk = true;
   let ollamaModels = [{ name: 'qwen3.5:9b' }];
   let lastOllamaChatBody = null;
+  const settingsStore = {
+    mineruConfig: { localEndpoint: null },
+    aiConfig: { enabled: true, providers: [] },
+    mineruAdmissionCircuit: undefined,
+  };
 
   // DB Server settings mock
   dummyApp.get('/settings', (req, res) => {
@@ -95,13 +100,18 @@ async function runTest() {
   // mineru -> http://127.0.0.1:dummyPort/mineru
   // ollama -> http://127.0.0.1:dummyPort/ollama
   const dbApp = express();
+  dbApp.use(express.json());
   dbApp.get('/settings', (req, res) => {
-    res.json({
-      mineruConfig: { localEndpoint: `http://127.0.0.1:${dummyPort}/mineru` },
-      aiConfig: { enabled: true, providers: [{ providerId: 'ollama', enabled: true, priority: 1, apiEndpoint: `http://127.0.0.1:${dummyPort}/ollama` }] }
-    });
+    settingsStore.mineruConfig.localEndpoint = `http://127.0.0.1:${dummyPort}/mineru`;
+    settingsStore.aiConfig.providers = [{ providerId: 'ollama', enabled: true, priority: 1, apiEndpoint: `http://127.0.0.1:${dummyPort}/ollama` }];
+    res.json(settingsStore);
+  });
+  dbApp.put('/settings/:key', (req, res) => {
+    settingsStore[req.params.key] = req.body;
+    res.json({ ok: true, key: req.params.key });
   });
   dbApp.get('/tasks', (req, res) => res.json([]));
+  dbApp.get('/ai-metadata-jobs', (req, res) => res.json([]));
   dbApp.post('/materials', (req, res) => res.json({ id: 'test-mat' }));
   dbApp.get('/materials/:id', (req, res) => res.status(404).json({}));
   dbApp.post('/tasks', (req, res) => res.json({ id: 'test-task' }));
@@ -130,7 +140,8 @@ async function runTest() {
       ALLOW_LOCAL_AI_ENDPOINT: 'true',
       MINIO_ENDPOINT: '127.0.0.1',
       MINIO_PORT: String(dummyPort),
-      DEPENDENCY_HEALTH_REWRITE_LOCAL_ENDPOINTS: 'false'
+      DEPENDENCY_HEALTH_REWRITE_LOCAL_ENDPOINTS: 'false',
+      MINERU_ADMISSION_CIRCUIT_COOLDOWN_MS: '0'
     }
   });
   
@@ -198,6 +209,14 @@ async function runTest() {
     assertEqual(data.dependencies.mineru.submitProbe.status, 503, 'mineru submit probe should report HTTP status');
     assertEqual(data.dependencies.mineru.ok, false, 'mineru.ok should be false when submit probe fails');
     assertEqual(data.blocking, true, 'blocking should be true when submit probe fails');
+    assertEqual(data.dependencies.mineru.admissionCircuit.state, 'open', 'submit probe failure should open durable admission circuit');
+
+    // Test 1c.1: /health 200 alone must not close an open circuit
+    res = await fetch(`${uploadBase}/ops/dependency-health`);
+    data = await res.json();
+    assertEqual(data.dependencies.mineru.healthOk, true, '/health-only check still sees MinerU health OK');
+    assertEqual(data.dependencies.mineru.submitProbe.enabled, false, '/health-only check does not run submit probe');
+    assertEqual(data.dependencies.mineru.admissionCircuit.state, 'open', '/health 200 alone must not close admission circuit');
 
     // Test 1d: /health OK and /tasks submit returns task_id with submit probe enabled
     mineruSubmitOk = true;
@@ -208,6 +227,7 @@ async function runTest() {
     assertEqual(Boolean(data.dependencies.mineru.submitProbe.taskId), true, 'mineru submit probe should include taskId');
     assertEqual(data.dependencies.mineru.ok, true, 'mineru.ok should be true when /health and submit probe pass');
     assertEqual(data.blocking, false, 'blocking should be false when minio and mineru submit probe pass');
+    assertEqual(data.dependencies.mineru.admissionCircuit.state, 'closed', 'successful submit probe should close circuit after cooldown and clean active diagnostics');
 
     // Test 2: POST /tasks blocked when mineru down
     const form1 = new FormData();
@@ -221,17 +241,30 @@ async function runTest() {
     assertEqual(taskData.code, 'DEPENDENCY_UNHEALTHY', 'Should return DEPENDENCY_UNHEALTHY code');
     assertEqual(taskData.blockingDependency, 'mineru', 'blocking dependency should be mineru');
 
-    // Test 3: POST /tasks allowed when mineru and minio ok
+    // Test 3: POST /tasks blocks PDF intake when /health is OK but submit path fails
     mineruOk = true;
     mineruSubmitOk = false;
     // (minio ok is implicit via tmpfiles backend mock)
     const form2 = new FormData();
     form2.append('file', blob1, 'test.pdf');
     taskRes = await fetch(`${uploadBase}/tasks`, { method: 'POST', body: form2 });
-    if (taskRes.status !== 200) {
+    if (taskRes.status !== 503) {
       console.error('Test 3 failed payload:', await taskRes.text());
     }
-    assertEqual(taskRes.status, 200, 'POST /tasks should succeed (200) when dependencies are ok');
+    assertEqual(taskRes.status, 503, 'POST /tasks should return 503 when MinerU submit circuit opens');
+    taskData = await taskRes.json();
+    assertEqual(taskData.code, 'MINERU_ADMISSION_CIRCUIT_OPEN', 'POST /tasks should return admission circuit code');
+    assertEqual(taskData.message, 'MinerU 当前不可接收新任务，文件未收取，请稍后重试。', 'POST /tasks should tell operator the file was not accepted');
+
+    // Test 3b: POST /tasks allowed when submit probe succeeds
+    mineruSubmitOk = true;
+    const form2b = new FormData();
+    form2b.append('file', blob1, 'test.pdf');
+    taskRes = await fetch(`${uploadBase}/tasks`, { method: 'POST', body: form2b });
+    if (taskRes.status !== 200) {
+      console.error('Test 3b failed payload:', await taskRes.text());
+    }
+    assertEqual(taskRes.status, 200, 'POST /tasks should succeed (200) when /health and submit probe are ok');
 
     // Test 4: ollama down does not block parse but is reported
     mineruOk = true;

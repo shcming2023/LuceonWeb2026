@@ -191,7 +191,14 @@ export function BatchProcessingController() {
 
         if (!uploadRes.ok) {
           const errText = await uploadRes.text();
-          throw new Error(`上传失败: HTTP ${uploadRes.status} - ${errText}`);
+          let errPayload: { message?: string; error?: string; code?: string } | null = null;
+          try {
+            errPayload = JSON.parse(errText);
+          } catch {
+            errPayload = null;
+          }
+          const errMessage = errPayload?.message || errPayload?.error || errText;
+          throw new Error(`上传失败: HTTP ${uploadRes.status} - ${errMessage}`);
         }
 
         const uploadResult = await uploadRes.json();

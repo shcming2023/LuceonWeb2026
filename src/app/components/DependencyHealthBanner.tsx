@@ -73,7 +73,8 @@ export function DependencyHealthBanner() {
   if (!health) return null;
 
   const minioOk = health.dependencies?.minio?.ok;
-  const mineruOk = health.dependencies?.mineru?.ok;
+  const mineruCircuitOpen = health.dependencies?.mineru?.admissionCircuit?.state === 'open';
+  const mineruOk = health.dependencies?.mineru?.ok && !mineruCircuitOpen;
   const ollamaOk = health.dependencies?.ollama?.ok || health.dependencies?.ollama?.skipped;
   const ollamaServiceReachable = supervisorStatus?.services?.ollamaReachable === true || health.dependencies?.ollama?.ok === true;
   const ollamaSessionUnmanaged = ollamaServiceReachable && supervisorStatus?.sessions?.ollama === false && !health.dependencies?.ollama?.skipped;
@@ -83,10 +84,10 @@ export function DependencyHealthBanner() {
   }
 
   const supervisorActive = supervisorStatus?.ok;
-  const bannerBlocking = Boolean(health.blocking);
+  const bannerBlocking = Boolean(health.blocking || mineruCircuitOpen);
   const bannerTone = bannerBlocking ? 'bg-red-50 border-red-200 text-red-800' : ollamaSessionUnmanaged ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-amber-50 border-amber-200 text-amber-800';
   const headline = bannerBlocking
-    ? '部分核心依赖未启动，任务解析可能受阻'
+    ? (mineruCircuitOpen ? 'MinerU 当前不可接收新任务' : '部分核心依赖未启动，任务解析可能受阻')
     : ollamaSessionUnmanaged && health.ok
       ? '依赖正常，部分运维会话未托管'
       : '部分非核心依赖未就绪';
@@ -113,7 +114,7 @@ export function DependencyHealthBanner() {
           </div>
           <div className="flex items-center gap-1.5">
             <div className={`w-2 h-2 rounded-full ${mineruOk ? 'bg-green-500' : 'bg-red-500'}`} />
-            <span>MinerU {mineruOk ? '正常' : '未启动'}</span>
+            <span>MinerU {mineruOk ? '正常' : mineruCircuitOpen ? '暂停接收' : '未启动'}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className={`w-2 h-2 rounded-full ${health.dependencies?.ollama?.skipped ? 'bg-gray-400' : ollamaOk ? (ollamaSessionUnmanaged ? 'bg-blue-500' : 'bg-green-500') : ollamaServiceReachable ? 'bg-blue-500' : 'bg-amber-500'}`} />
