@@ -108,7 +108,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 Current active tasks:
 
 - `TASK-20260509-104053-P0-Production-Release-Readiness-Final-Decision`: assigned to Director. This remains blocked pending MinerU submit-path recovery evidence and a later Director release decision.
-- `TASK-20260510-161343-P0-Pressure-Restart-Created-Tasks-Read-Only-Terminal-Observation`: assigned to Lucode. Lucode must observe only the 20 production validation tasks created by Task 75 until terminal/manual-review state, runtime block, or timeout. No new upload, retry, repair, cleanup, destructive operation, or release-readiness claim is authorized.
+- `TASK-20260510-171943-P1-Task-Page-MinerU-Progress-Semantics-Restoration`: assigned to Lucode. Lucode must restore operator-facing MinerU progress/log semantics on the task page and related API surface. This is code-level only: no new upload, pressure retry, Task 75/76 repair, production data mutation, runtime config change, broad restart, pressure PASS, L3, or release-readiness claim is authorized.
 
 Director shorthand is active:
 
