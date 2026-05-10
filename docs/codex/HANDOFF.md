@@ -108,7 +108,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 Current active tasks:
 
 - `TASK-20260509-104053-P0-Production-Release-Readiness-Final-Decision`: assigned to Director. This remains blocked pending MinerU submit-path recovery evidence and a later Director release decision.
-- `TASK-20260510-154254-P0-Entry-Circuit-Production-Deployment-And-Non-Destructive-Runtime-Validation`: assigned to Lucode. Lucode must execute narrow Option A only: deploy accepted P1 durable admission-circuit code to production and collect non-destructive runtime validation evidence, including both `dependency-health?mineruSubmitProbe=true` and `/ops/mineru/admission-circuit`.
+- `TASK-20260510-155052-P0-Next-Validation-Step-After-Entry-Circuit-Deployment`: assigned to Director. Director must decide whether the next step is one controlled validation upload, a bounded pressure-test restart, or hold for more read-only preparation.
 
 Director shorthand is active:
 
@@ -222,6 +222,8 @@ Lucia accepted task 53 at `2026-05-09T09:01:38+0800` as code-level implementatio
 Lucia accepted task 70 at `2026-05-10T15:31:54+0800` as `ACCEPTED_CODE_LEVEL_PRODUCTION_DEPLOYMENT_REQUIRED` and integrated the durable MinerU admission circuit into `main` at `98339b6`. Accepted behavior: non-Markdown MinerU-bound intake now checks submit-path admission before MinIO/Material/ParseTask creation, open circuit returns `503` with `MINERU_ADMISSION_CIRCUIT_OPEN`, `/health` alone cannot close the circuit, and worker/frontend/ops surfaces read the shared circuit state. Lucia independently reran diff-check, syntax checks, focused smokes, TypeScript, and build. Production deployment/runtime validation is not yet authorized; Director decision task 72 is active.
 
 Director approved task 72 at `2026-05-10T15:42:54+0800` with only narrow Option A. Lucia issued task 73 to Lucode for minimum necessary production apply/rebuild and non-destructive runtime validation only. Not authorized: validation upload, pressure test, failed-task repair, release-readiness declaration, DB/MinIO/Docker volume mutation, secret/model/timeout/config/override mutation, broad restart, rollback, or unrelated recovery.
+
+Lucia accepted task 73 at `2026-05-10T15:50:52+0800` as `ACCEPTED_PRODUCTION_DEPLOYED_NON_DESTRUCTIVE_RUNTIME_SURFACES_PASS`. Production deployed accepted code at `cf0466a`; submit-probe dependency-health passed with HTTP `202`; admission circuit was closed; active parse/AI queues were empty; and Ollama `qwen3.5:9b` was resident. Historical failed tasks remain unmodified. This is not production release readiness, L3, validation upload permission, pressure-test restart permission, failed-task repair permission, or manual pressure-test readiness. Director decision task 74 is now active.
 
 Lucia accepted task 66 at `2026-05-10T08:31:41+0800` as `ACCEPTED_DEPLOYED_BUT_RUNTIME_BLOCKED`. Production upload-server deployment of the MinerU submit circuit-breaker code succeeded and upload-server is healthy, but MinerU submit probe still returns HTTP 500 with `blocking=true` while MinerU `/health` remains OK. Manual PDF testing should not restart as a normal validation pass. Current active decision: task 67, Director-owned scoped MinerU runtime recovery authorization. Production release readiness remains unclaimed and blocked.
 
