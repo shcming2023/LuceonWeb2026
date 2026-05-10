@@ -108,7 +108,7 @@ Lucia task briefs and Lucode reports are now exchanged through `TaskAndReport/`,
 Current active tasks:
 
 - `TASK-20260509-104053-P0-Production-Release-Readiness-Final-Decision`: assigned to Director. This remains blocked pending MinerU submit-path recovery evidence and a later Director release decision.
-- `TASK-20260510-083141-P0-MinerU-Runtime-Submit-500-Recovery-Authorization`: assigned to Director. Director must decide whether to authorize scoped MinerU runtime recovery, request more read-only evidence, or hold the release-readiness track.
+- `TASK-20260510-083554-P0-MinerU-Runtime-Submit-500-Controlled-Recovery`: assigned to Lucode. Lucode must execute scoped MinerU runtime recovery and report before/after health, dependency-health submit probe, and active-task evidence.
 
 Director shorthand is active:
 
@@ -220,6 +220,8 @@ Lucia accepted task 52 at `2026-05-09T08:46:29+0800` as blocked pass-1 evidence.
 Lucia accepted task 53 at `2026-05-09T09:01:38+0800` as code-level implementation and integrated branch `lucode/p0-ollama-dependency-health-smoke-alignment-revision-1` at `9063a14`. The dependency-health Ollama smoke now uses no-thinking request semantics aligned with the production provider. Lucia independently reran focused dependency-health smoke, TypeScript, build, and diff-check. This used revision cycle 1 of 2 but did not itself validate production release readiness.
 
 Lucia accepted task 66 at `2026-05-10T08:31:41+0800` as `ACCEPTED_DEPLOYED_BUT_RUNTIME_BLOCKED`. Production upload-server deployment of the MinerU submit circuit-breaker code succeeded and upload-server is healthy, but MinerU submit probe still returns HTTP 500 with `blocking=true` while MinerU `/health` remains OK. Manual PDF testing should not restart as a normal validation pass. Current active decision: task 67, Director-owned scoped MinerU runtime recovery authorization. Production release readiness remains unclaimed and blocked.
+
+Director approved scoped MinerU runtime recovery at `2026-05-10T08:35:54+0800`. Current active task: task 68 for Lucode. Scope is limited to read-only diagnosis first, then minimum necessary MinerU runtime/API recovery if needed, followed by submit-probe, upload-health, and active-task verification. No new validation upload, failed pressure-task repair, DB/MinIO/Docker volume mutation, source code change, secret/model/timeout/override change, broad stack restart, or release-readiness declaration is authorized.
 
 Lucia accepted task 54 at `2026-05-09T09:12:21+0800` as `BLOCKED_AFTER_PASS_2_NO_GO_FOR_RELEASE_READY`. Validation pass 2 of 2 was used; no controlled upload was created because dependency-health still failed on container-to-host Ollama `/api/chat` timeout. Non-Ollama gates passed, and diagnostics classification remained healthy/idle. Production release readiness remains unclaimed.
 
