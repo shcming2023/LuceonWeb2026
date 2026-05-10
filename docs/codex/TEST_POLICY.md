@@ -1,6 +1,8 @@
 # Luceon2026 Validation Policy
 
-Last updated: 2026-05-08
+Last updated: 2026-05-11
+
+See `docs/codex/TEST_MATRIX.md` for the command-to-risk matrix used by current governance and validation reports.
 
 ## Local Test Sample Library
 

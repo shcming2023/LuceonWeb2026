@@ -12,8 +12,10 @@ Production release readiness is not claimed by this README. Current status, open
 - Team contract: `docs/codex/TEAM_CONTRACT.md`
 - Current project state: `docs/codex/PROJECT_STATE.md`
 - Current handoff: `docs/codex/HANDOFF.md`
+- Deployment docs index: `docs/deploy/README.md`
 - PRD: `docs/prd/Luceon2026-PRD-v0.4.md`
 - Validation policy: `docs/codex/TEST_POLICY.md`
+- Test matrix: `docs/codex/TEST_MATRIX.md`
 - Task ledger: `TaskAndReport/TASK_TRACKING_LIST.md`
 
 ## Requirements

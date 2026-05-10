@@ -12,8 +12,9 @@ Read these files first:
 4. `docs/reviews/PHASE1_ACCEPTANCE_SUMMARY.md`
 5. `docs/codex/REPOSITORY_STRUCTURE.md`
 6. `docs/codex/TEST_POLICY.md`
-7. `docs/prd/Luceon2026-PRD-v0.4.md`
-8. `TaskAndReport/TASK_TRACKING_LIST.md`
+7. `docs/codex/TEST_MATRIX.md`
+8. `docs/prd/Luceon2026-PRD-v0.4.md`
+9. `TaskAndReport/TASK_TRACKING_LIST.md`
 
 Current active development workspace:
 
@@ -75,6 +76,7 @@ BASE_URL=http://localhost:8081 npx pnpm@10.4.1 --dir uat exec playwright test te
 ```bash
 git status --short --branch
 npx pnpm@10.4.1 install --frozen-lockfile
+npx pnpm@10.4.1 run test:static
 npx pnpm@10.4.1 exec tsc --noEmit
 npx pnpm@10.4.1 run build
 npx pnpm@10.4.1 run tier2:standard:check
@@ -95,6 +97,8 @@ Historical role files are not active. Current role truth is stored in:
 - `docs/codex/roles/lucia.md`
 - `docs/codex/roles/lucode.md`
 - `docs/codex/TASK_BRIEF_TEMPLATE.md`
+
+Retired `.agents/workflows/` prompt files were archived on 2026-05-11 under `archive/phase1-governance-2026-05-11/agents-workflows/`; `.agents/workflows/README.md` now points back to the active role truth.
 
 ## 2026-05-07 TaskAndReport Handoff Update
 

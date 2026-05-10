@@ -6,7 +6,7 @@ Last updated: 2026-05-11
 
 - Active workspace: `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/3.Luceon2026`
 - Branch: `main`
-- Current synchronized baseline: `origin/main` at `9db0054` (`Merge Ollama keep-alive health semantics`)
+- Current synchronized baseline before the 2026-05-11 medium-risk governance pass: `origin/main` at `dd66f31` (`Govern low-risk project docs and hygiene`)
 - Package manager: `npx pnpm@10.4.1`
 - Root lockfile: `pnpm-lock.yaml`
 - Removed lockfile class: root `package-lock.json` and UAT-local `package-lock.json`
@@ -53,6 +53,14 @@ Current runtime dependencies:
 - Production release readiness remains unclaimed.
 
 ## 3. Governance Closure Summary
+
+Medium-risk governance on 2026-05-11:
+
+- Archived retired `.agents/workflows/` role prompts to `archive/phase1-governance-2026-05-11/agents-workflows/` and left an active pointer README under `.agents/workflows/`.
+- Added `docs/codex/TEST_MATRIX.md` and linked it from `docs/codex/TEST_POLICY.md` and `README.md`.
+- Added `docs/deploy/README.md` as the deployment documentation index, clarifying current runtime truth versus historical/proposed notes.
+- Added `.editorconfig` and `test:static` package script for low-friction static hygiene.
+- No business logic, public API, runtime data, production services, DB rows, MinIO objects, model settings, or task states were changed by this governance pass.
 
 Completed on 2026-05-06:
 

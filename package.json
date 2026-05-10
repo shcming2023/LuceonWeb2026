@@ -14,6 +14,7 @@
     "uat:stop": "bash start-uat.sh stop",
     "uat:smoke": "bash uat/smoke-test.sh",
     "local:check": "node scripts/local-env-check.mjs",
+    "test:static": "node --check server/upload-server.mjs && bash -n uat/smoke-test.sh && tsc --noEmit && vite build",
     "uat:docker:config": "docker compose -f docker-compose.yml -f docker-compose.local.yml -f docker-compose.override.yml config --quiet",
     "test": "bash scripts/run-tests.sh",
     "test:smoke": "bash uat/smoke-test.sh",
