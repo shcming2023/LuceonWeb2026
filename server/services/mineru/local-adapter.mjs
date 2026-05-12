@@ -253,6 +253,23 @@ export async function processWithLocalMinerU({ task, material, fileStream, fileN
             ...(statusPayload._synthetic_warn ? { _synthetic_warn: statusPayload._synthetic_warn, _synthetic_warn_msg: statusPayload._synthetic_warn_msg } : {})
           }
         });
+
+        // 日志活性健康判定：若 MinerU API 仍在处理但日志长期无进展，提前判定为卡死
+        if (observation && mineruStatus === 'processing') {
+          const stalenessActivity = observation.activityLevel || '';
+          const observationStale = observation.observationStale || false;
+          const logAgeMs = observation.logFreshness?.logAgeMs ?? Infinity;
+          const isLogStale = observationStale || ['suspected-stale', 'stale-critical', 'no-business-signal'].includes(stalenessActivity);
+          // 日志文件本身超过 5 分钟未更新也是强信号
+          const logFileStale = logAgeMs > 300_000;
+          if (isLogStale && logFileStale) {
+            throw new Error(
+              `MinerU 日志活性异常判定卡死: activityLevel=${stalenessActivity}, ` +
+              `logAgeMs=${logAgeMs}ms, mineruStatus=${mineruStatus}. ` +
+              `MinerU API 仍显示 processing 但日志长期无业务进展，提前终止轮询。`
+            );
+          }
+        }
       });
     } catch (pollErr) {
       if (pollErr instanceof MineruTimeoutError) {
@@ -577,6 +594,22 @@ export async function resumeWithLocalMinerU({ task, material, mineruTaskId, time
         ...(observation ? { mineruObservedProgress: observation } : {})
       }
     });
+
+    // 日志活性健康判定（接管路径同样适用）
+    if (observation && mineruStatus === 'processing') {
+      const stalenessActivity = observation.activityLevel || '';
+      const observationStale = observation.observationStale || false;
+      const logAgeMs = observation.logFreshness?.logAgeMs ?? Infinity;
+      const isLogStale = observationStale || ['suspected-stale', 'stale-critical', 'no-business-signal'].includes(stalenessActivity);
+      const logFileStale = logAgeMs > 300_000;
+      if (isLogStale && logFileStale) {
+        throw new Error(
+          `MinerU 日志活性异常判定卡死(接管): activityLevel=${stalenessActivity}, ` +
+          `logAgeMs=${logAgeMs}ms, mineruStatus=${mineruStatus}. ` +
+          `MinerU API 仍显示 processing 但日志长期无业务进展，提前终止轮询。`
+        );
+      }
+    }
   });
 
   await updateProgress({ progress: 80, message: '解析完成，提取结果...' });

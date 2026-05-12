@@ -142,6 +142,21 @@ export class AiMetadataWorker {
       // 处理 stale running jobs（长时间卡住的 running 状态）
       await this.recoverStaleRunningJobs(jobs);
 
+      // 在 recoverStaleRunningJobs 之后，检查是否有恢复后立即可用的 pending job
+      const postRecoveryJobs = await getAllJobs();
+      const nextPendingJobs = postRecoveryJobs
+        .filter(j => j.state === 'pending')
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+      if (nextPendingJobs.length > 0) {
+        const nextJob = nextPendingJobs[0];
+        if (!processingMap.has(nextJob.id)) {
+          // 如果有新恢复的 pending job（不是当前正在处理的），立即处理
+          console.log(`[ai-worker] Picking recovered job: ${nextJob.id}`);
+          await this.processJob(nextJob);
+        }
+      }
+
       // 按 createdAt 升序排序，选择最早的 pending job
       const pendingJobs = jobs
         .filter(j => j.state === 'pending')
@@ -508,7 +523,7 @@ export class AiMetadataWorker {
         aiSettings = {
           baseUrl: process.env.OLLAMA_API_URL || 'http://host.docker.internal:11434',
           model: REQUIRED_OLLAMA_MODEL,
-          timeoutMs: STRICT_NO_SKELETON ? 300000 : 120000,
+          timeoutMs: STRICT_NO_SKELETON ? 180000 : 120000,
           ollamaTwoPassJsonRepair: true,
           temperature: 0.1
         };

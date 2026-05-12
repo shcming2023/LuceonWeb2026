@@ -56,9 +56,40 @@ export class OllamaProvider extends BaseProvider {
     }
 
     const startTime = Date.now();
+    const heartbeatInterval = setInterval(() => {
+      const elapsed = Math.round((Date.now() - startTime) / 1000);
+
+      // Phase 1 (0-60s): 正常推理心跳
+      if (elapsed <= 60) {
+        console.log(`[ai-worker] Ollama ${this.model} 推理中... (已等待 ${elapsed}s)`);
+        return;
+      }
+
+      // Phase 2 (60-120s): 响应缓慢警告
+      if (elapsed <= 120) {
+        console.warn(`[ai-worker] Ollama ${this.model} 响应缓慢 (已等待 ${elapsed}s)，可能卡住`);
+        return;
+      }
+
+      // Phase 3 (>120s): 主动探测 Ollama 存活状态
+      // 每 30s 探测一次（120s, 150s, 180s...），避免频繁请求
+      if (elapsed % 30 < 10) {
+        fetch(`${this.baseUrl}/api/tags`, { signal: AbortSignal.timeout(5000) })
+          .then(alive => {
+            if (alive.ok) {
+              console.warn(`[ai-worker] Ollama API 可达但推理极慢 (已等待 ${elapsed}s)，建议关注`);
+            } else {
+              console.error(`[ai-worker] Ollama API 返回异常 (已等待 ${elapsed}s, HTTP ${alive.status})`);
+            }
+          })
+          .catch(() => {
+            console.error(`[ai-worker] Ollama API 探测失败 (已等待 ${elapsed}s)，可能已挂死`);
+          });
+      }
+    }, 10000);
     try {
       const dispatcher = new Agent({
-        headersTimeout: this.timeoutMs,
+        headersTimeout: 30000,
         bodyTimeout: this.timeoutMs
       });
 
@@ -76,6 +107,7 @@ export class OllamaProvider extends BaseProvider {
       }
 
       const data = await response.json();
+      clearInterval(heartbeatInterval);
       const rawContent = data.message?.content || '';
       const rawContainsThinkTag = rawContent.includes('<think>');
       const strippedContent = this.filterThinking(rawContent);
@@ -136,6 +168,7 @@ export class OllamaProvider extends BaseProvider {
         model: this.model
       };
     } catch (err) {
+      clearInterval(heartbeatInterval);
       const duration = Date.now() - startTime;
       
       let timeoutKind = 'network-or-fetch-error';
@@ -154,7 +187,7 @@ export class OllamaProvider extends BaseProvider {
         timeoutMs: this.timeoutMs,
         durationMs: duration,
         timeoutKind,
-        headersTimeoutMs: this.timeoutMs,
+        headersTimeoutMs: 30000,
         bodyTimeoutMs: this.timeoutMs,
         ...(err.rawContentDetails || {})
       };
@@ -165,7 +198,7 @@ export class OllamaProvider extends BaseProvider {
       error.details = errorDetail;
       // also put it directly on error for caller flexibility
       error.timeoutKind = timeoutKind;
-      error.headersTimeoutMs = this.timeoutMs;
+      error.headersTimeoutMs = 30000;
       error.bodyTimeoutMs = this.timeoutMs;
       error.cause = err.cause;
       throw error;

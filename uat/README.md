@@ -317,3 +317,189 @@ curl -sS http://127.0.0.1:8081/__proxy/upload/audit/consistency
 2. **完整 Docker UAT**：本地或远端的完整测试沙盒，执行全部流程。
    - 运行：`docker compose up -d` 然后执行冒烟测试。
 3. **手工浏览器验收**：在本地浏览器中通过 8081 端口和 19001 端口进行业务数据手工验收。
+
+---
+
+## 十、压力测试脚本
+
+系统提供了独立的 Shell 压力测试脚本，用于验证批量上传和并发排队的稳定性。脚本风格与 `smoke-test.sh` 一致，不依赖 Playwright/Node.js 运行时。
+
+### 前置依赖
+
+| 工具 | 安装方式 | 说明 |
+|------|---------|------|
+| `curl` | 系统自带 | HTTP 请求 |
+| `jq` | `brew install jq` (macOS) | JSON 解析 |
+| `docker` | Docker Desktop | Worker 自愈验证需要 |
+| `python3` | 系统自带 | 毫秒计时 |
+| 样本 PDF | 手动准备 | 压力测试需要 `testpdf/` 目录 |
+
+### 环境变量说明
+
+| 变量 | 默认值 | 适用脚本 | 说明 |
+|------|--------|---------|------|
+| `BASE_URL` | `http://127.0.0.1:8081` | 全部 | 目标服务地址 |
+| `TEST_PDF_DIR` | `../testpdf` | 24pdf, concurrency, worker-crash | 样本 PDF 目录 |
+| `TEST_MD_DIR` | `../testmd` | concurrency | 样本 Markdown 目录 |
+| `CONCURRENT_BATCH` | `8` | 24pdf | 每批并发提交数 |
+| `BATCH_INTERVAL` | `10` | 24pdf | 批次间隔秒数 |
+| `MAX_WAIT_MINUTES` | `60` (24pdf) / `10` (concurrency) | 全部 | 最大等待分钟数 |
+| `POLL_INTERVAL` | `15` (24pdf) / `10` (concurrency) | 全部 | 状态轮询间隔秒 |
+| `CHECK_KEEPALIVE` | `false` | 24pdf | 启用 Ollama keep-alive 检查 |
+
+---
+
+### stress-test-24pdf.sh — 24-PDF 批量压力测试
+
+**用途**：验证系统在 24 个 PDF 批量提交下的稳定性和吞吐能力。
+
+**执行**：
+
+```bash
+# 基本执行
+bash uat/stress-test-24pdf.sh
+
+# 自定义参数
+BASE_URL=http://192.168.31.33:8081 TEST_PDF_DIR=../testpdf bash uat/stress-test-24pdf.sh
+
+# 启用 Ollama keep-alive 检查
+CHECK_KEEPALIVE=true bash uat/stress-test-24pdf.sh
+```
+
+**验证流程**：
+1. 预检：dependency-health 全绿 + MinerU submit-probe 通过 + 准入电路关闭
+2. 分 3 批提交 24 个 PDF（每批 8 个，间隔 10s）
+3. 轮询终态直到全部完成或超时（最大 60min）
+4. 输出报告：终态分布、耗时分布（P50/P95/Max）、一致性审计
+
+**停止条件**：
+- 全部到达终态 → 正常退出
+- 超时 → FAIL
+- 准入电路打开 → FAIL
+- dependency blocked → FAIL
+- 连续 3 轮无终态推进 → FAIL
+
+**通过标准**：>= 80% 任务到达终态（completed 或 review-pending）
+
+**预期输出示例**：
+
+```
+============================================================
+  Luceon2026 24-PDF 压力测试
+  目标地址：http://127.0.0.1:8081
+  样本目录：../testpdf
+  时间：2026-05-11 15:30:00
+============================================================
+
+【1】预检
+  ✓ dependency-health 全绿
+  ✓ MinerU submit-probe 通过
+  ✓ 准入电路已关闭
+
+【2】批量提交 (24 个 PDF)
+  批次 1/3: 提交 8 个... ✓ (8/8 创建成功)
+  批次 2/3: 提交 8 个... ✓ (8/8 创建成功)
+  批次 3/3: 提交 8 个... ✓ (8/8 创建成功)
+  总计：24/24 任务创建成功
+
+【3】终态等待 (最大 60min)
+  [15s] 24 个活跃: completed=0, review-pending=0, processing=24
+  ...
+  [6min] 0 个活跃: completed=20, review-pending=2, failed=2
+
+【4】结果统计
+  创建任务: 24
+  到达终态: 22 (91.7%)
+  ────────────────────────
+  终态分布:
+    completed:        20
+    review-pending:    2
+    failed:            2
+    canceled:          0
+  处理中:             0
+
+【5】耗时分布
+  P50: 245s  P95: 312s  Max: 340s
+
+【6】一致性审计
+  GET /audit/consistency: ok=true, findings=0
+
+============================================================
+  结果：✓ PASS（到达终态 ≥ 80%）
+============================================================
+```
+
+---
+
+### stress-test-concurrency.sh — 5+ 并发阶段排队验证
+
+**用途**：验证高速并发提交下的阶段排队机制和串行处理保证。
+
+**执行**：
+
+```bash
+bash uat/stress-test-concurrency.sh
+BASE_URL=http://192.168.31.33:8081 bash uat/stress-test-concurrency.sh
+```
+
+**验证点**：
+1. upload/storage 持久化后任务创建间隔 < 5s
+2. MinerU heavy-stage active count ≤ 1（同一时刻仅 1 个任务处理）
+3. AI Worker active count ≤ 1（同一时刻仅 1 个任务运行 AI）
+4. 所有 5+5 个任务在 10 分钟内到达终态
+
+---
+
+## 十一、故障注入脚本
+
+### fault-injection-admission.sh — 准入电路故障注入验证
+
+**用途**：验证 MinerU 准入电路在不同故障场景下的行为（503 返回、Markdown 不受影响、恢复流程）。
+
+**执行**：
+
+```bash
+# 测试 1：完全停止 MinerU
+bash uat/fault-injection-admission.sh --mode mineru-down
+
+# 测试 2：半故障（需手动模拟 /health OK, submit 500）
+bash uat/fault-injection-admission.sh --mode mineru-half-failure
+
+# 测试 3：恢复验证
+bash uat/fault-injection-admission.sh --mode recovery
+```
+
+**模式说明**：
+
+| 模式 | 说明 | 验证点 |
+|------|------|--------|
+| `mineru-down` | 完全停止 MinerU | POST /tasks 返回 503，Markdown 上传不受影响 |
+| `mineru-half-failure` | 半故障（/health OK, submit 500） | submit-probe 失败，电路正确打开 |
+| `recovery` | 恢复验证 | 仅 /health 恢复时电路保持打开，submit-probe 成功 → 冷却期 → 电路关闭 → PDF 恢复 |
+
+**注意**：`mineru-down` 和 `mineru-half-failure` 模式执行过程中会提示用户手动操作 MinerU 服务。
+
+---
+
+### fault-injection-worker-crash.sh — Worker 异常终止自愈验证
+
+**用途**：验证 upload-server 异常终止后 ParseTask Worker 的自愈恢复能力。
+
+**执行**：
+
+```bash
+bash uat/fault-injection-worker-crash.sh
+BASE_URL=http://192.168.31.33:8081 bash uat/fault-injection-worker-crash.sh
+```
+
+**注意**：此脚本涉及 `docker kill` 操作，启动时会提示用户确认。
+
+**验证流程**：
+1. 预检：dependency-health 全绿
+2. 提交一个 PDF，等待进入 running 状态
+3. 强制终止 upload-server 容器 (`docker kill`)
+4. 重启 upload-server (`docker compose up -d upload-server`)
+5. 等待恢复扫描完成
+6. 验证 running 中的任务被重置为 pending
+7. 验证 `parse-stale-running-recovered` 或 `parse-restart-recovered` 事件被记录
+8. 等待任务完成完整流程（到达 review-pending/completed）

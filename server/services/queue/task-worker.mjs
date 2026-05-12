@@ -248,6 +248,19 @@ export class ParseTaskWorker {
                  message: '重启恢复：检测到 MinerU 仍在处理，正在接管',
                  metadata: { ...task.metadata, mineruStatus: 'processing' }
                }, { enqueueOnFailure: true });
+               await logTaskEvent({
+                 taskId: task.id,
+                 taskType: 'parse',
+                 level: 'info',
+                 event: 'parse-restart-mineru-resumed',
+                 message: `重启恢复：检测到 MinerU 仍在处理 (${mineruTaskId})，已接管`,
+                 payload: {
+                   mineruTaskId,
+                   mineruStatus,
+                   previousState: task.state,
+                   newState: 'running',
+                 },
+               });
                this.resumeMineruTask(task, mineruTaskId).catch(err => console.error(`[task-worker] Error resuming task ${task.id}:`, err));
             } else if (isQueued) {
                await this.updateTaskWithRetry(task.id, {
@@ -256,6 +269,19 @@ export class ParseTaskWorker {
                  message: '重启恢复：检测到 MinerU 仍在排队，正在接管',
                  metadata: { ...task.metadata, mineruStatus: 'queued' }
                }, { enqueueOnFailure: true });
+               await logTaskEvent({
+                 taskId: task.id,
+                 taskType: 'parse',
+                 level: 'info',
+                 event: 'parse-restart-mineru-resumed',
+                 message: `重启恢复：检测到 MinerU 仍在排队 (${mineruTaskId})，已接管`,
+                 payload: {
+                   mineruTaskId,
+                   mineruStatus,
+                   previousState: task.state,
+                   newState: 'running',
+                 },
+               });
                this.resumeMineruTask(task, mineruTaskId).catch(err => console.error(`[task-worker] Error resuming task ${task.id}:`, err));
             } else if (isDone) {
                await this.updateTaskWithRetry(task.id, {
@@ -264,6 +290,19 @@ export class ParseTaskWorker {
                  message: '重启恢复：检测到 MinerU 已完成，准备拉取结果',
                  metadata: { ...task.metadata, mineruStatus: 'completed' }
                }, { enqueueOnFailure: true });
+               await logTaskEvent({
+                 taskId: task.id,
+                 taskType: 'parse',
+                 level: 'info',
+                 event: 'parse-restart-mineru-resumed',
+                 message: `重启恢复：检测到 MinerU 已完成 (${mineruTaskId})，准备拉取结果`,
+                 payload: {
+                   mineruTaskId,
+                   mineruStatus,
+                   previousState: task.state,
+                   newState: 'running',
+                 },
+               });
                this.resumeMineruTask(task, mineruTaskId).catch(err => console.error(`[task-worker] Error resuming task ${task.id}:`, err));
             } else if (isFailed) {
                const mineruError = mineruResponseData?.error || mineruResponseData?.message || '无详细错误';
@@ -353,11 +392,22 @@ export class ParseTaskWorker {
           taskId: task.id,
           taskType: 'parse',
           level: 'warn',
-          event: isExplicitlyStale ? 'stale-running-recovered' : 'restart-recovered',
+          event: isExplicitlyStale ? 'parse-stale-running-recovered' : 'parse-restart-recovered',
           message: isExplicitlyStale
-            ? '检测到卡住的解析任务，已自动重置为 pending'
-            : '检测到重启前的运行中任务，已重置为 pending 重新拾取',
-          payload: { previousState: task.state, previousUpdatedAt: task.updatedAt },
+            ? '检测到卡住的解析任务（updatedAt 超过 localTimeout + 60s 缓冲），已自动重置为 pending'
+            : '检测到服务重启前的运行中任务，已重置为 pending 等待重新拾取',
+          payload: {
+            previousState: task.state,
+            previousUpdatedAt: task.updatedAt,
+            recoveryTrigger: isExplicitlyStale ? 'stale-timeout' : 'restart',
+            ...(isExplicitlyStale ? {
+              staleCheck: {
+                updatedAt: task.updatedAt,
+                timeoutMs,
+                gracePeriodMs: STALE_GRACE_MS,
+              },
+            } : {}),
+          },
         });
         processingMap.delete(task.id);
         recovered += 1;
@@ -587,7 +637,7 @@ export class ParseTaskWorker {
         taskId: task.id,
         taskType: 'parse',
         level: 'warn',
-        event: 'stale-running-recovered',
+        event: 'parse-stale-running-recovered',
         message: '日常扫描发现运行超时，已重置为 pending',
         payload: { previousState: task.state, previousUpdatedAt: task.updatedAt, timeoutMs },
       });
