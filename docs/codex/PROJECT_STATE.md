@@ -1,8 +1,13 @@
 # Luceon2026 Project State
 
-Last updated: 2026-05-11
+Last updated: 2026-05-12
 
 ## 1. Current Repository Baseline
+
+- Active workspace: `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/3.Luceon2026`
+- Branch: `main`
+- HEAD: `536acb1` — docs: 更新稳定性 PRD — KG-01/KG-02 已消除
+- Previous HEAD: `e7c68ba` — feat: Phase 1 稳定性增强 v0.2
 
 - Active workspace: `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/3.Luceon2026`
 - Branch: `main`
@@ -425,6 +430,33 @@ Runtime evidence from the final pipeline run:
 - Current Phase 1 status is local real-runtime PASS for the upload -> MinerU -> MinIO -> Ollama metadata -> review path.
 - This record does not promote staging readiness, production release readiness, or full-site acceptance.
 - Future changes must preserve full-text reasoning as the chapter-preprocessing direction if chapter preprocessing is reintroduced or extended; heuristic chapter preprocessing such as `chapterPreprocessV2.ts` must not be restored as a main path.
+
+## 8. Phase 1 稳定性增强 v0.2 (2026-05-11/12)
+
+基于 Phase 1 生产验证证据，完成全链路稳定性改造，由 SOP 软件开发团队执行。
+
+### 8.1 交付成果
+
+| 交付物 | 路径 | 内容 |
+|--------|------|------|
+| 稳定性 PRD v0.1 | `docs/prd/Luceon2026-Stability-PRD-v0.1.md` | 38 条需求, 8 项门槛, 7 类稳定性维度 |
+| 架构设计 v0.2 | `docs/design/Luceon2026-Stability-Architecture-v0.1.md` | 10 个任务分解, 含 v0.2 增补 |
+| ParseTask 事件对齐 | `server/services/queue/task-worker.mjs` | 事件命名对齐 PRD |
+| AI Worker 可观测性 | `server/services/ai/providers/ollama.mjs`, `metadata-worker.mjs` | 心跳+超时分级+跳过+减Timeout |
+| MinerU 日志健康判定 | `server/services/mineru/local-adapter.mjs` | activityLevel + logAgeMs 双重判定 |
+| 测试脚本 | `uat/` (6 files) | 24-PDF压力/5+并发/准入故障注入/Worker故障注入 |
+
+### 8.2 压力测试结果
+
+24-PDF 干净环境测试：24/24 创建，100% review-pending，0 失败。
+对比 Phase 1 原始测试：24/24 全部 failed。
+
+### 8.3 已知缺口状态
+
+- KG-01 (ParseTask 恢复) → 已消除（恢复逻辑预先存在，事件命名对齐完成）
+- KG-02 (24-PDF 压力测试) → 已消除（100% 终态，0 失败）
+- KG-06 (MinerU 观测后补) → 已消除（代码已实现）
+
 
 ## 2026-05-08 Controlled Concurrency Validation Planning
 
