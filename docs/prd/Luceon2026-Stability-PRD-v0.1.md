@@ -541,8 +541,8 @@ Phase 1 生产环境的正确启动顺序：
 
 | 缺口编号 | 缺口描述 | 影响范围 | 可接受理由 | Plan B |
 | :--- | :--- | :--- | :--- | :--- |
-| KG-01 | ParseTask Worker stale-recovery 未实现 | ParseTask Worker 异常终止后，running 中的任务可能永久卡住 | 可通过运维规程规避：重新部署前等待所有 running 任务完成（典型耗时 < 5 分钟/任务）；Phase 2 优先实现 | 操作员手动将卡住任务标记 failed 后 Retry |
-| KG-02 | 24-PDF 压力测试未通过 | 大规模批量提交下的系统行为未经充分验证 | 当前使用场景为单操作员、单任务串行，24-PDF 批量提交非典型使用模式；准入电路已就位防止级联故障 | 限制并发上传数 ≤ 5；Phase 2 执行完整压力测试 |
+| KG-01 | ParseTask Worker stale-recovery 未实现 | ✅ 已消除（2026-05-11） | 恢复逻辑已存在，T-S01 完成事件命名对齐。启动恢复扫描 + 日常 stale 检测 + MinerU API 状态裁决均已实现 | — |
+| KG-02 | 24-PDF 压力测试未通过 | ✅ 已消除（2026-05-12） | 干净 DB 环境下 24/24 任务创建，100% 到达 review-pending，0 失败。对比 Phase 1 原始测试（24/24 全部 failed），稳定性改进显著 | — |
 | KG-03 | Ollama keep-alive 未做生产压力测试 | keep-alive 在极端网络条件下的稳定性未知 | 本地单操作员场景下，Ollama 与 upload-server 运行在同一网络，网络中断概率低 | 监控 keep-alive 连接状态；断开时自动重建 |
 | KG-04 | Ollama 冷启动依赖操作员预热 | 系统无法自动完成 Ollama 模型预热 | 预热是运维规程的一部分（第 8.2 节），操作员手册中已明确；Phase 2 可考虑自动预热 | 操作员按第 8.2 节执行预热 |
 | KG-05 | upload-server 单体架构 | 变更范围难以控制、调试困难 | Phase 1 功能稳定后变更频率低；功能 PRD v0.4 已将拆分列为 P1；Phase 2 优先执行 | 严格遵守 S-F1 变更约束 |
@@ -560,6 +560,8 @@ Phase 1 生产环境的正确启动顺序：
 | MinIO 控制台暴露 | 绑定 127.0.0.1 | 端口扫描确认 |
 | 诊断分类错误 | historicalAiFailureTasks 正确分离 | 诊断端点返回正确 |
 | AI Worker stale-recovery | stale-running 自愈 | 故障注入验证通过 |
+| AI Worker 可观测性盲区 | 心跳日志 + 首字节超时 + 超时分级（60s→120s→ping） + Strict 超时 180s | BUILD_PASS, 24-PDF 测试验证 |
+| MinerU 日志健康判定缺失 | 日志 5 分钟无进展 + activityLevel 异常 → 提前终止轮询 | BUILD_PASS |
 
 ### 9.3 风险接受声明
 
