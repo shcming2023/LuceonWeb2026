@@ -4,6 +4,59 @@
  * 定义所有 AI 元数据提取提供者必须遵循的契约。
  */
 
+export function repairInvalidJsonStringEscapes(candidate) {
+  const text = String(candidate || '');
+  let repaired = '';
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+
+    if (!inString) {
+      repaired += char;
+      if (char === '"') inString = true;
+      continue;
+    }
+
+    if (escaped) {
+      if (char === 'u') {
+        const hex = text.slice(i + 1, i + 5);
+        if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+          repaired += char;
+          escaped = false;
+          continue;
+        }
+        repaired += `\\${char}`;
+        escaped = false;
+        continue;
+      }
+
+      if ('"\\/bfnrt'.includes(char)) {
+        repaired += char;
+        escaped = false;
+        continue;
+      }
+
+      repaired += `\\${char}`;
+      escaped = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      repaired += char;
+      escaped = true;
+      continue;
+    }
+
+    repaired += char;
+    if (char === '"') inString = false;
+  }
+
+  if (escaped) repaired += '\\';
+  return repaired;
+}
+
 export class BaseProvider {
   /**
    * @param {object} config - 配置信息（端点、模型、API Key、超时等）
@@ -57,17 +110,30 @@ export class BaseProvider {
     let cleaned = this.filterThinking(text);
     if (!cleaned) return null;
 
+    const tryParse = (candidate) => {
+      try {
+        return JSON.parse(candidate);
+      } catch {}
+
+      const repaired = repairInvalidJsonStringEscapes(candidate);
+      if (repaired !== candidate) {
+        try {
+          return JSON.parse(repaired);
+        } catch {}
+      }
+
+      return null;
+    };
+
     // 1. 尝试直接解析
-    try {
-      return JSON.parse(cleaned);
-    } catch {}
+    const direct = tryParse(cleaned);
+    if (direct) return direct;
 
     // 2. 尝试提取 ```json ... ``` 或 ``` ... ``` 甚至只是不带标签的 code fence
     const mdJsonMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
     if (mdJsonMatch && mdJsonMatch[1]) {
-      try {
-        return JSON.parse(mdJsonMatch[1].trim());
-      } catch {}
+      const parsed = tryParse(mdJsonMatch[1].trim());
+      if (parsed) return parsed;
     }
 
     // 3. 寻找第一个 { 和最后一个 }
@@ -75,9 +141,8 @@ export class BaseProvider {
     const endIndex = cleaned.lastIndexOf('}');
     if (startIndex !== -1 && endIndex !== -1 && endIndex >= startIndex) {
       const jsonStr = cleaned.slice(startIndex, endIndex + 1);
-      try {
-        return JSON.parse(jsonStr);
-      } catch {}
+      const parsed = tryParse(jsonStr);
+      if (parsed) return parsed;
     }
     
     return null;

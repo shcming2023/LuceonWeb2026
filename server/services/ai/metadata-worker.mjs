@@ -16,6 +16,7 @@ import { getSettings } from '../settings/settings-client.mjs';
 
 import { OllamaProvider } from './providers/ollama.mjs';
 import { OpenAiCompatibleProvider } from './providers/openai-compatible.mjs';
+import { repairInvalidJsonStringEscapes } from './providers/base.mjs';
 import { sampleMarkdown } from './metadata-sampler.mjs';
 import { buildEvidencePack } from './metadata-evidence-pack.mjs';
 import { getDefaultV02Skeleton, validateAndNormalizeV02, generateV02Prompt, generateV02DraftPrompt, generateV02RepairPrompt } from './metadata-standard-v0.2.mjs';
@@ -1480,12 +1481,26 @@ export class AiMetadataWorker {
     }
 
     try {
-      let parsed = JSON.parse(content);
+      let parsed;
+      try {
+        parsed = JSON.parse(content);
+      } catch (err) {
+        const repairedContent = repairInvalidJsonStringEscapes(content);
+        if (repairedContent === content) throw err;
+        parsed = JSON.parse(repairedContent);
+      }
 
       // 3. 递归处理：如果解析出的对象包含 content 且 content 看起来像 JSON (某些 Provider 的嵌套行为)
       if (parsed && typeof parsed.content === 'string' && parsed.content.trim().startsWith('{')) {
         try {
-          const inner = JSON.parse(parsed.content);
+          let inner;
+          try {
+            inner = JSON.parse(parsed.content);
+          } catch (err) {
+            const repairedContent = repairInvalidJsonStringEscapes(parsed.content);
+            if (repairedContent === parsed.content) throw err;
+            inner = JSON.parse(repairedContent);
+          }
           parsed = { ...parsed, ...inner };
         } catch (e) { /* ignore */ }
       }
@@ -1496,7 +1511,13 @@ export class AiMetadataWorker {
       try {
         const lastBrace = content.lastIndexOf('}');
         if (lastBrace !== -1) {
-          return JSON.parse(content.slice(0, lastBrace + 1));
+          const boundedContent = content.slice(0, lastBrace + 1);
+          try {
+            return JSON.parse(boundedContent);
+          } catch (innerErr) {
+            const repairedContent = repairInvalidJsonStringEscapes(boundedContent);
+            if (repairedContent !== boundedContent) return JSON.parse(repairedContent);
+          }
         }
       } catch (innerErr) { /* ignore */ }
       throw err;

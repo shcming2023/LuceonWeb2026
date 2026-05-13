@@ -4,6 +4,7 @@ process.env.DISABLE_AI_SKELETON_FALLBACK = 'true';
 process.env.ALLOW_AI_SKELETON_FALLBACK = 'false';
 
 const { AiMetadataWorker } = await import('../services/ai/metadata-worker.mjs');
+const { BaseProvider } = await import('../services/ai/providers/base.mjs');
 
 const DB_BASE_URL = process.env.DB_BASE_URL || 'http://localhost:8789';
 const ORIGINAL_MARKDOWN_SENTINEL = 'ORIGINAL_MARKDOWN_SENTINEL_DO_NOT_REPEAT_IN_REPAIR';
@@ -219,12 +220,55 @@ async function testRepairTimeoutStrictModeFailsWithoutSkeletonAndUsesBoundedInpu
   }
 }
 
+function testInvalidLatexEscapesAreRepairedWithoutSkeleton() {
+  const provider = new BaseProvider();
+  const rawRepairOutput = `{
+    "primary_facets": {
+      "domain": {"zh": "考试测评与真题"},
+      "subject": {"zh": "数学"},
+      "resource_type": {"zh": "试卷"},
+      "component_role": {"zh": "主体资料"}
+    },
+    "governance": {
+      "confidence": "high",
+      "human_review_required": false,
+      "risk_flags": []
+    },
+    "evidence": [
+      {
+        "type": "content",
+        "quote_or_summary": "在 $\\sqcap A B C D$ 中，$\\angle A D F = 9 0 ^ { \\circ }$",
+        "supports": ["subject", "resource_type"]
+      }
+    ]
+  }`;
+
+  assert.throws(
+    () => JSON.parse(rawRepairOutput),
+    /Bad escaped character|Unexpected token/,
+    'fixture should reproduce Task 95 invalid JSON escape shape'
+  );
+
+  const parsed = provider.parseJsonRobust(rawRepairOutput);
+  assert(parsed, 'robust parser should recover invalid JSON string escapes');
+  assert.equal(parsed.primary_facets.subject.zh, '数学');
+  assert.equal(parsed.evidence[0].quote_or_summary.includes('\\sqcap'), true);
+  assert.equal(parsed.evidence[0].quote_or_summary.includes('\\angle'), true);
+
+  const worker = new AiMetadataWorker({});
+  const workerParsed = worker.extractJson(rawRepairOutput);
+  assert.equal(workerParsed.primary_facets.resource_type.zh, '试卷');
+  assert.equal(workerParsed.governance.confidence, 'high');
+}
+
 async function main() {
   console.log('--- AI Metadata Repair Hardening Smoke Test Start ---');
   await testDeterministicDraftRepairSkipsSecondProviderCall();
   console.log('Case 1 Pass: deterministic draft repair skips second provider call');
   await testRepairTimeoutStrictModeFailsWithoutSkeletonAndUsesBoundedInput();
   console.log('Case 2 Pass: strict repair timeout fails without skeleton and bounded input');
+  testInvalidLatexEscapesAreRepairedWithoutSkeleton();
+  console.log('Case 3 Pass: invalid LaTeX escapes are repaired deterministically without skeleton');
   console.log('--- AI Metadata Repair Hardening Smoke Test Passed ---');
 }
 
