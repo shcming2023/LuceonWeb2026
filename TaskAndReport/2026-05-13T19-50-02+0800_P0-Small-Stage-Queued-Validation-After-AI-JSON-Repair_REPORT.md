@@ -2,12 +2,19 @@
 
 - Role: TestAcceptanceEngineer
 - Report time: 2026-05-13T19:57:44+0800
+- Corrected report time: 2026-05-13T20:14:43+0800
 - Task brief: `TaskAndReport/2026-05-13T19-50-02+0800_P0-Small-Stage-Queued-Validation-After-AI-JSON-Repair_TASK.md`
 - Development workspace: `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/3.Luceon2026`
 - Production workspace: `/Users/concm/prod_workspace/Luceon2026`
 - Production entered: yes
-- Result: blocked after sample 1 stop condition
-- Recommendation: blocked / fail for the small serial validation run; Director decision required.
+- Result: corrected after Director return; all 3 authorized serial samples reached `review-pending`
+- Recommendation: pass for the assigned small serial validation boundary; Director decision required for acceptance and next scope.
+
+## Correction Notice
+
+The original report was written when sample 1 appeared to satisfy the terminal-failed stop condition. Director later performed read-only follow-up and returned the task because sample 1 self-corrected to `review-pending`. I then continued from sample 2 and sample 3 without re-uploading sample 1.
+
+The initial failed observations below are retained as evidence because they remain important runtime behavior. They are superseded by the final per-sample states in the correction sections.
 
 ## Scope
 
@@ -19,7 +26,7 @@ Selected first 3 candidates by lexicographic filename order:
 2. `2025.pdf`
 3. `2025_2026学年春季课程中数G8_提取.pdf`
 
-Only sample 1 was uploaded. Samples 2 and 3 were not uploaded because sample 1 reached terminal failed state.
+Initial run uploaded only sample 1 and stopped when it appeared failed. After Director return, I continued from sample 2 and sample 3. Total authorized uploads performed by this task: 3.
 
 ## Candidate Inventory
 
@@ -117,29 +124,129 @@ UI evidence:
 - Task list page `/cms/tasks`: top row for this file showed `已终止`, `MinerU 已提交/正在处理，但暂无可归因业务日志`, and the same MinerU log-observation error; counters showed `已失败 4`.
 - Screenshots were saved as temporary local evidence under `/tmp/luceon-task100-s1-detail.png` and `/tmp/luceon-task100-s1-list.png`.
 
-## Stop Decision
+## Initial Stop Decision
 
 The run stopped after sample 1 because the task reached terminal `failed` state. This matches the task brief stop condition:
 
 > Stop immediately if any validation task reaches terminal `failed`.
 
-Samples 2 and 3 were not uploaded.
+At the time of the initial report, samples 2 and 3 were not uploaded. After Director returned the task with new read-only evidence showing sample 1 had self-corrected, samples 2 and 3 were uploaded strictly serially.
+
+## Director Return And Sample 1 Final State
+
+Director review:
+
+- `TaskAndReport/2026-05-13T20-04-24+0800_P0-Small-Stage-Queued-Validation-After-AI-JSON-Repair_DIRECTOR_REVIEW.md`
+- Review result: `RETURN_FOR_CORRECTION_RUNTIME_STATE_CHANGED_CONTINUE_FROM_SAMPLE_2`
+
+Final sample 1 state after self-correction:
+
+- Task: `task-1778673389375`
+- Material: `stage100-01-1778673388500`
+- MinerU task: `87b58566-c24e-4b34-8313-61e2b9dc2c09`
+- AI job: `ai-job-1778673618507-5b81`
+- Task final: `state=review-pending`, `stage=review`, `progress=100`, message `AI 识别完成: review-pending (待人工复核)`.
+- Material final: `status=reviewing`, `mineruStatus=completed`, `aiStatus=analyzed`.
+- Parsed artifacts: `114`.
+- AI job final: `state=review-pending`, provider/model `ollama` / `qwen3.5:9b`, `needsReview=true`, confidence `30`, message `AI 识别完成 (146972ms)`.
+- AI sampling: `evidence-pack-v0.3`, original length `71684`, sampled length `13044`.
+- AI repair: first pass `schema_invalid`; deterministic repair `deterministic-draft-normalization`; `aiClassificationRepairSucceeded=true`; `aiClassificationDeterministicRepairSucceeded=true`.
+- Non-skeleton metadata: title `基础班`, subject `会计`, grade `中级`, material type `讲义`.
+- UI final detail page: `当前状态=待复核`, `当前阶段=review`, `已产物=已生成 (Markdown)`, `下一步动作=需人工审核`.
+
+## Sample 2 Evidence
+
+Sample:
+
+- File: `/Users/concm/prod_workspace/Luceon2026/testpdf/2025.pdf`
+- Size: `175841`
+- SHA-256: `642599641f3b15e11b19f383379864081464be1f9c79bdd4f1e9334489c4b1ad`
+
+Upload:
+
+- Endpoint: `POST http://localhost:8081/__proxy/upload/tasks`
+- Material ID: `stage100-02-1778674074109`
+- HTTP status: `200`
+- Task ID: `task-1778674074944`
+- MinerU task ID: `33f075e2-ace4-45a8-a9e8-c160072c64c6`
+- AI job ID: `ai-job-1778674098531-0551`
+
+Observed behavior:
+
+- The first immediate poll saw transient `failed / mineru-failed` with `log-observation-unreadable`.
+- Follow-up read-only observation showed self-correction: MinerU completed, parsed files were stored, AI job was created, and the task reached `review-pending`.
+
+Final state:
+
+- Task: `state=review-pending`, `stage=review`, `progress=100`, message `AI 识别完成: review-pending (待人工复核)`.
+- Material: `status=reviewing`, `mineruStatus=completed`, `aiStatus=analyzed`.
+- Parsed artifacts: `8`.
+- AI job: `state=review-pending`, provider/model `ollama` / `qwen3.5:9b`, `needsReview=true`, confidence `30`, message `AI 识别完成 (76117ms)`.
+- AI sampling: `legacy-sampler-v0.2`, original length `3591`, sampled length `3725`.
+- AI repair: first pass `schema_invalid`; deterministic repair `deterministic-draft-normalization`; repair succeeded.
+- Non-skeleton metadata: title `Reading Explorer`, subject `英语`, grade `八年级`, material type `试卷`.
+- UI final detail page: `当前状态=待复核`, `当前阶段=review`, `已产物=已生成 (Markdown)`, `下一步动作=需人工审核`.
+
+## Sample 3 Evidence
+
+Sample:
+
+- File: `/Users/concm/prod_workspace/Luceon2026/testpdf/2025_2026学年春季课程中数G8_提取.pdf`
+- Size: `530205`
+- SHA-256: `71b95d983cdf73507c7334d3682f117f1dfce454286a6bb9f60d437a070b3cfb`
+
+Upload:
+
+- Endpoint: `POST http://localhost:8081/__proxy/upload/tasks`
+- Material ID: `stage100-03-1778674277141`
+- HTTP status: `200`
+- Task ID: `task-1778674278289`
+- MinerU task ID: `a44cd658-0d2f-4804-a343-c05ab883f424`
+- AI job ID: `ai-job-1778674298802-2a81`
+
+Observed behavior:
+
+- The first poll saw transient `failed / mineru-failed` with `log-observation-unreadable` while MinerU was still processing.
+- The task self-corrected, entered `ai-running`, then reached `review-pending`.
+
+Final state:
+
+- Task: `state=review-pending`, `stage=review`, `progress=100`, message `AI 识别完成: review-pending (待人工复核)`.
+- Material: `status=reviewing`, `mineruStatus=completed`, `aiStatus=analyzed`.
+- Parsed artifacts: `21`.
+- AI job: `state=review-pending`, provider/model `ollama` / `qwen3.5:9b`, `needsReview=true`, confidence `30`, message `AI 识别完成 (99564ms)`.
+- AI sampling: `legacy-sampler-v0.2`, original length `3082`, sampled length `3235`.
+- AI repair: first pass `schema_invalid`; deterministic repair `deterministic-draft-normalization`; repair succeeded.
+- Non-skeleton metadata: title `多边形错题集`, subject `数学`, grade `初中`, material type `试卷`.
+- UI final detail page: `当前状态=待复核`, `当前阶段=review`, `已产物=已生成 (Markdown)`, `下一步动作=需人工审核`.
+
+## Final Runtime State
+
+After all 3 authorized uploads:
+
+- Task list UI showed the 3 Task 100 samples at top as `待复核`, `状态一致`, and `AI 识别完成: review-pending (待人工复核)`.
+- Task list counters: `处理中 0`, `待复核 28`, `已失败 3`.
+- Active-task diagnostics: no active task, current processing task, queued tasks, drift tasks, submit-retryable tasks, or takeover-required tasks.
+- Admission circuit: `open=false`, `state=closed`, counts `parsePending=0`, `parseRunning=0`, `aiPending=0`, `aiRunning=0`, `activeTaskClean=true`.
+- MinerU health: `queued_tasks=0`, `processing_tasks=0`, `completed_tasks=36`, `failed_tasks=0`.
+- Ollama `/api/ps`: `qwen3.5:9b` resident.
+- Temporary UI screenshots were saved under `/tmp/luceon-task100-final-*.png`.
 
 ## Findings
 
-1. The small serial validation did not reproduce Task 98's successful full path on the first lexicographic sample.
-2. The failure occurred before AI: no AI job was created and no AI JSON repair/finalization evidence exists for sample 1.
-3. The dominant failure evidence is MinerU progress/log observability and failed-state adjudication: Luceon repeatedly marked the task failed because log observation was unreadable while direct MinerU still reported the internal task as `processing`.
-4. There is a state visibility gap after the stop: direct MinerU reports `processing_tasks=1`, but Luceon active-task diagnostics report no active/current/queued/drift/takeover task and admission remains closed with counts zero.
-5. No evidence was found that strict AI fallback weakened or skeleton metadata was produced; the pipeline never reached AI.
+1. All 3 authorized serial uploads ultimately reached `review-pending`.
+2. All 3 produced non-skeleton metadata through Ollama `qwen3.5:9b`.
+3. All 3 had first-pass `schema_invalid` evidence and deterministic repair `deterministic-draft-normalization` success.
+4. All 3 exposed the same residual MinerU observability/adjudication issue: transient failed states caused by `log-observation-unreadable` while MinerU was still processing, followed by self-correction.
+5. The final runtime ended clean: no active parse/AI work, admission circuit closed, and MinerU/Ollama healthy.
 
 ## Not Executed
 
-- Samples 2 and 3 were not uploaded because sample 1 reached terminal failed state.
+- No additional samples beyond the authorized 3 were uploaded.
 - No pressure, batch-concurrent, soak, broad stress, long-run test, repair, reparse, re-AI, cleanup, restart, rebuild, model operation, data deletion, DB/MinIO/Docker volume mutation, sample mutation, GitHub push, L3 validation, production-readiness, release-readiness, or go-live claim was performed.
 
 ## Recommendation
 
-Blocked / fail recommendation for Task 100's small serial validation boundary.
+Pass recommendation for Task 100's assigned small serial validation boundary, with residual P1 risk.
 
-Director should review whether the next action is a DevelopmentEngineer or Architect task around MinerU log-observation failure adjudication and active-task diagnostics drift. The current evidence should not be used as production readiness, release readiness, L3, pressure PASS, batch PASS, or go-live evidence.
+This should not be used as production readiness, release readiness, L3, pressure PASS, batch PASS, or go-live evidence. Director should still consider a follow-up DevelopmentEngineer or Architect task for MinerU log-observation failed-state adjudication, because the operator-visible transient failed/self-corrected history is confusing even though the final states were safe.
