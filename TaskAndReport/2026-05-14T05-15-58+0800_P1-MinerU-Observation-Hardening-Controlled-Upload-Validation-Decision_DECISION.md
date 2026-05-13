@@ -80,3 +80,21 @@ The project would mix a narrow MinerU observability verification with broader th
 Choose Option A.
 
 If this decision item remains unanswered for two consecutive Director heartbeat/check-task cycles, Director may follow the standing no-long-term-blocker rule and issue a conservative, scoped TestAcceptanceEngineer task for Option A only if production preflight surfaces are still clean. The resulting task must preserve all forbidden-operation boundaries above and must not declare readiness.
+
+## User Decision
+
+- Decision time: 2026-05-14T05:21:59+0800
+- User response: "同意 Option A，不进入压力测试。"
+- Recorded decision: `USER_APPROVED_OPTION_A`
+
+Director issued Task 104 to TestAcceptanceEngineer for exactly one controlled upload validation from `/Users/concm/prod_workspace/Luceon2026/testpdf`.
+
+Explicitly not authorized:
+
+- pressure, batch-concurrent, soak, broad stress, or long-run tests;
+- second upload;
+- failed-task repair, reparse, re-AI, cleanup, delete, rename, or historical mutation;
+- destructive DB/MinIO/Docker volume/data operations;
+- model pull/delete/replace, secret/config/env mutation, broad restart/rebuild/rollback;
+- sample-file mutation;
+- L3, pressure PASS, production readiness, release readiness, go-live readiness, or production上线 declaration.
