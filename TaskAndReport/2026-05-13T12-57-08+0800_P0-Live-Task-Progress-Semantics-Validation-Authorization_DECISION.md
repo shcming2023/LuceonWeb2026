@@ -50,15 +50,25 @@ This adds one planning step and may be useful if the user wants sample choice an
 
 ## User Decision
 
-Pending.
+Approved Option A.
+
+The user said: "同意Option A：只做一次小样本上传，专门观察任务页进度语义和终态，不碰压力测试和上线声明。"
 
 ## Director Interpretation
 
-Pending user response.
+The user authorizes exactly one controlled small/medium sample upload for live task-page MinerU progress semantics and terminal/ongoing-state observation.
+
+This authorization is narrow. It does not authorize pressure testing, 24-PDF retry, multiple uploads, failed-task repair, cleanup, destructive mutation, model operations, L3, pressure PASS, or production release-readiness declaration.
 
 ## Authorized Next Action
 
-None until user decides.
+Director issued:
+
+- `TASK-20260513-131855-P0-Controlled-Live-Task-Progress-Semantics-Validation`
+
+Assigned role:
+
+- `TestAcceptanceEngineer`
 
 ## Explicitly Not Authorized
 
@@ -66,8 +76,8 @@ Production release readiness, L3 acceptance, pressure PASS, 24-PDF pressure retr
 
 ## Next Actor
 
-`User`
+`TestAcceptanceEngineer`
 
 ## Required Output
 
-User chooses Option A, B, C, or provides a different instruction.
+TestAcceptanceEngineer performs the scoped one-upload validation and writes a report for Director review.
