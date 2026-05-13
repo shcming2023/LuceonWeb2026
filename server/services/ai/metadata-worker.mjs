@@ -9,7 +9,7 @@
  * 5. 处理 Fallback 与降级 logic
  */
 
-import { getAllJobs, updateJob } from './metadata-job-client.mjs';
+import { getAllJobs, getJobById, updateJob } from './metadata-job-client.mjs';
 import { getTaskById, getMaterialById } from '../tasks/task-client.mjs';
 import { logTaskEvent } from '../logging/task-events.mjs';
 import { getSettings } from '../settings/settings-client.mjs';
@@ -154,6 +154,7 @@ export class AiMetadataWorker {
           // 如果有新恢复的 pending job（不是当前正在处理的），立即处理
           console.log(`[ai-worker] Picking recovered job: ${nextJob.id}`);
           await this.processJob(nextJob);
+          return;
         }
       }
 
@@ -475,6 +476,13 @@ export class AiMetadataWorker {
    * 核心处理逻辑
    */
   async processJob(job) {
+    const latestJob = await getJobById(job.id);
+    const latestState = latestJob?.state ?? job.state;
+    if (latestState && latestState !== 'pending') {
+      console.log(`[ai-worker] Skipping job ${job.id}: latest state is ${latestState}`);
+      return;
+    }
+
     processingMap.add(job.id);
     const startTime = Date.now();
     console.log(`[ai-worker] Picking up job: ${job.id} (parseTask=${job.parseTaskId})`);
