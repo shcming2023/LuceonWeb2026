@@ -53,6 +53,43 @@ export class MineruSubmitUnreachableError extends Error {
   }
 }
 
+const MINERU_IN_FLIGHT_STATUSES = new Set(['queued', 'pending', 'processing', 'running']);
+
+const NON_TERMINAL_LOG_OBSERVATION_ACTIVITIES = new Set([
+  'suspected-stale',
+  'stale-critical',
+  'no-business-signal',
+  'log-observation-no-business-signal',
+  'log-observation-unreadable',
+  'log-observation-unavailable',
+  'log-observation-missing',
+  'log-observation-stale',
+  'api-alive-only'
+]);
+
+export function buildNonTerminalMineruLogObservationWarning(observation, mineruStatus) {
+  const status = String(mineruStatus || '').toLowerCase();
+  if (!observation || !MINERU_IN_FLIGHT_STATUSES.has(status)) return null;
+
+  const activityLevel = String(observation.activityLevel || '');
+  const observationStale = observation.observationStale === true;
+  const logAgeMs = observation.logFreshness?.logAgeMs ?? Infinity;
+  const activityIsDiagnostic = observationStale || NON_TERMINAL_LOG_OBSERVATION_ACTIVITIES.has(activityLevel);
+  const logFileStale = !Number.isFinite(logAgeMs) || logAgeMs > 300_000;
+
+  if (!activityIsDiagnostic || !logFileStale) return null;
+
+  return {
+    kind: 'mineru-log-observation-diagnostic-only',
+    severity: 'warning',
+    activityLevel,
+    observationStale,
+    logAgeMs: Number.isFinite(logAgeMs) ? logAgeMs : null,
+    mineruStatus: status,
+    message: 'MinerU API 仍在处理；日志观测不可读或滞后，仅作为诊断告警，不判定解析失败。'
+  };
+}
+
 async function buildCompletionObservation({ task, mineruTaskId, executionProfile, completedAt }) {
   const {
     parseLatestMineruProgress,
@@ -281,6 +318,7 @@ export async function processWithLocalMinerU({ task, material, fileStream, fileN
             msg = observation.progressSemantics.message;
           }
         }
+        const logObservationWarning = buildNonTerminalMineruLogObservationWarning(observation, mineruStatus);
 
         await updateProgress({
           stage,
@@ -296,26 +334,10 @@ export async function processWithLocalMinerU({ task, material, fileStream, fileN
             mineruLastStatusAt: new Date().toISOString(),
             mineruExecutionProfile: executionProfile,
             ...(observation ? { mineruObservedProgress: observation } : {}),
+            ...(logObservationWarning ? { mineruLogObservationWarning: logObservationWarning } : {}),
             ...(statusPayload._synthetic_warn ? { _synthetic_warn: statusPayload._synthetic_warn, _synthetic_warn_msg: statusPayload._synthetic_warn_msg } : {})
           }
         });
-
-        // 日志活性健康判定：若 MinerU API 仍在处理但日志长期无进展，提前判定为卡死
-        if (observation && mineruStatus === 'processing') {
-          const stalenessActivity = observation.activityLevel || '';
-          const observationStale = observation.observationStale || false;
-          const logAgeMs = observation.logFreshness?.logAgeMs ?? Infinity;
-          const isLogStale = observationStale || ['suspected-stale', 'stale-critical', 'no-business-signal'].includes(stalenessActivity);
-          // 日志文件本身超过 5 分钟未更新也是强信号
-          const logFileStale = logAgeMs > 300_000;
-          if (isLogStale && logFileStale) {
-            throw new Error(
-              `MinerU 日志活性异常判定卡死: activityLevel=${stalenessActivity}, ` +
-              `logAgeMs=${logAgeMs}ms, mineruStatus=${mineruStatus}. ` +
-              `MinerU API 仍显示 processing 但日志长期无业务进展，提前终止轮询。`
-            );
-          }
-        }
       });
     } catch (pollErr) {
       if (pollErr instanceof MineruTimeoutError) {
@@ -625,6 +647,7 @@ export async function resumeWithLocalMinerU({ task, material, mineruTaskId, time
         msg = observation.progressSemantics.message;
       }
     }
+    const logObservationWarning = buildNonTerminalMineruLogObservationWarning(observation, mineruStatus);
 
     await updateProgress({
       stage,
@@ -638,25 +661,10 @@ export async function resumeWithLocalMinerU({ task, material, mineruTaskId, time
         mineruQueuedAhead: queuedAhead,
         mineruStartedAt: startedAt,
         mineruLastStatusAt: new Date().toISOString(),
-        ...(observation ? { mineruObservedProgress: observation } : {})
+        ...(observation ? { mineruObservedProgress: observation } : {}),
+        ...(logObservationWarning ? { mineruLogObservationWarning: logObservationWarning } : {})
       }
     });
-
-    // 日志活性健康判定（接管路径同样适用）
-    if (observation && mineruStatus === 'processing') {
-      const stalenessActivity = observation.activityLevel || '';
-      const observationStale = observation.observationStale || false;
-      const logAgeMs = observation.logFreshness?.logAgeMs ?? Infinity;
-      const isLogStale = observationStale || ['suspected-stale', 'stale-critical', 'no-business-signal'].includes(stalenessActivity);
-      const logFileStale = logAgeMs > 300_000;
-      if (isLogStale && logFileStale) {
-        throw new Error(
-          `MinerU 日志活性异常判定卡死(接管): activityLevel=${stalenessActivity}, ` +
-          `logAgeMs=${logAgeMs}ms, mineruStatus=${mineruStatus}. ` +
-          `MinerU API 仍显示 processing 但日志长期无业务进展，提前终止轮询。`
-        );
-      }
-    }
   });
 
   await updateCompletionObservation({
