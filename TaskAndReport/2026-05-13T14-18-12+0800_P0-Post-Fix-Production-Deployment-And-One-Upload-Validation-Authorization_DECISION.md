@@ -13,7 +13,7 @@ Decision file:
 `TaskAndReport/2026-05-13T14-18-12+0800_P0-Post-Fix-Production-Deployment-And-One-Upload-Validation-Authorization_DECISION.md`
 
 Decision status:
-`PENDING_USER_DECISION`
+`USER_APPROVED_OPTION_A`
 
 ## Decision Boundary
 
@@ -75,17 +75,40 @@ Risk: avoids immediate production movement, but leaves the project blocked at ex
 
 ## User Decision
 
-Pending.
+At `2026-05-13T14:22:31+0800`, the user approved:
+
+`Option A`
+
+User message:
+
+`同意 Option A`
 
 ## Director Interpretation
 
-Until the user decides, Director must not authorize the next production deployment or new upload.
+Director interprets the user's approval as authorization for the two-step Option A track:
+
+1. first, a scoped DevelopmentEngineer production deployment and non-destructive runtime validation task;
+2. only after that task reports back and Director reviews it, a separate TestAcceptanceEngineer task for exactly one controlled upload validation.
+
+This does not authorize immediate upload before the deployment report is reviewed.
 
 If the same user decision remains unanswered for two consecutive heartbeat wakeups, Director may auto-progress only the conservative recommended path under the existing heartbeat rule, provided the row records the wait evidence and the resulting task remains scoped, non-destructive, reversible, and explicitly excludes release-readiness/L3/pressure claims.
 
+## Heartbeat Wait Evidence
+
+- `2026-05-13T14:21:17+0800`: first heartbeat check after Task 88 was recorded. No user decision was present. Director recommendation remains Option A. No auto-progress was triggered because this is wait count 1 of 2.
+
 ## Authorized Next Action
 
-Pending user decision.
+Director issued:
+
+- `TASK-20260513-142231-P0-Post-Fix-Production-Deployment-And-Non-Destructive-Runtime-Validation`
+
+Assigned to:
+
+- `DevelopmentEngineer`
+
+The follow-up one-upload validation is not yet dispatched. It remains conditional on successful deployment/runtime validation and Director review.
 
 ## Explicitly Not Authorized
 
@@ -103,8 +126,8 @@ Pending user decision.
 
 ## Next Actor
 
-`User`
+`DevelopmentEngineer`
 
 ## Required Output
 
-User decision on Option A, B, or C. Director should record the decision before issuing any follow-up task.
+DevelopmentEngineer deployment/runtime validation report.
