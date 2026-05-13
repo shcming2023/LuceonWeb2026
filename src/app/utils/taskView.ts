@@ -55,6 +55,45 @@ function formatMineruProgressSemantics(obs: any): string | null {
   return null;
 }
 
+function hasParsedArtifactEvidence(task: ParseTask): boolean {
+  const metadata = task.metadata || {};
+  return Number(metadata.parsedFilesCount || 0) > 0 ||
+    Boolean(metadata.markdownObjectName) ||
+    Boolean(metadata.parsedPrefix) ||
+    Boolean(metadata.resultZipObjectName) ||
+    Boolean(metadata.parsedObjectName);
+}
+
+function isInFlightOnlyMineruObservation(obs: any): boolean {
+  if (!obs) return true;
+  const level = obs.activityLevel || obs.progressSemantics?.activityLevel || '';
+  return level === 'log-observation-missing' ||
+    level === 'log-observation-unavailable' ||
+    level === 'log-observation-unreadable' ||
+    level === 'log-observation-no-business-signal' ||
+    level === 'log-observation-stale' ||
+    level === 'api-alive-only' ||
+    Boolean(obs.observationStale);
+}
+
+function deriveTerminalMineruCompletionLine(task: ParseTask): string | null {
+  const metadata = task.metadata || {};
+  if (metadata.mineruStatus !== 'completed') return null;
+  if (!hasParsedArtifactEvidence(task)) return null;
+
+  const obs = metadata.mineruObservedProgress;
+  if (obs?.activityLevel === 'fast-complete-no-business-signal' ||
+      obs?.progressSemantics?.activityLevel === 'fast-complete-no-business-signal') {
+    return formatMineruProgressSemantics(obs) || 'MinerU 已完成，但本次未捕获可归因业务进度日志';
+  }
+
+  if (isInFlightOnlyMineruObservation(obs)) {
+    return 'MinerU 已完成，但本次未捕获可归因业务进度日志';
+  }
+
+  return null;
+}
+
 export function deriveTaskDisplayStatus(task: ParseTask | null | undefined): string {
   if (!task) return '待处理';
   if (task.state === 'failed') {
@@ -77,7 +116,10 @@ export function deriveTaskDisplayStatus(task: ParseTask | null | undefined): str
 }
 
 export function deriveMineruProgressLine(task: ParseTask | null | undefined): string | null {
-  if (!task || task.state === 'completed' || task.state === 'review-pending') return null;
+  if (!task) return null;
+  const terminalCompletionLine = deriveTerminalMineruCompletionLine(task);
+  if (terminalCompletionLine) return terminalCompletionLine;
+  if (task.state === 'completed' || task.state === 'review-pending') return null;
   return formatMineruProgressSemantics(task.metadata?.mineruObservedProgress);
 }
 
