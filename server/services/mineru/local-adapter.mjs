@@ -53,6 +53,52 @@ export class MineruSubmitUnreachableError extends Error {
   }
 }
 
+async function buildCompletionObservation({ task, mineruTaskId, executionProfile, completedAt }) {
+  const {
+    parseLatestMineruProgress,
+    createFastCompleteMineruObservation
+  } = await import('../../lib/ops-mineru-log-parser.mjs');
+
+  const startedAt = task.metadata?.mineruStartedAt || task.createdAt || completedAt || new Date().toISOString();
+  const previousObservation = task.metadata?.mineruObservedProgress || null;
+  const observation = await parseLatestMineruProgress(startedAt, previousObservation, executionProfile).catch(() => null);
+  if (observation?.signals?.hasBusinessSignal) {
+    return {
+      ...observation,
+      completionObservation: true,
+      completionObservationReason: 'business progress signal captured before MinerU completion'
+    };
+  }
+
+  return createFastCompleteMineruObservation({
+    mineruTaskId,
+    taskId: task.id,
+    taskState: task.state,
+    taskStage: task.stage,
+    startedAt,
+    completedAt,
+    previousObservation: observation || previousObservation,
+    executionProfile,
+    reason: 'MinerU completed before Luceon captured an attributable business progress signal'
+  });
+}
+
+async function updateCompletionObservation({ task, mineruTaskId, executionProfile, updateProgress }) {
+  const completedAt = new Date().toISOString();
+  const observation = await buildCompletionObservation({ task, mineruTaskId, executionProfile, completedAt });
+  await updateProgress({
+    metadata: {
+      ...(task.metadata || {}),
+      mineruTaskId,
+      mineruStatus: 'completed',
+      mineruLastStatusAt: completedAt,
+      mineruExecutionProfile: executionProfile || task.metadata?.mineruExecutionProfile,
+      mineruObservedProgress: observation
+    }
+  });
+  return observation;
+}
+
 
 export async function processWithLocalMinerU({ task, material, fileStream, fileName, mimeType, timeoutMs, minioContext, updateProgress }) {
   const options = task.optionsSnapshot || {};
@@ -222,7 +268,7 @@ export async function processWithLocalMinerU({ task, material, fileStream, fileN
         let observation = null;
         if (mineruStatus === 'processing') {
           try {
-            const { parseLatestMineruProgress } = await import('../lib/ops-mineru-log-parser.mjs');
+            const { parseLatestMineruProgress } = await import('../../lib/ops-mineru-log-parser.mjs');
             observation = await parseLatestMineruProgress(
                startedAt || task.metadata?.mineruStartedAt || new Date().toISOString(),
                task.metadata?.mineruObservedProgress,
@@ -303,6 +349,7 @@ export async function processWithLocalMinerU({ task, material, fileStream, fileN
       }
     }
 
+    await updateCompletionObservation({ task, mineruTaskId, executionProfile, updateProgress });
     await updateProgress({ progress: 80, message: '解析完成，提取结果...' });
     const resultRaw = await fetchMinerUResultRaw(localEndpoint, mineruTaskId, timeoutMs);
     let resultPayload = resultRaw.kind === 'json' ? resultRaw.payload : null;
@@ -565,7 +612,7 @@ export async function resumeWithLocalMinerU({ task, material, mineruTaskId, time
     let observation = null;
     if (mineruStatus === 'processing') {
       try {
-        const { parseLatestMineruProgress } = await import('../lib/ops-mineru-log-parser.mjs');
+        const { parseLatestMineruProgress } = await import('../../lib/ops-mineru-log-parser.mjs');
         observation = await parseLatestMineruProgress(
            startedAt || task.metadata?.mineruStartedAt || new Date().toISOString(),
            task.metadata?.mineruObservedProgress,
@@ -612,6 +659,12 @@ export async function resumeWithLocalMinerU({ task, material, mineruTaskId, time
     }
   });
 
+  await updateCompletionObservation({
+    task,
+    mineruTaskId,
+    executionProfile: task.metadata?.mineruExecutionProfile || {},
+    updateProgress
+  });
   await updateProgress({ progress: 80, message: '解析完成，提取结果...' });
   const resultRaw = await fetchMinerUResultRaw(localEndpoint, mineruTaskId, timeoutMs);
   let resultPayload = resultRaw.kind === 'json' ? resultRaw.payload : null;

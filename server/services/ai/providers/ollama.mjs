@@ -87,17 +87,18 @@ export class OllamaProvider extends BaseProvider {
           });
       }
     }, 10000);
+    const requestTimeoutMs = this.timeoutMs;
     try {
       const dispatcher = new Agent({
-        headersTimeout: 30000,
-        bodyTimeout: this.timeoutMs
+        headersTimeout: requestTimeoutMs,
+        bodyTimeout: requestTimeoutMs
       });
 
       const response = await fetch(`${this.baseUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(this.timeoutMs),
+        signal: AbortSignal.timeout(requestTimeoutMs),
         dispatcher
       });
 
@@ -184,22 +185,22 @@ export class OllamaProvider extends BaseProvider {
         cause: err.cause ? { code: err.cause.code, message: err.cause.message } : null,
         baseUrl: this.baseUrl,
         model: this.model,
-        timeoutMs: this.timeoutMs,
+        timeoutMs: requestTimeoutMs,
         durationMs: duration,
         timeoutKind,
-        headersTimeoutMs: 30000,
-        bodyTimeoutMs: this.timeoutMs,
+        headersTimeoutMs: requestTimeoutMs,
+        bodyTimeoutMs: requestTimeoutMs,
         ...(err.rawContentDetails || {})
       };
       
-      const detailedMessage = `Ollama Provider Error: [${err.name}] ${err.message} (BaseURL: ${this.baseUrl}, Model: ${this.model}, Duration: ${duration}ms, Timeout: ${this.timeoutMs}ms)`;
+      const detailedMessage = `Ollama Provider Error: [${err.name}] ${err.message} (BaseURL: ${this.baseUrl}, Model: ${this.model}, Duration: ${duration}ms, Timeout: ${requestTimeoutMs}ms)`;
       
       const error = new Error(detailedMessage);
       error.details = errorDetail;
       // also put it directly on error for caller flexibility
       error.timeoutKind = timeoutKind;
-      error.headersTimeoutMs = 30000;
-      error.bodyTimeoutMs = this.timeoutMs;
+      error.headersTimeoutMs = requestTimeoutMs;
+      error.bodyTimeoutMs = requestTimeoutMs;
       error.cause = err.cause;
       throw error;
     }

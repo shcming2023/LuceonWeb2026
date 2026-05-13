@@ -827,8 +827,9 @@ async function runTests() {
   } catch (err) {
     assert.ok(fetchOptions.dispatcher);
     assert.equal(err.timeoutKind, 'headers-timeout');
-    // Current stability contract: first-byte/header timeout is fixed, body timeout follows provider timeoutMs.
-    assert.equal(err.headersTimeoutMs, 30000);
+    // Real metadata inference contract: first-byte/header timeout follows the provider deadline,
+    // so non-streaming /api/chat is not effectively capped at 30s before generation completes.
+    assert.equal(err.headersTimeoutMs, 12345);
     assert.equal(err.bodyTimeoutMs, 12345);
     assert.equal(err.cause.code, 'UND_ERR_HEADERS_TIMEOUT');
   }
@@ -857,7 +858,7 @@ async function runTests() {
   await worker6.processJob({ id: 'test-job-t6', parseTaskId: 't6', inputMarkdownObjectName: 'x.md' });
 
   assert.equal(finalResult6.aiClassificationRepairProviderDetails.timeoutKind, 'headers-timeout');
-  assert.equal(finalResult6.aiClassificationRepairProviderDetails.headersTimeoutMs, 30000);
+  assert.equal(finalResult6.aiClassificationRepairProviderDetails.headersTimeoutMs, 54321);
   assert.equal(finalResult6.aiClassificationRepairProviderDetails.bodyTimeoutMs, 54321);
   assert.equal(finalResult6.aiClassificationProvider, 'skeleton');
   assert.equal(finalResult6.aiClassificationModel, 'skeleton');

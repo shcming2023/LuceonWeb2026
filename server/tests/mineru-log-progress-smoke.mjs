@@ -27,7 +27,7 @@
  * 20. 连续 10 次相同 progress-update：task update + SSE 可执行，事件日志只写 1 条
  */
 
-import { parseTqdmLine, classifyLogLine, determineActivityLevel, parseLatestMineruProgress, MINERU_LOG_STALE_MS } from '../lib/ops-mineru-log-parser.mjs';
+import { parseTqdmLine, classifyLogLine, determineActivityLevel, parseLatestMineruProgress, createFastCompleteMineruObservation, MINERU_LOG_STALE_MS } from '../lib/ops-mineru-log-parser.mjs';
 import { ParseTaskWorker } from '../services/queue/task-worker.mjs';
 import fs from 'fs';
 import path from 'path';
@@ -979,6 +979,50 @@ async function run() {
     assert(!JSON.stringify(result.progressSemantics).includes('/Users/concm/ops/logs'), 'Operator semantics must not expose host log paths');
 
     console.log('Test 30 Pass ✅\n');
+  }
+
+  // ─── Test 31: Fast completed task gets truthful no-business-signal diagnostic ───
+  console.log('Test 31: Fast completed task gets truthful no-business-signal diagnostic');
+  {
+    const previousObservation = {
+      activityLevel: 'log-observation-missing',
+      signalSummary: { apiNoiseCount: 3 },
+      logSource: {
+        logSourcePath: '/Users/concm/ops/logs/mineru-api.log',
+        logSourceContext: 'host-mineru-log',
+        logSourceSelectedReason: 'file-not-found'
+      }
+    };
+    const result = createFastCompleteMineruObservation({
+      mineruTaskId: 'mineru-fast-1',
+      taskId: 'task-fast-1',
+      taskState: 'running',
+      taskStage: 'result-store',
+      startedAt: '2026-05-13T05:47:08.000Z',
+      completedAt: '2026-05-13T05:47:28.000Z',
+      previousObservation,
+      executionProfile: { backendEffective: 'pipeline' }
+    });
+
+    assert(result.activityLevel === 'fast-complete-no-business-signal', 'Should classify fast completion diagnostic explicitly');
+    assert(result.signals?.hasBusinessSignal === false, 'Diagnostic must not claim business progress');
+    assert(result.progressSemantics?.message?.includes('MinerU 已完成'), 'Operator message should say MinerU completed');
+    assert(!result.progressSemantics?.message?.includes('页 '), 'Diagnostic must not fabricate page progress');
+    assert(!result.progressSemantics?.message?.includes('批次 '), 'Diagnostic must not fabricate batch progress');
+    assert(!JSON.stringify(result.progressSemantics).includes('/Users/concm/ops/logs'), 'UI-safe semantics must not expose host log paths');
+    console.log('Test 31 Pass ✅\n');
+  }
+
+  // ─── Test 32: MinerU adapters import the shared log parser from the real server/lib path ───
+  console.log('Test 32: MinerU adapters import real server/lib log parser path');
+  {
+    const localAdapter = fs.readFileSync(path.join(process.cwd(), 'server', 'services', 'mineru', 'local-adapter.mjs'), 'utf-8');
+    const v4Adapter = fs.readFileSync(path.join(process.cwd(), 'server', 'services', 'mineru', 'v4-online-adapter.mjs'), 'utf-8');
+    assert(localAdapter.includes("../../lib/ops-mineru-log-parser.mjs"), 'local adapter should import parser from ../../lib');
+    assert(v4Adapter.includes("../../lib/ops-mineru-log-parser.mjs"), 'v4 adapter should import parser from ../../lib');
+    assert(!localAdapter.includes("import('../lib/ops-mineru-log-parser.mjs") && !localAdapter.includes('import("../lib/ops-mineru-log-parser.mjs'), 'local adapter must not point at missing services/lib path');
+    assert(!v4Adapter.includes("import('../lib/ops-mineru-log-parser.mjs") && !v4Adapter.includes('import("../lib/ops-mineru-log-parser.mjs'), 'v4 adapter must not point at missing services/lib path');
+    console.log('Test 32 Pass ✅\n');
   }
 
 

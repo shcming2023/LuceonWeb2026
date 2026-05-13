@@ -137,6 +137,7 @@ function phaseLabelZh(phase) {
 }
 
 function freshnessFromActivity(activityLevel, observationStale) {
+  if (activityLevel === 'fast-complete-no-business-signal') return 'completed-diagnostic';
   if (activityLevel === 'log-observation-missing') return 'missing';
   if (activityLevel === 'log-observation-unreadable' || activityLevel === 'log-observation-unavailable') return 'missing';
   if (activityLevel === 'log-observation-stale' || observationStale) return 'stale';
@@ -148,6 +149,10 @@ function freshnessFromActivity(activityLevel, observationStale) {
 }
 
 function buildOperatorMessage(semantics) {
+  if (semantics.activityLevel === 'fast-complete-no-business-signal') {
+    return 'MinerU 已完成，但本次未捕获可归因业务进度日志';
+  }
+
   const parts = [];
   if (semantics.backend) parts.push(`backend=${semantics.backend}`);
   if (semantics.phaseLabel || semantics.phase) parts.push(`相位 ${semantics.phaseLabel || semantics.phase}`);
@@ -206,6 +211,59 @@ function attachProgressSemantics(result) {
   semantics.message = buildOperatorMessage(semantics);
   result.progressSemantics = semantics;
   return result;
+}
+
+export function createFastCompleteMineruObservation({
+  mineruTaskId = null,
+  taskId = null,
+  taskState = null,
+  taskStage = null,
+  startedAt = null,
+  completedAt = null,
+  previousObservation = null,
+  executionProfile = null,
+  reason = 'completed before attributed business progress signal was captured'
+} = {}) {
+  const previousLogSource = previousObservation?.logSource || null;
+  return attachProgressSemantics({
+    source: 'mineru-fast-complete-diagnostic',
+    observer: 'luceon-mineru-completion-observer',
+    activityLevel: 'fast-complete-no-business-signal',
+    observationStale: false,
+    observationStaleReason: reason,
+    observedAt: new Date().toISOString(),
+    contextTime: completedAt || new Date().toISOString(),
+    mineruTaskId,
+    taskId,
+    terminalTaskState: taskState,
+    terminalTaskStage: taskStage,
+    startedAt,
+    completedAt,
+    backendProfile: executionProfile?.backendEffective || executionProfile?.backendRequested || executionProfile?.backend || previousObservation?.backendProfile || 'pipeline',
+    signals: {
+      hasBusinessSignal: false,
+      hasApiNoiseOnly: false,
+      hasErrorSignal: false,
+      diagnosticOnly: true
+    },
+    signalSummary: {
+      progressCount: 0,
+      stageChangeCount: 0,
+      businessLogCount: 0,
+      apiNoiseCount: previousObservation?.signalSummary?.apiNoiseCount || 0,
+      errorCount: 0,
+      errorSignalCount: 0,
+      lastBusinessSignalTime: null
+    },
+    diagnostic: {
+      kind: 'fast-complete-no-business-signal',
+      reason,
+      source: 'luceon-mineru-completion-observer',
+      previousActivityLevel: previousObservation?.activityLevel || null,
+      previousLogStatus: previousLogSource?.logSourceSelectedReason || null,
+      logSourceContext: previousLogSource?.logSourceContext || null
+    }
+  });
 }
 
 /**

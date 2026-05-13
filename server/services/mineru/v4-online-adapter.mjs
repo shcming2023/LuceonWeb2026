@@ -229,7 +229,7 @@ export async function processWithOnlineMinerU({ task, material, fileStream, file
         let observation = null;
         if (mineruStatus === 'processing') {
           try {
-            const { parseLatestMineruProgress } = await import('../lib/ops-mineru-log-parser.mjs');
+            const { parseLatestMineruProgress } = await import('../../lib/ops-mineru-log-parser.mjs');
             observation = await parseLatestMineruProgress(
                startedAt || task.metadata?.mineruStartedAt || new Date().toISOString(),
                task.metadata?.mineruObservedProgress,
@@ -550,7 +550,7 @@ export async function resumeWithOnlineMinerU({ task, material, mineruTaskId, tim
     let observation = null;
     if (mineruStatus === 'processing') {
       try {
-        const { parseLatestMineruProgress } = await import('../lib/ops-mineru-log-parser.mjs');
+        const { parseLatestMineruProgress } = await import('../../lib/ops-mineru-log-parser.mjs');
         observation = await parseLatestMineruProgress(
            startedAt || task.metadata?.mineruStartedAt || new Date().toISOString(),
            task.metadata?.mineruObservedProgress,
