@@ -65,3 +65,23 @@ This recommendation does not authorize production readiness, L3, pressure PASS, 
 If this same decision remains unanswered for two consecutive Director heartbeat wakeups, Director may apply the recommendation conservatively by creating a scoped TestAcceptanceEngineer task for Option A only after confirming that active parse/AI queues are clean and the admission circuit is closed.
 
 Auto-advance still may not declare production readiness, L3, pressure PASS, release readiness, destructive mutation, model changes, failed-task repair, cleanup, broad restart, or sample mutation.
+
+## User Decision
+
+At 2026-05-13T19:50:02+0800, the user approved Option A:
+
+> 同意Option A：从 /Users/concm/prod_workspace/Luceon2026/testpdf 做最多 3 个 PDF 的“小样本串行验证”，一次一个、终态后再下一个，遇到系统性失败立刻停，不做压力、不做清理、不声明上线。
+
+## Director Interpretation
+
+The approval authorizes one scoped TestAcceptanceEngineer validation task:
+
+- source folder: `/Users/concm/prod_workspace/Luceon2026/testpdf`;
+- sample count: up to 3 PDFs;
+- execution mode: strictly serial, one upload at a time, next upload only after the previous task reaches terminal state;
+- stop condition: stop immediately on dependency-blocking signal, admission-circuit open state, upload failure, terminal failed state, unresolved active-task drift, or other systemic failure evidence;
+- output: a `TaskAndReport/*_REPORT.md` plus tracking-list update for Director review.
+
+Explicitly not authorized: pressure, batch-concurrent, soak, cleanup, failed-task repair, reparse, re-AI, destructive DB/MinIO/Docker volume/data mutation, sample mutation, model operation, service restart/rebuild, L3, production-readiness, release-readiness, or go-live declaration.
+
+Task 100 is issued to TestAcceptanceEngineer under this boundary.
