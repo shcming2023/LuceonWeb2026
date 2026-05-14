@@ -73,3 +73,15 @@ This keeps the project moving while avoiding a noisy jump into broader validatio
 ## Heartbeat Wait Evidence
 
 - Wait evidence 1: 2026-05-14T15:51:21+0800 heartbeat found this decision still pending with no user reply after the Director recommendation. No autonomous advance was triggered yet.
+- Wait evidence 2: 2026-05-14T16:22:51+0800 heartbeat found this decision still pending with no user reply after wait evidence 1.
+
+## Autonomous Decision
+
+- Decision time: 2026-05-14T16:23:11+0800
+- Decision: `DIRECTOR_AUTONOMOUS_OPTION_A`
+
+After two unanswered heartbeat checks, Director applied the previously stated conservative recommendation: issue a scoped DevelopmentEngineer task to harden MinerU terminal progress-attribution semantics before batch/intake or pressure-style validation.
+
+This autonomous decision only authorizes a code/test-level implementation task. It does not authorize production deployment, uploads, batch/intake validation, pressure validation, soak, cleanup, repair, reparse, re-AI, destructive DB/MinIO/Docker volume/data mutation, settings/secrets/config/model/sample mutation, service ownership mutation, readiness, L3, pressure PASS, release-readiness, or go-live.
+
+Director issued `TASK-20260514-162311-P1-MinerU-Terminal-Progress-Attribution-Hardening`.
