@@ -73,3 +73,7 @@ Risk: future validation remains harder to interpret because the log observer is 
 Choose Option A.
 
 If this decision remains unanswered for two consecutive Director heartbeat/check-task cycles, Director may auto-issue only the scoped Option A DevelopmentEngineer task if preflight remains clean. Automatic progression must not authorize supervisor attach, MinerU restart/ownership normalization, Ollama mutation, upload, pressure testing, destructive operations, L3, production readiness, release readiness, go-live readiness, or production上线.
+
+## Heartbeat Wait Evidence
+
+- `2026-05-14T08:54:50+0800`: first Director heartbeat/check-task after Task 112 was recorded. No user decision was present. Director recommendation remains Option A: attach only `luceon-sidecar` with strict preflight/post-checks. No auto-progress was triggered because this is wait count 1 of 2.
