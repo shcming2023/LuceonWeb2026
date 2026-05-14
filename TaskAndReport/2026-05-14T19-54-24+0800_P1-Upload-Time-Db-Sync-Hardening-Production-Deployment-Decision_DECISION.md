@@ -57,3 +57,7 @@ Risk: the remaining uncertainty is primarily runtime/browser lifecycle behavior,
 Choose Option A.
 
 It is the smallest validation that can actually prove the fix in the environment where the issue was observed. It remains bounded, non-destructive, and explicitly does not authorize pressure or readiness claims.
+
+## Heartbeat Wait Evidence
+
+- `2026-05-14T20:12:51+0800`: heartbeat check found Task 147 still waiting for User decision; no Director待审 task was present. Director recommendation remains Option A.
