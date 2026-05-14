@@ -797,7 +797,7 @@ app.get('/ops/dependency-repair/status', async (req, res) => {
       res.status(sRes.status).json({ ok: false, error: await sRes.text() });
     }
   } catch (e) {
-    res.status(503).json({
+    res.json({
       ok: false,
       code: 'SUPERVISOR_UNAVAILABLE',
       message: '宿主机修复代理未启动',

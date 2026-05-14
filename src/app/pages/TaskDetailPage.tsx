@@ -11,7 +11,7 @@ import { MetadataTab } from '../components/MetadataTab';
 import { PDFPreviewPanel } from '../components/PDFPreviewPanel';
 import { renderMarkdown } from '../utils/markdown';
 import { TASK_ACTION_TERMS, TASK_ACTION_TOOLTIPS, getTaskStatusLabel } from '../utils/taskTerms';
-import { deriveMineruProgressLine } from '../utils/taskView';
+import { deriveMineruProgressLine, deriveTaskDisplayStatus } from '../utils/taskView';
 
 /**
  * ParseTask 详情数据结构
@@ -552,6 +552,8 @@ export function TaskDetailPage() {
     && resourceStatus.materialExists && resourceStatus.markdownExists;
   const canCancel = ['pending', 'running', 'ai-pending', 'ai-running', 'review-pending', 'result-store'].includes(String(task.state)) ||
                     ['mineru-queued', 'mineru-processing', 'submit-failed-retryable', 'result-fetching'].includes(String(task.stage));
+  const taskDisplayStatus = deriveTaskDisplayStatus(task as any);
+  const mineruProgressLine = deriveMineruProgressLine(task as any);
 
   // 资源缺失提示文案
   const resourceWarning = (() => {
@@ -728,11 +730,16 @@ export function TaskDetailPage() {
                 </div>
               </div>
 
-              {/* 消息 */}
-              {task.message && (
+              {/* 当前进展 */}
+              {(mineruProgressLine || taskDisplayStatus || task.message) && (
                 <div className="mt-4 pt-4 border-t border-slate-100">
-                  <p className="text-xs text-slate-400 mb-1 uppercase font-semibold tracking-wider">消息</p>
-                  <p className="text-sm text-slate-700 break-words leading-relaxed">{task.message}</p>
+                  <p className="text-xs text-slate-400 mb-1 uppercase font-semibold tracking-wider">当前进展</p>
+                  <p className="text-sm text-slate-700 break-words leading-relaxed">
+                    {mineruProgressLine || taskDisplayStatus || task.message}
+                  </p>
+                  {mineruProgressLine && task.message && task.message !== mineruProgressLine && (
+                    <p className="text-xs text-slate-500 mt-2 break-words leading-relaxed">{task.message}</p>
+                  )}
                 </div>
               )}
 
