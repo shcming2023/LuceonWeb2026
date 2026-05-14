@@ -54,3 +54,8 @@ Risk: future uploads remain harder to observe because progress semantics will st
 Choose Option A first. It is the clean next step because Task 109 gave us observability of the gap, but not enough authority to mutate process ownership safely in an unattended step.
 
 No option authorizes upload, pressure/batch/soak validation, destructive DB/MinIO/Docker volume/data mutation, model mutation, secrets changes, L3, production readiness, release readiness, go-live readiness, or production上线.
+
+## User Approval
+
+- `2026-05-14T08:12:41+0800`: User approved Option A: do a read-only recovery plan/preflight first, and clarify sidecar/supervisor/MinerU/Ollama ownership plus later executable commands.
+- Director issued `TASK-20260514-081241-P1-MinerU-Log-Observer-Runtime-Ownership-Read-Only-Recovery-Plan`.
