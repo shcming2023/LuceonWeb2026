@@ -3,7 +3,8 @@
 - Decision ID: `TASK-20260514-122944-P1-Task-Detail-Progress-Hardening-One-Upload-Validation-Authorization`
 - Created: 2026-05-14T12:29:44+0800
 - Created by: Director
-- Current status: `PENDING_USER_DECISION`
+- Current status: `USER_APPROVED_OPTION_A`
+- User approved: 2026-05-14T12:33:01+0800
 - Based on Director review: `TaskAndReport/2026-05-14T12-29-44+0800_P1-Task-Detail-Progress-Hardening-Production-Deployment-And-Read-Only-Runtime-Validation_DIRECTOR_REVIEW.md`
 
 ## Current Facts
@@ -83,3 +84,11 @@ This avoids any new production data but leaves the original UX concern unresolve
 Choose Option A.
 
 Because this creates a new production upload record, Director will wait for explicit user approval rather than auto-advancing it from heartbeat silence.
+
+## Decision Outcome
+
+User approved Option A at 2026-05-14T12:33:01+0800.
+
+Director will issue a scoped TestAcceptanceEngineer task for exactly one controlled small/medium PDF upload from `/Users/concm/prod_workspace/Luceon2026/testpdf`.
+
+No other validation scope is authorized by this decision.
