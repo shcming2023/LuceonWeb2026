@@ -73,3 +73,13 @@ Choose Option A.
 Reason: the process ownership blocker has been removed, and the next smallest meaningful validation is one real upload, not a pressure test. This keeps the blast radius tight while testing the exact user-facing objective: whether MinerU progress semantics are now observable during real processing.
 
 If the standing heartbeat auto-progress rule is invoked after two unanswered wakeups, Director may only choose this Option A if preflight is clean and the task remains exactly one upload with all restrictions above. It still must not declare readiness, L3, pressure PASS, or go-live.
+
+## User Decision Recorded
+
+- Decision recorded: 2026-05-14T11:37:27+0800
+- User decision: `APPROVED_OPTION_A`
+- Director action: issue a scoped TestAcceptanceEngineer task for exactly one controlled upload validation after MinerU ownership normalization.
+
+The approved scope is limited to one small/medium PDF upload from `/Users/concm/prod_workspace/Luceon2026/testpdf`, strict preflight, task-page/list/detail observation, canonical MinerU observability endpoint observation during and after processing, terminal or blocked evidence collection, and a completion report.
+
+This decision still does not authorize pressure, batch, soak, long-run validation, a second upload, cleanup, repair, reparse, re-AI, historical task mutation, destructive DB/MinIO/Docker volume/data operation, Docker down/down-v, MinerU/Ollama/supervisor mutation, model/config/secret/sample mutation, L3, production-readiness, release-readiness, pressure PASS, go-live readiness, or production上线 claim.
