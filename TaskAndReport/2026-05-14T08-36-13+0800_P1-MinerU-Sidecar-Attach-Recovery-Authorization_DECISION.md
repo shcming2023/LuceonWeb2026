@@ -77,3 +77,10 @@ If this decision remains unanswered for two consecutive Director heartbeat/check
 ## Heartbeat Wait Evidence
 
 - `2026-05-14T08:54:50+0800`: first Director heartbeat/check-task after Task 112 was recorded. No user decision was present. Director recommendation remains Option A: attach only `luceon-sidecar` with strict preflight/post-checks. No auto-progress was triggered because this is wait count 1 of 2.
+- `2026-05-14T09:14:50+0800`: second Director heartbeat/check-task after Task 112 was recorded. No user decision was present. Director ran the required read-only preflight: active-task clean, admission circuit closed, Docker services healthy, direct MinerU health healthy, dependency-health `ok=true`/`blocking=false` with MinerU submit probe, sidecar still not observed, and Ollama dependency-health healthy despite the recorded dual-listener risk. Director auto-issued only the scoped Option A DevelopmentEngineer task `TASK-20260514-091558-P1-MinerU-Sidecar-Attach-Only-Recovery`.
+
+## Autonomous Progression
+
+Director applied the standing no-long-term-blocker rule after two unanswered heartbeat/check-task cycles. This autonomous progression authorizes only the conservative `luceon-sidecar` attach task with strict preflight/post-checks.
+
+Still not authorized: supervisor attach, MinerU restart or ownership normalization, Ollama mutation, upload, pressure testing, destructive operations, config/secret/model/sample mutation, L3, production readiness, release readiness, go-live readiness, or production上线.
