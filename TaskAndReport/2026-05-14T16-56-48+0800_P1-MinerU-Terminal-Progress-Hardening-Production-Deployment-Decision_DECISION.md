@@ -68,3 +68,7 @@ Reason: batch/intake or pressure validation should not be started before the ope
 Approve Option A.
 
 This is the smallest next step that turns the accepted code/test fix into runtime evidence without widening into uploads or pressure.
+
+## Heartbeat Wait Evidence
+
+- Wait evidence 1: 2026-05-14T17:25:21+0800 heartbeat found this decision still pending with no user reply after the Director recommendation. No autonomous advance was triggered yet.
