@@ -68,3 +68,18 @@ Reason: batch/intake or pressure validation should not be started while the oper
 Approve Option A.
 
 This is the smallest next step that turns the accepted code/test cleanup into runtime evidence without widening into uploads or pressure.
+
+## User Decision
+
+- Decision time: 2026-05-14T19:08:58+0800
+- Decision: `USER_APPROVED_OPTION_A`
+
+User approved Option A: perform the minimum necessary production deployment plus read-only browser/runtime validation for the accepted Task 141 cleanup.
+
+Still not authorized:
+
+- uploads
+- batch/intake, pressure, soak, L3, pressure PASS, release-readiness, production-readiness, or go-live claims
+- cleanup, repair, reparse, re-AI, failed-task mutation, or manual status mutation
+- destructive DB, MinIO, Docker volume, Docker down, data, sample, model, secret, settings, or config mutation
+- MinerU, Ollama, supervisor, or sidecar ownership changes beyond the minimum service rebuild/restart needed to deploy accepted frontend code
