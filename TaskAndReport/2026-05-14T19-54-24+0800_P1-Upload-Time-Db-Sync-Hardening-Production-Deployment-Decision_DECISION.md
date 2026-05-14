@@ -61,3 +61,16 @@ It is the smallest validation that can actually prove the fix in the environment
 ## Heartbeat Wait Evidence
 
 - `2026-05-14T20:12:51+0800`: heartbeat check found Task 147 still waiting for User decision; no Director待审 task was present. Director recommendation remains Option A.
+
+## User Decision
+
+- Decision time: `2026-05-14T20:38:00+0800`
+- Decision: `USER_APPROVED_OPTION_A`
+- User instruction: `同意option A`
+
+Director will execute Option A as two scoped role tasks to preserve role boundaries:
+
+1. DevelopmentEngineer deploys the accepted Task 146 frontend hardening to production and performs non-destructive read-only health/browser checks.
+2. If deployment/read-only validation is accepted, Director may dispatch TestAcceptanceEngineer for exactly one controlled fresh upload validation under this same user authorization.
+
+No second upload, batch/intake/pressure/soak, cleanup/repair/reparse/re-AI, destructive DB/MinIO/Docker volume/data mutation, Docker/service mutation beyond minimum frontend deployment, settings/secrets/config/model/sample mutation, broad warning suppression, readiness/L3/pressure PASS/release-readiness/production-readiness/go-live claim is authorized.
