@@ -58,3 +58,11 @@ Director does not recommend this yet. The project should first obtain one clean 
 Choose Option A.
 
 It is the smallest useful next step, is reversible in process terms, avoids pressure or concurrency, and directly answers the remaining evidence gap created by Task 143's read-only boundary.
+
+## User Decision
+
+- Decision time: `2026-05-14T19:25:26+0800`
+- Decision: `USER_APPROVED_OPTION_A`
+- User instruction: `同意 option A`
+
+Director will issue a scoped TestAcceptanceEngineer task for exactly one controlled fresh upload. No second upload, batch/intake/pressure/soak validation, cleanup/repair/reparse/re-AI, destructive mutation, settings/secrets/config/model/sample mutation, service ownership mutation, readiness/L3/pressure PASS/release-readiness/production-readiness/go-live claim is authorized.
