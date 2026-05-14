@@ -69,3 +69,7 @@ Choose Option A.
 Reason: sidecar transport has been restored, the current runtime preflight is clean, and the remaining question is empirical: during one real parse, does MinerU progress become visible and attributable? One controlled upload is the smallest useful validation. It is reversible at the workflow level because it does not authorize cleanup, repair, pressure, ownership normalization, model mutation, or readiness claims.
 
 If the user gives no response after two heartbeat checks, Director may apply the conservative autonomous rule only to create a scoped TestAcceptanceEngineer task for Option A, provided the preflight remains clean. That autonomous action still must not claim production readiness or authorize any forbidden operation.
+
+## Heartbeat Wait Evidence
+
+- Wait evidence 1 recorded at 2026-05-14T09:35:50+0800 by Director heartbeat. No user response was present after this decision row was created. No autonomous task was issued yet.
