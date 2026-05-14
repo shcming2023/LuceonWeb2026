@@ -60,6 +60,7 @@ const NON_TERMINAL_LOG_OBSERVATION_ACTIVITIES = new Set([
   'stale-critical',
   'no-business-signal',
   'log-observation-no-business-signal',
+  'log-observation-empty',
   'log-observation-unreadable',
   'log-observation-unavailable',
   'log-observation-missing',

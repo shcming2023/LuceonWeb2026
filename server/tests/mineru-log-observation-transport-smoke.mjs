@@ -25,10 +25,11 @@ async function main() {
   const oldCwd = process.cwd();
   const errLog = path.join(scratch, 'mineru-api.err.log');
   const missingLog = path.join(scratch, 'missing.log');
-  const logSecond = '2026-05-07 13:06:48';
+  const logSecond = new Date(Date.now() - 5_000).toISOString().slice(0, 19).replace('T', ' ');
   const logSecondMs = new Date(logSecond).getTime();
 
   try {
+    process.chdir(scratch);
     process.env.MINERU_ERR_LOG_PATH = errLog;
     process.env.MINERU_LOG_PATH = missingLog;
     process.env.MINERU_LOG_SOURCE_CONTEXT = 'host-filesystem-test';
@@ -59,7 +60,6 @@ async function main() {
 
     process.env.MINERU_ERR_LOG_PATH = path.join(scratch, 'missing-err.log');
     process.env.MINERU_LOG_PATH = path.join(scratch, 'missing-out.log');
-    process.chdir(scratch);
     const missing = await parseLatestMineruProgress(null, null, { backendEffective: 'pipeline' });
     assert.equal(missing.activityLevel, 'log-observation-missing');
     assert.equal(missing.logSource.logSourceContext, 'host-filesystem-test');

@@ -56,6 +56,11 @@ curl -sS --max-time 15 "$UPLOAD_BASE/ops/mineru/active-task" 2>/dev/null || true
 echo
 
 echo
+echo "== MinerU log-channel ownership diagnostics =="
+curl -sS --max-time 15 "$UPLOAD_BASE/ops/mineru/log-channel-ownership" 2>/dev/null || true
+echo
+
+echo
 echo "== MinerU health =="
 curl -sS --max-time 10 "$MINERU_HEALTH_URL" 2>/dev/null || true
 echo

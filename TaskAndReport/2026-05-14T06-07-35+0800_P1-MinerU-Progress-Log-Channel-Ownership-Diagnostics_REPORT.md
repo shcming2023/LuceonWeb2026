@@ -21,6 +21,7 @@
 - `server/services/mineru/local-adapter.mjs`
 - `ops/runtime-ownership-status.sh`
 - `server/tests/mineru-log-channel-ownership-smoke.mjs`
+- `server/tests/mineru-log-observation-transport-smoke.mjs`
 - `TaskAndReport/2026-05-14T06-07-35+0800_P1-MinerU-Progress-Log-Channel-Ownership-Diagnostics_REPORT.md`
 - `TaskAndReport/TASK_TRACKING_LIST.md`
 
@@ -35,6 +36,7 @@
 - Split empty log files from unreadable files in `parseLatestMineruProgress()` by returning `log-observation-empty`.
 - Added `log-observation-empty` to non-terminal diagnostic-only MinerU observation handling, preserving the no-false-failure rule for in-flight MinerU API states.
 - Added focused smoke test coverage for missing, empty, stale, valid business progress, fast-complete no-business-signal, in-flight no false failure, and sidecar observed/not-observed states.
+- Correction after Director return: made `server/tests/mineru-log-observation-transport-smoke.mjs` time-stable by using a current timestamp and isolating `process.cwd()` to the temp scratch directory so workspace fallback logs cannot participate in the transport smoke candidate set.
 
 ## Required Questions Answered
 
@@ -77,13 +79,14 @@
 - `node --check server/tests/mineru-log-channel-ownership-smoke.mjs` — exit 0.
 - `node server/tests/mineru-log-channel-ownership-smoke.mjs` — exit 0.
 - `node server/tests/mineru-log-observation-adjudication-smoke.mjs` — exit 0.
+- `node --check server/tests/mineru-log-observation-transport-smoke.mjs` — exit 0.
+- `node server/tests/mineru-log-observation-transport-smoke.mjs` — exit 0 after correction.
 - `git diff --check -- server/lib/ops-mineru-log-parser.mjs server/upload-server.mjs server/services/mineru/local-adapter.mjs ops/runtime-ownership-status.sh server/tests/mineru-log-channel-ownership-smoke.mjs` — exit 0.
 - `npx pnpm@10.4.1 test:static` — exit 0.
-- `node server/tests/mineru-log-observation-transport-smoke.mjs` — exit 1; see skipped/failed checks.
 
 ## Skipped / Failed Checks And Reasons
 
-- `node server/tests/mineru-log-observation-transport-smoke.mjs` failed in the current dirty workspace because `parseLatestMineruProgress()` also considers workspace fallback logs under `uat/scratch`, and an existing fallback log was selected as a stale candidate over the test's temp log. This appears to be test-environment contamination from local scratch fallback state, not a failure of the new ownership diagnostic smoke test. I did not delete or modify scratch artifacts because the task forbids cleanup/mutation outside the scoped implementation.
+- The earlier `node server/tests/mineru-log-observation-transport-smoke.mjs` failure was corrected. Director reproduced the immediate cause as the test's stale hard-coded `2026-05-07` timestamp becoming older than the current runtime date. I revised the smoke to generate a current timestamp while preserving the second-granularity tolerance assertions and host log-source context evidence.
 - No production endpoint validation was run because the task only allowed production read-only inspection and this implementation has not been deployed by a Director-authorized production task.
 - No upload, pressure test, batch/soak test, repair, reparse, re-AI, restart, rebuild, rollback, or production deployment was run.
 
@@ -99,10 +102,14 @@
   - `Case 7 Pass: sidecar expected/running state is reported without process management`
 - `test:static` completed with Vite build success. Vite emitted only the existing large chunk warning.
 - `git diff --check` passed for the task-touched files.
+- Transport smoke output after correction included:
+  - `Case 1 Pass: host log source is explicit and second-granularity timestamp tolerance keeps valid business logs`
+  - `Case 2 Pass: observations outside timestamp tolerance remain excluded`
+  - `Case 3 Pass: missing log-source diagnostics keep the real observer source context`
 
 ## Risks / Blockers / Residual Debt
 
-- Existing local `uat/scratch` fallback log state can contaminate smoke tests that expect isolated temp log paths. This should be handled separately by either test isolation changes or explicit cleanup policy from Director.
+- Existing local `uat/scratch` fallback logs remain a general hygiene risk for tests that do not isolate `process.cwd()` or env log paths; the corrected transport smoke now isolates `cwd` for its own assertions.
 - The new endpoint is implemented in the development workspace only. Production visibility requires a separate authorized deploy/restart/rebuild task.
 - The endpoint can infer sidecar liveness only from recent global observations. It intentionally does not inspect or manage OS processes.
 - Some `server/upload-server.mjs` diff context includes pre-existing dirty workspace changes unrelated to this task; this report does not claim ownership of those unrelated modifications.

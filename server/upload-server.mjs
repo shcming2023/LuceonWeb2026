@@ -45,6 +45,7 @@ import { registerConsistencyRoutes } from './lib/consistency-routes.mjs';
 import { registerTaskActionRoutes } from './lib/task-actions-routes.mjs';
 import { taskEventBus } from './lib/task-events-bus.mjs';
 import { classifyMineruActiveTasks, registerMineruDiagnosticsRoutes } from './lib/ops-mineru-diagnostics.mjs';
+import { inspectMineruLogChannelOwnership } from './lib/ops-mineru-log-parser.mjs';
 import { ParseTaskWorker } from './services/queue/task-worker.mjs';
 import { AiMetadataWorker } from './services/ai/metadata-worker.mjs';
 import { logTaskEvent } from './services/logging/task-events.mjs';
@@ -1362,6 +1363,24 @@ export function normalizeTerminalMineruObservationSnapshot(task, snapshot) {
 
 app.get('/ops/mineru/global-observation', (req, res) => {
   res.json({ observation: globalLogObservation });
+});
+
+app.get('/ops/mineru/log-channel-ownership', async (req, res) => {
+  try {
+    const minObservedAt = typeof req.query.minObservedAt === 'string' && req.query.minObservedAt.trim()
+      ? req.query.minObservedAt.trim()
+      : null;
+    const diagnostics = await inspectMineruLogChannelOwnership({
+      minObservedAt,
+      globalObservation: globalLogObservation
+    });
+    return res.json(diagnostics);
+  } catch (error) {
+    return res.status(500).json({
+      error: 'failed to inspect MinerU log-channel ownership',
+      message: error?.message || String(error)
+    });
+  }
 });
 
 app.post('/ops/mineru-log-observation', async (req, res) => {

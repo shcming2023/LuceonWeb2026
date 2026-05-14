@@ -36,6 +36,33 @@ function getLogSourceContext(filePath) {
   return process.env.MINERU_LOG_SOURCE_CONTEXT || (filePath.includes('/host/') ? 'container-mounted-log' : 'host-filesystem');
 }
 
+function getMineruLogPaths() {
+  return [
+    process.env.MINERU_ERR_LOG_PATH || '/Users/concm/ops/logs/mineru-api.err.log',
+    process.env.MINERU_LOG_PATH || '/Users/concm/ops/logs/mineru-api.log',
+    path.join(process.cwd(), 'uat', 'scratch', 'mineru-api.err.log'),
+    path.join(process.cwd(), 'uat', 'scratch', 'mineru-api.log')
+  ];
+}
+
+function buildPublicLogSource(filePath, index = 0) {
+  const baseName = path.basename(filePath);
+  const isErr = baseName.includes('.err') || /err|stderr/i.test(baseName);
+  const configuredBy = index === 0
+    ? 'MINERU_ERR_LOG_PATH'
+    : index === 1
+      ? 'MINERU_LOG_PATH'
+      : 'workspace-scratch-fallback';
+
+  return {
+    sourceId: `${configuredBy}:${baseName}`,
+    configuredBy,
+    logRole: isErr ? 'stderr' : 'stdout',
+    logSourceContext: getLogSourceContext(filePath),
+    logSourceBaseName: baseName
+  };
+}
+
 function isBeforeMinObserved(effectiveMs, minObservedMs) {
   return Number.isFinite(effectiveMs) && Number.isFinite(minObservedMs) && effectiveMs + MINERU_LOG_TIMESTAMP_TOLERANCE_MS < minObservedMs;
 }
@@ -139,6 +166,7 @@ function phaseLabelZh(phase) {
 function freshnessFromActivity(activityLevel, observationStale) {
   if (activityLevel === 'fast-complete-no-business-signal') return 'completed-diagnostic';
   if (activityLevel === 'log-observation-missing') return 'missing';
+  if (activityLevel === 'log-observation-empty') return 'missing';
   if (activityLevel === 'log-observation-unreadable' || activityLevel === 'log-observation-unavailable') return 'missing';
   if (activityLevel === 'log-observation-stale' || observationStale) return 'stale';
   if (activityLevel === 'api-alive-only' || activityLevel === 'log-observation-no-business-signal') return 'missing';
@@ -264,6 +292,227 @@ export function createFastCompleteMineruObservation({
       logSourceContext: previousLogSource?.logSourceContext || null
     }
   });
+}
+
+function summarizeLogContentSignals(content, minObservedAt) {
+  const lines = String(content || '').split(/[\r\n]+/);
+  const minObservedMs = minObservedAt ? new Date(minObservedAt).getTime() : 0;
+
+  let progressCount = 0;
+  let stageChangeCount = 0;
+  let businessLogCount = 0;
+  let apiNoiseCount = 0;
+  let errorCount = 0;
+  let errorSignalCount = 0;
+  let lastBusinessSignalTime = null;
+  let lastContextTime = null;
+  let previousPhase = null;
+
+  for (const line of lines) {
+    const classified = classifyLogLine(line);
+    if (!classified) continue;
+
+    if (classified.timestamp) {
+      lastContextTime = classified.timestamp;
+    }
+
+    const effectiveTime = classified.timestamp || lastContextTime;
+    if (minObservedMs > 0) {
+      if (effectiveTime) {
+        const effectiveMs = new Date(effectiveTime).getTime();
+        if (isBeforeMinObserved(effectiveMs, minObservedMs)) continue;
+      } else if (classified.signalType !== 'api-noise') {
+        continue;
+      }
+    }
+
+    switch (classified.signalType) {
+      case 'progress':
+        progressCount++;
+        if (previousPhase && classified.detail.phase !== previousPhase) stageChangeCount++;
+        previousPhase = classified.detail.phase;
+        lastBusinessSignalTime = classified.timestamp || lastContextTime;
+        break;
+      case 'window':
+      case 'document-shape':
+      case 'engine-config':
+        businessLogCount++;
+        lastBusinessSignalTime = classified.timestamp || lastContextTime;
+        break;
+      case 'error':
+        errorCount++;
+        lastBusinessSignalTime = classified.timestamp || lastContextTime;
+        break;
+      case 'error-signal':
+        errorSignalCount++;
+        lastBusinessSignalTime = classified.timestamp || lastContextTime;
+        break;
+      case 'api-noise':
+        apiNoiseCount++;
+        break;
+    }
+  }
+
+  return {
+    progressCount,
+    stageChangeCount,
+    businessLogCount,
+    apiNoiseCount,
+    errorCount,
+    errorSignalCount,
+    lastBusinessSignalTime,
+    hasBusinessSignal: progressCount > 0 || stageChangeCount > 0 || businessLogCount > 0,
+    hasApiNoiseOnly: apiNoiseCount > 0 && progressCount === 0 && stageChangeCount === 0 && businessLogCount === 0 && errorCount === 0 && errorSignalCount === 0,
+    hasConfirmedErrorSignal: errorCount > 0
+  };
+}
+
+function classifyLogChannelSource({ exists, readable, empty, ageMs, signals }) {
+  if (!exists) return 'missing';
+  if (!readable) return 'unreadable';
+  if (empty) return 'empty';
+  if (ageMs > MINERU_LOG_STALE_MS) return 'stale';
+  if (signals?.hasConfirmedErrorSignal) return 'confirmed-error-log-signal';
+  if (signals?.hasBusinessSignal) return 'valid-business-progress';
+  if (signals?.hasApiNoiseOnly) return 'api-noise-only';
+  return 'available-no-business-signal';
+}
+
+function rankLogChannelState(state) {
+  const rank = {
+    'valid-business-progress': 100,
+    'confirmed-error-log-signal': 90,
+    'api-noise-only': 60,
+    'available-no-business-signal': 55,
+    stale: 50,
+    empty: 40,
+    unreadable: 30,
+    missing: 20
+  };
+  return rank[state] || 0;
+}
+
+function summarizeSidecarState(globalObservation, nowMs) {
+  const observerCheckedAt = globalObservation?.observerCheckedAt || globalObservation?.observedAt || null;
+  const checkedMs = observerCheckedAt ? new Date(observerCheckedAt).getTime() : 0;
+  const ageMs = Number.isFinite(checkedMs) && checkedMs > 0 ? nowMs - checkedMs : null;
+  const recent = Number.isFinite(ageMs) && ageMs <= Math.max(MINERU_LOG_STALE_MS, 10_000);
+
+  return {
+    expected: true,
+    runningState: recent ? 'observed-recent' : observerCheckedAt ? 'observed-stale' : 'not-observed',
+    runningObserved: recent ? true : null,
+    lastObserverCheckedAt: observerCheckedAt,
+    observerAgeMs: ageMs,
+    managementScope: 'diagnostic-only; this endpoint does not start, stop, or restart the sidecar'
+  };
+}
+
+export async function inspectMineruLogChannelOwnership({
+  minObservedAt = null,
+  globalObservation = null,
+  nowMs = Date.now()
+} = {}) {
+  const logPaths = getMineruLogPaths();
+  const sources = [];
+
+  for (const [index, filePath] of logPaths.entries()) {
+    const publicSource = buildPublicLogSource(filePath, index);
+    const source = {
+      ...publicSource,
+      exists: false,
+      readable: false,
+      empty: false,
+      size: 0,
+      mtime: null,
+      ageMs: null,
+      state: 'missing',
+      signals: {
+        progressCount: 0,
+        stageChangeCount: 0,
+        businessLogCount: 0,
+        apiNoiseCount: 0,
+        errorCount: 0,
+        errorSignalCount: 0,
+        hasBusinessSignal: false,
+        hasApiNoiseOnly: false,
+        hasConfirmedErrorSignal: false
+      }
+    };
+
+    try {
+      if (!fs.existsSync(filePath)) {
+        sources.push(source);
+        continue;
+      }
+
+      const stats = fs.statSync(filePath);
+      source.exists = stats.isFile();
+      source.size = stats.size;
+      source.mtime = new Date(stats.mtimeMs).toISOString();
+      source.ageMs = nowMs - stats.mtimeMs;
+      if (!source.exists) {
+        source.state = 'unreadable';
+        sources.push(source);
+        continue;
+      }
+
+      source.empty = stats.size === 0;
+      if (source.empty) {
+        source.readable = true;
+        source.state = classifyLogChannelSource(source);
+        sources.push(source);
+        continue;
+      }
+
+      const content = await readTail(filePath, 16384);
+      source.readable = Boolean(content);
+      if (source.readable) {
+        source.signals = summarizeLogContentSignals(content, minObservedAt);
+      }
+      source.state = classifyLogChannelSource(source);
+      sources.push(source);
+    } catch (error) {
+      sources.push({
+        ...source,
+        state: 'unreadable',
+        diagnostic: {
+          kind: 'log-source-read-error',
+          message: error?.message || 'unable to read log source'
+        }
+      });
+    }
+  }
+
+  const selectedSource = [...sources].sort((a, b) => rankLogChannelState(b.state) - rankLogChannelState(a.state))[0] || null;
+  const summaryState = selectedSource?.state || 'missing';
+
+  return {
+    kind: 'mineru-log-channel-ownership',
+    checkedAt: new Date(nowMs).toISOString(),
+    summaryState,
+    staleThresholdMs: MINERU_LOG_STALE_MS,
+    minObservedAt,
+    selectedSource: selectedSource
+      ? {
+          sourceId: selectedSource.sourceId,
+          configuredBy: selectedSource.configuredBy,
+          logRole: selectedSource.logRole,
+          logSourceContext: selectedSource.logSourceContext,
+          logSourceBaseName: selectedSource.logSourceBaseName,
+          state: selectedSource.state,
+          ageMs: selectedSource.ageMs,
+          mtime: selectedSource.mtime,
+          signals: selectedSource.signals
+        }
+      : null,
+    sources,
+    sidecar: summarizeSidecarState(globalObservation, nowMs),
+    lifecycleAuthority: {
+      terminalFailureAuthority: 'MinerU API status and Luceon task lifecycle remain authoritative for terminal failure decisions.',
+      logChannelAuthority: 'Log-channel diagnostics describe observability ownership only and must not fabricate page, batch, or phase progress.'
+    }
+  };
 }
 
 /**
@@ -466,12 +715,7 @@ export function determineActivityLevel(signalSummary, previousObservation, curre
  * @returns {Promise<object|null>} 结构化观测结果，无日志或全部过期返回 null
  */
 export async function parseLatestMineruProgress(minObservedAt, previousObservation = null, executionProfile = null) {
-  const logPaths = [
-    process.env.MINERU_ERR_LOG_PATH || '/Users/concm/ops/logs/mineru-api.err.log',
-    process.env.MINERU_LOG_PATH || '/Users/concm/ops/logs/mineru-api.log',
-    path.join(process.cwd(), 'uat', 'scratch', 'mineru-api.err.log'),
-    path.join(process.cwd(), 'uat', 'scratch', 'mineru-api.log')
-  ];
+  const logPaths = getMineruLogPaths();
 
   let bestResult = null;
   let candidates = [];
@@ -508,7 +752,11 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
       const content = await readTail(filePath, 16384); // 读取 16KB 以覆盖更多信号
       if (!content) {
         if (!fallbackLogSource || !fallbackLogSource.logSourceExists) {
-          fallbackLogSource = { ...logSource, logSourceSelectedReason: 'unreadable-or-empty' };
+          fallbackLogSource = {
+            ...logSource,
+            logSourceReadable: stats.size === 0,
+            logSourceSelectedReason: stats.size === 0 ? 'file-empty' : 'file-unreadable'
+          };
         }
         continue;
       }
@@ -830,9 +1078,12 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
     if (!finalLogSource.logSourceExists) {
       activityLevel = 'log-observation-missing';
       observationStaleReason = 'log file does not exist';
+    } else if (finalLogSource.logSourceSize === 0 || finalLogSource.logSourceSelectedReason === 'file-empty') {
+      activityLevel = 'log-observation-empty';
+      observationStaleReason = 'log file exists but is empty';
     } else if (!finalLogSource.logSourceReadable) {
       activityLevel = 'log-observation-unreadable';
-      observationStaleReason = 'log file is unreadable or empty';
+      observationStaleReason = 'log file is unreadable';
     }
 
     return attachProgressSemantics({
