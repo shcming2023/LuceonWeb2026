@@ -69,3 +69,7 @@ Reason: current evidence is strong for strict serial execution, but it does not 
 Approve Option A.
 
 This keeps the project moving while avoiding a noisy jump into broader validation before the remaining observability debt is cleaned up.
+
+## Heartbeat Wait Evidence
+
+- Wait evidence 1: 2026-05-14T15:51:21+0800 heartbeat found this decision still pending with no user reply after the Director recommendation. No autonomous advance was triggered yet.
