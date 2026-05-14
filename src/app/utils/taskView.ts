@@ -85,9 +85,15 @@ function isInFlightOnlyMineruObservation(obs: any): boolean {
     Boolean(obs.observationStale);
 }
 
+function isNoAttributedTerminalDiagnosticLine(line: string | null | undefined): boolean {
+  if (!line) return false;
+  return line.includes('MinerU 已完成，但本次未捕获可归因业务进度日志');
+}
+
 function formatLastKnownMineruProgress(obs: any): string | null {
   if (!obs || isInFlightOnlyMineruObservation(obs)) return null;
   const line = formatMineruProgressSemantics(obs);
+  if (isNoAttributedTerminalDiagnosticLine(line)) return null;
   if (!line) return null;
   return line.replace(/^MinerU 正在解析[：:]?\s*/, '').replace(/^MinerU 正在处理，但日志观测滞后[：:]?\s*/, '');
 }

@@ -83,6 +83,34 @@ try {
     'diagnostic attribution residual remains inspectable in metadata'
   );
 
+  const successfulTerminalOldCompletionDiagnostic = {
+    id: 'task-review-pending-old-terminal-diagnostic',
+    state: 'review-pending',
+    stage: 'review',
+    message: 'AI 识别完成: review-pending',
+    metadata: {
+      mineruStatus: 'completed',
+      parsedFilesCount: 9,
+      markdownObjectName: 'parsed/mat-old-diagnostic/full.md',
+      mineruObservedProgress: {
+        activityLevel: 'fast-complete-no-business-signal',
+        progressSemantics: {
+          activityLevel: 'fast-complete-no-business-signal',
+          message: 'MinerU 已完成，但本次未捕获可归因业务进度日志'
+        }
+      }
+    }
+  };
+
+  const successfulTerminalOldCompletionDiagnosticLine = deriveMineruProgressLine(successfulTerminalOldCompletionDiagnostic);
+  assert.equal(successfulTerminalOldCompletionDiagnosticLine, 'MinerU 已完成，解析产物 9 个');
+  assert.equal(successfulTerminalOldCompletionDiagnosticLine.includes('最后可见进度'), false);
+  assert.equal(
+    successfulTerminalOldCompletionDiagnostic.metadata.mineruObservedProgress.progressSemantics.message,
+    'MinerU 已完成，但本次未捕获可归因业务进度日志',
+    'old terminal diagnostic remains inspectable in metadata but not appended as last progress'
+  );
+
   const successfulTerminalWithLastProgress = {
     id: 'task-review-pending-active-progress',
     state: 'review-pending',
