@@ -73,3 +73,7 @@ This avoids runtime risk, but the ledger remains intentionally paused and produc
 Choose Option A.
 
 If the same decision row receives two consecutive heartbeat checks without user reply, Director may apply Option A autonomously because it is read-only, reversible, scoped, non-destructive, and does not declare production readiness or go-live readiness.
+
+## Heartbeat Wait Evidence
+
+- 2026-05-14T21:18:51+0800: heartbeat check found no Director-pending task and Task 150 still awaiting User decision. This is wait evidence 1. No autonomous progression was triggered.
