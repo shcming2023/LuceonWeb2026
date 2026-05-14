@@ -249,6 +249,97 @@ function attachProgressSemantics(result) {
   return result;
 }
 
+function normalizeStatus(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function readObservationPhase(obs) {
+  return obs?.stage?.rawPhase || obs?.progressSemantics?.phase || obs?.phase || null;
+}
+
+function readObservationCurrent(obs) {
+  return obs?.stage?.current ?? obs?.progressSemantics?.stage?.current ?? obs?.current ?? null;
+}
+
+function readObservationTotal(obs) {
+  return obs?.stage?.total ?? obs?.progressSemantics?.stage?.total ?? obs?.total ?? null;
+}
+
+function observationAdvancedBeyond(previousObservation, observation) {
+  if (!previousObservation || !observation) return false;
+  return readObservationPhase(previousObservation) !== readObservationPhase(observation) ||
+    readObservationCurrent(previousObservation) !== readObservationCurrent(observation) ||
+    readObservationTotal(previousObservation) !== readObservationTotal(observation);
+}
+
+export function deriveMineruRuntimeProgressTruth({
+  task = {},
+  directMineruStatus = '',
+  observation = null,
+  previousObservation = null
+} = {}) {
+  const metadata = task.metadata || {};
+  const status = normalizeStatus(directMineruStatus || metadata.directMineruStatus || metadata.mineruStatus);
+  const isDirectProcessing = ['processing', 'running', 'pending', 'queued'].includes(status);
+  const isDirectTerminalFailure = ['failed', 'error', 'errored', 'canceled', 'cancelled'].includes(status);
+  const isDirectCompleted = ['completed', 'done', 'success', 'succeeded'].includes(status);
+  const activityLevel = observation?.activityLevel || observation?.progressSemantics?.activityLevel || null;
+  const rawLogAdvancing = ['active-progress', 'active-stage-change', 'active-business-log'].includes(activityLevel || '') ||
+    observationAdvancedBeyond(previousObservation, observation);
+  const localTimeoutOccurred = metadata.localTimeoutOccurred === true || metadata.localTimeout === true;
+  const observationStale = observation?.observationStale === true ||
+    observation?.progressSemantics?.freshness === 'stale' ||
+    activityLevel === 'log-observation-stale';
+
+  let operatorState = 'unknown';
+  let terminalFailure = false;
+  let terminalSuccess = false;
+  let message = 'MinerU 状态待确认';
+
+  if (isDirectCompleted) {
+    operatorState = 'remote-completed';
+    terminalSuccess = true;
+    message = 'MinerU API 已完成';
+  } else if (isDirectTerminalFailure) {
+    operatorState = 'remote-terminal-failure';
+    terminalFailure = true;
+    message = 'MinerU API 返回终态失败';
+  } else if (isDirectProcessing && rawLogAdvancing) {
+    operatorState = localTimeoutOccurred
+      ? 'local-timeout-remote-processing-raw-log-advancing'
+      : 'remote-processing-raw-log-advancing';
+    message = localTimeoutOccurred
+      ? '本地等待已超时，但 MinerU API 仍在 processing；原始日志显示任务仍在推进'
+      : 'MinerU API 仍在 processing；原始日志显示任务仍在推进';
+  } else if (isDirectProcessing && observationStale) {
+    operatorState = localTimeoutOccurred
+      ? 'local-timeout-remote-processing-observation-stale'
+      : 'remote-processing-observation-stale';
+    message = localTimeoutOccurred
+      ? '本地等待已超时，但 MinerU API 仍在 processing；日志观测滞后，不能按终态失败处理'
+      : 'MinerU API 仍在 processing；日志观测滞后，不能按终态失败处理';
+  } else if (isDirectProcessing) {
+    operatorState = localTimeoutOccurred
+      ? 'local-timeout-remote-processing'
+      : 'remote-processing';
+    message = localTimeoutOccurred
+      ? '本地等待已超时，但 MinerU API 仍在 processing'
+      : 'MinerU API 仍在 processing';
+  }
+
+  return {
+    directMineruStatus: status || null,
+    operatorState,
+    terminalFailure,
+    terminalSuccess,
+    rawLogAdvancing,
+    localTimeoutOccurred,
+    observationStale,
+    activityLevel,
+    message
+  };
+}
+
 export function createFastCompleteMineruObservation({
   mineruTaskId = null,
   taskId = null,

@@ -25,10 +25,27 @@ export interface ParseTask {
  */
 export type TaskBucket = 'queued' | 'processing' | 'reviewing' | 'completed' | 'failed' | 'canceled' | 'unknown';
 
-function formatMineruProgressSemantics(obs: any): string | null {
+function isDirectMineruProcessing(task: ParseTask | null | undefined): boolean {
+  const status = String(task?.metadata?.directMineruStatus || task?.metadata?.mineruStatus || '').toLowerCase();
+  return ['processing', 'running', 'pending', 'queued'].includes(status);
+}
+
+function isLocalMineruTimeout(task: ParseTask | null | undefined): boolean {
+  return task?.metadata?.localTimeoutOccurred === true || task?.metadata?.localTimeout === true;
+}
+
+function getAiFailureClassification(task: ParseTask | null | undefined): any {
+  return task?.metadata?.aiFailureClassification || null;
+}
+
+function isManualRetryEligibleAiFailure(task: ParseTask | null | undefined): boolean {
+  const classification = getAiFailureClassification(task);
+  return task?.metadata?.aiManualRetryEligible === true || classification?.manualRetryEligible === true;
+}
+
+function formatMineruProgressSemantics(obs: any, task?: ParseTask | null): string | null {
   if (!obs) return null;
   const semantics = obs.progressSemantics;
-  if (semantics?.message) return String(semantics.message);
 
   const level = obs.activityLevel || '';
   const phase = obs.stage?.rawPhase || obs.phase || '';
@@ -44,8 +61,30 @@ function formatMineruProgressSemantics(obs: any): string | null {
   if (win?.index != null && win?.total != null) pieces.push(`批次 ${win.index}/${win.total}`);
   if (pageCurrent != null && pageTotal != null) pieces.push(`页 ${pageCurrent}/${pageTotal}`);
 
+  const directProcessing = isDirectMineruProcessing(task);
+  const localTimeout = isLocalMineruTimeout(task);
+  const staleObservation = level === 'log-observation-stale' || obs.observationStale;
+  const activeRawLog = ['active-progress', 'active-stage-change', 'active-business-log'].includes(level);
+
+  if (directProcessing && localTimeout && activeRawLog) {
+    return pieces.length
+      ? `本地等待已超时，但 MinerU API 仍在 processing；原始日志显示仍在推进：${pieces.join('，')}`
+      : '本地等待已超时，但 MinerU API 仍在 processing；原始日志显示仍在推进';
+  }
+  if (directProcessing && localTimeout && staleObservation) {
+    return pieces.length
+      ? `本地等待已超时，但 MinerU API 仍在 processing；日志观测滞后：${pieces.join('，')}`
+      : '本地等待已超时，但 MinerU API 仍在 processing；日志观测滞后，不能按终态失败处理';
+  }
+  if (directProcessing && staleObservation) {
+    return pieces.length
+      ? `MinerU API 仍在 processing；日志观测滞后：${pieces.join('，')}`
+      : 'MinerU API 仍在 processing；日志观测滞后，不能按终态失败处理';
+  }
+  if (semantics?.message) return String(semantics.message);
+
   if (level === 'api-alive-only') return 'MinerU API 可达，但未见可归因业务进展';
-  if (level === 'log-observation-stale' || obs.observationStale) {
+  if (staleObservation) {
     return pieces.length ? `MinerU 正在解析，但日志观测滞后：${pieces.join('，')}` : 'MinerU 正在解析，但日志观测滞后/不可用';
   }
   if (level === 'log-observation-missing' || level === 'log-observation-unavailable' || level === 'log-observation-no-business-signal') {
@@ -132,6 +171,12 @@ function deriveTerminalMineruCompletionLine(task: ParseTask): string | null {
 export function deriveTaskDisplayStatus(task: ParseTask | null | undefined): string {
   if (!task) return '待处理';
   if (task.state === 'failed') {
+    if (task.stage === 'ai' || getAiFailureClassification(task) || task.metadata?.aiStatus === 'failed') {
+      if (isManualRetryEligibleAiFailure(task)) {
+        return 'AI 识别失败，待人工判断是否手动重试';
+      }
+      return 'AI 识别失败，需人工查看';
+    }
     if (task.metadata?.mineruTaskId && task.metadata?.mineruStatus === 'completed' && !task.metadata?.parsedFilesCount) {
       return 'MinerU 已完成，结果待接管';
     }
@@ -142,7 +187,7 @@ export function deriveTaskDisplayStatus(task: ParseTask | null | undefined): str
 
   if (task.stage === 'mineru-queued') return 'MinerU 排队中';
   if (task.stage === 'mineru-processing') {
-    return formatMineruProgressSemantics(task.metadata?.mineruObservedProgress) || task.message || 'MinerU 正在解析';
+    return formatMineruProgressSemantics(task.metadata?.mineruObservedProgress, task) || task.message || 'MinerU 正在解析';
   }
   if (task.stage === 'result-store') return '解析产物同步中';
   if (task.state === 'ai-pending') return 'AI 元数据识别待执行';
@@ -157,7 +202,7 @@ export function deriveMineruProgressLine(task: ParseTask | null | undefined): st
   const terminalCompletionLine = deriveTerminalMineruCompletionLine(task);
   if (terminalCompletionLine) return terminalCompletionLine;
   if (task.state === 'completed' || task.state === 'review-pending') return null;
-  return formatMineruProgressSemantics(task.metadata?.mineruObservedProgress);
+  return formatMineruProgressSemantics(task.metadata?.mineruObservedProgress, task);
 }
 
 /**

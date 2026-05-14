@@ -64,6 +64,127 @@ export function shouldUseEvidencePack(markdownContentOrLength, sourceMeta = {}) 
   };
 }
 
+export function sanitizeProviderBaseUrl(baseUrl = '') {
+  const raw = String(baseUrl || '').trim();
+  if (!raw) return '';
+  try {
+    const url = new URL(raw);
+    url.username = '';
+    url.password = '';
+    url.search = '';
+    url.hash = '';
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return raw.replace(/\?.*$/, '').replace(/#.*$/, '');
+  }
+}
+
+function hasTimeoutSignal(error, details = {}) {
+  const timeoutKind = error?.timeoutKind || details.timeoutKind || '';
+  const text = [
+    error?.name,
+    error?.message,
+    details.name,
+    details.message,
+    details.cause?.code,
+    details.cause?.message,
+  ].filter(Boolean).join(' ');
+  return Boolean(timeoutKind && timeoutKind !== 'network-or-fetch-error') ||
+    /TimeoutError|AbortError|timeout|timed out|UND_ERR_HEADERS_TIMEOUT|Headers Timeout|Body Timeout/i.test(text);
+}
+
+function hasProviderUnreachableSignal(error, details = {}) {
+  const text = [
+    error?.name,
+    error?.message,
+    error?.cause?.code,
+    error?.cause?.message,
+    details.name,
+    details.message,
+    details.cause?.code,
+    details.cause?.message,
+  ].filter(Boolean).join(' ');
+  return /ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|ECONNRESET|fetch failed|network|unreachable/i.test(text);
+}
+
+function normalizeAiPhase(phaseName, fallback = 'first-pass') {
+  if (phaseName === 'first-pass' || phaseName === 'repair-pass' || phaseName === 'repair-retry-pass') {
+    return phaseName;
+  }
+  if (phaseName === 'strict-skeleton-block' || phaseName === 'json-parse' || phaseName === 'schema-validation' || phaseName === 'provider-unreachable') {
+    return phaseName;
+  }
+  return fallback;
+}
+
+export function buildAiFailureClassification({
+  error = null,
+  details = null,
+  phaseName = 'first-pass',
+  failureKind = '',
+  providerId = '',
+  provider = null,
+  model = '',
+  baseUrl = '',
+  timeoutMs,
+  durationMs,
+  underlying = null,
+  reason = ''
+} = {}) {
+  const mergedDetails = details || error?.details || {};
+  const timeoutSignal = hasTimeoutSignal(error, mergedDetails);
+  const unreachableSignal = hasProviderUnreachableSignal(error, mergedDetails);
+  let aiPhase = normalizeAiPhase(phaseName || mergedDetails.phaseName || mergedDetails.phase);
+  let kind = failureKind || 'provider-transport-failure';
+
+  if (failureKind === 'json_parse_failure') {
+    kind = 'json-parse-failure';
+    aiPhase = 'json-parse';
+  } else if (failureKind === 'schema_validation_failure') {
+    kind = 'schema-validation-failure';
+    aiPhase = 'schema-validation';
+  } else if (failureKind === 'strict_no_skeleton_fallback_block') {
+    kind = 'strict-no-skeleton-fallback-block';
+    aiPhase = 'strict-skeleton-block';
+  } else if (unreachableSignal) {
+    kind = 'provider-unreachable';
+    aiPhase = 'provider-unreachable';
+  } else if (timeoutSignal) {
+    kind = `${aiPhase}-provider-timeout`;
+  }
+
+  const retryableProviderFailure = kind.endsWith('provider-timeout') || kind === 'provider-unreachable' || kind === 'provider-transport-failure';
+  const manualRetryEligible = retryableProviderFailure || (kind === 'strict-no-skeleton-fallback-block' && underlying?.manualRetryEligible === true);
+  const providerIdentity = {
+    providerId: providerId || mergedDetails.provider || provider?.id || '',
+    model: model || mergedDetails.model || provider?.model || '',
+    baseUrl: sanitizeProviderBaseUrl(baseUrl || mergedDetails.baseUrl || provider?.baseUrl || '')
+  };
+
+  return {
+    kind,
+    aiPhase,
+    timeoutKind: error?.timeoutKind || mergedDetails.timeoutKind || '',
+    durationMs: Number(durationMs ?? mergedDetails.durationMs ?? 0),
+    timeoutMs: Number(timeoutMs ?? mergedDetails.timeoutMs ?? provider?.timeoutMs ?? 0),
+    ...providerIdentity,
+    autoRetryAllowed: false,
+    manualRetryEligible,
+    manualRetryEligibilityStatus: manualRetryEligible ? 'eligible-manual-only' : 'not-eligible',
+    manualRetryEligibilityReason: manualRetryEligible
+      ? 'Provider transport/timeout failure may be retried manually after operator review; no automatic retry is allowed.'
+      : 'Failure is semantic/strict-fallback related and is not a retry candidate without Director/user decision.',
+    reason: reason || error?.message || mergedDetails.message || '',
+    underlying: underlying ? {
+      kind: underlying.kind,
+      aiPhase: underlying.aiPhase,
+      timeoutKind: underlying.timeoutKind || '',
+      durationMs: underlying.durationMs || 0,
+      timeoutMs: underlying.timeoutMs || 0
+    } : undefined
+  };
+}
+
 // 内存队列锁
 const processingMap = new Set();
 
@@ -312,6 +433,9 @@ export class AiMetadataWorker {
         err.details.promptLength = String(prompt || '').length;
         err.details.inputLength = String(options.markdownContent || '').length;
         err.details.numPredict = options.num_predict || 512;
+        if (err.details.timeoutKind && !err.timeoutKind) {
+          err.timeoutKind = err.details.timeoutKind;
+        }
       }
       throw err;
     }
@@ -712,6 +836,15 @@ export class AiMetadataWorker {
         if (err.details) {
           rawTrace.firstPass = this._extractTrace(err.details);
         }
+        const failureClassification = buildAiFailureClassification({
+          error: err,
+          phaseName: 'first-pass',
+          providerId,
+          provider,
+          model: provider.model,
+          baseUrl: provider.baseUrl,
+          timeoutMs: provider.timeoutMs
+        });
         const durationMs = Date.now() - startTime;
         console.error(`[ai-worker] Job ${job.id} failed after attempts: ${err.message}`);
 
@@ -736,9 +869,10 @@ export class AiMetadataWorker {
         const skeletonReason = STRICT_NO_SKELETON
           ? `AI Provider 调用全部失败: ${err.message}；严格模式禁止骨架兜底`
           : `AI Provider 调用全部失败: ${err.message}，自动降级为模拟结果完成链路`;
-        const degradedResult = await this.degradeToSkeleton(job, skeletonReason, sourceMeta);
+        const degradedResult = await this.degradeToSkeleton(job, skeletonReason, sourceMeta, { failureClassification });
         if (degradedResult && degradedResult.result) {
             degradedResult.result.aiClassificationRawTrace = rawTrace;
+            degradedResult.result.aiFailureClassification = failureClassification;
             if (rawTrace.firstPass?.objectName) {
                 degradedResult.result.aiClassificationRawObjectName = rawTrace.firstPass.objectName;
                 degradedResult.result.aiClassificationRawContentHash = rawTrace.firstPass.contentHash;
@@ -1002,7 +1136,33 @@ export class AiMetadataWorker {
         }
 
         if (STRICT_NO_SKELETON) {
-          throw new Error(`[AI 严格模式拦截] 不允许降级到骨架模型: ${aiClassificationDegradedReason}`);
+          const failureClassification = buildAiFailureClassification({
+            error: repairProviderDetails ? { message: repairFailedReason || aiClassificationDegradedReason, details: repairProviderDetails, timeoutKind: repairProviderDetails.timeoutKind } : { message: aiClassificationDegradedReason },
+            details: repairProviderDetails,
+            phaseName: repairProviderDetails?.phaseName || (schemaInvalid ? 'schema-validation' : 'json-parse'),
+            failureKind: repairProviderDetails?.timeoutKind ? '' : (schemaInvalid ? 'schema_validation_failure' : 'json_parse_failure'),
+            providerId,
+            provider,
+            model: provider.model,
+            baseUrl: provider.baseUrl,
+            timeoutMs: provider.timeoutMs,
+            reason: aiClassificationDegradedReason
+          });
+          const strictClassification = buildAiFailureClassification({
+            phaseName: 'strict-skeleton-block',
+            failureKind: 'strict_no_skeleton_fallback_block',
+            providerId,
+            provider,
+            model: provider.model,
+            baseUrl: provider.baseUrl,
+            timeoutMs: provider.timeoutMs,
+            reason: aiClassificationDegradedReason,
+            underlying: failureClassification
+          });
+          const strictError = new Error(`[AI 严格模式拦截] 不允许降级到骨架模型: ${aiClassificationDegradedReason}`);
+          strictError.aiFailureClassification = strictClassification;
+          strictError.aiFailureUnderlyingClassification = failureClassification;
+          throw strictError;
         }
         resultV02 = getDefaultV02Skeleton(sourceMeta, 'low', aiClassificationDegradedReason);
       } else {
@@ -1020,7 +1180,29 @@ export class AiMetadataWorker {
         }
 
         if (aiClassificationDegraded && STRICT_NO_SKELETON) {
-          throw new Error(`[AI 严格模式拦截] 不允许降级到骨架模型: ${aiClassificationDegradedReason}`);
+          const failureClassification = buildAiFailureClassification({
+            phaseName: 'strict-skeleton-block',
+            failureKind: 'strict_no_skeleton_fallback_block',
+            providerId,
+            provider,
+            model: provider.model,
+            baseUrl: provider.baseUrl,
+            timeoutMs: provider.timeoutMs,
+            reason: aiClassificationDegradedReason,
+            underlying: buildAiFailureClassification({
+              phaseName: 'schema-validation',
+              failureKind: 'schema_validation_failure',
+              providerId,
+              provider,
+              model: provider.model,
+              baseUrl: provider.baseUrl,
+              timeoutMs: provider.timeoutMs,
+              reason: aiClassificationDegradedReason
+            })
+          });
+          const strictError = new Error(`[AI 严格模式拦截] 不允许降级到骨架模型: ${aiClassificationDegradedReason}`);
+          strictError.aiFailureClassification = failureClassification;
+          throw strictError;
         }
       }
 
@@ -1122,11 +1304,29 @@ export class AiMetadataWorker {
 
     } catch (error) {
       console.error(`[ai-worker] Job ${job.id} unexpected error: ${error.message}`);
+      const failureClassification = error.aiFailureClassification || buildAiFailureClassification({
+        error,
+        phaseName: error.details?.phaseName || 'first-pass',
+        providerId: error.details?.provider || '',
+        model: error.details?.model || '',
+        baseUrl: error.details?.baseUrl || '',
+        timeoutMs: error.details?.timeoutMs,
+        durationMs: error.details?.durationMs
+      });
       await this.transition(job, {
         state: 'failed',
         errorMessage: error.message,
-        message: `AI 识别异常: ${error.message}`
-      }, 'ai-provider-failed', 'error', { error: error.message });
+        message: `AI 识别异常: ${error.message}`,
+        metadata: {
+          ...(job.metadata || {}),
+          aiFailureClassification: failureClassification,
+          aiFailureUnderlyingClassification: error.aiFailureUnderlyingClassification,
+          autoRetryAllowed: false,
+          manualRetryEligible: failureClassification.manualRetryEligible,
+          manualRetryEligibilityReason: failureClassification.manualRetryEligibilityReason
+        },
+        aiFailureClassification: failureClassification
+      }, 'ai-provider-failed', 'error', { error: error.message, aiFailureClassification: failureClassification });
     } finally {
       processingMap.delete(job.id);
     }
@@ -1135,9 +1335,23 @@ export class AiMetadataWorker {
   /**
    * 非严格模式兜底：返回待复核骨架结果
    */
-  async degradeToSkeleton(job, reason, prebuiltSourceMeta = null) {
+  async degradeToSkeleton(job, reason, prebuiltSourceMeta = null, options = {}) {
     if (STRICT_NO_SKELETON) {
-      throw new Error(`[AI 严格模式拦截] 不允许降级到骨架模型: ${reason}`);
+      const strictClassification = buildAiFailureClassification({
+        phaseName: 'strict-skeleton-block',
+        failureKind: 'strict_no_skeleton_fallback_block',
+        providerId: options.failureClassification?.providerId || '',
+        model: options.failureClassification?.model || '',
+        baseUrl: options.failureClassification?.baseUrl || '',
+        timeoutMs: options.failureClassification?.timeoutMs,
+        durationMs: options.failureClassification?.durationMs,
+        reason,
+        underlying: options.failureClassification
+      });
+      const strictError = new Error(`[AI 严格模式拦截] 不允许降级到骨架模型: ${reason}`);
+      strictError.aiFailureClassification = strictClassification;
+      strictError.aiFailureUnderlyingClassification = options.failureClassification;
+      throw strictError;
     }
     console.warn(`[ai-worker] Degrading job ${job.id}: ${reason}`);
 
@@ -1173,6 +1387,9 @@ export class AiMetadataWorker {
     simulatedResult.aiClassificationDegraded = true;
     simulatedResult.aiClassificationDegradedReason = reason;
     simulatedResult.aiClassificationErrorSource = 'ollama-json-parse-failed';
+    if (options.failureClassification) {
+      simulatedResult.aiFailureClassification = options.failureClassification;
+    }
 
     await this.transition(job, {
       state: 'review-pending',
@@ -1182,6 +1399,13 @@ export class AiMetadataWorker {
       confidence: 50,
       needsReview: true,
       providerId: 'skeleton',
+      metadata: {
+        ...(job.metadata || {}),
+        aiFailureClassification: options.failureClassification,
+        autoRetryAllowed: false,
+        manualRetryEligible: options.failureClassification?.manualRetryEligible || false,
+        manualRetryEligibilityReason: options.failureClassification?.manualRetryEligibilityReason
+      },
       updatedAt: new Date().toISOString(),
       completedAt: new Date().toISOString()
     }, 'ai-worker-completed');

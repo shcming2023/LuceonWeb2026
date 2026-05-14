@@ -210,6 +210,13 @@ async function testRepairTimeoutStrictModeFailsWithoutSkeletonAndUsesBoundedInpu
     const failed = updates.find((update) => update.state === 'failed');
     assert(failed, 'strict no-skeleton mode should fail the AI job after repair timeout');
     assert.match(failed.errorMessage, /AI 严格模式拦截/);
+    assert.equal(failed.aiFailureClassification?.kind, 'strict-no-skeleton-fallback-block');
+    assert.equal(failed.aiFailureClassification?.aiPhase, 'strict-skeleton-block');
+    assert.equal(failed.aiFailureClassification?.underlying?.kind, 'repair-pass-provider-timeout');
+    assert.equal(failed.aiFailureClassification?.underlying?.aiPhase, 'repair-pass');
+    assert.equal(failed.metadata?.aiFailureClassification?.autoRetryAllowed, false);
+    assert.equal(failed.metadata?.manualRetryEligible, true);
+    assert.equal(failed.metadata?.autoRetryAllowed, false);
     assert.equal(calls, 2, 'repair timeout case should attempt exactly one repair pass');
     assert(!repairMarkdown.includes(ORIGINAL_MARKDOWN_SENTINEL), 'repair user content must not repeat original markdown');
     assert(repairMarkdown.length < 1000, `repair user content should be compact, got ${repairMarkdown.length}`);

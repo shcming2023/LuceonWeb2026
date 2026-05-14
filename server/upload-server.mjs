@@ -46,6 +46,7 @@ import { registerTaskActionRoutes } from './lib/task-actions-routes.mjs';
 import { taskEventBus } from './lib/task-events-bus.mjs';
 import { classifyMineruActiveTasks, registerMineruDiagnosticsRoutes } from './lib/ops-mineru-diagnostics.mjs';
 import { inspectMineruLogChannelOwnership } from './lib/ops-mineru-log-parser.mjs';
+import { buildAiFailureBackfillMetadata, buildAiFailureTaskMessage } from './lib/ai-failure-backfill.mjs';
 import { ParseTaskWorker } from './services/queue/task-worker.mjs';
 import { AiMetadataWorker } from './services/ai/metadata-worker.mjs';
 import { logTaskEvent } from './services/logging/task-events.mjs';
@@ -134,7 +135,7 @@ app.use(cors(ALLOWED_CORS_ORIGINS.length > 0 ? {
     return callback(new Error(`CORS: origin ${origin} not allowed`));
   },
   credentials: true,
-} : undefined)); // CORS_ORIGIN 未配置时保持原有行为（兼容开发环境）
+} : undefined)); // 未配置 CORS_ORIGIN 时沿用 cors() 默认行为以兼容开发/UAT；生产需显式配置白名单。
 
 app.use(express.json());
 app.use((req, res, next) => {
@@ -5292,6 +5293,11 @@ const aiWorker = new AiMetadataWorker({
           aiStatus = 'failed';
         }
 
+        const aiAnalyzedAt = new Date().toISOString();
+        const aiFailureBackfill = update.state === 'failed'
+          ? buildAiFailureBackfillMetadata({ update, job, analyzedAt: aiAnalyzedAt })
+          : {};
+
         const materialUpdates = {
           status,
           mineruStatus,
@@ -5299,6 +5305,7 @@ const aiWorker = new AiMetadataWorker({
           metadata: {
             ...(existingMaterial.metadata || {}),
             ...(update.result || {}),
+            ...aiFailureBackfill,
             aiClassificationTaxonomyVersion: update.result?.aiClassificationV02?.taxonomy_version || 'v0.1',
             aiClassificationRulesVersion: update.result?.aiClassificationV02?.rules_version || update.result?.aiClassificationV02?.taxonomy_version || 'v0.1',
             processingStage: update.state === 'confirmed' ? 'done' : update.state === 'review-pending' ? 'review' : 'ai',
@@ -5308,7 +5315,7 @@ const aiWorker = new AiMetadataWorker({
                 ? 'AI 识别完成，待人工复核'
                 : 'AI 识别失败',
             aiJobId: job.id,
-            aiAnalyzedAt: new Date().toISOString()
+            aiAnalyzedAt
           }
         };
 
@@ -5336,18 +5343,24 @@ const aiWorker = new AiMetadataWorker({
           console.warn(`[upload-server] Failed to fetch existing ParseTask ${job.parseTaskId} before merge: ${e.message}`);
         }
 
+        const aiCompletedAt = new Date().toISOString();
+        const aiFailureBackfill = update.state === 'failed'
+          ? buildAiFailureBackfillMetadata({ update, job, analyzedAt: aiCompletedAt })
+          : {};
+
         const taskResp = await fetch(`${DB_BASE_URL}/tasks/${job.parseTaskId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             state: taskState,
             stage: taskState === 'completed' ? 'done' : taskState === 'review-pending' ? 'review' : 'ai',
-            message: `AI 识别完成: ${update.state}${update.needsReview ? ' (待人工复核)' : ''}`,
-            completedAt: new Date().toISOString(),
+            message: buildAiFailureTaskMessage(update),
+            completedAt: aiCompletedAt,
             metadata: {
               ...(existingTask?.metadata || {}),
               ...(update.result || {}),
-              aiCompletedAt: new Date().toISOString()
+              ...aiFailureBackfill,
+              aiCompletedAt
             }
           })
         });

@@ -180,6 +180,7 @@ export class OllamaProvider extends BaseProvider {
       }
 
       const errorDetail = {
+        provider: this.id,
         name: err.name,
         message: err.message,
         cause: err.cause ? { code: err.cause.code, message: err.cause.message } : null,
