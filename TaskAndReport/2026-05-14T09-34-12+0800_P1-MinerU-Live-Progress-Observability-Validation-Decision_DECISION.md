@@ -73,3 +73,11 @@ If the user gives no response after two heartbeat checks, Director may apply the
 ## Heartbeat Wait Evidence
 
 - Wait evidence 1 recorded at 2026-05-14T09:35:50+0800 by Director heartbeat. No user response was present after this decision row was created. No autonomous task was issued yet.
+
+## User Decision Recorded
+
+- Decision time: 2026-05-14T09:38:05+0800
+- User decision: approve Option A.
+- Authorized next task: `TASK-20260514-093805-P1-MinerU-Live-Progress-Observability-Exactly-One-Controlled-Upload-Validation`
+- Scope: TestAcceptanceEngineer may run exactly one controlled small/medium PDF upload from `/Users/concm/prod_workspace/Luceon2026/testpdf` to validate live MinerU page progress semantics and observability endpoints.
+- Still not authorized: pressure/batch/soak, second upload, cleanup, repair/reparse/re-AI, destructive DB/MinIO/Docker volume/data mutation, MinerU restart/ownership normalization, Ollama mutation, supervisor attach, config/secret/model/sample mutation, L3, production-readiness, release-readiness, go-live readiness, or production上线.
