@@ -84,3 +84,13 @@ Choose Option A.
 Reason: code hygiene is now deployed and validated, so the remaining blocker is the runtime owner of MinerU's stdout/stderr. The next safest step is not another upload; it is a tightly scoped ownership normalization with no upload and no data mutation. This keeps the change small enough to reverse operationally while finally aligning MinerU with the configured log channel.
 
 No autonomous approval is granted by this decision row. If the heartbeat auto-progress rule is later invoked, it must still obey the standing restrictions and may not claim readiness or run destructive data operations.
+
+## User Decision Recorded
+
+- Decision recorded: 2026-05-14T11:12:19+0800
+- User decision: `APPROVED_OPTION_A`
+- Director action: issue a scoped DevelopmentEngineer task for controlled MinerU ownership normalization.
+
+The approved scope is limited to strict preflight, recording the current MinerU listener, replacing only the verified unmanaged MinerU listener on port `8083` with `luceon-mineru` launched via `ops/start-mineru-api.sh`, keeping or re-attaching `luceon-sidecar` only if needed, and running health/log-channel validation.
+
+This decision still does not authorize PDF upload, pressure/batch/soak validation, Docker down/down-v/volume/data cleanup, DB/MinIO mutation, Ollama mutation, supervisor attach, model pull/delete/replace, sample/config/secret mutation, repair/reparse/re-AI, L3, production-readiness, release-readiness, go-live readiness, or production上线 claim.
