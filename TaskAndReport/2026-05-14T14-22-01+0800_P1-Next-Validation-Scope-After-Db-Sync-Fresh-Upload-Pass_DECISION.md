@@ -60,3 +60,8 @@ Choose Option A.
 
 Do not declare readiness after Option A alone. If Option A passes, the next discussion should be whether to run a carefully bounded serial-longer validation or a small pressure preflight, not broad pressure or go-live.
 
+## Decision Recorded
+
+User approved Option A at 2026-05-14T14:24:48+0800.
+
+Director will issue a scoped TestAcceptanceEngineer task for up to 3 additional PDFs from `/Users/concm/prod_workspace/Luceon2026/testpdf`, strictly serial, one terminal state before the next, and stop on systemic failure.
