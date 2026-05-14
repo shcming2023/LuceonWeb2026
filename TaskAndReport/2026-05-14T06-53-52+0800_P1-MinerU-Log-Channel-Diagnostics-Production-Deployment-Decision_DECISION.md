@@ -92,3 +92,9 @@ If this decision item remains unanswered for two consecutive Director heartbeat/
 The conservative automatic path is intentionally held until GitHub synchronization is restored or the User explicitly authorizes a different source-of-truth route. Director still recommends Option A after GitHub sync is restored.
 
 Not recommended: deploying production directly from the unsynced local branch, starting/restarting the MinerU log observer sidecar first, or changing runtime ownership before the diagnostics endpoint is visible from the normal repository-to-production path.
+
+## User Approval
+
+- `2026-05-14T08:05:08+0800`: User instructed Director to restore GitHub synchronization first, then continue Option A minimal production deployment plus read-only validation.
+- GitHub synchronization was restored through clean temporary clone commit `69108e1` on `origin/main`.
+- Director issued `TASK-20260514-080508-P1-MinerU-Log-Channel-Diagnostics-Production-Deployment-And-Runtime-Validation`.
