@@ -6,6 +6,14 @@ Created: 2026-05-15T07:43:09+0800
 
 Next Actor: `User`
 
+## User Decision
+
+Decision received: 2026-05-15T07:55:03+0800
+
+User approved: `Option A`
+
+Director action: issue Task 159 to DevelopmentEngineer for minimum necessary production deployment plus read-only validation only.
+
 ## Context
 
 Task 157 has been accepted at code/test level and integrated to GitHub main by Director review. Production still runs the previous deployed code until a separate deployment task is authorized and executed.
