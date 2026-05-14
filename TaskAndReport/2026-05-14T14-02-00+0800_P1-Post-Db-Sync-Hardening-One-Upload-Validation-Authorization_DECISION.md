@@ -52,3 +52,8 @@ Choose Option A.
 
 Reason: the code is deployed and read-only validation passed. A single controlled upload is the smallest meaningful proof that the Task 128 warning pattern is gone during the real upload lifecycle. It keeps the next step useful without jumping to pressure or broader serial validation.
 
+## Decision Recorded
+
+User approved Option A at 2026-05-14T14:05:03+0800.
+
+Director will issue a scoped TestAcceptanceEngineer task for exactly one controlled small/medium PDF upload from `/Users/concm/prod_workspace/Luceon2026/testpdf`.
