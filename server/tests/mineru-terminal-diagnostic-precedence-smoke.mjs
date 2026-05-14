@@ -55,6 +55,58 @@ try {
   assert.equal(terminalLine.includes('批次 '), false);
   assert.equal(deriveTaskDisplayStatus(task90Shape), '失败');
 
+  const successfulTerminalNoAttributedLog = {
+    id: 'task-review-pending-no-attributed-log',
+    state: 'review-pending',
+    stage: 'review',
+    message: 'AI 识别完成: review-pending',
+    metadata: {
+      mineruStatus: 'completed',
+      parsedFilesCount: 21,
+      markdownObjectName: 'parsed/mat-review/full.md',
+      mineruObservedProgress: {
+        activityLevel: 'log-observation-unreadable',
+        progressSemantics: {
+          activityLevel: 'log-observation-unreadable',
+          message: 'MinerU 已提交/正在处理，但暂无可归因业务日志'
+        }
+      }
+    }
+  };
+
+  const successfulTerminalLine = deriveMineruProgressLine(successfulTerminalNoAttributedLog);
+  assert.equal(successfulTerminalLine, 'MinerU 已完成，解析产物 21 个');
+  assert.equal(successfulTerminalLine.includes('未捕获可归因业务进度日志'), false);
+  assert.equal(
+    successfulTerminalNoAttributedLog.metadata.mineruObservedProgress.progressSemantics.message,
+    'MinerU 已提交/正在处理，但暂无可归因业务日志',
+    'diagnostic attribution residual remains inspectable in metadata'
+  );
+
+  const successfulTerminalWithLastProgress = {
+    id: 'task-review-pending-active-progress',
+    state: 'review-pending',
+    stage: 'review',
+    metadata: {
+      mineruStatus: 'completed',
+      parsedFilesCount: 82,
+      parsedPrefix: 'parsed/mat-large/',
+      mineruObservedProgress: {
+        activityLevel: 'active-progress',
+        backendProfile: 'pipeline',
+        stage: { rawPhase: 'MFR Predict', current: 12, total: 20 },
+        window: { index: 2, total: 3, pageCurrent: 64, pageTotal: 82 }
+      }
+    }
+  };
+
+  const successfulTerminalWithLastProgressLine = deriveMineruProgressLine(successfulTerminalWithLastProgress);
+  assert.ok(successfulTerminalWithLastProgressLine.startsWith('MinerU 已完成，解析产物 82 个；最后可见进度：'));
+  assert.ok(successfulTerminalWithLastProgressLine.includes('backend=pipeline'));
+  assert.ok(successfulTerminalWithLastProgressLine.includes('相位 MFR Predict 12/20'));
+  assert.ok(successfulTerminalWithLastProgressLine.includes('批次 2/3'));
+  assert.ok(successfulTerminalWithLastProgressLine.includes('页 64/82'));
+
   const activeProgressTask = {
     id: 'task-active-progress',
     state: 'running',

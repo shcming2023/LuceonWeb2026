@@ -64,6 +64,15 @@ function hasParsedArtifactEvidence(task: ParseTask): boolean {
     Boolean(metadata.parsedObjectName);
 }
 
+function getParsedArtifactCount(task: ParseTask): number {
+  const metadata = task.metadata || {};
+  return Number(metadata.parsedFilesCount || (task as any).parsedFilesCount || 0) || 0;
+}
+
+function isTerminalSuccessfulTask(task: ParseTask): boolean {
+  return task.state === 'review-pending' || task.state === 'completed';
+}
+
 function isInFlightOnlyMineruObservation(obs: any): boolean {
   if (!obs) return true;
   const level = obs.activityLevel || obs.progressSemantics?.activityLevel || '';
@@ -74,6 +83,26 @@ function isInFlightOnlyMineruObservation(obs: any): boolean {
     level === 'log-observation-stale' ||
     level === 'api-alive-only' ||
     Boolean(obs.observationStale);
+}
+
+function formatLastKnownMineruProgress(obs: any): string | null {
+  if (!obs || isInFlightOnlyMineruObservation(obs)) return null;
+  const line = formatMineruProgressSemantics(obs);
+  if (!line) return null;
+  return line.replace(/^MinerU 正在解析[：:]?\s*/, '').replace(/^MinerU 正在处理，但日志观测滞后[：:]?\s*/, '');
+}
+
+function deriveTerminalSuccessMineruCompletionLine(task: ParseTask): string | null {
+  const metadata = task.metadata || {};
+  if (!isTerminalSuccessfulTask(task)) return null;
+  if (metadata.mineruStatus !== 'completed') return null;
+  if (!hasParsedArtifactEvidence(task)) return null;
+
+  const parsedCount = getParsedArtifactCount(task);
+  const artifactPart = parsedCount > 0 ? `解析产物 ${parsedCount} 个` : '解析产物已生成';
+  const lastKnownProgress = formatLastKnownMineruProgress(metadata.mineruObservedProgress);
+  if (lastKnownProgress) return `MinerU 已完成，${artifactPart}；最后可见进度：${lastKnownProgress}`;
+  return `MinerU 已完成，${artifactPart}`;
 }
 
 function deriveTerminalMineruCompletionLine(task: ParseTask): string | null {
@@ -117,6 +146,8 @@ export function deriveTaskDisplayStatus(task: ParseTask | null | undefined): str
 
 export function deriveMineruProgressLine(task: ParseTask | null | undefined): string | null {
   if (!task) return null;
+  const terminalSuccessLine = deriveTerminalSuccessMineruCompletionLine(task);
+  if (terminalSuccessLine) return terminalSuccessLine;
   const terminalCompletionLine = deriveTerminalMineruCompletionLine(task);
   if (terminalCompletionLine) return terminalCompletionLine;
   if (task.state === 'completed' || task.state === 'review-pending') return null;
