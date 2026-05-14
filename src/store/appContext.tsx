@@ -248,11 +248,36 @@ function persistenceFingerprint(value: unknown): string {
 let dbFailCount = 0;
 const DB_FAIL_TOAST_THRESHOLD = 3; // 连续失败 N 次后才弹窗提示
 let dbFailToastShown = false;
+let dbSyncPageLifecycleEnding = false;
+
+if (typeof window !== 'undefined') {
+  const markPageLifecycleEnding = () => { dbSyncPageLifecycleEnding = true; };
+  window.addEventListener('pagehide', markPageLifecycleEnding, { capture: true });
+  window.addEventListener('beforeunload', markPageLifecycleEnding, { capture: true });
+}
+
+function isTransientFetchCancellation(err: unknown, msg: string) {
+  const name = err && typeof err === 'object' && 'name' in err
+    ? String((err as { name?: unknown }).name || '')
+    : '';
+  const text = `${name} ${msg}`.toLowerCase();
+  return text.includes('failed to fetch')
+    || text.includes('abort')
+    || text.includes('aborted')
+    || text.includes('networkerror')
+    || text.includes('load failed');
+}
 
 function handleDbWriteError(operation: string, err: unknown, silent = false) {
-  dbFailCount++;
   const msg = err instanceof Error ? err.message : String(err);
-  
+
+  if (dbSyncPageLifecycleEnding && isTransientFetchCancellation(err, msg)) {
+    console.debug(`[db-sync] ${operation} cancelled during page lifecycle change:`, msg);
+    return;
+  }
+
+  dbFailCount++;
+
   if (silent) {
     console.warn(`[db-sync] ${operation} failed (silent):`, msg);
     return;
