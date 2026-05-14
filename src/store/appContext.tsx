@@ -238,6 +238,10 @@ function loadConfigFromStorage<T extends Record<string, unknown>>(key: string, f
   }
 }
 
+function persistenceFingerprint(value: unknown): string {
+  return JSON.stringify(value);
+}
+
 // ─── db-server API 工具（带失败提示与重试）───────────────────────
 
 // 连续失败计数器，避免频繁弹窗骚扰用户
@@ -416,6 +420,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const mergedMineru = settings?.mineruConfig ? mergeConfigWithFallback(initialMinerUConfig, settings.mineruConfig) : initialMinerUConfig;
           const mergedMinio = settings?.minioConfig ? mergeConfigWithFallback(initialMinioConfig, settings.minioConfig) : initialMinioConfig;
           const withSecrets = applySecretsToConfigs({ aiConfig: mergedAi, mineruConfig: mergedMineru, minioConfig: mergedMinio }, secrets?.secrets ?? {});
+          const sanitizedAi = sanitizeAiConfigForLocalStorage(withSecrets.aiConfig);
+          const sanitizedMineru = sanitizeMinerUConfigForLocalStorage(withSecrets.mineruConfig);
+          const sanitizedMinio = sanitizeMinioConfigForLocalStorage(withSecrets.minioConfig);
+          const secretsPayload = extractSecretsPayload(withSecrets);
           // DB 已初始化（有数据 or 有初始化标记）：直接用 DB 数据覆盖内存 state
           dispatch({
             type: 'HYDRATE_FROM_DB',
@@ -463,6 +471,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const newAiRuleFp = new Map();
           (aiRules || []).forEach(r => newAiRuleFp.set(r.id, JSON.stringify(r)));
           aiRuleFingerprintsRef.current = newAiRuleFp;
+
+          aiConfigFingerprintRef.current = persistenceFingerprint(sanitizedAi);
+          mineruConfigFingerprintRef.current = persistenceFingerprint(sanitizedMineru);
+          minioConfigFingerprintRef.current = persistenceFingerprint(sanitizedMinio);
+          secretsFingerprintRef.current = persistenceFingerprint(secretsPayload);
 
           console.log(`[appContext] Hydrated from DB (${materials?.length ?? 0} materials, initialized=${isDbInitialized})`);
         } else {
@@ -540,6 +553,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const newAiRuleFp = new Map();
           state.aiRules.forEach(r => newAiRuleFp.set(r.id, JSON.stringify(r)));
           aiRuleFingerprintsRef.current = newAiRuleFp;
+
+          aiConfigFingerprintRef.current = persistenceFingerprint(sanitizeAiConfigForLocalStorage(state.aiConfig));
+          mineruConfigFingerprintRef.current = persistenceFingerprint(sanitizeMinerUConfigForLocalStorage(state.mineruConfig));
+          minioConfigFingerprintRef.current = persistenceFingerprint(sanitizeMinioConfigForLocalStorage(state.minioConfig));
+          secretsFingerprintRef.current = persistenceFingerprint(extractSecretsPayload({
+            aiConfig: state.aiConfig,
+            mineruConfig: state.mineruConfig,
+            minioConfig: state.minioConfig,
+          }));
         }
       } catch (err) {
         console.warn('[appContext] db-server hydration failed, using localStorage fallback:', err);
@@ -574,6 +596,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const productFingerprintsRef     = useRef<Map<number, string>>(new Map());
   const tagFingerprintsRef         = useRef<Map<number, string>>(new Map());
   const aiRuleFingerprintsRef      = useRef<Map<number, string>>(new Map());
+  const aiConfigFingerprintRef     = useRef<string | null>(null);
+  const mineruConfigFingerprintRef = useRef<string | null>(null);
+  const minioConfigFingerprintRef  = useRef<string | null>(null);
+  const secretsFingerprintRef      = useRef<string | null>(null);
 
   // ── 持久化：localStorage（同步）+ db-server（异步）────────────
 
@@ -734,24 +760,46 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [state.aiRuleSettings]);
 
   useEffect(() => {
-    saveToStorage(LS.AI, sanitizeAiConfigForLocalStorage(state.aiConfig));
+    const sanitized = sanitizeAiConfigForLocalStorage(state.aiConfig);
+    saveToStorage(LS.AI, sanitized);
     if (!hydratedRef.current) return;
-    dbPut('/settings/aiConfig', sanitizeAiConfigForLocalStorage(state.aiConfig));
-    dbPut('/secrets', extractSecretsPayload({ aiConfig: state.aiConfig, mineruConfig: state.mineruConfig, minioConfig: state.minioConfig }));
-  }, [state.aiConfig]);
+
+    const fingerprint = persistenceFingerprint(sanitized);
+    if (aiConfigFingerprintRef.current !== fingerprint) {
+      aiConfigFingerprintRef.current = fingerprint;
+      dbPut('/settings/aiConfig', sanitized);
+    }
+
+    const secretsPayload = extractSecretsPayload({ aiConfig: state.aiConfig, mineruConfig: state.mineruConfig, minioConfig: state.minioConfig });
+    const secretsFingerprint = persistenceFingerprint(secretsPayload);
+    if (secretsFingerprintRef.current !== secretsFingerprint) {
+      secretsFingerprintRef.current = secretsFingerprint;
+      dbPut('/secrets', secretsPayload);
+    }
+  }, [state.aiConfig, state.mineruConfig, state.minioConfig]);
 
   useEffect(() => {
-    saveToStorage(LS.MINERU, sanitizeMinerUConfigForLocalStorage(state.mineruConfig));
+    const sanitized = sanitizeMinerUConfigForLocalStorage(state.mineruConfig);
+    saveToStorage(LS.MINERU, sanitized);
     if (!hydratedRef.current) return;
-    dbPut('/settings/mineruConfig', sanitizeMinerUConfigForLocalStorage(state.mineruConfig));
-    dbPut('/secrets', extractSecretsPayload({ aiConfig: state.aiConfig, mineruConfig: state.mineruConfig, minioConfig: state.minioConfig }));
+
+    const fingerprint = persistenceFingerprint(sanitized);
+    if (mineruConfigFingerprintRef.current !== fingerprint) {
+      mineruConfigFingerprintRef.current = fingerprint;
+      dbPut('/settings/mineruConfig', sanitized);
+    }
   }, [state.mineruConfig]);
 
   useEffect(() => {
-    saveToStorage(LS.MINIO, sanitizeMinioConfigForLocalStorage(state.minioConfig));
+    const sanitized = sanitizeMinioConfigForLocalStorage(state.minioConfig);
+    saveToStorage(LS.MINIO, sanitized);
     if (!hydratedRef.current) return;
-    dbPut('/settings/minioConfig', sanitizeMinioConfigForLocalStorage(state.minioConfig));
-    dbPut('/secrets', extractSecretsPayload({ aiConfig: state.aiConfig, mineruConfig: state.mineruConfig, minioConfig: state.minioConfig }));
+
+    const fingerprint = persistenceFingerprint(sanitized);
+    if (minioConfigFingerprintRef.current !== fingerprint) {
+      minioConfigFingerprintRef.current = fingerprint;
+      dbPut('/settings/minioConfig', sanitized);
+    }
   }, [state.minioConfig]);
 
   // P1 Patch: batchProcessing 不再持久化到 localStorage 和 db-server。
