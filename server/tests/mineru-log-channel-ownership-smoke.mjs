@@ -105,7 +105,42 @@ async function main() {
     assert.equal(diagnostics.summaryState, 'valid-business-progress');
     assert.equal(diagnostics.selectedSource.signals.hasBusinessSignal, true);
     assert.equal(diagnostics.selectedSource.signals.progressCount, 1);
+    const parsed = await parseLatestMineruProgress(null, null, { backendEffective: 'pipeline' });
+    assert.equal(parsed.activityLevel, 'active-progress');
+    assert.equal(parsed.signals.hasBusinessSignal, true);
+    assert.equal(parsed.logSource.configuredBy, 'MINERU_ERR_LOG_PATH');
     console.log('Case 4 Pass: valid business progress lines are detected');
+  });
+
+  await withScratch(async (scratch) => {
+    const emptyErr = path.join(scratch, 'configured-empty.err.log');
+    const emptyOut = path.join(scratch, 'configured-empty.out.log');
+    const fallbackDir = path.join(scratch, 'uat', 'scratch');
+    const fallbackLog = path.join(fallbackDir, 'mineru-api.log');
+    fs.mkdirSync(fallbackDir, { recursive: true });
+    fs.writeFileSync(emptyErr, '');
+    fs.writeFileSync(emptyOut, '');
+    fs.writeFileSync(fallbackLog, [
+      '2026-05-08 08:09:00 | INFO | Pipeline processing-window multi-file run. doc_count=1, total_pages=99, window_size=64, total_batches=2',
+      'Predict: 99%|######### | 98/99 [00:10<00:01, 1.00s/it]',
+    ].join('\n'));
+    const staleMs = Date.now() - MINERU_LOG_STALE_MS - 60_000;
+    fs.utimesSync(fallbackLog, new Date(staleMs), new Date(staleMs));
+
+    await inspectWithLogs({ scratch, errLog: emptyErr, outLog: emptyOut });
+    const parsed = await parseLatestMineruProgress(null, null, { backendEffective: 'pipeline' });
+    assert.equal(parsed.activityLevel, 'log-observation-empty');
+    assert.equal(parsed.signals?.hasBusinessSignal, undefined);
+    assert.equal(parsed.phase, undefined);
+    assert.equal(parsed.progressSemantics.phase, null);
+    assert.equal(parsed.progressSemantics.freshness, 'missing');
+    assert.equal(parsed.logSource.logSourceSelectedReason, 'file-empty');
+    assert.equal(
+      parsed.ignoredDiagnosticLogSource.logSourceSelectedReason,
+      'workspace-scratch-fallback-ignored-when-configured-logs-explicit'
+    );
+    assert.equal(parsed.ignoredDiagnosticLogSource.diagnostic.hasBusinessSignal, true);
+    console.log('Case 5 Pass: stale workspace scratch fallback cannot outrank explicit empty configured logs');
   });
 
   {
@@ -121,7 +156,7 @@ async function main() {
     assert.equal(fastComplete.phase == null, true);
     assert.equal(fastComplete.percent == null, true);
     assert.equal(fastComplete.progressSemantics.freshness, 'completed-diagnostic');
-    console.log('Case 5 Pass: fast-complete without business signal is not fabricated into progress');
+    console.log('Case 6 Pass: fast-complete without business signal is not fabricated into progress');
   }
 
   await withScratch(async (scratch) => {
@@ -134,7 +169,7 @@ async function main() {
     assert.equal(parsed.activityLevel, 'log-observation-empty');
     assert.equal(warning.kind, 'mineru-log-observation-diagnostic-only');
     assert.notEqual(parsed.activityLevel, 'failed-confirmed');
-    console.log('Case 6 Pass: in-flight MinerU API state is not terminally failed solely by an empty log channel');
+    console.log('Case 7 Pass: in-flight MinerU API state is not terminally failed solely by an empty log channel');
   });
 
   {
@@ -155,7 +190,7 @@ async function main() {
       assert.equal(diagnostics.sidecar.expected, true);
       assert.equal(diagnostics.sidecar.runningState, 'observed-recent');
       assert.equal(diagnostics.sidecar.runningObserved, true);
-      console.log('Case 7 Pass: sidecar expected/running state is reported without process management');
+      console.log('Case 8 Pass: sidecar expected/running state is reported without process management');
     } finally {
       restoreEnv();
       fs.rmSync(scratch, { recursive: true, force: true });

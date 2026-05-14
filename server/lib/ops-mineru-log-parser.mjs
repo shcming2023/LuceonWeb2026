@@ -45,6 +45,10 @@ function getMineruLogPaths() {
   ];
 }
 
+function hasExplicitConfiguredLogPaths() {
+  return Boolean(process.env.MINERU_LOG_PATH || process.env.MINERU_ERR_LOG_PATH);
+}
+
 function buildPublicLogSource(filePath, index = 0) {
   const baseName = path.basename(filePath);
   const isErr = baseName.includes('.err') || /err|stderr/i.test(baseName);
@@ -61,6 +65,10 @@ function buildPublicLogSource(filePath, index = 0) {
     logSourceContext: getLogSourceContext(filePath),
     logSourceBaseName: baseName
   };
+}
+
+function isWorkspaceScratchLogSource(logSource) {
+  return logSource?.configuredBy === 'workspace-scratch-fallback';
 }
 
 function isBeforeMinObserved(effectiveMs, minObservedMs) {
@@ -716,15 +724,20 @@ export function determineActivityLevel(signalSummary, previousObservation, curre
  */
 export async function parseLatestMineruProgress(minObservedAt, previousObservation = null, executionProfile = null) {
   const logPaths = getMineruLogPaths();
+  const configuredLogPathsExplicit = hasExplicitConfiguredLogPaths();
 
   let bestResult = null;
   let candidates = [];
   let selectedLogSource = null;
   let fallbackLogSource = null;
+  let ignoredScratchFallbackSource = null;
   const observerCheckedAt = new Date().toISOString();
 
-  for (const filePath of logPaths) {
+  for (const [index, filePath] of logPaths.entries()) {
+    const publicSource = buildPublicLogSource(filePath, index);
+    const scratchFallbackSuppressed = configuredLogPathsExplicit && isWorkspaceScratchLogSource(publicSource);
     const logSource = {
+      ...publicSource,
       logSourcePath: filePath,
       logSourceContext: getLogSourceContext(filePath),
       logSourceExists: false,
@@ -751,7 +764,7 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
 
       const content = await readTail(filePath, 16384); // 读取 16KB 以覆盖更多信号
       if (!content) {
-        if (!fallbackLogSource || !fallbackLogSource.logSourceExists) {
+        if (!scratchFallbackSuppressed && (!fallbackLogSource || !fallbackLogSource.logSourceExists)) {
           fallbackLogSource = {
             ...logSource,
             logSourceReadable: stats.size === 0,
@@ -1016,6 +1029,22 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
         signals
       };
 
+      if (scratchFallbackSuppressed) {
+        ignoredScratchFallbackSource = {
+          ...logSource,
+          logSourceReadable: true,
+          logSourceSelectedReason: 'workspace-scratch-fallback-ignored-when-configured-logs-explicit',
+          diagnostic: {
+            kind: 'stale-or-nonauthoritative-workspace-scratch-fallback',
+            reason: 'Explicit MINERU_LOG_PATH/MINERU_ERR_LOG_PATH are configured, so workspace scratch logs cannot be selected as current MinerU business progress.',
+            hasBusinessSignal: candidateResult.signals.hasBusinessSignal,
+            activityLevel: candidateResult.activityLevel,
+            contextTime: candidateResult.contextTime
+          }
+        };
+        continue;
+      }
+
       candidates.push({ result: candidateResult, logSource });
 
     } catch (_e) {
@@ -1086,13 +1115,22 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
       observationStaleReason = 'log file is unreadable';
     }
 
-    return attachProgressSemantics({
+    const result = attachProgressSemantics({
       activityLevel,
       observationStale: true,
       observationStaleReason,
       logSource: finalLogSource,
       observerCheckedAt
     });
+    if (ignoredScratchFallbackSource) {
+      result.ignoredDiagnosticLogSource = ignoredScratchFallbackSource;
+      if (activityLevel === 'log-observation-empty') {
+        result.observationStaleReason = 'configured log file exists but is empty; workspace scratch fallback ignored as non-authoritative diagnostic';
+        result.progressSemantics = undefined;
+        attachProgressSemantics(result);
+      }
+    }
+    return result;
   }
 
   // 计算 lastProgressObservedAt（只看业务信号时间，不看 API 噪声时间）
