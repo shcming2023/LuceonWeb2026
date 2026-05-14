@@ -77,3 +77,25 @@ If the same decision row receives two consecutive heartbeat checks without user 
 ## Heartbeat Wait Evidence
 
 - 2026-05-14T21:18:51+0800: heartbeat check found no Director-pending task and Task 150 still awaiting User decision. This is wait evidence 1. No autonomous progression was triggered.
+
+## User Decision Received
+
+- 2026-05-14T21:20:55+0800: User chose a new pressure-test route.
+
+Decision:
+
+- user will clean the environment manually;
+- user will manually submit one pressure test of roughly 20+ PDFs with mixed large and small files;
+- TestAcceptanceEngineer should monitor the pressure test every 30 minutes by heartbeat;
+- TestAcceptanceEngineer should comprehensively record the process until success, failure, hang/stall, or machine/service down;
+- once the run fully ends, TestAcceptanceEngineer should write a report for Director review.
+
+Director converted this decision into Task 151:
+
+`TaskAndReport/2026-05-14T21-20-55+0800_P1-Manual-Pressure-Test-Read-Only-Monitoring_TASK.md`
+
+Boundary:
+
+- the user owns cleanup and upload submission;
+- TestAcceptanceEngineer owns read-only monitoring and final evidence report;
+- no role is authorized to upload, clean, repair, reparse, re-AI, mutate DB/MinIO/Docker volume/data, restart services, mutate models/config/secrets/samples, or claim readiness/L3/go-live.
