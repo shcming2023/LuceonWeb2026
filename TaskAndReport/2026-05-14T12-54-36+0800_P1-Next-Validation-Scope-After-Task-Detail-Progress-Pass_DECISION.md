@@ -3,7 +3,8 @@
 - Decision ID: `TASK-20260514-125436-P1-Next-Validation-Scope-After-Task-Detail-Progress-Pass`
 - Created: 2026-05-14T12:54:36+0800
 - Created by: Director
-- Current status: `PENDING_USER_DECISION`
+- Current status: `USER_APPROVED_OPTION_A`
+- User approved: 2026-05-14T12:58:14+0800
 - Based on Director review: `TaskAndReport/2026-05-14T12-54-36+0800_P1-Task-Detail-Progress-Hardening-Exactly-One-Controlled-Upload-Validation_DIRECTOR_REVIEW.md`
 
 ## Current Facts
@@ -69,3 +70,17 @@ This avoids new production uploads but leaves broader stability untested.
 Choose Option A.
 
 Do not move to pressure testing yet. Pressure or long-duration validation should wait until a small serial run passes with clean task-level evidence.
+
+## Decision Outcome
+
+User approved Option A at 2026-05-14T12:58:14+0800.
+
+Director will issue a scoped TestAcceptanceEngineer task for a small serial validation pass:
+
+- up to 3 additional PDFs from `/Users/concm/prod_workspace/Luceon2026/testpdf`;
+- strictly one upload at a time;
+- each task must reach terminal state before the next upload;
+- stop immediately on systemic failure;
+- no pressure, no concurrent batch, no soak, no readiness claim.
+
+No other validation scope is authorized by this decision.
