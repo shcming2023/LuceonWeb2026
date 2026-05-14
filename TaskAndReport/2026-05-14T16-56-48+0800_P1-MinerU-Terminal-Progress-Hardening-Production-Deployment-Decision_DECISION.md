@@ -72,3 +72,18 @@ This is the smallest next step that turns the accepted code/test fix into runtim
 ## Heartbeat Wait Evidence
 
 - Wait evidence 1: 2026-05-14T17:25:21+0800 heartbeat found this decision still pending with no user reply after the Director recommendation. No autonomous advance was triggered yet.
+- Wait evidence 2: 2026-05-14T17:55:21+0800 heartbeat found this decision still pending with no user reply after wait evidence 1. Director applied the conservative autonomous rule and selected Option A only.
+
+## Autonomous Decision
+
+Result: `DIRECTOR_AUTONOMOUS_OPTION_A`
+
+Director authorized only the scoped production deployment plus read-only validation task described in Option A.
+
+Still not authorized:
+
+- uploads
+- batch/intake, pressure, soak, L3, pressure PASS, release-readiness, production-readiness, or go-live claims
+- cleanup, repair, reparse, re-AI, failed-task mutation, or manual status mutation
+- destructive DB, MinIO, Docker volume, Docker down, data, sample, model, secret, settings, or config mutation
+- MinerU, Ollama, supervisor, or sidecar ownership changes beyond the minimum service rebuild/restart needed to deploy accepted frontend code
