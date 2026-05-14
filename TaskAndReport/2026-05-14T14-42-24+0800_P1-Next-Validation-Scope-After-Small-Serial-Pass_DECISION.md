@@ -64,3 +64,19 @@ Reason: current evidence is still serial. Jumping to pressure/batch could mix mu
 Approve Option A: extended strict-serial validation, still no pressure.
 
 This keeps progress moving toward unattended long-run confidence while preserving the current safety boundary.
+
+## User Decision
+
+- Decision time: 2026-05-14T14:45:50+0800
+- Decision: `USER_APPROVED_OPTION_A`
+
+User approved the Director-recommended Option A:
+
+- TestAcceptanceEngineer may run up to 6 additional PDFs from `/Users/concm/prod_workspace/Luceon2026/testpdf`
+- uploads must be strictly serial
+- one upload must reach terminal state before the next begins
+- no pressure test
+- no batch concurrency
+- no cleanup, repair, reparse, re-AI, destructive mutation, service ownership mutation, settings/secrets mutation, readiness/L3/go-live claim, or pressure PASS claim
+
+Director issued `TASK-20260514-144550-P1-Extended-Strict-Serial-Validation-After-Small-Serial-Pass`.
