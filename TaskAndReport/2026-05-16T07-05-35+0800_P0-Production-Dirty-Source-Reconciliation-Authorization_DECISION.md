@@ -86,3 +86,11 @@ This keeps production-source cleanup under direct owner control, but may take lo
 ## Pending User Reply
 
 Please choose Option A, B, C, or D.
+
+## User Decision Recorded
+
+- Decision time: `2026-05-16T07:07:58+0800`
+- User chose: `Option A`
+- Director action: issued `TASK-20260516-070758-P0-Production-Dirty-Source-Backup-Reconcile-And-Progress-Snapshot-Deploy` to `DevelopmentEngineer`.
+
+Authorized scope is limited to backing up production dirty source outside the Git repo, cleaning only backed-up tracked source files, fast-forwarding production source, rebuilding/restarting only the minimum required services, and read-only validation. Upload, pressure test, submit-probe, retry/reparse/re-AI/cancel/repair/reset, DB/MinIO/Docker volume cleanup, model/secret/config/sample mutation, pressure PASS, L3, release readiness, production readiness, and go-live declaration remain unauthorized.
