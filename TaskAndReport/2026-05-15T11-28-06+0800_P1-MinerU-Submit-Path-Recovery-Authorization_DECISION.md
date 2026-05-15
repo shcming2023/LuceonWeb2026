@@ -50,6 +50,21 @@ Please choose one:
 
 Unless the user decides otherwise, Director recommends Option A.
 
+## User Decision Recorded
+
+At 2026-05-15T11:36:28+0800, the user approved Option A.
+
+Director will issue a scoped DevelopmentEngineer task to:
+
+1. Confirm no active parse/AI work.
+2. Capture current MinerU process/listener/log state.
+3. Restart or relaunch only the host MinerU API session/process.
+4. Verify direct MinerU `/health`.
+5. Run exactly one authorized dependency-health submit-probe.
+6. Stop and report whether the admission circuit closes or remains open.
+
+This approval does not authorize uploads, pressure tests, broad service restart, Docker down/down-v/prune, DB/MinIO restore/import, cleanup/cancel/repair/retry/reparse/re-AI, deploy/rebuild/rollback, Ollama/model/config/secret/sample mutation, or any release-readiness/go-live claim.
+
 ## Non-Authorized Boundaries
 
 This decision does not authorize uploads, pressure/batch/soak/fresh serial validation, broad service restart, Docker down/down-v/prune, DB/MinIO restore/import, cleanup/cancel/repair/retry/reparse/re-AI, deploy/rebuild/rollback, Ollama/model/config/secret/sample mutation, automatic retry/requeue, skeleton fallback weakening, pressure PASS, L3, release-readiness, production-readiness, production上线, or go-live readiness.
