@@ -61,3 +61,25 @@ Do not accept a release boundary now. Record no-go/hold pending further implemen
 For the current local/single-machine deployment boundary, choose Option A if you accept the limitations above.
 
 Choose Option B if your standard for "production" requires rollback/recovery rehearsal before operator-facing use.
+
+## User Decision Recorded
+
+- Decision time: 2026-05-15T12:54:33+0800
+- User selected: Option C, with a custom pressure-validation route.
+
+The selected route is:
+
+1. First clear the production test/runtime data so the 24-PDF run starts from a clean initial environment.
+2. User will manually submit 24 test PDF tasks from the frontend page.
+3. TestAcceptanceEngineer will then monitor the whole pressure window at a 30-minute heartbeat cadence until all tasks reach terminal state, a system-level failure is confirmed, or the run is judged hung/unrecoverable.
+4. The monitoring report must focus on long-duration stability and anomaly handling, including whether MinerU progress semantics, page task semantics, admission state, AI failures, queue behavior, and dependency health remain interpretable during pressure.
+
+Director interpretation:
+
+- This is not a release/go-live approval.
+- The originally planned scoped clean-environment preparation task is no longer needed because User reported manual frontend reset at 2026-05-15T12:56:42+0800 before Director synced the task to GitHub.
+- Director must not dispatch another cleanup task unless new evidence shows the reset did not take effect and User approves a new cleanup.
+- The next role task is read-only/manual-run monitoring by TestAcceptanceEngineer.
+- It does not authorize automatic pressure upload by any role.
+- It does not authorize pressure PASS, L3, production readiness, production上线, or go-live declaration.
+- It does not authorize broad service restart, Docker volume deletion, `docker compose down -v`, DB/MinIO volume deletion, model pull/delete/replace, secret/config mutation, retry/reparse/re-AI, or sample-file mutation.
