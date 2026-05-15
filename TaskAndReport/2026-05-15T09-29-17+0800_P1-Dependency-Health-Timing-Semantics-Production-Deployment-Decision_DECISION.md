@@ -64,7 +64,14 @@ If this same User decision remains unanswered for two heartbeat cycles, Director
 
 ## User Decision
 
-Pending.
+User approved Option A in-thread on 2026-05-15.
+
+Director action:
+
+- issue Task 166 to `DevelopmentEngineer`;
+- keep scope to minimum necessary production deployment and read-only dependency-health validation;
+- require validation of the new Ollama readiness/timing fields in production;
+- do not authorize upload, pressure/batch/soak/fresh serial validation, cleanup/cancel/repair/retry/reparse/re-AI, destructive DB/MinIO/Docker volume/data mutation, settings/secrets/config/model/sample mutation, skeleton fallback weakening, pressure PASS, L3, release-readiness, production-readiness, production上线, or go-live claim.
 
 ## Not Authorized By This Decision Row
 
