@@ -1,81 +1,278 @@
-# Report: P1 Manual 24-PDF Pressure Monitoring
+# Test Acceptance Report: P1 Manual 24-PDF Pressure Monitoring
 
 - Task ID: `TASK-20260515-125642-P1-Manual-24-PDF-Pressure-Monitoring`
-- Role: `TestAcceptanceEngineer`
-- Task Brief: `TaskAndReport/2026-05-15T12-56-42+0800_P1-Manual-24-PDF-Pressure-Monitoring_TASK.md`
-- Report Written: 2026-05-15T10:47:51Z (UTC) / 2026-05-15T18:47:51+0800 (CST)
-- Outcome: `BLOCKED_CLOUD_AGENT_CANNOT_OBSERVE_LOCAL_PRODUCTION`
+- Based on Director task brief: `TaskAndReport/2026-05-15T12-56-42+0800_P1-Manual-24-PDF-Pressure-Monitoring_TASK.md`
+- Assignee role: `TestAcceptanceEngineer`
+- Report time: 2026-05-15T19:10:42+0800
+- Development workspace: `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/3.Luceon2026`
+- Production workspace: `/Users/concm/prod_workspace/Luceon2026`
+- Recommendation: `blocked`
 
-## 1. Execution Environment
+## Boundary
 
-This report is produced by the GitHub Copilot cloud coding agent (GitHub Actions sandbox runner).  
-Branch: `copilot/improve-user-profile-page`  
-HEAD: `74bdd32`
+This report covers read-only monitoring of the User-submitted 24-PDF pressure window after the User-reported frontend reset. It does not claim pressure PASS, L3, release readiness, production readiness, production上线, or go-live readiness.
 
-The production deployment runs on the user's local machine at:  
-- `http://localhost:8081` / `http://192.168.31.33:8081`
+No upload, cleanup/reset, manual or extra MinerU submit-probe, retry, reparse, re-AI, cancel, repair, service restart, rebuild, redeploy, config mutation, secret mutation, model mutation, sample mutation, DB/MinIO/Docker mutation, Docker down/down-v/prune, or volume operation was performed by TestAcceptanceEngineer.
 
-The cloud sandbox runner **cannot reach the user's local machine**. All required monitoring endpoints (`/__proxy/upload/health`, `/__proxy/upload/ops/dependency-health`, `/__proxy/upload/ops/mineru/admission-circuit`, `/__proxy/upload/ops/mineru/active-task`, `/__proxy/db/tasks`, etc.) are only accessible from the local network.
+## Branch And Runtime State
 
-## 2. Blocker Summary
+Development branch/status at monitoring pass:
 
-| Item | Detail |
-|---|---|
-| Environment | GitHub Copilot cloud agent (GitHub Actions runner) |
-| Production URL | `http://localhost:8081` — not reachable from cloud runner |
-| Monitoring endpoints | All under `/__proxy/upload/` and `/__proxy/db/` — require local network access |
-| Observation attempted | No — connection to production is not possible from this environment |
-| Mutations performed | None |
+```text
+## main...origin/main
+```
 
-## 3. What Was Read (Repository-Only, Read-Only)
+Development HEAD observed during the monitoring pass:
 
-- `TaskAndReport/TASK_TRACKING_LIST.md` — Task 181 confirmed `已下达待执行 / TestAcceptanceEngineer`
-- `TaskAndReport/2026-05-15T12-56-42+0800_P1-Manual-24-PDF-Pressure-Monitoring_TASK.md` — full task brief reviewed
-- `TaskAndReport/2026-05-15T12-45-06+0800_P1-Release-Boundary-Decision-After-One-Real-PDF-Pass_DECISION.md` — User selected Option C (manual reset + manual 24-PDF submission + TestAcceptanceEngineer read-only monitoring)
-- Previous task/review chain through Task 180
+```text
+74bdd32
+```
 
-The repository is a shallow clone. No production directories, log files, or runtime state files are present in this cloud environment.
+Production branch/status:
 
-## 4. Production State at Last Known Record
+```text
+## main...origin/main
+ M .gitignore
+ M docker-compose.override.yml
+ M docs/codex/TEST_MATRIX.md
+ M docs/deploy/PRODUCTION_RUNTIME_OWNERSHIP.md
+ M ops/runtime-ownership-status.sh
+ M server/db-server.mjs
+ M server/tests/worker-smoke.mjs
+ M src/app/components/BatchUploadModal.tsx
+ M src/app/pages/SourceMaterialsPage.tsx
+```
 
-From `TaskAndReport/TASK_TRACKING_LIST.md` row 180 (Task 179 review):
+Production HEAD:
 
-- Production HEAD: `1716add` (from Task 166/176 sync chain)
-- User reported manual frontend reset at 2026-05-15T12:56:42+0800
-- User then began manual submission of approximately 24 PDFs from the frontend
-- MinerU submit path recovered as of Task 173 (`202` submit-probe, circuit closed)
-- Ollama `qwen3.5:9b` was resident with `readinessState=resident-chat-succeeded` as of Task 166
+```text
+1716add
+```
 
-No direct production API evidence is available from this cloud environment.
+The production workspace was dirty before this report and was treated as runtime evidence only.
 
-## 5. Recommended Action for Director
+## Read-Only Commands And Endpoints Used
 
-This task **cannot be completed by the GitHub Copilot cloud agent** because it requires real-time HTTP observation of the user's local production system. The required monitoring endpoints are only reachable from the local network.
+All commands and endpoints below were read-only:
 
-Director should take one of the following actions:
+- `git status --short --branch`
+- `git rev-parse --short HEAD`
+- `curl -fsS http://localhost:8081/__proxy/upload/health`
+- `curl -sS --max-time 15 'http://localhost:8081/__proxy/upload/ops/dependency-health?mineruSubmitProbe=false'`
+- `curl -sS --max-time 15 http://localhost:8081/__proxy/upload/ops/mineru/admission-circuit`
+- `curl -sS --max-time 20 http://localhost:8081/__proxy/upload/ops/mineru/active-task`
+- `curl -sS --max-time 20 http://localhost:8081/__proxy/db/tasks`
+- `curl -sS --max-time 20 http://localhost:8081/__proxy/db/materials`
+- `curl -sS --max-time 20 http://localhost:8081/__proxy/db/ai-metadata-jobs`
+- `curl -sS --max-time 10 http://127.0.0.1:8083/health`
+- `curl -sS --max-time 15 http://127.0.0.1:8083/tasks/f8e44788-db97-4273-89da-dc5bbfa29d71`
+- `lsof -nP -iTCP:8083 -sTCP:LISTEN`
+- `tmux list-sessions`
+- `tail -n` on `/Users/concm/ops/logs/mineru-api.log` and `/Users/concm/ops/logs/mineru-api.err.log`
+- HTTP accessibility check for `/cms/tasks`
 
-1. **Reassign to local agent session**: Route Task 181 back to a TestAcceptanceEngineer role running in the user's local environment (local terminal/IDE session), which can reach `localhost:8081`.
-2. **User-provided evidence**: If the pressure run has already reached a terminal state, the user may provide the relevant API response payloads, task state counts, and log excerpts directly in the Director thread, and TestAcceptanceEngineer (in a local session) can compile the report from that evidence.
-3. **Director-observed evidence**: Director may perform the read-only monitoring checks directly from the local machine and compile the report with production evidence.
+No `mineruSubmitProbe=true` endpoint was called.
 
-## 6. Explicit Confirmation of Non-Mutation
+## Pressure Window Identification
 
-TestAcceptanceEngineer (cloud agent) performed **no operations** against the production system or local environment:
+The observed pressure window used tasks submitted after `2026-05-15T12:56:42+0800`. Twenty-four pressure-run tasks were visible in the DB. The first observed submissions were around `2026-05-15T05:07:37Z` to `2026-05-15T05:08:09Z`.
 
-- No file upload
-- No cleanup or data deletion
-- No service restart, stop, or rebuild
-- No manual submit-probe
-- No circuit reset
-- No retry, reparse, re-AI, or repair of any task
-- No mutation of config, secrets, models, Ollama, MinerU, Docker volumes, DB volumes, or MinIO volumes
-- No pressure PASS, L3, release-readiness, production-readiness, or go-live claim
+## Snapshot Timeline
 
-## 7. Recommended Next Task
+| Time +0800 | Observed State |
+| --- | --- |
+| 13:08 | 24 total: 1 running, 23 pending. Dependency and admission checks did not show a terminal pressure result. |
+| 13:40 | 24 total: 1 review-pending, 1 running, 22 pending. |
+| 14:10 | 24 total: 1 review-pending, 1 running, 22 pending. MinerU logs still showed progress, so the active task was not treated as hung. |
+| 14:40 | 24 total: 1 review-pending, 1 running, 22 pending. Active-task diagnostics showed local timeout, but logs still showed progress. |
+| 15:10 | 24 total: 2 review-pending, 1 running, 21 pending. |
+| 15:40 | 24 total: 3 review-pending, 1 running, 20 pending. |
+| 16:10 | 24 total: 4 review-pending, 1 running, 19 pending. |
+| 16:55 | 24 total: 4 review-pending, 1 running, 19 pending. The 91.5 MB task had local timeout evidence but later continued into AI. |
+| 17:25 | 24 total: 4 review-pending, 1 AI-running, 1 MinerU-running, 18 pending. |
+| 17:43 | 24 total: 5 review-pending, 1 MinerU-running, 18 pending. The 91.5 MB file reached review-pending. |
+| 18:34 | 24 total: 5 review-pending, 1 MinerU-running, 18 pending. Direct MinerU health was unreachable, no listener on 8083 was visible, and no tmux server was visible, while stale logs still contained earlier progress. |
+| 19:10 | 24 total: 5 review-pending, 1 MinerU-running, 18 pending. Upload health stayed OK, but dependency-health reported MinerU `connect ECONNREFUSED`, direct MinerU health and task API failed, no 8083 listener was visible, and no tmux session was visible. This is the stop-condition snapshot for system-level blocking. |
 
-Director should issue a correction decision reassigning Task 181 monitoring to a local session environment with access to `localhost:8081`, or accept the evidence provided directly by the user and compile the report accordingly.
+## Final Counts
 
----
+Pressure-run DB task count:
 
-Report completed: 2026-05-15T18:47:51+0800  
-TestAcceptanceEngineer (GitHub Copilot cloud agent)
+```json
+{
+  "total": 24,
+  "byState": {
+    "review-pending": 5,
+    "running": 1,
+    "pending": 18
+  },
+  "byStage": {
+    "review": 5,
+    "mineru-processing": 1,
+    "upload": 18
+  },
+  "failed": 0
+}
+```
+
+AI metadata jobs:
+
+```json
+{
+  "total": 5,
+  "byState": {
+    "review-pending": 5
+  },
+  "running": 0,
+  "failed": 0
+}
+```
+
+Completed/review-pending examples included:
+
+- `Cambridge IGCSE(0607) International Mathematics Coursebook_2023(Hodder Express).pdf`, 52,964,792 bytes, `review-pending`
+- `Cambridge IGCSE(0607) International Mathematics Coursebook Extended_2018(Haese Mathematics).pdf`, 45,247,007 bytes, `review-pending`
+- `Cambridge IGCSE(0606) and O Level(4037) Additional Mathematics Coursebook_2023(Hodder Express).pdf`, 43,536,275 bytes, `review-pending`
+- `Cambridge IGCSE(0606) and O Level(4037) Additional Mathematics Coursebook_2023(Cambridge University Press).pdf`, 40,235,936 bytes, `review-pending`
+- `Cambridge IGCSE(0606) and O Level(4037) Additional Mathematics _2018(Haese Mathematics).pdf`, 91,501,329 bytes, `review-pending`
+
+No task-level `failed` records were observed at the final snapshot. The blocked recommendation is therefore based on system/runtime observability and MinerU availability, not on declaring the 24 PDFs as content-level failed.
+
+## Active MinerU Evidence
+
+The final active backend task was:
+
+```text
+taskId: task-1778821666605
+materialId: 2299860817314472
+file: Cambridge IGCSE(0580) Extended Mathematics Student Book_2018(Oxford University Press).pdf
+sizeBytes: 96516982
+stage: mineru-processing
+state: running
+mineruTaskId: f8e44788-db97-4273-89da-dc5bbfa29d71
+```
+
+Active-task diagnostics reported:
+
+```text
+message: MinerU 正在处理，但日志观测滞后：backend=pipeline，相位 OCR 检测，批次 1/10，页 64/578
+progress: 50
+log phase: OCR-det ch
+log percent: 52
+log current/total: 36/69
+logUpdatedAt: 2026-05-15T10:26:09.721Z
+localTimeoutOccurred: true
+synthetic warning: mineru-status-query-timeout
+```
+
+At the final stop-condition snapshot:
+
+- direct MinerU `/health` failed with connection refused;
+- direct MinerU `/tasks/f8e44788-db97-4273-89da-dc5bbfa29d71` failed with connection refused;
+- `lsof -nP -iTCP:8083 -sTCP:LISTEN` returned no listener;
+- `tmux list-sessions` reported no tmux server;
+- `dependency-health?mineruSubmitProbe=false` reported `mineru.ok=false`, `healthOk=false`, `connect ECONNREFUSED`, and `blocking=true`.
+
+## Dependency And Admission Findings
+
+Upload health remained reachable:
+
+```json
+{"ok":true,"service":"upload-server"}
+```
+
+Final dependency-health without submit probe reported:
+
+```json
+{
+  "ok": false,
+  "blocking": true,
+  "dependencies": {
+    "minio": {"ok": true},
+    "mineru": {
+      "ok": false,
+      "healthOk": false,
+      "error": "connect ECONNREFUSED",
+      "submitProbe": {"enabled": false}
+    },
+    "ollama": {
+      "ok": true,
+      "readinessState": "resident-chat-succeeded",
+      "model": "qwen3.5:9b"
+    }
+  }
+}
+```
+
+Admission circuit was closed, with counts showing the queue still blocked behind MinerU processing:
+
+```json
+{
+  "state": "closed",
+  "counts": {
+    "parsePending": 18,
+    "parseRunning": 1,
+    "aiPending": 0,
+    "aiRunning": 0
+  }
+}
+```
+
+## UI And Operator Semantics
+
+`/cms/tasks` remained HTTP-accessible at the final snapshot. However, the operator-facing semantics were not sufficient to confidently understand the run without backend and log correlation:
+
+- The backend active task still reported `running` / `mineru-processing`.
+- The active-task message said MinerU was processing but logs were stale.
+- Direct MinerU APIs and direct health were unreachable.
+- Host-level evidence showed no visible listener on 8083 and no expected tmux session.
+- Dependency-health marked MinerU as unavailable and blocking.
+
+This mismatch makes the page/backend/log semantics hard for a human operator to interpret during a long pressure run. The problem is not just page wording: current health, direct API, process/listener, and queued task evidence disagree in a way that requires engineering diagnosis.
+
+## AI/Ollama Findings
+
+Ollama readiness stayed healthy in the final dependency-health check:
+
+```text
+readinessState: resident-chat-succeeded
+model: qwen3.5:9b
+durationMs: 408
+```
+
+Five AI metadata jobs were observed and all were `review-pending`. No AI job failure was observed in the final pressure-window DB snapshot. The final blocker is MinerU/runtime availability and observability, not AI/Ollama failure.
+
+## Failed Tasks And Retry Candidates
+
+No task-level `failed` records were observed in the final snapshot. There were no concrete failed retry candidates to classify.
+
+The remaining 19 non-terminal tasks should not be classified as content failures from this evidence:
+
+- 1 task was still recorded as `running` / `mineru-processing`;
+- 18 tasks remained `pending` / `upload`;
+- the system-level MinerU service path became unavailable before the pressure window reached terminal completion.
+
+## Acceptance Boundary
+
+The 24-PDF pressure window did not reach terminal completion. It also did not show isolated task-level failures that could simply be retried while the rest of the run continued normally. Instead, the monitoring reached a system-level blocked condition:
+
+- MinerU host service became unreachable by direct health and direct task API;
+- no host listener on 8083 was visible;
+- no expected tmux session was visible;
+- dependency-health reported MinerU `connect ECONNREFUSED` and `blocking=true`;
+- 18 tasks remained queued and 1 task remained running in backend state.
+
+Recommendation: `blocked`. Director should review this report and decide whether to issue an engineering follow-up for MinerU runtime ownership/recovery, worker-state reconciliation, and operator progress semantics before any release-boundary decision.
+
+## Recommended Next Engineering Work
+
+Suggested follow-up scope for Director consideration:
+
+1. Reconcile MinerU runtime ownership: expected tmux/session/process/port evidence versus actual production runtime.
+2. Make active-task and dependency-health semantics incorporate direct MinerU API, host listener/process evidence, and log freshness clearly.
+3. Improve `/cms/tasks` operator semantics so stale log progress, backend running state, and service-unreachable state are visually distinguishable.
+4. Preserve the important distinction that successfully completed large files are positive task-level evidence, while the current run still blocks on system observability and MinerU availability.
+
+## Director Decision Needed
+
+Yes. Director should decide whether this task is accepted as a blocked pressure-monitoring result, whether to dispatch engineering recovery/observability work, and whether any further pressure validation should wait until MinerU runtime ownership and progress semantics are corrected.
