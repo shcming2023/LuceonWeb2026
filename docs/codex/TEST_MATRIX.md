@@ -37,7 +37,8 @@ This matrix maps common validation commands to the risk they cover. It is a coor
 | Command | Covers | Notes |
 | --- | --- | --- |
 | `curl -fsS http://localhost:8081/__proxy/upload/health` | Upload-server proxy surface | Read-only. |
-| `curl -sS --max-time 15 'http://localhost:8081/__proxy/upload/ops/dependency-health?mineruSubmitProbe=true'` | MinerU submit path, MinIO, Ollama dependency semantics | Submit-probe creates a bounded synthetic MinerU task; use only where authorized by validation policy. |
+| `curl -sS --max-time 15 'http://localhost:8081/__proxy/upload/ops/dependency-health'` | MinIO, MinerU `/health`, Ollama dependency semantics, and current admission-circuit evidence | Read-only; does not prove MinerU `/tasks` submit readiness by itself. |
+| `curl -sS --max-time 15 'http://localhost:8081/__proxy/upload/ops/dependency-health?mineruSubmitProbe=true'` | MinerU submit path, MinIO, Ollama dependency semantics | Side-effecting: creates a bounded synthetic MinerU task and may update the durable admission circuit; use only where explicitly authorized by validation policy/task brief. |
 | `curl -sS --max-time 15 'http://localhost:8081/__proxy/upload/ops/mineru/admission-circuit'` | Durable MinerU admission circuit state | Read-only. |
 | `docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'` | Runtime container status | Read-only; does not imply authorization to restart. |
 

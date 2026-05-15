@@ -1,7 +1,39 @@
 #!/bin/bash
 set -u
 
-ROOT="${1:-$(pwd)}"
+ROOT="$(pwd)"
+RUN_MINERU_SUBMIT_PROBE="${RUN_MINERU_SUBMIT_PROBE:-0}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --submit-probe)
+      RUN_MINERU_SUBMIT_PROBE=1
+      shift
+      ;;
+    --no-submit-probe)
+      RUN_MINERU_SUBMIT_PROBE=0
+      shift
+      ;;
+    --help|-h)
+      cat <<'USAGE'
+Usage: bash ops/runtime-ownership-status.sh [ROOT] [--submit-probe|--no-submit-probe]
+
+Default behavior is read-only/no-submit. The MinerU submit-probe creates a
+bounded synthetic MinerU task and may update the durable admission circuit; run
+it only with explicit task/user authorization:
+
+  RUN_MINERU_SUBMIT_PROBE=1 bash ops/runtime-ownership-status.sh
+  bash ops/runtime-ownership-status.sh --submit-probe
+USAGE
+      exit 0
+      ;;
+    *)
+      ROOT="$1"
+      shift
+      ;;
+  esac
+done
+
 UPLOAD_BASE="${UPLOAD_BASE:-http://localhost:8081/__proxy/upload}"
 MINERU_HEALTH_URL="${MINERU_HEALTH_URL:-http://127.0.0.1:8083/health}"
 OLLAMA_BASE="${OLLAMA_BASE:-http://127.0.0.1:11434}"
@@ -46,8 +78,19 @@ curl -fsS --max-time 5 "$UPLOAD_BASE/health" 2>/dev/null || true
 echo
 
 echo
-echo "== dependency health with MinerU submit probe =="
-curl -sS --max-time 15 "$UPLOAD_BASE/ops/dependency-health?mineruSubmitProbe=true" 2>/dev/null || true
+echo "== dependency health without MinerU submit probe (read-only) =="
+curl -sS --max-time 15 "$UPLOAD_BASE/ops/dependency-health" 2>/dev/null || true
+echo
+
+echo
+if [[ "$RUN_MINERU_SUBMIT_PROBE" == "1" || "$RUN_MINERU_SUBMIT_PROBE" == "true" || "$RUN_MINERU_SUBMIT_PROBE" == "yes" ]]; then
+  echo "== MinerU submit probe (SIDE EFFECT: creates synthetic MinerU task and may update admission circuit) =="
+  curl -sS --max-time 15 "$UPLOAD_BASE/ops/dependency-health?mineruSubmitProbe=true" 2>/dev/null || true
+else
+  echo "== MinerU submit probe skipped =="
+  echo "RUN_MINERU_SUBMIT_PROBE=0; no synthetic MinerU task was created by this helper."
+  echo "To run the side-effecting probe, use RUN_MINERU_SUBMIT_PROBE=1 or --submit-probe only when explicitly authorized."
+fi
 echo
 
 echo

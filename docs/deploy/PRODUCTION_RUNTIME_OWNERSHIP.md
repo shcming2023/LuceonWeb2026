@@ -40,17 +40,22 @@ DB settings may be useful UI/application configuration, but they are not product
 
 ## Health And Admission Checks
 
-Before accepting a manual pressure/validation run, the local production line must show:
+Read-only status checks:
 
 - upload-server health: `curl -fsS http://localhost:8081/__proxy/upload/health`
-- dependency health with submit probe: `curl -sS --max-time 15 'http://localhost:8081/__proxy/upload/ops/dependency-health?mineruSubmitProbe=true'`
+- dependency health without submit probe: `curl -sS --max-time 15 'http://localhost:8081/__proxy/upload/ops/dependency-health'`
 - active-task diagnostics: `curl -sS --max-time 15 'http://localhost:8081/__proxy/upload/ops/mineru/active-task'`
+- admission circuit state: `curl -sS --max-time 15 'http://localhost:8081/__proxy/upload/ops/mineru/admission-circuit'`
 - MinerU health: `curl -sS --max-time 10 http://127.0.0.1:8083/health`
 - Ollama version / loaded model state: `curl -sS --max-time 10 http://127.0.0.1:11434/api/version` and `/api/ps`
 - Docker service state: `docker compose ps`
 - listener state: `lsof -nP -iTCP:8081 -iTCP:8083 -iTCP:11434 -iTCP:19001 -sTCP:LISTEN`
 
-MinerU `/health` 200 alone is insufficient. The submit path must be healthy, meaning dependency-health submit probe returns HTTP `202`, a task id, and `blocking=false`.
+Side-effecting submit-path verification:
+
+- dependency health with MinerU submit probe: `curl -sS --max-time 15 'http://localhost:8081/__proxy/upload/ops/dependency-health?mineruSubmitProbe=true'`
+
+MinerU `/health` 200 alone is insufficient for admission readiness. The submit path is healthy only when an explicitly authorized dependency-health submit probe returns HTTP `202`, a task id, and `blocking=false`. The submit probe creates a bounded synthetic MinerU task and may open or close the durable admission circuit, so it must not be used in read-only evidence collection unless the task or user explicitly authorizes that side effect.
 
 ## Recovery Boundaries
 
@@ -62,10 +67,20 @@ MinerU `/health` 200 alone is insufficient. The submit path must be healthy, mea
 
 ## Inspection Helper
 
-Run the read-only helper from the production workspace:
+Run the default read-only/no-submit helper from the production workspace:
 
 ```bash
 bash ops/runtime-ownership-status.sh
 ```
 
-The helper reports runtime ownership evidence without changing DB rows, MinIO objects, Docker volumes, tasks, materials, artifacts, logs, samples, secrets, model/provider selection, timeout policy, or production override settings.
+The default helper reports runtime ownership evidence without running the MinerU submit probe and without changing DB rows, MinIO objects, Docker volumes, Luceon tasks/materials/artifacts, logs, samples, secrets, model/provider selection, timeout policy, or production override settings.
+
+Run the side-effecting submit-probe only when explicitly authorized:
+
+```bash
+RUN_MINERU_SUBMIT_PROBE=1 bash ops/runtime-ownership-status.sh
+# or
+bash ops/runtime-ownership-status.sh --submit-probe
+```
+
+When submit-probe is enabled, the helper prints a warning label and calls `dependency-health?mineruSubmitProbe=true`, which creates a synthetic MinerU task and may update the durable admission circuit.
