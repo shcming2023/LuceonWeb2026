@@ -54,3 +54,11 @@ This is conservative, but current focused tests and Director reruns are already 
 ## Pending User Reply
 
 Please choose Option A, B, or C.
+
+## User Decision Recorded
+
+- Decision time: `2026-05-16T06:56:43+0800`
+- User chose: `Option A`
+- Director action: issued `TASK-20260516-065643-P1-MinerU-Progress-Snapshot-Production-Deployment-And-Read-Only-Validation` to `DevelopmentEngineer`.
+
+Authorized scope remains limited to scoped production deployment plus read-only validation. Upload, pressure test, submit-probe, retry/reparse/re-AI/cancel/repair/reset, DB/MinIO/Docker volume cleanup, model/secret/config/sample mutation, pressure PASS, L3, release readiness, and go-live declaration remain unauthorized.
