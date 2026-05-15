@@ -67,3 +67,11 @@ Do not move toward release-boundary acceptance yet. Record `NO_GO` pending furth
 Choose Option B if the next step is meant to support real operator-facing use. It is the smallest remaining confidence check after the MinerU submit-path recovery and avoids accepting a release boundary without any real post-recovery PDF.
 
 Choose Option A only if you explicitly accept the limitations above.
+
+## User Decision
+
+User approved Option B in-thread at `2026-05-15T12:32:50+0800`:
+
+> 同意选 Option B，做一个最小真实 PDF 验证
+
+Director will issue a scoped `TestAcceptanceEngineer` task for exactly one real PDF post-recovery validation. This decision does not authorize pressure/batch/soak testing, submit-probe, cleanup, repair, retry/reparse/re-AI, production deployment/restart, or any readiness/go-live claim.
