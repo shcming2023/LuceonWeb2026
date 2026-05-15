@@ -218,6 +218,27 @@ async function runTest() {
     assertEqual(data.dependencies.ollama.modelPresent, true, 'ollama modelPresent should be true when required model is listed');
     assertEqual(data.dependencies.ollama.residency.beforeChat.modelResident, true, 'ollama residency should report resident model before warm chat');
     assertEqual(data.dependencies.ollama.warmState, 'resident-before-chat', 'ollama warmState should report resident-before-chat');
+    assertEqual(data.dependencies.ollama.readinessState, 'resident-chat-succeeded', 'resident chat success should have explicit readinessState');
+    assertEqual(data.dependencies.ollama.readinessBlocking, false, 'resident chat success should not be readinessBlocking');
+    assertEqual(data.dependencies.ollama.blockingAi, false, 'resident chat success should not block AI readiness');
+    assertEqual(data.dependencies.ollama.recommendedClientTimeoutMs, 20000, 'recommended client timeout should exceed configured chat timeout');
+
+    // Test 1b.1: cold-before-chat can be slow-but-successful without becoming a hard failure
+    ollamaResidentModels = [];
+    lastOllamaChatBody = null;
+    res = await fetch(`${uploadBase}/ops/dependency-health`);
+    data = await res.json();
+    assertEqual(data.dependencies.ollama.ok, true, 'cold-before-chat success should keep ollama.ok true');
+    assertEqual(data.dependencies.ollama.chatOk, true, 'cold-before-chat success should keep chatOk true');
+    assertEqual(data.dependencies.ollama.warmState, 'cold-before-chat', 'cold-before-chat success should preserve warmState');
+    assertEqual(data.dependencies.ollama.readinessState, 'cold-start-chat-succeeded', 'cold-before-chat success should be explicit');
+    assertEqual(data.dependencies.ollama.coldStartChatSucceeded, true, 'cold-before-chat success should set coldStartChatSucceeded');
+    assertEqual(data.dependencies.ollama.readinessBlocking, false, 'cold-before-chat success should not be readinessBlocking');
+    assertEqual(data.dependencies.ollama.blockingParse, false, 'cold-before-chat success should not block parse/upload');
+    assertEqual(data.dependencies.ollama.probeTimeoutMs, 200, 'ollama probe timeout should be reported');
+    assertEqual(data.dependencies.ollama.recommendedClientTimeoutMs, 20000, 'cold-before-chat success should report client timeout expectation');
+    assertEqual(data.blocking, false, 'cold-before-chat success should not block parse/upload health');
+    ollamaResidentModels = [{ name: 'qwen3.5:9b' }];
 
     // Test 1c: /health OK but /tasks submit fails with submit probe enabled
     res = await fetch(`${uploadBase}/ops/dependency-health?mineruSubmitProbe=true`);
@@ -296,6 +317,8 @@ async function runTest() {
     assertEqual(dataOllamaDown.dependencies.mineru.ok, true, 'mineru.ok should be true');
     assertEqual(dataOllamaDown.dependencies.ollama.ok, false, 'ollama.ok should be false');
     assertEqual(dataOllamaDown.dependencies.ollama.blockingParse, false, 'ollama.blockingParse should be false');
+    assertEqual(dataOllamaDown.dependencies.ollama.blockingAi, true, 'ollama down should block AI readiness');
+    assertEqual(dataOllamaDown.dependencies.ollama.readinessState, 'tags-http-error', 'ollama down should classify readinessState');
     assertEqual(dataOllamaDown.blocking, false, 'blocking should be false when only ollama is down');
 
     const form3 = new FormData();
@@ -319,6 +342,8 @@ async function runTest() {
     assertEqual(dataChatDown.dependencies.ollama.chatOk, false, 'ollama.chatOk should be false');
     assertEqual(dataChatDown.dependencies.ollama.error.includes('Smoke test HTTP 503'), true, 'Should include smoke test error');
     assertEqual(dataChatDown.dependencies.ollama.failureKind, 'chat-http-error', 'ollama HTTP chat failure should be classified');
+    assertEqual(dataChatDown.dependencies.ollama.readinessState, 'chat-http-error', 'ollama HTTP chat failure should set readinessState');
+    assertEqual(dataChatDown.dependencies.ollama.readinessBlocking, true, 'ollama HTTP chat failure should be AI-readiness blocking');
 
     // Test 5b: cold model chat timeout is explicit
     ollamaOk = true;
@@ -333,6 +358,9 @@ async function runTest() {
     assertEqual(dataColdTimeout.dependencies.ollama.warmState, 'cold-before-chat', 'cold timeout should preserve cold-before-chat warmState');
     assertEqual(dataColdTimeout.dependencies.ollama.coldStartChatTimeout, true, 'cold timeout should set coldStartChatTimeout');
     assertEqual(dataColdTimeout.dependencies.ollama.failureKind, 'cold-start-chat-timeout', 'cold timeout should be classified separately');
+    assertEqual(dataColdTimeout.dependencies.ollama.readinessState, 'cold-start-chat-timeout', 'cold timeout should set readinessState');
+    assertEqual(dataColdTimeout.dependencies.ollama.readinessBlocking, true, 'cold timeout should block AI readiness');
+    assertEqual(dataColdTimeout.dependencies.ollama.blockingParse, false, 'cold timeout should not block parse/upload');
 
     // Test 5c: resident model chat timeout is not labeled as cold start
     ollamaResidentModels = [{ name: 'qwen3.5:9b' }];
@@ -343,6 +371,7 @@ async function runTest() {
     assertEqual(dataWarmTimeout.dependencies.ollama.warmChatTimeout, true, 'warm timeout should set warmChatTimeout');
     assertEqual(dataWarmTimeout.dependencies.ollama.coldStartChatTimeout, false, 'warm timeout should not be labeled as cold start');
     assertEqual(dataWarmTimeout.dependencies.ollama.failureKind, 'warm-chat-timeout', 'warm timeout should be classified separately');
+    assertEqual(dataWarmTimeout.dependencies.ollama.readinessState, 'warm-chat-timeout', 'warm timeout should set readinessState');
     ollamaChatHangs = false;
     ollamaChatOk = true;
 
@@ -357,6 +386,8 @@ async function runTest() {
     let dataMissingModel = await resMissingModel.json();
     assertEqual(dataMissingModel.dependencies.ollama.ok, false, 'ollama.ok should be false when required model is missing');
     assertEqual(dataMissingModel.dependencies.ollama.error, 'Missing required Ollama model: qwen3.5:9b', 'missing model error should name required model');
+    assertEqual(dataMissingModel.dependencies.ollama.readinessState, 'model-missing', 'missing model should set readinessState');
+    assertEqual(dataMissingModel.dependencies.ollama.blockingAi, true, 'missing model should block AI readiness');
     assertEqual(lastOllamaChatBody, null, 'ollama smoke should not run when required model is missing');
     assertEqual(dataMissingModel.blocking, false, 'missing ollama model should not block parse');
 

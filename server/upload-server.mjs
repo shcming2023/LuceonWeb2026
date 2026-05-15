@@ -373,6 +373,26 @@ function isAbortTimeout(error) {
     String(error?.message || '').includes('timeout');
 }
 
+function recommendedDependencyHealthClientTimeoutMs() {
+  return Math.max(DEPENDENCY_HEALTH_OLLAMA_CHAT_TIMEOUT_MS + 5000, 20000);
+}
+
+function annotateOllamaReadiness(ollama, {
+  state,
+  severity = 'info',
+  timingNote = null,
+  blockingAi = false,
+  blockingParse = false,
+}) {
+  ollama.readinessState = state;
+  ollama.readinessSeverity = severity;
+  ollama.timingNote = timingNote;
+  ollama.readinessBlocking = Boolean(blockingAi);
+  ollama.blockingAi = Boolean(blockingAi);
+  ollama.blockingParse = Boolean(blockingParse);
+  return ollama;
+}
+
 async function probeOllamaResidency(base, targetModel) {
   const startedAt = Date.now();
   try {
@@ -479,6 +499,13 @@ async function checkDependencyHealth(minioBucket, options = {}) {
         ok: false,
         requiredFor: ['ai'],
         blockingParse: false,
+        blockingAi: false,
+        readinessBlocking: false,
+        readinessState: 'not-checked',
+        readinessSeverity: 'info',
+        timingNote: null,
+        probeTimeoutMs: DEPENDENCY_HEALTH_OLLAMA_CHAT_TIMEOUT_MS,
+        recommendedClientTimeoutMs: recommendedDependencyHealthClientTimeoutMs(),
         endpoint: null,
         serviceReachable: false,
         tagsOk: false,
@@ -633,6 +660,10 @@ async function checkDependencyHealth(minioBucket, options = {}) {
     // 4. Ollama
     if (!aiEnabled || !ollamaEndpoint) {
        result.dependencies.ollama.skipped = true;
+       annotateOllamaReadiness(result.dependencies.ollama, {
+         state: 'skipped',
+         timingNote: 'AI provider disabled or no Ollama endpoint configured; parse/upload readiness is not blocked by Ollama.',
+       });
     } else {
        let checkOllamaEndpoint = ollamaEndpoint;
        if (process.env.DEPENDENCY_HEALTH_REWRITE_LOCAL_ENDPOINTS !== 'false') {
@@ -660,6 +691,12 @@ async function checkDependencyHealth(minioBucket, options = {}) {
              result.dependencies.ollama.error = `Missing required Ollama model: ${targetModel}`;
              result.dependencies.ollama.failureKind = 'model-missing';
              result.dependencies.ollama.ok = false;
+             annotateOllamaReadiness(result.dependencies.ollama, {
+               state: 'model-missing',
+               severity: 'error',
+               blockingAi: true,
+               timingNote: `Required Ollama model ${targetModel} is not listed; AI recognition cannot run in strict no-skeleton mode.`,
+             });
            } else {
              const residencyBeforeChat = await probeOllamaResidency(base, targetModel);
              result.dependencies.ollama.residency = { beforeChat: residencyBeforeChat, afterChat: null };
@@ -694,11 +731,36 @@ async function checkDependencyHealth(minioBucket, options = {}) {
                  result.dependencies.ollama.chatOk = true;
                  result.dependencies.ollama.ok = true;
                  result.dependencies.ollama.failureKind = null;
+                 if (result.dependencies.ollama.warmState === 'cold-before-chat') {
+                   result.dependencies.ollama.coldStartChatSucceeded = true;
+                   annotateOllamaReadiness(result.dependencies.ollama, {
+                     state: 'cold-start-chat-succeeded',
+                     severity: result.dependencies.ollama.durationMs > 10000 ? 'notice' : 'info',
+                     timingNote: `Ollama model was not resident before chat but responded successfully in ${result.dependencies.ollama.durationMs}ms; short external clients should allow at least ${result.dependencies.ollama.recommendedClientTimeoutMs}ms before treating this as a service failure.`,
+                   });
+                 } else if (result.dependencies.ollama.warmState === 'resident-before-chat') {
+                   annotateOllamaReadiness(result.dependencies.ollama, {
+                     state: 'resident-chat-succeeded',
+                     timingNote: `Ollama model was resident before chat and responded in ${result.dependencies.ollama.durationMs}ms.`,
+                   });
+                 } else {
+                   annotateOllamaReadiness(result.dependencies.ollama, {
+                     state: 'chat-succeeded-residency-unknown',
+                     severity: 'notice',
+                     timingNote: `Ollama chat responded in ${result.dependencies.ollama.durationMs}ms, but model residency before chat could not be confirmed.`,
+                   });
+                 }
                } else {
                  result.dependencies.ollama.chatOk = false;
                  result.dependencies.ollama.error = `Smoke test HTTP ${smokeRes.status}`;
                  result.dependencies.ollama.failureKind = 'chat-http-error';
                  result.dependencies.ollama.ok = false;
+                 annotateOllamaReadiness(result.dependencies.ollama, {
+                   state: 'chat-http-error',
+                   severity: 'error',
+                   blockingAi: true,
+                   timingNote: `Ollama chat probe returned HTTP ${smokeRes.status}; parse/upload readiness remains separate.`,
+                 });
                }
                result.dependencies.ollama.residency.afterChat = await probeOllamaResidency(base, targetModel);
                result.dependencies.ollama.modelResident = result.dependencies.ollama.residency.afterChat.modelResident;
@@ -710,13 +772,37 @@ async function checkDependencyHealth(minioBucket, options = {}) {
                if (timedOut && residencyBeforeChat.ok && !residencyBeforeChat.modelResident) {
                  result.dependencies.ollama.coldStartChatTimeout = true;
                  result.dependencies.ollama.failureKind = 'cold-start-chat-timeout';
+                 annotateOllamaReadiness(result.dependencies.ollama, {
+                   state: 'cold-start-chat-timeout',
+                   severity: 'warning',
+                   blockingAi: true,
+                   timingNote: `Ollama model was not resident before chat and did not answer within ${DEPENDENCY_HEALTH_OLLAMA_CHAT_TIMEOUT_MS}ms; this is an AI readiness caveat, not a parse/upload blocker.`,
+                 });
                } else if (timedOut && residencyBeforeChat.ok && residencyBeforeChat.modelResident) {
                  result.dependencies.ollama.warmChatTimeout = true;
                  result.dependencies.ollama.failureKind = 'warm-chat-timeout';
+                 annotateOllamaReadiness(result.dependencies.ollama, {
+                   state: 'warm-chat-timeout',
+                   severity: 'error',
+                   blockingAi: true,
+                   timingNote: `Ollama model was resident before chat but did not answer within ${DEPENDENCY_HEALTH_OLLAMA_CHAT_TIMEOUT_MS}ms; this is a stronger AI readiness failure than cold-start delay.`,
+                 });
                } else if (timedOut) {
                  result.dependencies.ollama.failureKind = 'chat-timeout';
+                 annotateOllamaReadiness(result.dependencies.ollama, {
+                   state: 'chat-timeout',
+                   severity: 'error',
+                   blockingAi: true,
+                   timingNote: `Ollama chat probe did not answer within ${DEPENDENCY_HEALTH_OLLAMA_CHAT_TIMEOUT_MS}ms; parse/upload readiness remains separate.`,
+                 });
                } else {
                  result.dependencies.ollama.failureKind = 'chat-error';
+                 annotateOllamaReadiness(result.dependencies.ollama, {
+                   state: 'chat-error',
+                   severity: 'error',
+                   blockingAi: true,
+                   timingNote: `Ollama chat probe failed: ${se.message || 'unknown error'}; parse/upload readiness remains separate.`,
+                 });
                }
                result.dependencies.ollama.ok = false;
                result.dependencies.ollama.residency.afterChat = await probeOllamaResidency(base, targetModel);
@@ -726,10 +812,22 @@ async function checkDependencyHealth(minioBucket, options = {}) {
          } else {
            result.dependencies.ollama.error = `HTTP ${ollamaRes.status}`;
            result.dependencies.ollama.failureKind = 'tags-http-error';
+           annotateOllamaReadiness(result.dependencies.ollama, {
+             state: 'tags-http-error',
+             severity: 'error',
+             blockingAi: true,
+             timingNote: `Ollama tags endpoint returned HTTP ${ollamaRes.status}; parse/upload readiness remains separate.`,
+           });
          }
        } catch (e) {
          result.dependencies.ollama.error = e.cause?.code === 'ECONNREFUSED' ? 'connect ECONNREFUSED' : (e.message || 'connect ECONNREFUSED');
          result.dependencies.ollama.failureKind = e.cause?.code === 'ECONNREFUSED' ? 'service-unreachable' : 'tags-error';
+         annotateOllamaReadiness(result.dependencies.ollama, {
+           state: result.dependencies.ollama.failureKind,
+           severity: 'error',
+           blockingAi: true,
+           timingNote: `Ollama tags probe failed: ${result.dependencies.ollama.error}; parse/upload readiness remains separate.`,
+         });
        }
     }
 
