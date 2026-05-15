@@ -70,7 +70,20 @@ Because this is an owner-level product/release boundary, Director should not aut
 
 ## User Decision
 
-Pending.
+User approved Option A in-thread on 2026-05-15.
+
+Accepted boundary:
+
+- known pressure-window `failed/ai` residuals may remain as visible manual retry candidates for this release-readiness track;
+- they do not block moving to rollback/error-path evidence;
+- they must not be counted as hidden success or flattened into systemic pressure failure;
+- no automatic repair, retry, reparse, re-AI, cleanup, upload, pressure rerun, destructive mutation, or readiness/go-live claim is authorized by this decision alone.
+
+Director action:
+
+- close this decision row as `USER_APPROVED_OPTION_A`;
+- issue Task 168 to `Architect` for read-only rollback/recovery and error-path evidence gap planning;
+- keep the next task non-destructive and analytical before any high-risk rehearsal or failure injection.
 
 ## Not Authorized By This Decision Row
 
