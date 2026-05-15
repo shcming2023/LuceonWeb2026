@@ -51,3 +51,11 @@ Risk: a future role thread may accidentally use the older production helper and 
 ## Director Recommendation
 
 Choose Option A. It is a small, reversible source sync with no service restart and no runtime mutation beyond reading status. It directly removes a known collaboration hazard before more runtime evidence work.
+
+## User Decision
+
+User approved Option A in-thread at `2026-05-15T12:03:07+0800`:
+
+> 同意Option A：只做生产源码同步和只读验证，不重启服务、不跑 submit-probe、不上传、不做压力测试。
+
+Director will issue a scoped `DevelopmentEngineer` task for production source sync and read-only verification only.
