@@ -171,7 +171,7 @@ function deriveTerminalMineruCompletionLine(task: ParseTask): string | null {
 export function deriveTaskDisplayStatus(task: ParseTask | null | undefined): string {
   if (!task) return '待处理';
   if (task.state === 'failed') {
-    if (task.stage === 'ai' || getAiFailureClassification(task) || task.metadata?.aiStatus === 'failed') {
+    if (getAiFailureClassification(task) || task.metadata?.aiStatus === 'failed') {
       if (isManualRetryEligibleAiFailure(task)) {
         return 'AI 识别失败，待人工判断是否手动重试';
       }

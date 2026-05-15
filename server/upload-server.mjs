@@ -46,6 +46,7 @@ import { registerTaskActionRoutes } from './lib/task-actions-routes.mjs';
 import { taskEventBus } from './lib/task-events-bus.mjs';
 import { classifyMineruActiveTasks, registerMineruDiagnosticsRoutes } from './lib/ops-mineru-diagnostics.mjs';
 import { inspectMineruLogChannelOwnership } from './lib/ops-mineru-log-parser.mjs';
+import { attachProgressSnapshot, buildProgressSnapshot } from './lib/progress-snapshot.mjs';
 import { buildAiFailureBackfillMetadata, buildAiFailureTaskMessage } from './lib/ai-failure-backfill.mjs';
 import { ParseTaskWorker } from './services/queue/task-worker.mjs';
 import { AiMetadataWorker } from './services/ai/metadata-worker.mjs';
@@ -393,6 +394,25 @@ function annotateOllamaReadiness(ollama, {
   return ollama;
 }
 
+function buildRuntimeIdleProgressSnapshot({ checkedAt, summaryState = 'stale' } = {}) {
+  return {
+    version: 'progress-snapshot-v0.1',
+    phase: 'terminal',
+    source: 'log',
+    sourcePriority: 'db',
+    observedAt: checkedAt || new Date().toISOString(),
+    freshness: summaryState === 'stale' ? 'idle' : 'unknown',
+    confidence: 'medium',
+    lagKind: 'log-stale-after-terminal',
+    directMineruStatus: null,
+    dbState: null,
+    dbStage: null,
+    logState: summaryState,
+    aiState: null,
+    operatorMessage: 'MinerU 当前无活动任务；日志通道处于空闲/终态后无新增业务进度',
+  };
+}
+
 async function probeOllamaResidency(base, targetModel) {
   const startedAt = Date.now();
   try {
@@ -485,6 +505,10 @@ async function checkDependencyHealth(minioBucket, options = {}) {
   const result = {
     ok: false,
     blocking: false,
+    progressSnapshot: buildProgressSnapshot({}, {
+      dependencyHealthReadinessOnly: true,
+      observedAt: new Date().toISOString(),
+    }),
     dependencies: {
       minio: { ok: false, requiredFor: ['upload', 'parse'] },
       mineru: {
@@ -1280,7 +1304,8 @@ registerMineruDiagnosticsRoutes(app, () => process.env.DB_BASE_URL || 'http://lo
  */
 app.get('/ops/mineru/active-task', async (req, res) => {
   const dbBaseUrl = process.env.DB_BASE_URL || 'http://localhost:8789';
-  const queryApi = req.query.queryApi === 'true';
+  const directCheck = req.query.directCheck !== 'false' && req.query.queryApi !== 'false';
+  const queryApi = directCheck || req.query.queryApi === 'true';
 
   try {
     const tRes = await fetch(`${dbBaseUrl}/tasks`);
@@ -1321,6 +1346,11 @@ app.get('/ops/mineru/active-task', async (req, res) => {
       submitRetryableTasks: submitRetryableTasks.map(t => ({ id: t.id, state: t.state, stage: t.stage, retries: t.metadata?.submitRetries })),
       takeoverRequiredTasks: takeoverRequiredTasks.map(t => ({ id: t.id, mineruTaskId: t.metadata?.mineruTaskId, state: t.state, stage: t.stage })),
       historicalAiFailureTasks: historicalAiFailureTasks.map(t => ({ id: t.id, mineruTaskId: t.metadata?.mineruTaskId, state: t.state, stage: t.stage })),
+      resultIngestionLagTasks: [],
+      diagnosticMode: {
+        taskSource: 'db-derived',
+        directMineruChecked: false,
+      },
     };
 
     // 可选：查询 MinerU API 获取 ground truth
@@ -1339,6 +1369,7 @@ app.get('/ops/mineru/active-task', async (req, res) => {
       localEndpoint = localEndpoint.replace(/\/+$/, '');
 
       const apiChecks = [];
+      const apiChecksByTaskId = new Map();
       const allMineruTaskIds = [...new Set(
         [...runningWithMineru, ...driftTasks, ...completedButNotIngestedTasks]
           .map(t => t.metadata?.mineruTaskId)
@@ -1350,15 +1381,61 @@ app.get('/ops/mineru/active-task', async (req, res) => {
           const mRes = await fetch(`${localEndpoint}/tasks/${mTaskId}`, { signal: AbortSignal.timeout(3000) });
           if (mRes.ok) {
             const mData = await mRes.json();
-            apiChecks.push({ mineruTaskId: mTaskId, status: mData.status || mData.state, startedAt: mData.started_at });
+            const status = mData.status || mData.state || mData.task_status || mData.data?.status || mData.data?.state;
+            const apiCheck = { mineruTaskId: mTaskId, status, startedAt: mData.started_at || mData.data?.started_at };
+            apiChecks.push(apiCheck);
+            apiChecksByTaskId.set(mTaskId, { ...apiCheck, data: mData });
           } else {
-            apiChecks.push({ mineruTaskId: mTaskId, status: `http-${mRes.status}` });
+            const apiCheck = { mineruTaskId: mTaskId, status: `http-${mRes.status}` };
+            apiChecks.push(apiCheck);
+            apiChecksByTaskId.set(mTaskId, apiCheck);
           }
         } catch (e) {
-          apiChecks.push({ mineruTaskId: mTaskId, status: 'unreachable', error: e.message });
+          const apiCheck = { mineruTaskId: mTaskId, status: 'unreachable', error: e.message };
+          apiChecks.push(apiCheck);
+          apiChecksByTaskId.set(mTaskId, apiCheck);
         }
       }
+      const attachDirectSnapshot = (task) => {
+        if (!task) return null;
+        const apiCheck = apiChecksByTaskId.get(task.metadata?.mineruTaskId);
+        return attachProgressSnapshot(task, {
+          directMineruStatus: apiCheck?.status,
+          directMineruData: apiCheck?.data,
+        });
+      };
+      result.activeTask = attachDirectSnapshot(result.activeTask);
+      result.currentProcessingTask = attachDirectSnapshot(result.currentProcessingTask);
+      result.queuedTasks = result.queuedTasks.map(t => {
+        const sourceTask = runningWithMineru.find(item => item.id === t.id) || t;
+        return attachDirectSnapshot(sourceTask);
+      });
+      result.completedButNotIngestedTasks = completedButNotIngestedTasks.map(attachDirectSnapshot);
+      result.driftTasks = driftTasks.map(attachDirectSnapshot);
+      result.takeoverRequiredTasks = takeoverRequiredTasks.map(attachDirectSnapshot);
+      result.resultIngestionLagTasks = [...runningWithMineru, ...driftTasks, ...completedButNotIngestedTasks]
+        .map(attachDirectSnapshot)
+        .filter(t => t?.progressSnapshot?.lagKind === 'db-behind-direct-mineru')
+        .map(t => ({
+          id: t.id,
+          mineruTaskId: t.metadata?.mineruTaskId,
+          state: t.state,
+          stage: t.stage,
+          progressSnapshot: t.progressSnapshot,
+        }));
+      result.diagnosticMode.directMineruChecked = true;
       result.mineruApiChecks = apiChecks;
+    } else {
+      const attachDbSnapshot = (task) => task ? attachProgressSnapshot(task) : null;
+      result.activeTask = attachDbSnapshot(result.activeTask);
+      result.currentProcessingTask = attachDbSnapshot(result.currentProcessingTask);
+      result.queuedTasks = result.queuedTasks.map(t => {
+        const sourceTask = runningWithMineru.find(item => item.id === t.id) || t;
+        return attachDbSnapshot(sourceTask);
+      });
+      result.completedButNotIngestedTasks = completedButNotIngestedTasks.map(attachDbSnapshot);
+      result.driftTasks = driftTasks.map(attachDbSnapshot);
+      result.takeoverRequiredTasks = takeoverRequiredTasks.map(attachDbSnapshot);
     }
 
     return res.json(result);
@@ -1473,6 +1550,12 @@ app.get('/ops/mineru/log-channel-ownership', async (req, res) => {
       minObservedAt,
       globalObservation: globalLogObservation
     });
+    if (!minObservedAt && diagnostics?.summaryState === 'stale') {
+      diagnostics.progressSnapshot = buildRuntimeIdleProgressSnapshot({
+        checkedAt: diagnostics.checkedAt,
+        summaryState: diagnostics.summaryState,
+      });
+    }
     return res.json(diagnostics);
   } catch (error) {
     return res.status(500).json({

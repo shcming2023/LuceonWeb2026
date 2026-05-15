@@ -31,6 +31,15 @@ const RECOVERY_DELAY_MS = 2_000;
 // 内存队列锁，防止同一个实例中的多个 tick 重复处理
 const processingMap = new Set();
 
+export function buildTaskEventLogMessage(update = {}, eventName = 'task-update') {
+  if (update.message) return update.message;
+  if (update.state) return `Status changed to ${update.state}`;
+  if (update.stage) return `Stage changed to ${update.stage}`;
+  if (eventName === 'progress-update') return 'Progress metadata updated';
+  if (update.metadata) return 'Task metadata updated';
+  return `Task event ${eventName}`;
+}
+
 export class ParseTaskWorker {
   /**
    * @param {object|null} contextOrOptions - 兼容旧调用（传 minioContext 对象）与新调用（传 options）
@@ -2430,7 +2439,7 @@ export class ParseTaskWorker {
       taskId: task.id,
       event: eventName,
       level,
-      message: update.message || `Status changed to ${update.state}`,
+      message: buildTaskEventLogMessage(update, eventName),
       payload: update
     });
   }
