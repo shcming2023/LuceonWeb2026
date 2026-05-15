@@ -76,3 +76,24 @@ Reason:
 - It keeps the pressure-test evidence honest: we recover the service first, then separately decide whether to re-run or reconcile the 19 unresolved pressure tasks.
 
 If there are two Director heartbeats with no user response, Director may proceed with Option A under the existing conservative auto-progress rule, because it is scoped, reversible, and does not mutate task data. Director may not auto-authorize Option B or D.
+
+## User Decision Recorded
+
+- Decision time: 2026-05-15T20:12:31+0800
+- User decision: approved Option A.
+
+Authorized scope:
+
+- issue a DevelopmentEngineer task for scoped MinerU-only runtime relaunch;
+- use one canonical owner for this recovery, with repo-documented `luceon-mineru` preferred;
+- verify direct MinerU health, dependency-health without submit-probe, active-task diagnostics, listener/session evidence, and log ownership.
+
+Still not authorized:
+
+- manual or extra MinerU submit-probe;
+- upload or pressure run;
+- task retry/reparse/re-AI/cancel/repair/reset;
+- DB/MinIO/Docker cleanup or volume mutation;
+- Docker down/down-v/prune;
+- broad service restart/redeploy;
+- readiness, pressure PASS, L3, production readiness, production上线, or go-live claim.
