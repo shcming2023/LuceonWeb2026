@@ -63,6 +63,20 @@ Choose Option A now.
 
 It is the smallest useful next step: one controlled submit-path validation, no PDF upload, no failed-task mutation, and no readiness claim. After Option A evidence is reviewed, Director can ask a cleaner second question: whether to leave the 24 pressure tasks as historical incident evidence, repair/retry selected tasks, or reset for a clean pressure run.
 
+## User Decision Received
+
+At 2026-05-15T20:29:08+0800, User chose a custom pressure-validation route instead of the submit-probe-only recommendation:
+
+- User manually cleaned/reset the frontend test environment.
+- User manually uploaded 24 PDFs from the frontend.
+- Director should dispatch TestAcceptanceEngineer to perform read-only full-process monitoring.
+- Monitoring cadence is 120 minutes.
+- The monitor must pay special attention to whether MinerU logs/direct API show progress and must not lightly declare failure when MinerU is still processing.
+
+Director issued:
+
+- `TASK-20260515-202908-P1-Manual-Clean-24-PDF-Pressure-Monitoring`
+
 ## Forbidden Without Further Approval
 
 - pressure PASS, L3, production readiness, release readiness, production上线, or go-live claim;
@@ -72,4 +86,3 @@ It is the smallest useful next step: one controlled submit-path validation, no P
 - `docker compose down -v`, Docker prune, broad restart/redeploy;
 - model pull/delete/replace, config/secret/sample mutation;
 - destructive task or material mutation.
-
