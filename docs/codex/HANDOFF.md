@@ -9,14 +9,15 @@ Start here:
 1. `README.md`
 2. `AGENTS.md`
 3. `docs/codex/roles/luceon.md`
-4. `docs/codex/PROJECT_STATE.md`
-5. `docs/prd/README.md`
-6. `docs/prd/Luceon2026-PRD-v0.4.md`
-7. `docs/codex/TEST_POLICY.md`
-8. `docs/codex/REPOSITORY_STRUCTURE.md`
-9. `docs/deploy/README.md`
-10. `TaskAndReport/README.md`
-11. `TaskAndReport/TASK_TRACKING_LIST.md`
+4. `docs/codex/LUCODE_EXTERNAL_WORKFLOW.md`
+5. `docs/codex/PROJECT_STATE.md`
+6. `docs/prd/README.md`
+7. `docs/prd/Luceon2026-PRD-v0.4.md`
+8. `docs/codex/TEST_POLICY.md`
+9. `docs/codex/REPOSITORY_STRUCTURE.md`
+10. `docs/deploy/README.md`
+11. `TaskAndReport/README.md`
+12. `TaskAndReport/TASK_TRACKING_LIST.md`
 
 Luceon governance workspace:
 
@@ -33,6 +34,10 @@ GitHub:
 External Lucode workspace, user-managed:
 
 `/Users/caoming/Documents/Luceon2026`
+
+External Lucode copyable rules:
+
+`docs/codex/LUCODE_EXTERNAL_WORKFLOW.md`
 
 Package manager:
 

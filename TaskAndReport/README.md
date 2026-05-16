@@ -9,7 +9,7 @@ Historical task briefs, reports, reviews, decisions, and ledger rows must remain
 ## Active Roles After 6.9.1
 
 - `Luceon`: Codex-side project director, architecture reviewer, test/acceptance engineer, production validation/deployment coordinator, and task-ledger owner.
-- `Lucode`: external IDE-side product/implementation role. Lucode's full local role instructions are user-managed outside this repository, but the GitHub interface contract below is authoritative for shared project coordination.
+- `Lucode`: external IDE-side product/implementation role. Lucode's full local role instructions are user-managed outside this repository, but the shared GitHub interface contract here and the copyable guide `docs/codex/LUCODE_EXTERNAL_WORKFLOW.md` are authoritative for project coordination.
 - `User`: owner decisions, scope choices, destructive-operation approvals, and release/go-live judgment.
 - `None`: no next action.
 
@@ -71,6 +71,8 @@ Legacy statuses remain valid history.
 For new active rows, `Next Actor` must be one of `Luceon`, `Lucode`, `User`, or `None`.
 
 ## GitHub Branch And Report Contract
+
+Lucode should read `docs/codex/LUCODE_EXTERNAL_WORKFLOW.md` before its first task in a new environment.
 
 Lucode normally works on a scoped branch, for example:
 

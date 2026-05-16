@@ -42,6 +42,10 @@ The current Luceon role file is:
 
 `docs/codex/roles/luceon.md`
 
+The copyable external Lucode workflow guide is:
+
+`docs/codex/LUCODE_EXTERNAL_WORKFLOW.md`
+
 Do not revive archived role files or old task-routing rules by implication.
 
 ## GitHub Control Plane
