@@ -46,6 +46,15 @@ The copyable external Lucode workflow guide is:
 
 `docs/codex/LUCODE_EXTERNAL_WORKFLOW.md`
 
+## Cross-Role Document Boundary
+
+Because Luceon and Lucode exchange task briefs, reports, role guides, and workflow notes through GitHub, each side may read the other side's role document. Reading the other role's document is for interface understanding only.
+
+- Luceon may read Lucode rules to understand implementation/report expectations, but Luceon must keep acting as Luceon.
+- Lucode may read Luceon rules to understand review/acceptance expectations, but Lucode must keep acting as Lucode.
+- A task brief can assign work only through `Next Actor`, `Next Action`, and explicit task scope in `TaskAndReport/TASK_TRACKING_LIST.md`.
+- Do not adopt the other role's permissions, responsibilities, workspace paths, or production authority by implication.
+
 Do not revive archived role files or old task-routing rules by implication.
 
 ## GitHub Control Plane

@@ -15,6 +15,15 @@ Historical task briefs, reports, reviews, decisions, and ledger rows must remain
 
 Retired roles such as ProductManager, Architect, DevelopmentEngineer, TestAcceptanceEngineer, Lucia, and legacy Lucode rows remain historical only.
 
+## Cross-Role Document Boundary
+
+Luceon and Lucode share GitHub, so both roles may see each other's role guides and workflow instructions. These documents are coordination context, not permission transfer.
+
+- `docs/codex/roles/luceon.md` tells Lucode how Luceon will review and validate, but Lucode must not act as Luceon.
+- `docs/codex/LUCODE_EXTERNAL_WORKFLOW.md` tells Luceon how Lucode should implement and report, but Luceon must not act as Lucode.
+- The active assignment source is the task ledger row and task brief.
+- If a role document conflicts with the current task row, stop and escalate instead of guessing.
+
 ## Required Files
 
 - `TASK_TRACKING_LIST.md`: ordered task ledger and status list.
