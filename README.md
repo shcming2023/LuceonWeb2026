@@ -4,18 +4,19 @@ Luceon2026 is the local real-runtime education-material processing CMS. The curr
 
 `upload -> MinIO -> local MinerU -> parsed artifacts -> Ollama qwen3.5:9b -> AI metadata -> operator review`
 
-Production release readiness is not claimed by this README. Current status and open boundaries are recorded in `docs/codex/PROJECT_STATE.md` and `docs/codex/HANDOFF.md`.
+Production release readiness is not claimed by this README. Current status, open boundaries, and the active Luceon/Lucode collaboration model are recorded in `docs/codex/PROJECT_STATE.md`, `docs/codex/HANDOFF.md`, `docs/codex/roles/luceon.md`, and `TaskAndReport/README.md`.
 
 ## Repository Truth Sources
 
 - Entry rules: `AGENTS.md`
+- Active Luceon role: `docs/codex/roles/luceon.md`
 - Current project state: `docs/codex/PROJECT_STATE.md`
 - Current handoff: `docs/codex/HANDOFF.md`
 - Deployment docs index: `docs/deploy/README.md`
 - PRD: `docs/prd/Luceon2026-PRD-v0.4.md`
 - Validation policy: `docs/codex/TEST_POLICY.md`
 - Test matrix: `docs/codex/TEST_MATRIX.md`
-- Historical task ledger: `TaskAndReport/TASK_TRACKING_LIST.md`
+- Active task ledger: `TaskAndReport/TASK_TRACKING_LIST.md`
 - Retired role/workflow archive: `archive/team-model-retired-2026-05-16/`
 - Milestone 6.9.1 record: `docs/codex/MILESTONE_6.9.1.md`
 

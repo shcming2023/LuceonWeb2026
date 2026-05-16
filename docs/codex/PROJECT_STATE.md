@@ -6,9 +6,9 @@ Last updated: 2026-05-16
 
 Milestone: `6.9.1`
 
-Purpose: preserve the current working mainline after the fresh 24-PDF validation sequence and retire the temporary multi-role collaboration workflow.
+Purpose: preserve the current working mainline after the fresh 24-PDF validation sequence, then enter a new two-role Luceon/Lucode development stage.
 
-Rollback anchor: the repository will be tagged as `v6.9.1` after this cleanup commit is pushed to GitHub.
+Rollback anchor: Git tag `v6.9.1`.
 
 ## 2. Current Mainline
 
@@ -60,17 +60,26 @@ These are known residuals but do not block the 6.9.1 milestone:
 
 As of 2026-05-16, the previous Director/ProductManager/Architect/DevelopmentEngineer/TestAcceptanceEngineer workflow is dissolved by user decision.
 
+The active next-stage model is:
+
+| Role | Environment | Responsibility |
+| --- | --- | --- |
+| `Luceon` | Codex thread on this machine | Director + Architect + TestAcceptanceEngineer responsibilities: planning, architecture review, task ledger ownership, report review, validation, production deployment coordination, milestone records |
+| `Lucode` | External IDE, usually `/Users/caoming/Documents/Luceon2026` | DevelopmentEngineer + ProductManager responsibilities: product refinement, implementation, local developer checks, branch/report creation |
+
+The shared control plane is GitHub `main` plus task/report branches in `https://github.com/shcming2023/Luceon2026`.
+
 Archived workflow material:
 
 - `archive/team-model-retired-2026-05-16/`
 - `archive/legacy-roles-2026-05-15/`
 - `archive/phase1-governance-2026-05-11/agents-workflows/`
 
-`TaskAndReport/` remains a historical evidence registry and must be preserved for lookup. It is not an active role-dispatch queue after this cleanup unless a future workflow explicitly reactivates it.
+`TaskAndReport/` is active again for the Luceon/Lucode workflow and remains the historical evidence registry.
 
 ## 6. Current Repository Hygiene Boundary
 
-This cleanup:
+The 6.9.1 cleanup:
 
 - retires active role/collaboration docs from the active docs tree,
 - preserves historical tasks, reports, reviews, decisions, and technical documents,
@@ -79,6 +88,6 @@ This cleanup:
 
 ## 7. Current Next Step
 
-No role-thread task is active.
+No feature task is active at the time this role model is recorded.
 
-Future work should begin from a new explicit user decision, issue, PRD update, or task plan. Do not infer that archived role files or historical TaskAndReport rows are active instructions.
+Future work should begin from a user goal or `check task` against GitHub-synchronized `TaskAndReport/TASK_TRACKING_LIST.md`. Do not infer that archived role files or pre-6.9.1 historical rows are active instructions.

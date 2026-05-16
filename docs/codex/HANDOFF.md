@@ -8,16 +8,17 @@ Start here:
 
 1. `README.md`
 2. `AGENTS.md`
-3. `docs/codex/PROJECT_STATE.md`
-4. `docs/prd/README.md`
-5. `docs/prd/Luceon2026-PRD-v0.4.md`
-6. `docs/codex/TEST_POLICY.md`
-7. `docs/codex/REPOSITORY_STRUCTURE.md`
-8. `docs/deploy/README.md`
-9. `TaskAndReport/README.md`
-10. `TaskAndReport/TASK_TRACKING_LIST.md`
+3. `docs/codex/roles/luceon.md`
+4. `docs/codex/PROJECT_STATE.md`
+5. `docs/prd/README.md`
+6. `docs/prd/Luceon2026-PRD-v0.4.md`
+7. `docs/codex/TEST_POLICY.md`
+8. `docs/codex/REPOSITORY_STRUCTURE.md`
+9. `docs/deploy/README.md`
+10. `TaskAndReport/README.md`
+11. `TaskAndReport/TASK_TRACKING_LIST.md`
 
-Development workspace:
+Luceon governance workspace:
 
 `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/3.Luceon2026`
 
@@ -28,6 +29,10 @@ Production deployment path:
 GitHub:
 
 `https://github.com/shcming2023/Luceon2026`
+
+External Lucode workspace, user-managed:
+
+`/Users/caoming/Documents/Luceon2026`
 
 Package manager:
 
@@ -50,7 +55,12 @@ This is a rollback milestone, not a release/go-live declaration.
 
 ## Collaboration State
 
-The previous multi-thread role team has been dissolved and archived. There is no active ProductManager, Architect, DevelopmentEngineer, TestAcceptanceEngineer, Lucia, or Lucode workflow.
+The previous multi-thread role team has been dissolved and archived. The active model is now:
+
+- `Luceon`: this Codex-side role, combining Director, Architect, and TestAcceptanceEngineer duties.
+- `Lucode`: external IDE-side role, combining DevelopmentEngineer and ProductManager duties.
+
+The two roles coordinate through GitHub and `TaskAndReport/`. `check task` must fetch GitHub first; stale local-only task rows are not authoritative.
 
 Archived role/workflow material is retained under:
 
@@ -58,13 +68,13 @@ Archived role/workflow material is retained under:
 - `archive/legacy-roles-2026-05-15/`
 - `archive/phase1-governance-2026-05-11/agents-workflows/`
 
-`TaskAndReport/` remains historical evidence. Do not delete it.
+`TaskAndReport/` is active for the new Luceon/Lucode workflow and remains historical evidence. Do not delete it.
 
 ## First Commands In A Fresh Checkout
 
 ```bash
 git status --short --branch
-git fetch origin
+git fetch origin --prune --tags
 git pull --ff-only origin main
 npx pnpm@10.4.1 install --frozen-lockfile
 npx pnpm@10.4.1 run test:static

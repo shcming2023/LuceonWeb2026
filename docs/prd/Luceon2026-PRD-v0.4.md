@@ -5,7 +5,7 @@
 - 作者：Manus AI（基于多方评审意见、代码事实基线交叉核查后产出）
 - 适用范围：Luceon2026 仓库（`shcming2023/Luceon2026`）下一阶段开发与联调
 - 文档定位：**工程契约型 PRD**。本版本是一份独立自包含文档，替代 v0.2 与 v0.3，不需要与历史版本合并阅读即可完整理解需求与约束。
-- 维护机制：6.9.1 里程碑后暂无活跃角色化 PRD 维护流程；历史 Lucia 维护规程已归档至 `archive/team-model-retired-2026-05-16/docs-prd/lucia-prd-maintenance.md`。未来 PRD 维护流程需重新明确后生效。
+- 维护机制：6.9.1 里程碑后采用 Luceon/Lucode 双角色流程；Lucode 可提出产品/需求修订，Luceon 负责架构/验收边界审查和最终文档落账。历史 Lucia 维护规程已归档至 `archive/team-model-retired-2026-05-16/docs-prd/lucia-prd-maintenance.md`。
 
 ## 目录
 1. 产品背景与本版修订动机
@@ -639,6 +639,11 @@ v0.4 要求把 `AiMetadataJob.state` 的终态命名统一为 `confirmed | revie
   - 协同状态：2026-05-16 前的 Director/ProductManager/Architect/DevelopmentEngineer/TestAcceptanceEngineer 角色化协同流程解散；Lucia/Lucode 历史材料和多角色团队材料均仅保留为追溯档案，不再作为活跃派单入口。
   - 保留边界：所有历史任务书、任务列表、任务回报、技术文档继续存放，便于查询追溯。
   - 影响范围：`AGENTS.md`、`README.md`、`docs/codex/PROJECT_STATE.md`、`docs/codex/HANDOFF.md`、`docs/codex/MILESTONE_6.9.1.md`、`TaskAndReport/README.md`、`TaskAndReport/TASK_TRACKING_LIST.md`、`archive/team-model-retired-2026-05-16/`。
+- **v0.4-post-6.9.1-luceon-lucode-2026-05-16（2026-05-16）**：建立下一阶段 Luceon/Lucode 双角色协作模型。
+  - 背景：项目进入精细化、专业化开发阶段，Luceon 与 Lucode 分属不同工作区，需要通过 GitHub 共享任务、代码、报告和审查证据。
+  - 确定需求：Luceon 承担 Director、Architect、TestAcceptanceEngineer 职责；Lucode 在外部 IDE 承担 DevelopmentEngineer、ProductManager 职责；双方以 GitHub `main`、分支和 `TaskAndReport/` 为控制面。
+  - 调试策略：`check task` 必须先访问 GitHub 上的任务列表、任务书和回报书，不再依赖单一工作区的本地任务状态。
+  - 影响范围：`AGENTS.md`、`docs/codex/roles/luceon.md`、`TaskAndReport/README.md`、`docs/codex/PROJECT_STATE.md`、`docs/codex/HANDOFF.md`。
 - **v0.4-team-contract-2026-05-07（2026-05-07）**：固化 Director、Lucia、Lucode 两级执行团队契约。
   - 背景：项目进入持续迭代优化阶段，需要用稳定团队角色提升协作效率、任务质量、报告质量和文档代码一致性。
   - 确定需求：Lucia 作为产品研发总监和 Director 高级参谋，负责目标讨论、技术路线分析、PRD、项目总账、任务书、报告审查和文档对齐；Lucode 作为开发测试经理，严格按 Lucia 任务书执行开发和测试并按统一格式回报。

@@ -6,7 +6,12 @@ See `docs/codex/TEST_MATRIX.md` for the command-to-risk matrix used by current g
 
 ## 6.9.1 Role Boundary
 
-The former Lucia/Lucode and multi-role Director/ProductManager/Architect/DevelopmentEngineer/TestAcceptanceEngineer workflows are retired as of 2026-05-16. Historical validation evidence below keeps original owner wording for traceability, but it is not an active assignment model.
+The former Lucia/Lucode and multi-role Director/ProductManager/Architect/DevelopmentEngineer/TestAcceptanceEngineer workflows are retired as of 2026-05-16. The active post-6.9.1 model is Luceon/Lucode:
+
+- Luceon owns validation planning, production validation/deployment coordination, acceptance review, and readiness wording.
+- Lucode owns implementation/product work and developer checks in the external IDE workspace.
+
+Historical validation evidence below keeps original owner wording for traceability, but it is not an active assignment model.
 
 ## Local Test Sample Library
 

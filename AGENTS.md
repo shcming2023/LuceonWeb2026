@@ -2,16 +2,17 @@
 
 Last updated: 2026-05-16
 
-This repository is the durable operating record for Luceon2026. GitHub `main`, committed source code, PRD/docs, TaskAndReport history, and verified runtime evidence are the project truth sources.
+This repository is the durable operating record for Luceon2026. GitHub `main`, committed source code, PRD/docs, active `TaskAndReport/` records, and verified runtime evidence are the project truth sources.
 
 ## Project Anchors
 
-- Development workspace: `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/3.Luceon2026`
-- Production deployment path: `/Users/concm/prod_workspace/Luceon2026`
+- Luceon governance workspace: `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/3.Luceon2026`
+- Luceon production validation/deployment workspace: `/Users/concm/prod_workspace/Luceon2026`
+- External Lucode development workspace, user-managed outside this machine context: `/Users/caoming/Documents/Luceon2026`
 - GitHub repository: `https://github.com/shcming2023/Luceon2026`
 - Active branch: `main`
 - Package manager: `npx pnpm@10.4.1`
-- Historical task and report registry: `TaskAndReport/`
+- Active task and report registry: `TaskAndReport/`
 - Local test sample library: `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/4.XxwlAs2026/sample`
 
 The local test sample library may be used as a read-only source of validation inputs. It is outside this repository, must not be synchronized to GitHub, and must not be deleted, moved, renamed, modified, or polluted during Luceon testing.
@@ -26,17 +27,49 @@ git pull --ff-only origin main
 
 If the worktree is dirty, do not overwrite unrelated changes. Work with the current state, keep the edit scope explicit, and report any blocking conflict.
 
-## Milestone 6.9.1 Collaboration State
+## Post-6.9.1 Collaboration Model
 
-As of 2026-05-16, the previous Director/ProductManager/Architect/DevelopmentEngineer/TestAcceptanceEngineer multi-thread collaboration model has been dissolved by user decision.
+As of 2026-05-16, the previous Director/ProductManager/Architect/DevelopmentEngineer/TestAcceptanceEngineer multi-thread collaboration model remains retired. The active next-stage model is a two-role, GitHub-mediated workflow:
 
-There is no active role-dispatch workflow in this repository now. Historical role contracts, task brief templates, and prior handoff docs are preserved under:
+- `Luceon`: this Codex-side role. Luceon combines the previous Director, Architect, and TestAcceptanceEngineer responsibilities: project direction, architecture judgment, task planning, GitHub task ledger ownership, code/report review, production validation/deployment coordination, acceptance boundaries, and milestone records.
+- `Lucode`: an external IDE-side role run by the user outside this environment. Lucode combines the previous DevelopmentEngineer and ProductManager responsibilities: product/requirement refinement, implementation, developer checks, branch/report creation, and GitHub synchronization from the external workspace.
+
+Historical role contracts, old task templates, and old workflow prompts are preserved under:
 
 `archive/team-model-retired-2026-05-16/`
 
-`TaskAndReport/` remains a historical evidence registry. Do not delete historical task briefs, reports, reviews, decisions, or `TASK_TRACKING_LIST.md`.
+The current Luceon role file is:
 
-Future role definitions or collaboration workflows must be introduced explicitly as new repository documents. Do not revive archived role files or task-routing rules by implication.
+`docs/codex/roles/luceon.md`
+
+Do not revive archived role files or old task-routing rules by implication.
+
+## GitHub Control Plane
+
+Luceon and Lucode work in different workspaces and coordinate through GitHub. Local-only task state is not authoritative.
+
+When running `check task`, Luceon must:
+
+1. enter the Luceon governance workspace;
+2. run `git status --short --branch`;
+3. run `git fetch origin --prune --tags`;
+4. fast-forward local `main` from `origin/main` when the local worktree is clean;
+5. read `TaskAndReport/TASK_TRACKING_LIST.md`, task briefs, reports, and review artifacts from the synchronized GitHub state;
+6. process the earliest open row where `Next Actor=Luceon`;
+7. if reviewing Lucode work, fetch the reported branch/HEAD and inspect the diff, report, checks, and evidence before accepting, returning, or escalating;
+8. commit and push any task ledger, review, planning, or documentation updates that Luceon makes.
+
+If the local worktree is dirty with unrelated changes, do not overwrite them. Either stop and report the dirty state or use a clean temporary clone/worktree for read-only review.
+
+## Active Task Flow
+
+1. User and Luceon discuss goals, risk, architecture, validation boundary, and next step.
+2. Luceon writes a task brief and updates `TaskAndReport/TASK_TRACKING_LIST.md` on GitHub `main`.
+3. Lucode fetches GitHub, executes only tasks with `Next Actor=Lucode`, works on a scoped branch by default, writes a `*_REPORT.md`, updates the ledger on that branch, and pushes the branch/report to GitHub.
+4. Luceon fetches GitHub, reviews Lucode's branch/report, runs required review checks and production validation when authorized, then accepts, returns, merges, or escalates.
+5. Luceon records the final decision in `TaskAndReport/`, updates `docs/codex/PROJECT_STATE.md` or `docs/codex/HANDOFF.md` when needed, and pushes GitHub.
+
+Default `Next Actor` values after 6.9.1 are `Luceon`, `Lucode`, `User`, and `None`.
 
 ## Current Technical Guardrails
 
@@ -61,12 +94,13 @@ Future role definitions or collaboration workflows must be introduced explicitly
 For future development or review, start from:
 
 1. `README.md`
-2. `docs/codex/PROJECT_STATE.md`
-3. `docs/codex/HANDOFF.md`
-4. `docs/prd/README.md`
-5. `docs/prd/Luceon2026-PRD-v0.4.md`
-6. `docs/codex/TEST_POLICY.md`
-7. `docs/codex/REPOSITORY_STRUCTURE.md`
-8. `docs/deploy/README.md`
-9. `TaskAndReport/README.md`
-10. `TaskAndReport/TASK_TRACKING_LIST.md`
+2. `docs/codex/roles/luceon.md`
+3. `docs/codex/PROJECT_STATE.md`
+4. `docs/codex/HANDOFF.md`
+5. `docs/prd/README.md`
+6. `docs/prd/Luceon2026-PRD-v0.4.md`
+7. `docs/codex/TEST_POLICY.md`
+8. `docs/codex/REPOSITORY_STRUCTURE.md`
+9. `docs/deploy/README.md`
+10. `TaskAndReport/README.md`
+11. `TaskAndReport/TASK_TRACKING_LIST.md`
