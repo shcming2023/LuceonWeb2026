@@ -48,18 +48,23 @@ Do not revive archived role files or old task-routing rules by implication.
 
 Luceon and Lucode work in different workspaces and coordinate through GitHub. Local-only task state is not authoritative.
 
+`check task` must be token-efficient. Do not reread the whole repository or the full role/history stack before knowing whether a matching task exists.
+
 When running `check task`, Luceon must:
 
 1. enter the Luceon governance workspace;
 2. run `git status --short --branch`;
 3. run `git fetch origin --prune --tags`;
 4. fast-forward local `main` from `origin/main` when the local worktree is clean;
-5. read `TaskAndReport/TASK_TRACKING_LIST.md`, task briefs, reports, and review artifacts from the synchronized GitHub state;
-6. process the earliest open row where `Next Actor=Luceon`;
-7. if reviewing Lucode work, fetch the reported branch/HEAD and inspect the diff, report, checks, and evidence before accepting, returning, or escalating;
-8. commit and push any task ledger, review, planning, or documentation updates that Luceon makes.
+5. read only `TaskAndReport/TASK_TRACKING_LIST.md` first;
+6. if no open row has `Next Actor=Luceon`, stop after a brief no-task reply and do not read extra docs, write files, run checks, or push;
+7. if a matching task exists, read only the referenced task brief, report/review files, linked branch, and directly relevant docs needed for that task;
+8. if reviewing Lucode work, fetch the reported branch/HEAD and inspect the diff, report, checks, and evidence before accepting, returning, or escalating;
+9. commit and push any task ledger, review, planning, or documentation updates that Luceon makes.
 
 If the local worktree is dirty with unrelated changes, do not overwrite them. Either stop and report the dirty state or use a clean temporary clone/worktree for read-only review.
+
+If no matching task exists, the correct steady state is sleeping until the next user instruction, heartbeat, or GitHub-visible task update.
 
 ## Active Task Flow
 
@@ -88,6 +93,14 @@ Default `Next Actor` values after 6.9.1 are `Luceon`, `Lucode`, `User`, and `Non
 - Do not treat partial local checks as UAT, L2, L3, production readiness, release readiness, production上线, or go-live.
 - Do not promote pending, failed, stale, or unreviewed evidence into confirmed project facts.
 - Do not copy local sample-library files into the repository for commit. Reports may reference sample paths, sizes, hashes, and observed validation results, but source sample files must remain external and unchanged.
+
+## Context And Documentation Hygiene
+
+- Keep active docs concise and current so future `check task` runs do not need to load old context.
+- Update `docs/codex/PROJECT_STATE.md` and `docs/codex/HANDOFF.md` only when project truth, milestone state, runtime boundary, or active workflow changes.
+- Keep detailed evidence in `TaskAndReport/`; keep active docs as summaries and pointers.
+- Archive superseded workflow docs instead of leaving competing active instructions.
+- Avoid broad documentation rewrites when a small update preserves clarity.
 
 ## Current Reading Entry
 

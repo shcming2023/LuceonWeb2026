@@ -76,13 +76,15 @@ Archived role/workflow material is retained under:
 git status --short --branch
 git fetch origin --prune --tags
 git pull --ff-only origin main
-npx pnpm@10.4.1 install --frozen-lockfile
-npx pnpm@10.4.1 run test:static
 ```
 
-Optional broader checks when needed:
+For `check task`, read `TaskAndReport/TASK_TRACKING_LIST.md` first. If there is no open `Next Actor=Luceon` row, stop after a short no-task reply.
+
+Install and validation commands are task-dependent, not part of every wakeup:
 
 ```bash
+npx pnpm@10.4.1 install --frozen-lockfile
+npx pnpm@10.4.1 run test:static
 npx pnpm@10.4.1 exec tsc --noEmit
 npx pnpm@10.4.1 run build
 BASE_URL=http://localhost:8081 npx pnpm@10.4.1 run tier2:standard:check
@@ -105,3 +107,5 @@ For detailed historical evidence, use:
 - `TaskAndReport/*_DIRECTOR_REVIEW.md`
 - `TaskAndReport/*_DECISION.md`
 - `archive/`
+
+Only use historical lookup when the current task needs it.

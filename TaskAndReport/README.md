@@ -97,15 +97,27 @@ Lucode should not mutate production data, run production deployment, or merge to
 When the user says `check task` in the Luceon thread, Luceon must:
 
 1. synchronize with GitHub (`git fetch origin --prune --tags`, then fast-forward `main` when safe);
-2. read `TaskAndReport/TASK_TRACKING_LIST.md`;
+2. read only `TaskAndReport/TASK_TRACKING_LIST.md` first;
 3. find the earliest open row with `Next Actor=Luceon`;
-4. read the related task brief, Lucode report, branch, and evidence;
-5. perform the listed `Next Action`;
-6. write a `*_LUCEON_REVIEW.md`, `*_REPORT.md`, or `*_DECISION.md` when the action requires durable evidence;
-7. update the task ledger;
-8. commit and push changes to GitHub.
+4. if no such row exists, report "当前无 Luceon 待处理任务" and stop;
+5. if `Next Actor=User` rows exist, mention the decision id and the decision needed, then stop unless the user asks to continue;
+6. only after finding a Luceon row, read the related task brief, Lucode report, branch, evidence, and task-relevant docs;
+7. perform the listed `Next Action`;
+8. write a `*_LUCEON_REVIEW.md`, `*_REPORT.md`, or `*_DECISION.md` when the action requires durable evidence;
+9. update the task ledger;
+10. commit and push changes to GitHub.
 
-If there is no open `Next Actor=Luceon` row, Luceon should report that clearly. If there are `Next Actor=User` rows, Luceon should summarize the decision needed and recommend a path.
+No-task wakeups must not read the whole repo, run validation, write reports, update docs, or push.
+
+## Context Hygiene
+
+To keep future runs efficient:
+
+- task briefs should be standalone and include only the context needed for the assigned work;
+- reports should summarize evidence and link detailed artifacts instead of pasting excessive raw logs;
+- `PROJECT_STATE.md` and `HANDOFF.md` should stay short and point to detailed TaskAndReport evidence;
+- stale active instructions should be archived or replaced, not left beside newer rules;
+- broad documentation cleanup should be done only when it directly improves current comprehension or task routing.
 
 ## Safety
 

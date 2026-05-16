@@ -52,14 +52,26 @@ If the worktree is dirty, do not overwrite unrelated changes. Report the dirty s
 
 Then:
 
-1. read `TaskAndReport/TASK_TRACKING_LIST.md`;
+1. read only `TaskAndReport/TASK_TRACKING_LIST.md` first;
 2. process the earliest open row where `Next Actor=Luceon`;
-3. if the row references a Lucode branch, fetch and inspect that branch;
-4. read the task brief, report, changed files, checks, and evidence;
-5. run appropriate review checks;
-6. write a durable review/report/decision when needed;
-7. update the ledger;
-8. commit and push Luceon changes.
+3. if there is no Luceon row, give a short no-task reply and stop;
+4. if there is a User decision row, identify the decision and recommended path, then stop unless the user asks to continue;
+5. only when a Luceon row exists, read the task brief, report, changed files, checks, evidence, and directly relevant docs;
+6. if the row references a Lucode branch, fetch and inspect that branch;
+7. run appropriate review checks;
+8. write a durable review/report/decision when needed;
+9. update the ledger;
+10. commit and push Luceon changes.
+
+No-task wakeups are intentionally cheap: no broad doc reading, no validation commands, no production probing, no report writing, no commits, and no pushes.
+
+## Context Budget Rules
+
+- Prefer task-linked files over broad repository rereads.
+- Read `PROJECT_STATE.md`, `HANDOFF.md`, PRD, deployment docs, or historical reports only when the task depends on them.
+- Summarize findings concisely and link evidence files instead of copying long logs.
+- Keep active docs small and current; move superseded workflow material to `archive/`.
+- When closing tasks, update only the docs whose durable truth actually changed.
 
 ## Review Rules
 
