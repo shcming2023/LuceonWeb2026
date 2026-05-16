@@ -30,9 +30,8 @@ const INELIGIBLE_TASK_STATES = new Set([
 function hasParsedArtifactEvidence(task = {}) {
   const metadata = task.metadata || {};
   const parsedFilesCount = Number(metadata.parsedFilesCount || 0);
-  return metadata.mineruStatus === 'completed' ||
+  return Boolean(metadata.artifactManifestObjectName) ||
     Boolean(metadata.markdownObjectName) ||
-    Boolean(metadata.artifactManifestObjectName) ||
     (Boolean(metadata.parsedPrefix) && parsedFilesCount > 0);
 }
 
@@ -72,6 +71,10 @@ function buildInputObjectRef(task = {}) {
         object: metadata.markdownObjectName,
       },
     };
+  }
+  const parsedFilesCount = Number(metadata.parsedFilesCount || 0);
+  if (!metadata.parsedPrefix || parsedFilesCount <= 0) {
+    throw new Error('cleanservice-input-object-ref-missing: expected artifactManifestObjectName, markdownObjectName, or parsedPrefix with parsedFilesCount > 0');
   }
   return {
     role: 'mineru-parsed-prefix',

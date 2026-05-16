@@ -89,8 +89,9 @@ async function main() {
   assert.equal(isCleanServiceTaskEligible(eligibleTask()), true);
   assert.equal(isCleanServiceTaskEligible(eligibleTask({ state: 'failed' })), false);
   assert.equal(isCleanServiceTaskEligible(eligibleTask({ state: 'canceled' })), false);
-  assert.equal(isCleanServiceTaskEligible(eligibleTask({ metadata: { mineruStatus: 'completed' } })), true);
+  assert.equal(isCleanServiceTaskEligible(eligibleTask({ metadata: { mineruStatus: 'completed' } })), false);
   assert.equal(isCleanServiceTaskEligible(eligibleTask({ metadata: { parsedPrefix: 'parsed/x/', parsedFilesCount: 0 } })), false);
+  assert.equal(isCleanServiceTaskEligible(eligibleTask({ metadata: { parsedPrefix: 'parsed/x/', parsedFilesCount: 1 } })), true);
   assert.equal(isCleanServiceTaskEligible(eligibleTask({
     metadata: {
       mineruStatus: 'completed',
@@ -117,6 +118,29 @@ async function main() {
   assert.equal(jobRequest.job_id, 'luceon-task-clean-1-toc-rebuild-v1');
   assert.equal(jobRequest.inputs[0].role, 'mineru-artifact-manifest');
   assert.equal(jobRequest.options.max_cost_cny, 8);
+  assert.throws(
+    () => buildCleanServiceJobRequest(eligibleTask({ metadata: { mineruStatus: 'completed' } }), enabledConfig),
+    /cleanservice-input-object-ref-missing/,
+  );
+
+  const markdownRequest = buildCleanServiceJobRequest(eligibleTask({
+    metadata: {
+      markdownObjectName: 'parsed/mat-clean-1/full.md',
+      parsedPrefix: 'parsed/mat-clean-1/',
+      parsedFilesCount: 12,
+    },
+  }), enabledConfig);
+  assert.equal(markdownRequest.inputs[0].role, 'mineru-markdown');
+  assert.equal(markdownRequest.inputs[0].source.object, 'parsed/mat-clean-1/full.md');
+
+  const parsedPrefixRequest = buildCleanServiceJobRequest(eligibleTask({
+    metadata: {
+      parsedPrefix: 'parsed/mat-clean-1/',
+      parsedFilesCount: 12,
+    },
+  }), enabledConfig);
+  assert.equal(parsedPrefixRequest.inputs[0].role, 'mineru-parsed-prefix');
+  assert.equal(parsedPrefixRequest.inputs[0].source.object, 'parsed/mat-clean-1/');
 
   const persisted = [];
   const submittedRequests = [];
