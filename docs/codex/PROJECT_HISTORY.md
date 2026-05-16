@@ -1,14 +1,10 @@
 # EduAsset CMS — 教育资产管理平台 说明文档
 
-## 强制交接入口
+## 历史说明
 
-任何 Lucia 临时代班、并行协作、Lucia 额度恢复或重新接手，均应先阅读以下文档，再开始派单、验收或调整节奏。
+本文档保留早期项目规划、复盘和阶段记录。6.9.1 里程碑后，历史 Lucia/Lucode 和多角色团队协同均已归档；本文中的旧角色称谓仅作为历史记录，不再作为活跃派单、验收或 PRD 维护入口。
 
-- Lucia 角色定义：[docs/codex/roles/lucia.md](/Users/concm/prod_workspace/Luceon2026/docs/codex/roles/lucia.md)
-- PRD v0.4：[docs/prd/Luceon2026-PRD-v0.4.md](/Users/concm/prod_workspace/Luceon2026/docs/prd/Luceon2026-PRD-v0.4.md)
-- PRD 唯一性索引：[docs/prd/README.md](/Users/concm/prod_workspace/Luceon2026/docs/prd/README.md)
-- Lucia PRD 维护规程：[docs/prd/lucia-prd-maintenance.md](/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/3.Luceon2026/docs/prd/lucia-prd-maintenance.md)
-- UAT 测试指南：[uat/README.md](/Users/concm/prod_workspace/Luceon2026/uat/README.md)
+当前入口以仓库根目录 `AGENTS.md`、`README.md`、`docs/codex/PROJECT_STATE.md`、`docs/codex/HANDOFF.md`、`docs/prd/README.md` 和 `TaskAndReport/README.md` 为准。
 
 ## 一、项目规划
 

@@ -5,7 +5,7 @@
 - 作者：Manus AI（基于多方评审意见、代码事实基线交叉核查后产出）
 - 适用范围：Luceon2026 仓库（`shcming2023/Luceon2026`）下一阶段开发与联调
 - 文档定位：**工程契约型 PRD**。本版本是一份独立自包含文档，替代 v0.2 与 v0.3，不需要与历史版本合并阅读即可完整理解需求与约束。
-- 维护机制：当前 PRD 由 Lucia 维护。Lucia 负责保持 PRD 与项目真实进度一致，并按“确定需求 / 调试策略 / 历史记录”分层记录。维护规程见 [Lucia PRD 维护规程](./lucia-prd-maintenance.md)。
+- 维护机制：6.9.1 里程碑后暂无活跃角色化 PRD 维护流程；历史 Lucia 维护规程已归档至 `archive/team-model-retired-2026-05-16/docs-prd/lucia-prd-maintenance.md`。未来 PRD 维护流程需重新明确后生效。
 
 ## 目录
 1. 产品背景与本版修订动机
@@ -633,6 +633,12 @@ v0.4 要求把 `AiMetadataJob.state` 的终态命名统一为 `confirmed | revie
 
 ## 16. 变更记录
 
+- **v0.4-milestone-6.9.1-team-retirement-2026-05-16（2026-05-16）**：记录 6.9.1 里程碑和协同体系退休。
+  - 背景：用户确认当前主流程已基本跑通，Task 205 暴露的一个 AI 残留失败和 MinerU 日志通道归属/新鲜度缺口暂不构成 6.9.1 阻塞。
+  - 确定需求：以当前代码和文档状态保存 `v6.9.1` GitHub 里程碑标签，作为后续深入开发前的可回滚锚点。
+  - 协同状态：2026-05-16 前的 Director/ProductManager/Architect/DevelopmentEngineer/TestAcceptanceEngineer 角色化协同流程解散；Lucia/Lucode 历史材料和多角色团队材料均仅保留为追溯档案，不再作为活跃派单入口。
+  - 保留边界：所有历史任务书、任务列表、任务回报、技术文档继续存放，便于查询追溯。
+  - 影响范围：`AGENTS.md`、`README.md`、`docs/codex/PROJECT_STATE.md`、`docs/codex/HANDOFF.md`、`docs/codex/MILESTONE_6.9.1.md`、`TaskAndReport/README.md`、`TaskAndReport/TASK_TRACKING_LIST.md`、`archive/team-model-retired-2026-05-16/`。
 - **v0.4-team-contract-2026-05-07（2026-05-07）**：固化 Director、Lucia、Lucode 两级执行团队契约。
   - 背景：项目进入持续迭代优化阶段，需要用稳定团队角色提升协作效率、任务质量、报告质量和文档代码一致性。
   - 确定需求：Lucia 作为产品研发总监和 Director 高级参谋，负责目标讨论、技术路线分析、PRD、项目总账、任务书、报告审查和文档对齐；Lucode 作为开发测试经理，严格按 Lucia 任务书执行开发和测试并按统一格式回报。

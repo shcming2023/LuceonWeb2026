@@ -213,7 +213,7 @@ Release-candidate 命名前必须同时确认：
 - MinIO console 暴露策略已经被明确接受或变更。
 - 没有把本地 override 的存在表述为生产发布就绪。
 
-以下操作仍需单独 Director 授权和 Lucia 任务书，不得仅凭本节执行：
+以下操作仍需单独用户授权或未来明确记录的治理流程授权，不得仅凭本节执行：
 
 - production sync、rebuild、restart、deploy、rollback。
 - Docker pull/build/compose 操作。

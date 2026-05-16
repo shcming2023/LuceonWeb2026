@@ -4,19 +4,20 @@ Luceon2026 is the local real-runtime education-material processing CMS. The curr
 
 `upload -> MinIO -> local MinerU -> parsed artifacts -> Ollama qwen3.5:9b -> AI metadata -> operator review`
 
-Production release readiness is not claimed by this README. Current status, open boundaries, and task routing are recorded in `docs/codex/PROJECT_STATE.md`, `docs/codex/HANDOFF.md`, and `TaskAndReport/TASK_TRACKING_LIST.md`.
+Production release readiness is not claimed by this README. Current status and open boundaries are recorded in `docs/codex/PROJECT_STATE.md` and `docs/codex/HANDOFF.md`.
 
 ## Repository Truth Sources
 
 - Entry rules: `AGENTS.md`
-- Team contract: `docs/codex/TEAM_CONTRACT.md`
 - Current project state: `docs/codex/PROJECT_STATE.md`
 - Current handoff: `docs/codex/HANDOFF.md`
 - Deployment docs index: `docs/deploy/README.md`
 - PRD: `docs/prd/Luceon2026-PRD-v0.4.md`
 - Validation policy: `docs/codex/TEST_POLICY.md`
 - Test matrix: `docs/codex/TEST_MATRIX.md`
-- Task ledger: `TaskAndReport/TASK_TRACKING_LIST.md`
+- Historical task ledger: `TaskAndReport/TASK_TRACKING_LIST.md`
+- Retired role/workflow archive: `archive/team-model-retired-2026-05-16/`
+- Milestone 6.9.1 record: `docs/codex/MILESTONE_6.9.1.md`
 
 ## Requirements
 
@@ -67,6 +68,6 @@ BASE_URL=http://localhost:8081 npx pnpm@10.4.1 run tier2:standard:check
 
 - The external sample library may be used read-only: `/Users/concm/Library/CloudStorage/OneDrive-个人/Mac/项目开发/4.XxwlAs2026/sample`.
 - Do not copy sample files into this repository.
-- Do not mutate production data, MinIO objects, Docker volumes, secrets, model settings, or runtime overrides without an explicit Director/Lucia task.
+- Do not mutate production data, MinIO objects, Docker volumes, secrets, model settings, or runtime overrides without explicit user authorization or a future documented governance process.
 - Skeleton fallback must not be represented as real AI recognition.
 - Online MinerU remains compatibility-only unless explicitly assigned.

@@ -2,7 +2,7 @@
 
 Status: Canonical architecture direction for future planning  
 Last updated: 2026-05-15  
-Owner: Architect  
+Historical owner: Architect; role retired after 6.9.1
 Related PRD: `docs/prd/Luceon2026-PRD-v0.4.md`, `docs/prd/Luceon2026-PRD-v0.4-CleanService-Addendum.md`
 
 ## 1. Boundary
@@ -88,7 +88,7 @@ eduassets-clean/
     provenance.json
 ```
 
-This layout is not an immediate migration instruction. Existing buckets and objects remain legacy until Director issues and accepts a separate migration plan.
+This layout is not an immediate migration instruction. Existing buckets and objects remain legacy until a future approved migration plan exists.
 
 ## 7. CleanService Directory
 
@@ -117,13 +117,13 @@ The worker boundary should include:
 - cost soft-limit pause behavior;
 - explicit failure mapping.
 
-Heavy CleanService stages should default to active concurrency `<=1` on the current local single-machine runtime unless Director later authorizes a broader concurrency model.
+Heavy CleanService stages should default to active concurrency `<=1` on the current local single-machine runtime unless a future approved governance process authorizes a broader concurrency model.
 
 ## 9. Retention And Cleanup
 
 No fixed old-version retention count is set in this phase.
 
-Future assets must preserve enough structure and provenance to support a later cleanup decision, but automatic cleanup is not part of this foundation. A later Director task must define:
+Future assets must preserve enough structure and provenance to support a later cleanup decision, but automatic cleanup is not part of this foundation. A later approved plan must define:
 
 - retention count or retention policy;
 - archival vs deletion behavior;
@@ -140,7 +140,7 @@ CleanService stages involving LLM calls must be cost-aware.
 - Luceon soft limit: `¥5`.
 - Service hard limit: `¥8`.
 
-Crossing the soft limit should pause the path for Director/User decision. Crossing the hard limit must stop explicitly and must not be silently retried as if normal completion occurred.
+Crossing the soft limit should pause the path for explicit user or future-governance decision. Crossing the hard limit must stop explicitly and must not be silently retried as if normal completion occurred.
 
 Operator review should eventually expose clean-stage state, clean outputs, unresolved anchors, provenance, and cost/token summary in product language.
 
@@ -154,4 +154,3 @@ This vision does not authorize:
 - migration of existing assets;
 - automatic cleanup;
 - release or production readiness claims.
-

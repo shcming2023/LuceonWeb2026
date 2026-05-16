@@ -2,7 +2,7 @@
 
 Status: Canonical protocol direction for future implementation  
 Last updated: 2026-05-15  
-Owner: Architect  
+Historical owner: Architect; role retired after 6.9.1
 Mirror requirement: this file must be kept byte-identical with the approved copy in CleanService implementation repositories, starting with Mineru2Table2026.
 
 ## 1. Boundary
@@ -317,4 +317,3 @@ Each CleanService must provide:
 ## 12. Versioning
 
 Protocol v1 is stable once accepted by Director. Future incompatible changes must use `CleanService-Protocol-v2.md` or an explicit v2 endpoint. Do not mutate v1 field meanings in place.
-

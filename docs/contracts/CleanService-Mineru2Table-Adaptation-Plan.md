@@ -2,7 +2,7 @@
 
 Status: Architecture planning document for future external dependency work  
 Last updated: 2026-05-15  
-Owner: Architect  
+Historical owner: Architect; role retired after 6.9.1
 External repository: `shcming2023/Mineru2Table2026`
 
 ## 1. Boundary
@@ -155,7 +155,7 @@ Mineru2Table should expose:
 
 ## 5. Luceon-Side Dependency Expectations
 
-Before Luceon implementation starts, Director should require evidence that Mineru2Table supports:
+Before Luceon implementation starts, the future approved governance process should require evidence that Mineru2Table supports:
 
 - health format with service identity;
 - job submission by MinIO ObjectRef;
@@ -192,4 +192,3 @@ This adaptation plan does not cover:
 - migration of old assets;
 - cleanup/deletion policy;
 - release readiness or go-live decisions.
-

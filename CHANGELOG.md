@@ -1,5 +1,15 @@
 # Changelog
 
+## [v6.9.1] - 2026-05-16
+
+### Milestone 6.9.1: Mainline Through And Governance Reset
+
+- Preserves the current working mainline as a rollback anchor: upload -> MinIO -> local MinerU -> parsed artifacts -> Ollama `qwen3.5:9b` -> AI metadata -> operator review.
+- Records Task 205 pressure-window evidence as sufficient for the 6.9.1 milestone boundary: 24/24 MinerU parses completed, 23/24 tasks reached review-pending/reviewing, and one AI-stage residual remains visible and manual-retry eligible.
+- Retires the former role-dispatch workflow and archives its role contracts, task template, team contract, and workflow prompt material under `archive/team-model-retired-2026-05-16/`.
+- Keeps `TaskAndReport/` as the historical evidence registry instead of an active role-dispatch surface.
+- Adds `docs/codex/MILESTONE_6.9.1.md` as the milestone boundary and rollback note.
+
 ## [milestone-prd-v0.4-wave1] - 2026-04-22
 
 ### ✨ PRD v0.4 一期修订：任务流水线工程契约落地

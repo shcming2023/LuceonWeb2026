@@ -50,12 +50,12 @@ luplan
 luceonhmm
 ```
 
-6. Have each thread read:
+6. Start from the current repo entry documents:
 
 ```text
 AGENTS.md
 docs/codex/PROJECT_STATE.md
-docs/codex/roles/<role>.md
+docs/codex/HANDOFF.md
 ```
 
 7. Run L1:

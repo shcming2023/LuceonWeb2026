@@ -1,8 +1,8 @@
 # ADR-2026-05-15: Clean Pipeline Foundation
 
-Status: Proposed for Director review  
+Status: Historical proposal preserved after 6.9.1 team retirement
 Date: 2026-05-15  
-Owner: Architect  
+Historical owner: Architect; role retired after 6.9.1
 Related:
 
 - `docs/prd/Luceon2026-PRD-v0.4-CleanService-Addendum.md`
@@ -18,7 +18,7 @@ Luceon2026 currently operates under PRD v0.4's Phase 1 mainline:
 upload -> local MinerU -> MinIO -> Ollama qwen3.5:9b -> AI metadata -> operator review
 ```
 
-The user supplied source material proposing Mineru2Table2026 as the first CleanService for `toc-rebuild`. ProductManager has accepted a PRD addendum that scopes Mineru2Table as future product direction while preserving current PRD v0.4 boundaries.
+The user supplied source material proposing Mineru2Table2026 as the first CleanService for `toc-rebuild`. A historical ProductManager addendum scoped Mineru2Table as future product direction while preserving current PRD v0.4 boundaries.
 
 This ADR records architecture decisions for future planning. It does not authorize implementation, runtime mutation, production mutation, migration, cleanup, release readiness, L3, pressure PASS, production readiness, or go-live.
 
@@ -60,7 +60,7 @@ Existing `eduassets` / `eduassets-parsed` data remains legacy. No immediate migr
 
 ### D-5. Retention count is not fixed in this phase
 
-No fixed old-version retention count is set. The layout and provenance must preserve future cleanup capability, but a later Director task must define any retention count, archive behavior, deletion behavior, and approval boundary.
+No fixed old-version retention count is set. The layout and provenance must preserve future cleanup capability, but a later approved plan must define any retention count, archive behavior, deletion behavior, and approval boundary.
 
 ### D-6. Automatic cleanup is a future task
 
@@ -75,7 +75,7 @@ Mineru2Table's existing multipart routes may be deprecated but retained for at l
 - Luceon soft limit: `¥5`.
 - Service hard limit: `¥8`.
 
-Crossing Luceon's soft limit requires an explicit Director/User decision path. Crossing the service hard limit must stop explicitly with non-retriable cost-limit failure.
+Crossing Luceon's soft limit requires an explicit user or future-governance decision path. Crossing the service hard limit must stop explicitly with non-retriable cost-limit failure.
 
 ### D-9. Shared protocol must be mirrored byte-identically
 
@@ -113,12 +113,12 @@ Costs:
 
 Recommended future phases:
 
-1. Director review of canonical docs.
-2. Architect implementation plan for Luceon CleanServiceWorker.
-3. DevelopmentEngineer task for Mineru2Table protocol compatibility or cross-repo dependency preparation.
-4. DevelopmentEngineer task for Luceon-side CleanService integration after dependency contract is available.
-5. TestAcceptanceEngineer protocol and E2E validation.
-6. Separate Director/User decision for any migration, cleanup, release boundary, or production rollout.
+1. Future approved review of canonical docs.
+2. Future implementation plan for Luceon CleanServiceWorker.
+3. Future Mineru2Table protocol compatibility or cross-repo dependency preparation.
+4. Future Luceon-side CleanService integration after dependency contract is available.
+5. Future protocol and E2E validation.
+6. Separate user or future-governance decision for any migration, cleanup, release boundary, or production rollout.
 
 ## 6. Open Architecture Questions
 
@@ -140,4 +140,3 @@ This ADR does not authorize:
 - validation uploads, pressure tests, submit probes, retries, reparses, or re-AI;
 - data migration or cleanup;
 - readiness, L3, pressure PASS, production readiness, release readiness, or go-live claims.
-

@@ -1,6 +1,6 @@
 # Luceon2026 PRD v0.4 CleanService Addendum
 
-- Document status: ProductManager draft for Director review
+- Document status: historical ProductManager draft preserved after 6.9.1 team retirement
 - Task: `TASK-20260515-192928-P1-CleanService-Mineru2Table-PRD-Addendum`
 - Date: 2026-05-15
 - Scope: product requirement addendum for future Mineru2Table `toc-rebuild` CleanService
@@ -88,7 +88,7 @@ The following user decisions must be reflected in future canonical architecture/
 | Old-version retention count | No fixed retention count is set in this phase. Retention policy is deferred to a future cleanup decision. |
 | Automatic cleanup | Cleanup is a separate future task. Foundation work may flag issues but must not delete or mutate old assets. |
 | Old multipart routes | Mineru2Table's old multipart routes may be deprecated but retained for at least one version cycle; Luceon should not bind a production path to those routes as the long-term contract. |
-| LLM cost limit | Luceon soft limit is `¥5`; service hard limit is `¥8`. Exceeding the soft limit requires Director/User decision behavior; exceeding the hard limit must stop the service path explicitly. |
+| LLM cost limit | Luceon soft limit is `¥5`; service hard limit is `¥8`. Exceeding the soft limit requires explicit user or future-governance decision behavior; exceeding the hard limit must stop the service path explicitly. |
 
 ## 8. Legacy Asset Policy
 
@@ -111,7 +111,7 @@ CleanService/Mineru2Table must be cost-aware at the product workflow level.
 
 - Luceon soft limit: `¥5`.
 - Service hard limit: `¥8`.
-- Soft-limit behavior: when projected or actual cost crosses `¥5`, Luceon should pause the clean-stage decision path and require Director/User decision before continuing, unless a later Director-approved policy defines a narrower automatic behavior.
+- Soft-limit behavior: when projected or actual cost crosses `¥5`, Luceon should pause the clean-stage decision path and require explicit user or future-governance decision before continuing, unless a later approved policy defines a narrower automatic behavior.
 - Hard-limit behavior: when projected or actual cost crosses `¥8`, the service must fail or reject the job explicitly with a non-retriable cost-limit state.
 - Operators must not see a silent fallback, partial disguised as success, or hidden cost overrun.
 - Future contracts should carry enough cost/token metadata for audit, review, and decision records.
@@ -177,4 +177,4 @@ These questions should be resolved before implementation planning:
 
 ## 15. Recommended Next Step
 
-After Director reviews this addendum, the next recommended task is an Architect task for canonical CleanService architecture/contract reconciliation. That task should write reconciled docs from the accepted product boundary and the six preserved user decisions, not by copying the raw source bundle.
+Future CleanService work should start with a newly approved governance/process decision, then reconcile architecture and contracts from the accepted product boundary and the six preserved user decisions, not by copying the raw source bundle.

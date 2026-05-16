@@ -1,8 +1,12 @@
 # Luceon2026 Validation Policy
 
-Last updated: 2026-05-11
+Last updated: 2026-05-16
 
 See `docs/codex/TEST_MATRIX.md` for the command-to-risk matrix used by current governance and validation reports.
+
+## 6.9.1 Role Boundary
+
+The former Lucia/Lucode and multi-role Director/ProductManager/Architect/DevelopmentEngineer/TestAcceptanceEngineer workflows are retired as of 2026-05-16. Historical validation evidence below keeps original owner wording for traceability, but it is not an active assignment model.
 
 ## Local Test Sample Library
 
@@ -23,7 +27,7 @@ Rules:
 
 ### L1: Fast Code Gate
 
-Execution owner: `Lucode`; review owner: `Lucia`
+Historical execution owner: `Lucode`; historical review owner: `Lucia`
 
 Purpose: determine whether the code is obviously broken before deeper environment validation.
 
@@ -40,7 +44,7 @@ L1 must not be reported as L2, UAT, or production validation.
 
 ### L2: Tier 2 Near-Production Validation
 
-Execution owner: `Lucode` when assigned by Lucia; review owner: `Lucia`.
+Historical execution owner: `Lucode` when assigned by Lucia; historical review owner: `Lucia`.
 
 Purpose: validate real integration behavior in a near-production local or staging environment.
 
@@ -255,7 +259,7 @@ The previous online MinerU v4 Standard target is retired from the current main v
 - missing `MINERU_ONLINE_API_TOKEN` no longer blocks the current main UAT.
 - do not report the retired online target as passed unless a future compatibility task explicitly requires and proves it.
 
-Current UAT command set is task-specific. Lucode must start from the real runtime path assigned by Lucia, confirm the effective dependency chain, then run the assigned checks without destructive cleanup.
+Current UAT command set is task-specific. Future validation must start from the real runtime path authorized for that run, confirm the effective dependency chain, then run the assigned checks without destructive cleanup.
 
 Required report fields:
 
@@ -310,7 +314,7 @@ Accepted strict no-skeleton local9b evidence for the 2026-05-03 PASS:
 
 ### L3: Home Mac Mini Production Truth
 
-Execution owner: `Lucode` when assigned by Lucia; acceptance owner: `Lucia` and Director
+Historical execution owner: `Lucode` when assigned by Lucia; historical acceptance owner: `Lucia` and Director
 
 Purpose: validate the actual staging or production environment on the Home Mac mini.
 
@@ -380,7 +384,7 @@ Reports must not include any full token or secret value.
 
 ## Destructive Operations
 
-These require explicit Director approval:
+These require explicit user approval or approval under a future documented governance process:
 
 - `docker compose down -v`
 - deleting Docker volumes

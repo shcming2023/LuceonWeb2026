@@ -1,6 +1,6 @@
 # Deployment Documentation Index
 
-Last updated: 2026-05-11
+Last updated: 2026-05-16
 
 ## Current Truth
 
@@ -14,4 +14,4 @@ Last updated: 2026-05-11
 
 ## Safety Boundary
 
-Deployment documentation does not authorize production sync, rebuild, restart, rollback, Docker volume mutation, DB edits, MinIO object deletion, secret changes, model/provider changes, validation uploads, or release-readiness claims. Those actions require explicit Director/Lucia task authorization.
+Deployment documentation does not authorize production sync, rebuild, restart, rollback, Docker volume mutation, DB edits, MinIO object deletion, secret changes, model/provider changes, validation uploads, or release-readiness claims. Those actions require explicit user authorization or a future documented governance process.

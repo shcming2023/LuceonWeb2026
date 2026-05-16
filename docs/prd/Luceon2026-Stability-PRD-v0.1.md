@@ -36,7 +36,7 @@
 | 审核人 | Director |
 | 适用范围 | Phase 1 收尾阶段：Ollama / MinerU / 准入电路 / 压力测试 / 恢复机制 / 基础设施稳定性 |
 | 前序文档 | [Luceon2026 PRD v0.4](./Luceon2026-PRD-v0.4.md)（功能 PRD） |
-| 维护者 | 许清楚（Xu）；后续维护由 Lucia 接管，遵循 [Lucia PRD 维护规程](./lucia-prd-maintenance.md) |
+| 维护者 | 许清楚（Xu）；历史 Lucia 维护规程已归档至 `archive/team-model-retired-2026-05-16/docs-prd/lucia-prd-maintenance.md`，6.9.1 后暂无活跃角色化维护流程 |
 
 ---
 
@@ -615,4 +615,4 @@ Phase 1 生产环境的正确启动顺序：
   - 背景：Luceon2026 Phase 1 主线功能已实现，但经过密集型生产验证后暴露出 Ollama 冷启动、MinerU 运行时稳定性、压力测试失败、ParseTask 恢复缺失等多个稳定性问题。功能 PRD v0.4 主要关注功能需求，缺乏对稳定性需求的系统性定义。
   - 内容：基于 Director 提供的 Phase 1 稳定性证据汇总，产出首版稳定性 PRD。涵盖 7 个稳定性类别（A–G）、38 条稳定性需求、8 项生产就绪门槛、7 个故障模式行为契约、8 项运维前置条件和 7 个已知缺口。
   - 证据来源：Phase 1 生产验证数据（Ollama 冷/热 probe 计时、24-PDF 压力测试记录、双重监听器修复记录、大文档 AI 超时修复、MinerU HTTP 500 根因分析、准入电路验证、3-sample 并发验证、takeover 路径修复、诊断分类修复等）。
-  - 后续维护：本文档由许清楚（Xu）产出后交由 Lucia 维护，遵循 [Lucia PRD 维护规程](./lucia-prd-maintenance.md)。后续版本更新需记录每次修改的确定需求、调试策略和历史记录。
+  - 后续维护：本文档由许清楚（Xu）产出；历史 Lucia 维护规程已归档，6.9.1 后暂无活跃角色化维护流程。后续版本更新仍需记录每次修改的确定需求、调试策略和历史记录。
