@@ -7,7 +7,7 @@ import type { AiConfig, AiProvider, MinerUConfig, MinioConfig } from '../../stor
 import { checkLocalMinerUHealth } from '../../utils/mineruLocalApi';
 import { MetadataSettingsPanel } from '../components/MetadataSettingsPanel';
 
-type ActiveTab = 'ai' | 'mineru' | 'storage' | 'backup' | 'consistency' | 'dictionary';
+type ActiveTab = 'ai' | 'mineru' | 'storage' | 'backup' | 'dictionary';
 
 // ─── 提示词字段中文标签映射 ──────────────────────────────────
 const PROMPT_LABELS: Record<string, string> = {
@@ -54,14 +54,6 @@ type ImportResult = {
   skippedObjects?: number;
   materialsCount?: number;
   backupPath?: string;
-};
-
-type OrphanObject = { bucket: string; objectName: string; size: number };
-
-type OrphanStats = {
-  orphans: OrphanObject[];
-  totalCount: number;
-  totalSize: number;
 };
 
 function FieldRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -226,11 +218,6 @@ export function SettingsPage() {
   const [confirmInput, setConfirmInput] = useState('');
   const [exportingFull, setExportingFull] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
-  // 孤儿对象审计
-  const [orphanStats, setOrphanStats] = useState<OrphanStats | null>(null);
-  const [orphanLoading, setOrphanLoading] = useState(false);
-  const [cleaningOrphans, setCleaningOrphans] = useState(false);
-  const [orphanConfirmOpen, setOrphanConfirmOpen] = useState(false);
 
   // 切换到 storage tab 时从 upload-server 读取最新配置
   useEffect(() => {
@@ -566,43 +553,6 @@ export function SettingsPage() {
     }
   };
 
-  const handleScanOrphans = async () => {
-    setOrphanLoading(true);
-    setOrphanStats(null);
-    try {
-      const resp = await fetch('/__proxy/upload/audit/orphans');
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
-      setOrphanStats({ orphans: data.orphans || [], totalCount: data.totalCount || 0, totalSize: data.totalSize || 0 });
-    } catch (error) {
-      toast.error(`扫描失败：${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setOrphanLoading(false);
-    }
-  };
-
-  const handleCleanupOrphans = async () => {
-    setCleaningOrphans(true);
-    setOrphanConfirmOpen(false);
-    try {
-      const resp = await fetch('/__proxy/upload/audit/cleanup-orphans', { method: 'POST' });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
-      const errCount = Array.isArray(data.errors) ? data.errors.length : 0;
-      if (errCount > 0) {
-        toast.warning(`清理完成：已删除 ${data.removed} 个对象，${errCount} 个对象删除失败`);
-      } else {
-        toast.success(`清理完成：已删除 ${data.removed} 个孤儿对象，释放 ${formatBytes(data.totalSize || 0)}`);
-      }
-      setOrphanStats(null);
-      void refreshBackupStats();
-    } catch (error) {
-      toast.error(`清理失败：${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setCleaningOrphans(false);
-    }
-  };
-
   const handleExportBackup = async () => {
     try {
       const response = await fetch('/__proxy/db/backup/export');
@@ -789,16 +739,6 @@ export function SettingsPage() {
           }`}
         >
           <span className="flex items-center gap-1.5"><HardDrive size={15} /> 备份与监控</span>
-        </button>
-        <button
-          onClick={() => switchTab('consistency')}
-          className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'consistency'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-800'
-          }`}
-        >
-          <span className="flex items-center gap-1.5"><AlertTriangle size={15} /> 一致性检查</span>
         </button>
         <button
           onClick={() => switchTab('dictionary')}
