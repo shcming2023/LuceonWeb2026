@@ -19,8 +19,8 @@
 | 子系统 | 路由前缀 | 当前完成度 |
 |--------|---------|-----------|
 | **EduAsset CMS** | `/source-materials`、`/asset`、`/products`、`/metadata`、`/settings` | 核心功能完成，已具备"资料 → 解析 → AI 分析 → 成品入库"最小闭环 |
-| **Overleaf 备份系统** | `/backup/*` | 当前仓库仅保留 LaTeX 工具入口，未接入独立备份后端页面 |
-| **LaTeX 工具集** | `/backup/latex` | 浏览器本地处理，不依赖后端 |
+| **Overleaf 备份系统** | `/backup/*` | 未接入独立备份后端页面 |
+| **LaTeX 工具集** | `/backup/latex` | ❌ 已在里程碑后归档移除 |
 
 ---
 
