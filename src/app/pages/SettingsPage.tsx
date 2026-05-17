@@ -738,18 +738,9 @@ export function SettingsPage() {
               : 'border-transparent text-gray-500 hover:text-gray-800'
           }`}
         >
-          <span className="flex items-center gap-1.5"><HardDrive size={15} /> 备份与监控</span>
+          <span className="flex items-center gap-1.5"><HardDrive size={15} /> 备份与容量</span>
         </button>
-        <button
-          onClick={() => switchTab('dictionary')}
-          className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'dictionary'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-800'
-          }`}
-        >
-          <span className="flex items-center gap-1.5"><Tag size={15} /> 字典与标签</span>
-        </button>
+        {/* Dictionary tab hidden from normal Settings navigation */}
       </div>
 
       {/* ===== AI 配置 ===== */}
@@ -895,10 +886,10 @@ export function SettingsPage() {
             </FieldRow>
           </div>
 
-          {/* 多提供商列表 */}
+          {/* 本地大模型配置 */}
           <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="font-semibold text-gray-800">AI 提供商（Main Provider）</h2>
+              <h2 className="font-semibold text-gray-800">本地大模型配置 (Local Provider)</h2>
             </div>
 
             {(!aiForm.providers || aiForm.providers.length === 0) && (
@@ -965,7 +956,7 @@ export function SettingsPage() {
                         <div className="space-y-2">
                           <div className="flex items-center justify-between gap-2">
                             <div className="text-xs text-gray-400 truncate">
-                              {provider.id === 'ollama' ? 'Ollama 可自动拉取已安装模型' : '可尝试自动拉取（非 Ollama 可能失败）'}
+                              {provider.id === 'ollama' ? 'Ollama 可自动拉取已安装模型' : '非 Ollama 本地服务可能需要手动输入'}
                             </div>
                             <button
                               type="button"
@@ -1022,7 +1013,7 @@ export function SettingsPage() {
             })}
 
             <p className="text-xs text-gray-400">
-              * AI 分析时按优先级顺序依次尝试各提供商，第一个成功即返回结果。429/401 等错误自动跳过到下一个。Ollama 作为本地兜底无需 API Key。
+              * AI 分析默认使用本地模型提供商进行处理。Ollama 作为本地模型服务无需填写 API Key。
             </p>
           </div>
 
@@ -1064,7 +1055,7 @@ export function SettingsPage() {
             <h2 className="font-semibold text-gray-800">接口参数</h2>
             {true && (
               <>
-                <FieldRow label="本地地址">
+                <FieldRow label="本地地址" hint="留空则默认使用 http://host.docker.internal:8083">
                   <Input
                     value={mineruForm.localEndpoint}
                     onChange={(v) => updateMineru({ localEndpoint: v })}
@@ -1180,7 +1171,6 @@ export function SettingsPage() {
                 value={minioForm.endpoint}
                 onChange={(v) => updateMinio({ endpoint: v })}
                 placeholder="minio 或 192.168.1.100"
-                disabled={minioForm.storageBackend !== 'minio'}
               />
             </FieldRow>
             <FieldRow label="端口">
@@ -1189,7 +1179,6 @@ export function SettingsPage() {
                 value={minioForm.port}
                 onChange={(v) => updateMinio({ port: Number(v) })}
                 placeholder="9000"
-                disabled={minioForm.storageBackend !== 'minio'}
               />
             </FieldRow>
             <FieldRow label="使用 SSL">
@@ -1198,7 +1187,6 @@ export function SettingsPage() {
                   type="checkbox"
                   checked={minioForm.useSSL}
                   onChange={(e) => updateMinio({ useSSL: e.target.checked })}
-                  disabled={minioForm.storageBackend !== 'minio'}
                   className="w-4 h-4 rounded"
                 />
                 <span className="text-sm text-gray-700">启用 HTTPS</span>
@@ -1212,7 +1200,6 @@ export function SettingsPage() {
                   onChange={(v) => updateMinio({ accessKey: v })}
                   placeholder="minioadmin"
                   className="pr-10"
-                  disabled={minioForm.storageBackend !== 'minio'}
                 />
                 <button
                   type="button"
@@ -1231,7 +1218,6 @@ export function SettingsPage() {
                   onChange={(v) => updateMinio({ secretKey: v })}
                   placeholder="minioadmin"
                   className="pr-10"
-                  disabled={minioForm.storageBackend !== 'minio'}
                 />
                 <button
                   type="button"
@@ -1247,7 +1233,6 @@ export function SettingsPage() {
                 value={minioForm.bucket}
                 onChange={(v) => updateMinio({ bucket: v })}
                 placeholder="eduassets"
-                disabled={minioForm.storageBackend !== 'minio'}
               />
             </FieldRow>
             <FieldRow label="解析产物 Bucket" hint="存放 MinerU 解析输出物的存储桶">
@@ -1255,7 +1240,6 @@ export function SettingsPage() {
                 value={minioForm.parsedBucket}
                 onChange={(v) => updateMinio({ parsedBucket: v })}
                 placeholder="eduassets-parsed"
-                disabled={minioForm.storageBackend !== 'minio'}
               />
             </FieldRow>
             <FieldRow label="URL 有效期" hint="预签名 URL 有效秒数">
@@ -1264,7 +1248,6 @@ export function SettingsPage() {
                 value={minioForm.presignedExpiry}
                 onChange={(v) => updateMinio({ presignedExpiry: Number(v) })}
                 placeholder="3600"
-                disabled={minioForm.storageBackend !== 'minio'}
               />
             </FieldRow>
           </div>
