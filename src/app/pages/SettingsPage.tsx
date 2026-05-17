@@ -893,14 +893,14 @@ export function SettingsPage() {
             {(() => {
               const providers = aiForm.providers ?? [];
               const realIdx = providers.findIndex(p => p.id === 'ollama' || (p.apiEndpoint || '').includes('11434'));
-              
+
               if (providers.length === 0) {
                 return <p className="text-xs text-gray-400 py-2">暂无提供商配置，请在后端预设配置。</p>;
               }
               if (realIdx === -1) {
                 return <p className="text-sm text-amber-600 py-4">未找到本地 Ollama 提供商配置，请在后端预设本地模型配置。</p>;
               }
-              
+
               const provider = providers[realIdx];
               const updateProvider = (patch: Partial<AiProvider>) => {
                 const next = providers.map((p, i) => i === realIdx ? { ...p, ...patch } : p);
