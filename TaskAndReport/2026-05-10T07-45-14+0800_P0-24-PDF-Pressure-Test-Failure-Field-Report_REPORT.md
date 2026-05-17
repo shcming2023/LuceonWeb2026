@@ -1,11 +1,11 @@
 # P0 24 PDF Pressure Test Failure Field Report
 
-Report time: 2026-05-10T07:45:14+0800  
-Reporter: Lucode  
-Reviewer: Lucia  
-Status: Field evidence submitted for Lucia review  
-Branch: `main`  
-Base HEAD before report: `20d08d5` (`Record parsed zip review head`)  
+Report time: 2026-05-10T07:45:14+0800
+Reporter: Lucode
+Reviewer: Lucia
+Status: Field evidence submitted for Lucia review
+Branch: `main`
+Base HEAD before report: `20d08d5` (`Record parsed zip review head`)
 Report commit: pending at report creation; see pushed main HEAD after this report is committed.
 
 ## Scope

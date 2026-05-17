@@ -315,40 +315,40 @@ Before Luceon real integration, Director should require evidence from Mineru2Tab
 
 ### Phase A: Luceon Planning Follow-up
 
-Role: Architect  
-Scope: refine exact state names, callback endpoint, DB metadata shape, and worker enablement flag after ProductManager answers UI/state questions.  
+Role: Architect
+Scope: refine exact state names, callback endpoint, DB metadata shape, and worker enablement flag after ProductManager answers UI/state questions.
 No code.
 
 ### Phase B: Mineru2Table External Dependency
 
-Role: DevelopmentEngineer or separate external-repo thread  
-Scope: implement/verify CleanService Protocol v1 in Mineru2Table2026.  
+Role: DevelopmentEngineer or separate external-repo thread
+Scope: implement/verify CleanService Protocol v1 in Mineru2Table2026.
 No Luceon runtime integration.
 
 ### Phase C: Luceon Mock Protocol Foundation
 
-Role: DevelopmentEngineer  
-Scope: add CleanService client, config, circuit, output verifier, callback route, and mock tests. Keep disabled by default.  
+Role: DevelopmentEngineer
+Scope: add CleanService client, config, circuit, output verifier, callback route, and mock tests. Keep disabled by default.
 Validation: unit/mock only.
 
 ### Phase D: CleanServiceWorker Disabled Integration
 
-Role: DevelopmentEngineer  
+Role: DevelopmentEngineer
 Scope: add worker scaffold, task metadata summaries, idempotency, and polling/callback reconciliation against mock service. Feature flag disabled for production.
 
 ### Phase E: UI Read Surface
 
-Role: DevelopmentEngineer  
+Role: DevelopmentEngineer
 Scope: add task labels, task detail clean-stage panel, error/cost/provenance display. No real service dispatch.
 
 ### Phase F: Real Mineru2Table Local E2E
 
-Role: TestAcceptanceEngineer after DevelopmentEngineer implementation  
+Role: TestAcceptanceEngineer after DevelopmentEngineer implementation
 Scope: one controlled local or staging E2E against protocol-compatible Mineru2Table, with MinIO fixture/sample and no release-readiness claim.
 
 ### Phase G: Production Boundary Decision
 
-Role: Director/User  
+Role: Director/User
 Scope: decide whether to authorize production deployment/validation. This is separate from implementation acceptance.
 
 ## Validation Plan

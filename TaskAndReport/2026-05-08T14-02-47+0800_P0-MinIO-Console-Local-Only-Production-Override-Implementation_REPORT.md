@@ -1,7 +1,7 @@
 # P0 MinIO Console Local-Only Production Override Implementation Report
 
-Author: Lucode  
-Date: 2026-05-08T14:02:47+0800  
+Author: Lucode
+Date: 2026-05-08T14:02:47+0800
 Based on Lucia task brief: `TaskAndReport/2026-05-08T13-47-08+0800_P0-MinIO-Console-Local-Only-Production-Override-Implementation_TASK.md`
 
 ## Scope

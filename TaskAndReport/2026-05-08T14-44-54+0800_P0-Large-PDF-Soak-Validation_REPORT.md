@@ -1,7 +1,7 @@
 # P0 Large-PDF Soak Validation Report
 
-Author: Lucode  
-Report time: 2026-05-08T14:44:54+0800  
+Author: Lucode
+Report time: 2026-05-08T14:44:54+0800
 Based on Lucia task brief: `TaskAndReport/2026-05-08T14-24-33+0800_P0-Large-PDF-Soak-Validation_TASK.md`
 
 ## Decision
@@ -113,7 +113,7 @@ provider=minio
 
 ## State Transitions
 
-Observed task ID: `task-1778222027064`  
+Observed task ID: `task-1778222027064`
 Material ID: `mat-lucode-large-soak-20260508143346`
 
 Key transitions:
