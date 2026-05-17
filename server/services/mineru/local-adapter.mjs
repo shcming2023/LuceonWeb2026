@@ -174,7 +174,7 @@ export async function processWithLocalMinerU({ task, material, fileStream, fileN
   const fileSize = material?.fileSize || 0;
   const submitTimeoutMs = Math.max(timeoutMs, Math.max(120_000, Math.ceil(fileSize / 1024) * 50));
   const effectiveBackend = (fileSize > 0 && fileSize < 2 * 1024 * 1024 && /hybrid/i.test(backend)) ? 'pipeline' : backend;
-  
+
   let finalParseMethod = parseMethod || 'auto';
   if (enableOcr && !parseMethod) finalParseMethod = 'ocr';
 
@@ -306,12 +306,13 @@ export async function processWithLocalMinerU({ task, material, fileStream, fileN
         let observation = null;
         if (mineruStatus === 'processing') {
           try {
-            const { parseLatestMineruProgress } = await import('../../lib/ops-mineru-log-parser.mjs');
-            observation = await parseLatestMineruProgress(
+            const { parseLatestMineruProgress, reconcileLogObservations } = await import('../../lib/ops-mineru-log-parser.mjs');
+            const containerObservation = await parseLatestMineruProgress(
                startedAt || task.metadata?.mineruStartedAt || new Date().toISOString(),
                task.metadata?.mineruObservedProgress,
                executionProfile
             );
+            observation = reconcileLogObservations(containerObservation, task.metadata?.mineruObservedProgress);
           } catch (e) {
             // ignore
           }
@@ -482,7 +483,7 @@ export async function processWithLocalMinerU({ task, material, fileStream, fileN
 
         const objectName = `${parsedPrefix}${safeRelativePath}`;
         const contentType = inferContentTypeByExt(safeRelativePath);
-        
+
         const fileObj = zip.file(name);
         let size = null;
         if (fileObj._data && typeof fileObj._data.uncompressedSize === 'number') {
@@ -622,7 +623,7 @@ export async function resumeWithLocalMinerU({ task, material, mineruTaskId, time
     let mineruStatus = 'processing';
 
     const isDone = ['done', 'success', 'completed', 'succeeded', 'finished', 'complete'].includes(status);
-    if (isDone) return; 
+    if (isDone) return;
 
     if (status === 'pending' || status === 'queued' || (!startedAt && status !== 'processing') || queuedAhead > 0) {
       stage = 'mineru-queued';
@@ -635,12 +636,13 @@ export async function resumeWithLocalMinerU({ task, material, mineruTaskId, time
     let observation = null;
     if (mineruStatus === 'processing') {
       try {
-        const { parseLatestMineruProgress } = await import('../../lib/ops-mineru-log-parser.mjs');
-        observation = await parseLatestMineruProgress(
+        const { parseLatestMineruProgress, reconcileLogObservations } = await import('../../lib/ops-mineru-log-parser.mjs');
+        const containerObservation = await parseLatestMineruProgress(
            startedAt || task.metadata?.mineruStartedAt || new Date().toISOString(),
            task.metadata?.mineruObservedProgress,
            task.metadata?.mineruExecutionProfile
         );
+        observation = reconcileLogObservations(containerObservation, task.metadata?.mineruObservedProgress);
       } catch (e) {
         // ignore
       }
@@ -783,7 +785,7 @@ export async function resumeWithLocalMinerU({ task, material, mineruTaskId, time
 
       const objectName = `${parsedPrefix}${safeRelativePath}`;
       const contentType = inferContentTypeByExt(safeRelativePath);
-      
+
       const fileObj = zip.file(name);
       let size = null;
       if (fileObj._data && typeof fileObj._data.uncompressedSize === 'number') {
@@ -895,13 +897,13 @@ async function waitMinerUTask(localEndpoint, taskId, timeoutMs, onProgress) {
       const response = await fetch(`${localEndpoint}/tasks/${encodeURIComponent(taskId)}`, { signal: AbortSignal.timeout(10000) });
       const payload = await response.json();
       if (!response.ok) throw new Error(`查询状态失败: HTTP ${response.status}`);
-      
+
       lastPayload = payload;
       const status = String(payload?.status || payload?.state || payload?.task_status || payload?.data?.status || payload?.data?.state).toLowerCase();
       lastKnownStatus = status;
 
       if (onProgress) await onProgress(payload);
-      
+
       if (['done', 'success', 'completed', 'succeeded', 'finished', 'complete'].includes(status)) return payload;
       if (['failed', 'error', 'failure', 'canceled', 'cancelled'].includes(status)) throw new Error(payload?.error || payload?.message || '任务执行失败');
     } catch (err) {
@@ -914,7 +916,7 @@ async function waitMinerUTask(localEndpoint, taskId, timeoutMs, onProgress) {
         throw err;
       }
     }
-    
+
     await new Promise(r => setTimeout(r, 1500));
   }
   throw new MineruTimeoutError(taskId, lastKnownStatus, timeoutMs);
