@@ -259,7 +259,7 @@ export function SettingsPage() {
 
   useEffect(() => {
     const tab = new URLSearchParams(location.search).get('tab');
-    const valid: ActiveTab[] = ['ai', 'mineru', 'storage', 'backup', 'consistency', 'dictionary'];
+    const valid: ActiveTab[] = ['ai', 'mineru', 'storage', 'backup', 'dictionary'];
     if (tab && valid.includes(tab as ActiveTab)) {
       setActiveTab(tab as ActiveTab);
     }
@@ -958,69 +958,29 @@ export function SettingsPage() {
           {/* 多提供商列表 */}
           <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="font-semibold text-gray-800">AI 提供商（按优先级依次尝试）</h2>
-              <button
-                type="button"
-                onClick={() => {
-                  const newProvider: AiProvider = {
-                    id: `custom_${Date.now()}`,
-                    name: '自定义',
-                    enabled: true,
-                    apiEndpoint: 'https://api.example.com/v1/chat/completions',
-                    apiKey: '',
-                    model: 'gpt-4o-mini',
-                    timeout: 120,
-                    priority: (aiForm.providers?.length ?? 0) + 1,
-                  };
-                  updateAi({ providers: [...(aiForm.providers ?? []), newProvider] });
-                }}
-                className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 border border-blue-200"
-              >
-                <Plus size={13} /> 新增提供商
-              </button>
+              <h2 className="font-semibold text-gray-800">AI 提供商（Main Provider）</h2>
             </div>
 
             {(!aiForm.providers || aiForm.providers.length === 0) && (
-              <p className="text-xs text-gray-400 py-2">暂无提供商，点击「新增提供商」添加</p>
+              <p className="text-xs text-gray-400 py-2">暂无提供商配置，请在后端预设配置。</p>
             )}
 
-            {(aiForm.providers ?? []).map((provider, idx) => {
+            {(aiForm.providers ?? []).slice(0, 1).map((provider, idx) => {
               const providers = aiForm.providers ?? [];
               const updateProvider = (patch: Partial<AiProvider>) => {
                 const next = providers.map((p, i) => i === idx ? { ...p, ...patch } : p);
-                updateAi({ providers: next });
-              };
-              const moveUp = () => {
-                if (idx === 0) return;
-                const next = [...providers];
-                [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
-                next.forEach((p, i) => { p.priority = i + 1; });
-                updateAi({ providers: next });
-              };
-              const moveDown = () => {
-                if (idx === providers.length - 1) return;
-                const next = [...providers];
-                [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
-                next.forEach((p, i) => { p.priority = i + 1; });
-                updateAi({ providers: next });
-              };
-              const remove = () => {
-                const next = providers.filter((_, i) => i !== idx);
-                next.forEach((p, i) => { p.priority = i + 1; });
                 updateAi({ providers: next });
               };
 
               return (
                 <div
                   key={provider.id}
-                  className={`rounded-lg border p-4 space-y-3 transition-colors ${
-                    provider.enabled ? 'border-blue-200 bg-blue-50/30' : 'border-gray-200 bg-gray-50 opacity-60'
-                  }`}
+                  className="rounded-lg border p-4 space-y-3 transition-colors border-blue-200 bg-blue-50/30"
                 >
                   {/* 标题行 */}
                   <div className="flex items-center gap-2">
                     <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
-                      {idx + 1}
+                      主
                     </span>
                     <input
                       className="flex-1 text-sm font-medium bg-transparent border-b border-transparent focus:border-blue-300 outline-none text-gray-800 min-w-0"
@@ -1037,23 +997,6 @@ export function SettingsPage() {
                         title="测试连接"
                       >
                         {aiTestingId === provider.id ? '测试中...' : '测试'}
-                      </button>
-                      <button type="button" onClick={moveUp} disabled={idx === 0} className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30" title="上移">
-                        <ChevronUp size={14} />
-                      </button>
-                      <button type="button" onClick={moveDown} disabled={idx === providers.length - 1} className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30" title="下移">
-                        <ChevronDown size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => updateProvider({ enabled: !provider.enabled })}
-                        className={`p-1 ${provider.enabled ? 'text-blue-500 hover:text-blue-700' : 'text-gray-400 hover:text-gray-600'}`}
-                        title={provider.enabled ? '禁用' : '启用'}
-                      >
-                        {provider.enabled ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
-                      </button>
-                      <button type="button" onClick={remove} className="p-1 text-red-400 hover:text-red-600" title="删除">
-                        <Trash2 size={14} />
                       </button>
                     </div>
                   </div>
@@ -1179,35 +1122,7 @@ export function SettingsPage() {
         <div className="space-y-5">
           <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
             <h2 className="font-semibold text-gray-800">接口参数</h2>
-            <FieldRow label="运行模式" hint="本地模式同步返回，官方模式走轮询任务">
-              <div className="space-y-3">
-                <label className="flex items-center justify-between p-3 rounded-lg border border-green-200 bg-green-50 cursor-pointer">
-                  <div>
-                    <p className="text-sm font-medium text-green-800">本地 MinerU API</p>
-                    <p className="text-xs text-green-700 mt-0.5">适合内网部署，解析结果可直接回存当前文件库</p>
-                  </div>
-                  <input
-                    type="radio"
-                    name="mineruEngine"
-                    checked={mineruForm.engine === 'local'}
-                    onChange={() => updateMineru({ engine: 'local' })}
-                  />
-                </label>
-                <label className="flex items-center justify-between p-3 rounded-lg border border-blue-200 bg-blue-50 cursor-pointer">
-                  <div>
-                    <p className="text-sm font-medium text-blue-800">官方 MinerU API</p>
-                    <p className="text-xs text-blue-700 mt-0.5">兼容现有云端解析流程，保留 ZIP 回存链路</p>
-                  </div>
-                  <input
-                    type="radio"
-                    name="mineruEngine"
-                    checked={mineruForm.engine === 'cloud'}
-                    onChange={() => updateMineru({ engine: 'cloud' })}
-                  />
-                </label>
-              </div>
-            </FieldRow>
-            {mineruForm.engine === 'local' ? (
+            {true && (
               <>
                 <FieldRow label="本地地址">
                   <Input
@@ -1257,55 +1172,6 @@ export function SettingsPage() {
                   </div>
                 )}
               </>
-            ) : (
-              <>
-                <FieldRow label="API 地址">
-                  <Input
-                    value={mineruForm.apiEndpoint}
-                    onChange={(v) => updateMineru({ apiEndpoint: v })}
-                  />
-                </FieldRow>
-                <FieldRow label="API Key">
-                  <div className="relative">
-                    <Input
-                      type={showKey ? 'text' : 'password'}
-                      value={mineruForm.apiKey}
-                      onChange={(v) => updateMineru({ apiKey: v })}
-                      className="pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowKey(!showKey)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    >
-                      {showKey ? <EyeOff size={15} /> : <Eye size={15} />}
-                    </button>
-                  </div>
-                </FieldRow>
-                <FieldRow label="超时（秒）">
-                  <Input
-                    type="number"
-                    value={mineruForm.timeout}
-                    onChange={(v) => updateMineru({ timeout: Number(v) })}
-                  />
-                </FieldRow>
-                <FieldRow label="API 模式">
-                  <div className="flex gap-3">
-                    {(['precise', 'agent'] as const).map((mode) => (
-                      <label key={mode} className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="apiMode"
-                          value={mode}
-                          checked={mineruForm.apiMode === mode}
-                          onChange={() => updateMineru({ apiMode: mode })}
-                        />
-                        <span className="text-sm text-gray-700 capitalize">{mode}</span>
-                      </label>
-                    ))}
-                  </div>
-                </FieldRow>
-              </>
             )}
             {/* 模型版本已弃用并隐藏 */}
           </div>
@@ -1341,7 +1207,7 @@ export function SettingsPage() {
           </div>
 
           <div className="flex justify-end">
-            {mineruForm.engine === 'local' && (
+            {true && (
               <button
                 onClick={handleTestLocalMineru}
                 disabled={localTesting}
@@ -1365,28 +1231,9 @@ export function SettingsPage() {
       {activeTab === 'storage' && (
         <div className="space-y-5">
           {/* 存储后端 */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
-            <h2 className="font-semibold text-gray-800">存储后端</h2>
-            <FieldRow label="存储后端" hint="minio：私有对象存储；tmpfiles：临时公开存储">
-              <div className="flex gap-4">
-                {(['minio', 'tmpfiles'] as const).map((b) => (
-                  <label key={b} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="storageBackend"
-                      value={b}
-                      checked={minioForm.storageBackend === b}
-                      onChange={() => updateMinio({ storageBackend: b })}
-                    />
-                    <span className="text-sm text-gray-700">{b === 'minio' ? 'MinIO（推荐）' : 'tmpfiles（临时）'}</span>
-                  </label>
-                ))}
-              </div>
-            </FieldRow>
-          </div>
 
           {/* MinIO 连接参数 */}
-          <div className={`bg-white rounded-xl border p-5 space-y-4 transition-opacity ${minioForm.storageBackend !== 'minio' ? 'opacity-50 pointer-events-none border-gray-200' : 'border-gray-200'}`}>
+          <div className="bg-white rounded-xl border p-5 space-y-4 transition-opacity border-gray-200">
             <h2 className="font-semibold text-gray-800">MinIO 连接参数</h2>
             <FieldRow label="端点地址" hint="主机名或 IP，不含协议">
               <Input
@@ -1496,7 +1343,7 @@ export function SettingsPage() {
           <div className="flex items-center justify-between">
             <button
               onClick={handleTestMinio}
-              disabled={testing || minioForm.storageBackend !== 'minio'}
+              disabled={testing}
               className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {testing ? <Loader size={14} className="animate-spin" /> : <Database size={14} />}
@@ -1678,14 +1525,14 @@ export function SettingsPage() {
           </div>
 
           <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
-            <h2 className="font-semibold text-gray-800">备份与恢复</h2>
+            <h2 className="font-semibold text-gray-800">备份导出 (安全操作)</h2>
             <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-              导出元数据 JSON 仅恢复数据库记录，不恢复 MinIO 文件。完整资产备份会同时包含原始资料、解析产物与数据库快照。
+              导出元数据 JSON 仅保存数据库记录，不包含 MinIO 文件。完整资产备份会打包原始资料、解析产物与数据库快照。
             </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="rounded-lg border border-gray-200 p-4 space-y-3">
                 <p className="font-medium text-gray-800">JSON 元数据备份</p>
-                <p className="text-xs text-gray-500">适合快速迁移数据库记录，不包含 MinIO 原始文件与解析产物。</p>
+                <p className="text-xs text-gray-500">适合快速迁移数据库记录，文件体积小。</p>
                 <div className="flex items-center gap-3">
                   <button
                     onClick={handleExportBackup}
@@ -1693,17 +1540,11 @@ export function SettingsPage() {
                   >
                     <Download size={14} /> 导出元数据 JSON
                   </button>
-                  <button
-                    onClick={() => jsonImportInputRef.current?.click()}
-                    className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50"
-                  >
-                    <Upload size={14} /> 导入元数据 JSON
-                  </button>
                 </div>
               </div>
               <div className="rounded-lg border border-gray-200 p-4 space-y-3">
                 <p className="font-medium text-gray-800">完整资产备份</p>
-                <p className="text-xs text-gray-500">包含 JSON 数据库、MinIO 原始资料文件与 MinerU 解析产物。</p>
+                <p className="text-xs text-gray-500">包含完整的 JSON 数据库、MinIO 原始资料与解析产物文件。</p>
                 <div className="flex items-center gap-3">
                   <button
                     onClick={handleFullExportBackup}
@@ -1713,24 +1554,52 @@ export function SettingsPage() {
                     {exportingFull ? <Loader size={14} className="animate-spin" /> : <Download size={14} />}
                     {exportingFull ? '正在导出...' : '导出完整资产'}
                   </button>
-                  <button
-                    onClick={() => fullImportInputRef.current?.click()}
-                    className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50"
-                  >
-                    <Upload size={14} /> 导入完整资产
-                  </button>
                 </div>
                 {exportingFull && (
                   <p className="text-xs text-amber-600">正在打包完整资产，大容量备份可能耗时较长，请勿重复点击。</p>
                 )}
-                <div className="flex gap-4 text-sm text-gray-600">
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-red-50 rounded-xl border border-red-200 p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="text-red-600" size={20} />
+              <h2 className="font-semibold text-red-800">危险区域 (Danger Zone) - 导入与恢复</h2>
+            </div>
+            <div className="rounded-lg border border-red-100 bg-white/60 px-4 py-3 text-sm text-red-700">
+              警告：导入操作可能会覆盖或修改现有的生产数据。进行导入前，强烈建议先执行一次上方的数据导出备份。
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="rounded-lg border border-red-200 p-4 space-y-3 bg-white">
+                <p className="font-medium text-red-800">导入元数据 JSON</p>
+                <p className="text-xs text-red-600/80">将覆盖当前数据库记录。</p>
+                <button
+                  onClick={() => jsonImportInputRef.current?.click()}
+                  className="flex items-center gap-2 px-4 py-2 text-sm border border-red-200 rounded-lg text-red-700 hover:bg-red-50"
+                >
+                  <Upload size={14} /> 导入元数据 JSON
+                </button>
+              </div>
+              <div className="rounded-lg border border-red-200 p-4 space-y-3 bg-white">
+                <p className="font-medium text-red-800">导入完整资产</p>
+                <p className="text-xs text-red-600/80">选择导入模式并上传压缩包。</p>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => fullImportInputRef.current?.click()}
+                    className="flex items-center gap-2 px-4 py-2 text-sm border border-red-200 rounded-lg text-red-700 hover:bg-red-50"
+                  >
+                    <Upload size={14} /> 导入完整资产
+                  </button>
+                </div>
+                <div className="flex gap-4 text-sm text-red-800 mt-2">
                   <label className="flex items-center gap-2">
                     <input
                       type="radio"
                       checked={fullImportMode === 'replace'}
                       onChange={() => setFullImportMode('replace')}
                     />
-                    <span>replace 覆盖恢复</span>
+                    <span className="font-semibold">replace 覆盖恢复</span>
                   </label>
                   <label className="flex items-center gap-2">
                     <input
@@ -1855,132 +1724,7 @@ export function SettingsPage() {
         </div>
       )}
 
-      {activeTab === 'consistency' && (
-        <div className="space-y-5">
-          <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="font-semibold text-gray-800">数据来源</h2>
-              <span className="text-xs text-gray-500">
-                {state._dataSource === 'db-server' ? 'db-server' : state._dataSource === 'initial' ? 'initial' : 'localStorage'}
-              </span>
-            </div>
-            {state._dataSource !== 'db-server' && (
-              <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-                <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
-                <span>当前页面数据可能来自本地缓存。若近期做过导入/删除/迁移，建议清除缓存并刷新以强制从服务端重新加载。</span>
-              </div>
-            )}
-            <div className="flex justify-end">
-              <button
-                onClick={handleClearLocalCache}
-                className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50"
-                type="button"
-              >
-                <RefreshCw size={14} /> 清除缓存并刷新
-              </button>
-            </div>
-          </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="font-semibold text-gray-800">孤儿对象审计</h2>
-              <button
-                onClick={handleScanOrphans}
-                disabled={orphanLoading}
-                className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                type="button"
-              >
-                {orphanLoading ? <Loader size={14} className="animate-spin" /> : <ScanLine size={14} />}
-                {orphanLoading ? '扫描中...' : '扫描孤儿对象'}
-              </button>
-            </div>
-            <p className="text-xs text-gray-500">孤儿对象指 MinIO 中存在但数据库无对应记录的文件，通常由删除失败或历史操作残留产生。</p>
-
-            {orphanStats === null && !orphanLoading && (
-              <p className="text-sm text-gray-400">点击"扫描孤儿对象"开始检测</p>
-            )}
-
-            {orphanStats !== null && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-3">
-                  <span className="text-sm text-gray-700">发现孤儿对象</span>
-                  <span className={`text-sm font-semibold ${orphanStats.totalCount > 0 ? 'text-amber-600' : 'text-green-600'}`}>
-                    {orphanStats.totalCount} 个（{formatBytes(orphanStats.totalSize)}）
-                  </span>
-                </div>
-
-                {orphanStats.orphans.length > 0 && (
-                  <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-100 divide-y divide-gray-100">
-                    {orphanStats.orphans.slice(0, 50).map((o) => (
-                      <div key={`${o.bucket}/${o.objectName}`} className="flex items-center justify-between px-3 py-2 text-xs text-gray-600 hover:bg-gray-50">
-                        <span className="truncate flex-1 pr-3 font-mono">{o.objectName}</span>
-                        <span className="flex-shrink-0 text-gray-400">{o.bucket} · {formatBytes(o.size)}</span>
-                      </div>
-                    ))}
-                    {orphanStats.orphans.length > 50 && (
-                      <div className="px-3 py-2 text-xs text-gray-400 text-center">
-                        仅展示前 50 条，共 {orphanStats.totalCount} 条
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {orphanStats.totalCount > 0 && (
-                  <div className="space-y-2">
-                    {!orphanConfirmOpen ? (
-                      <button
-                        onClick={() => setOrphanConfirmOpen(true)}
-                        disabled={cleaningOrphans}
-                        className="flex items-center gap-2 px-4 py-2 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
-                        type="button"
-                      >
-                        <Trash2 size={14} /> 一键清理孤儿对象
-                      </button>
-                    ) : (
-                      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3">
-                        <div className="flex items-start gap-2">
-                          <AlertTriangle size={16} className="mt-0.5 text-amber-600 flex-shrink-0" />
-                          <div>
-                            <p className="text-sm font-semibold text-amber-800">确认清理？</p>
-                            <p className="text-xs text-amber-700 mt-1">
-                              将从 MinIO 中永久删除 <strong>{orphanStats.totalCount}</strong> 个孤儿对象（共 {formatBytes(orphanStats.totalSize)}），此操作不可撤销。
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <button
-                            onClick={handleCleanupOrphans}
-                            disabled={cleaningOrphans}
-                            className="flex items-center gap-2 px-4 py-2 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
-                            type="button"
-                          >
-                            {cleaningOrphans ? <Loader size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                            {cleaningOrphans ? '清理中...' : '确认删除'}
-                          </button>
-                          <button
-                            onClick={() => setOrphanConfirmOpen(false)}
-                            disabled={cleaningOrphans}
-                            className="px-4 py-2 text-sm border border-amber-200 text-amber-700 rounded-lg hover:bg-white disabled:opacity-50"
-                            type="button"
-                          >
-                            取消
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {orphanStats.totalCount === 0 && (
-                  <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 border border-green-100 rounded-lg px-4 py-3">
-                    <CheckCircle size={16} /> 未发现孤儿对象，数据一致性良好
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {activeTab === 'dictionary' && (
         <MetadataSettingsPanel />

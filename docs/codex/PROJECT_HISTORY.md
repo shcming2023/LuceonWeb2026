@@ -40,7 +40,7 @@
 | Lucide React | 0.487.0 | 图标 |
 | Sonner | - | Toast 通知 |
 | React DnD | 16.x | 拖拽排序 |
-| JSZip | 3.x | ZIP 处理（前端 LaTeX 工具 + 服务端完整资产备份） |
+| JSZip | 3.x | ZIP 处理（服务端完整资产备份） |
 
 #### 服务端
 
@@ -77,7 +77,7 @@
 | `/products` | `ProductsPage` | EduAsset CMS | ✅ 完成 |
 | `/metadata` | `MetadataManagementPage` | EduAsset CMS | ✅ 完成 |
 | `/settings` | `SettingsPage` | EduAsset CMS | ✅ 完成 |
-| `/backup/latex` | `LatexToolPage` | LaTeX 工具集 | ✅ 完成（纯浏览器端） |
+| `/backup/latex` | `LatexToolPage` | LaTeX 工具集 | ❌ 已废弃 |
 
 ---
 
@@ -745,7 +745,7 @@ src/store/
 |--------|---------|-----------|
 | **EduAsset CMS** | `src/app/pages/` (非 backup/) | 核心功能完成，已具备成品最小闭环 |
 | **Overleaf 备份** | `src/app/pages/backup/`（除 latex） | 当前仓库未接入独立备份页面 |
-| **LaTeX 工具集** | `src/app/pages/backup/LatexToolPage.tsx` | 完成（纯浏览器端，无需后端） |
+| **LaTeX 工具集** | `src/app/pages/backup/LatexToolPage.tsx` | 已迁移/废弃 |
 
 ### 4.2 各阶段任务清单
 
@@ -925,7 +925,7 @@ node server/tests/mineru-deep-check.mjs
 - ✅ 上传多个 PDF 后，页面无"批量上传与处理"列表
 - ✅ 无 BatchProgressFab 悬浮球
 - ✅ 刷新页面不恢复历史批处理列表
-- ✅ 不再弹"长时间无进度"toast
+- ✅ 不再弹"长时间无进度"toas
 - ✅ 任务详情页重跑/下载功能不受影响
 
 **涉及文件**：
@@ -1054,7 +1054,7 @@ node server/tests/mineru-deep-check.mjs
 - ✅ 新增冒烟测试：`task-events-compaction-smoke.mjs`
 
 **涉及文件**：
-- `server/services/queue/task-worker.mjs` — parsedArtifacts 外置到 MinIO manifest
+- `server/services/queue/task-worker.mjs` — parsedArtifacts 外置到 MinIO manifes
 - `server/services/ai/metadata-worker.mjs` — ai-stale 事件去重
 - `server/services/logging/task-events.mjs` — 未修改（保持简洁）
 - `server/db-server.mjs` — 启动迁移、事件压缩、体积诊断、DELETE 接口

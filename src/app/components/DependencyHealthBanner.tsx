@@ -6,7 +6,6 @@ export function DependencyHealthBanner() {
   const [health, setHealth] = useState<any>(null);
   const [supervisorStatus, setSupervisorStatus] = useState<{ok: boolean, command?: string, services?: Record<string, boolean>, sessions?: Record<string, boolean>} | null>(null);
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const fetchHealth = async () => {
     setLoading(true);
@@ -15,9 +14,9 @@ export function DependencyHealthBanner() {
         fetch('/__proxy/upload/ops/dependency-health').catch(() => null),
         fetch('/__proxy/upload/ops/dependency-repair/status').catch(() => null)
       ]);
-      
+
       if (resHealth?.ok) setHealth(await resHealth.json());
-      
+
       if (resSupervisor) {
         const data = await resSupervisor.json().catch(() => ({}));
         if (resSupervisor.ok) {
@@ -27,8 +26,8 @@ export function DependencyHealthBanner() {
             sessions: data.sessions
           });
         } else {
-          setSupervisorStatus({ 
-            ok: false, 
+          setSupervisorStatus({
+            ok: false,
             command: data.command || 'node ops/luceon-dependency-supervisor.mjs',
             services: data.services,
             sessions: data.sessions
@@ -48,27 +47,6 @@ export function DependencyHealthBanner() {
     return () => clearInterval(timer);
   }, []);
 
-  const handleAction = async (action: string) => {
-    setActionLoading(action);
-    try {
-      const res = await fetch('/__proxy/upload/ops/dependency-repair', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success(`执行成功: ${action}`);
-        setTimeout(fetchHealth, 2000);
-      } else {
-        toast.error(`执行失败: ${data.message || data.error || 'Unknown error'}`);
-      }
-    } catch (err) {
-      toast.error(`请求失败: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setActionLoading(null);
-    }
-  };
 
   if (!health) return null;
 
@@ -106,7 +84,7 @@ export function DependencyHealthBanner() {
           {bannerBlocking ? <XCircle className="w-5 h-5 text-red-600" /> : ollamaSessionUnmanaged ? <CheckCircle className="w-5 h-5 text-blue-600" /> : <AlertTriangle className="w-5 h-5 text-amber-600" />}
           <span>系统诊断: {headline}</span>
         </div>
-        
+
         <div className="flex items-center gap-4 text-xs">
           <div className="flex items-center gap-1.5">
             <div className={`w-2 h-2 rounded-full ${minioOk ? 'bg-green-500' : 'bg-red-500'}`} />
@@ -122,60 +100,12 @@ export function DependencyHealthBanner() {
           </div>
         </div>
       </div>
-      
+
       <div className="flex flex-wrap items-center gap-3">
-        {!supervisorActive && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-gray-500">启动修复代理:</span>
-            <div className="text-[11px] font-mono bg-white/60 px-2 py-1 rounded border border-gray-200 text-gray-700 select-all flex items-center gap-1">
-              <TerminalSquare className="w-3 h-3" />
-              {supervisorStatus?.command || 'node ops/luceon-dependency-supervisor.mjs'}
-            </div>
-          </div>
-        )}
 
-        {supervisorActive && !mineruOk && (
-          <button 
-            onClick={() => handleAction('start-mineru')} 
-            disabled={!!actionLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded text-xs font-medium transition-colors"
-          >
-            {actionLoading === 'start-mineru' ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Wrench className="w-3.5 h-3.5" />}
-            一键修复 MinerU
-          </button>
-        )}
-
-        {supervisorActive && (
-          <button 
-            onClick={() => handleAction('restart-sidecar')} 
-            disabled={!!actionLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/60 hover:bg-white/80 border border-gray-200 text-gray-700 rounded text-xs font-medium transition-colors"
-          >
-            {actionLoading === 'restart-sidecar' ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
-            重启日志观测
-          </button>
-        )}
-
-        {supervisorActive && !ollamaOk && !health.dependencies?.ollama?.skipped && (
-          <button 
-            onClick={() => handleAction('start-ollama')} 
-            disabled={!!actionLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded text-xs font-medium transition-colors"
-          >
-            {actionLoading === 'start-ollama' ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Wrench className="w-3.5 h-3.5" />}
-            一键启动 Ollama
-          </button>
-        )}
-
-        {(!ollamaOk && !ollamaServiceReachable && !health.dependencies?.ollama?.skipped && !supervisorActive) && (
-          <div className="text-[11px] font-mono bg-white/60 px-2 py-1 rounded border border-amber-100 text-amber-700 select-all">
-            ollama serve
-          </div>
-        )}
-
-        <button 
-          onClick={fetchHealth} 
-          disabled={loading || !!actionLoading} 
+        <button
+          onClick={fetchHealth}
+          disabled={loading}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-xs font-medium transition-colors"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />

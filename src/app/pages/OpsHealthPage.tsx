@@ -1,15 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  Activity, 
-  Server, 
-  Database, 
-  Cpu, 
-  Brain, 
-  HardDrive, 
-  CheckCircle2, 
-  AlertCircle, 
-  Loader2, 
-  Clock, 
+import {
+  Activity,
+  Server,
+  Database,
+  Cpu,
+  Brain,
+  HardDrive,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  Clock,
   ShieldCheck,
   RefreshCw,
   Globe
@@ -34,7 +34,7 @@ interface OpsHealthReport {
 
 /**
  * OpsHealthPage — 系统健康仪表盘（只读运维视图）
- * 
+ *
  * 遵循《阶段四第二批小任务书》：展示系统各组件健康状态，无运维按钮。
  */
 export function OpsHealthPage() {
@@ -47,13 +47,37 @@ export function OpsHealthPage() {
     setLoading(true);
     try {
       // 聚合健康检查接口（稍后在 upload-server 中实现）
-      const [res, diagRes] = await Promise.all([
+      const [res, diagRes, depRes] = await Promise.all([
         fetch('/__proxy/upload/ops/health'),
-        fetch('/__proxy/upload/ops/mineru/diagnostics')
+        fetch('/__proxy/upload/ops/mineru/diagnostics'),
+        fetch('/__proxy/upload/ops/dependency-health')
       ]);
-      
+
       if (res.ok) {
         const data = await res.json();
+
+        if (depRes.ok) {
+          const depData = await depRes.json();
+          if (depData.dependencies?.mineru) {
+            data.mineru.details = {
+              ...(data.mineru.details || {}),
+              simple_health: depData.dependencies.mineru.healthOk ? 'ok' : 'failed',
+              admission_circuit: depData.dependencies.mineru.admissionCircuit?.state || 'unknown',
+              submit_probe: depData.dependencies.mineru.submitProbe?.ok ? 'ok' : 'failed'
+            };
+          }
+          if (depData.dependencies?.ollama) {
+            data.ollama.details = {
+              ...(data.ollama.details || {}),
+              readinessState: depData.dependencies.ollama.readinessState,
+              readinessSeverity: depData.dependencies.ollama.readinessSeverity,
+              warmState: depData.dependencies.ollama.warmState,
+              failureKind: depData.dependencies.ollama.failureKind,
+              probeTimeoutMs: depData.dependencies.ollama.probeTimeoutMs,
+              recommendedClientTimeoutMs: depData.dependencies.ollama.recommendedClientTimeoutMs
+            };
+          }
+        }
         setReport(data);
       } else {
         throw new Error(`HTTP ${res.status}`);
@@ -149,7 +173,7 @@ export function OpsHealthPage() {
             </div>
           </div>
         </div>
-        <button 
+        <button
           onClick={fetchHealth}
           disabled={loading}
           className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm active:scale-95 disabled:opacity-50"
@@ -173,22 +197,22 @@ export function OpsHealthPage() {
               <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest">核心后端服务</h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <StatusCard 
-                title="Frontend App" 
-                status={report.frontend} 
-                icon={Globe} 
+              <StatusCard
+                title="Frontend App"
+                status={report.frontend}
+                icon={Globe}
                 subtext="浏览器访问与 SPA 路由状态"
               />
-              <StatusCard 
-                title="Upload Server" 
-                status={report.uploadServer} 
-                icon={Server} 
+              <StatusCard
+                title="Upload Server"
+                status={report.uploadServer}
+                icon={Server}
                 subtext="文件上传、解析调度、Worker 状态"
               />
-              <StatusCard 
-                title="Database Server" 
-                status={report.dbServer} 
-                icon={Database} 
+              <StatusCard
+                title="Database Server"
+                status={report.dbServer}
+                icon={Database}
                 subtext="JSON 文件持久化与 REST API 可达性"
               />
             </div>
@@ -201,23 +225,23 @@ export function OpsHealthPage() {
               <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest">AI 与基础设施</h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <StatusCard 
-                title="MinIO Storage" 
-                status={report.minio} 
-                icon={HardDrive} 
+              <StatusCard
+                title="MinIO Storage"
+                status={report.minio}
+                icon={HardDrive}
                 subtext="对象存储桶联通性与存储权限"
               />
-              <StatusCard 
-                title="Local MinerU" 
-                status={report.mineru} 
-                icon={Cpu} 
+              <StatusCard
+                title="Local MinerU"
+                status={report.mineru}
+                icon={Cpu}
                 subtext="本地 PDF 解析引擎 (FastAPI) 状态"
               />
-              <StatusCard 
-                title="Ollama (Qwen3.5)" 
-                status={report.ollama} 
-                icon={Brain} 
-                subtext="本地 AI 推理引擎及 qwen3.5:9b 模型就绪度"
+              <StatusCard
+                title="Ollama"
+                status={report.ollama}
+                icon={Brain}
+                subtext="本地 AI 推理引擎及预设模型就绪度"
               />
             </div>
           </div>
@@ -228,14 +252,14 @@ export function OpsHealthPage() {
                 <div className="w-1 h-4 bg-orange-500 rounded-full" />
                 <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest">MinerU 通畅诊断</h2>
               </div>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
                 <div className={`p-6 rounded-3xl border transition-all duration-300 ${['orphan-processing-blocker', 'known-failed-but-mineru-processing'].includes(diagnostics.diagnosis.kind) ? 'bg-orange-50 border-orange-200' : 'bg-slate-50 border-slate-100'}`}>
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
                     <div>
                       <h3 className="text-sm font-bold text-slate-900">MinerU 队列状态: {diagnostics.diagnosis.status}</h3>
                       <p className="text-xs text-slate-500 mt-1">
-                        MinerU 内部：处理中 {diagnostics.mineru.processingTasks}，排队中 {diagnostics.mineru.queuedTasks} | 
+                        MinerU 内部：处理中 {diagnostics.mineru.processingTasks}，排队中 {diagnostics.mineru.queuedTasks} |
                         Luceon 追踪：处理中 {diagnostics.luceon.mineruProcessingTasks.length}，排队中 {diagnostics.luceon.mineruQueuedTasks.length}
                       </p>
                     </div>
@@ -392,8 +416,8 @@ export function OpsHealthPage() {
               </div>
             </div>
             <div className="text-right">
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">EduAsset OS Version</div>
-              <div className="text-sm font-black text-slate-900">v2026.04.23-UAT</div>
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">System Edition</div>
+              <div className="text-sm font-black text-slate-900">Luceon2026 Production</div>
             </div>
           </div>
         </>
