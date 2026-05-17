@@ -83,7 +83,7 @@ If no matching task exists, the correct steady state is sleeping until the next 
 
 1. User and Luceon discuss goals, risk, architecture, validation boundary, and next step.
 2. Luceon writes a task brief and updates `TaskAndReport/TASK_TRACKING_LIST.md` on GitHub `main`.
-3. Lucode fetches GitHub, executes only tasks with `Next Actor=Lucode`, works on a scoped branch by default, writes a `*_REPORT.md`, updates the ledger on that branch, and pushes the branch/report to GitHub.
+3. Lucode fetches GitHub, executes only tasks with `Next Actor=Lucode`, works on a scoped branch by default, writes a `*_REPORT.md`. **CRITICAL: Before ending its turn, Lucode MUST update the ledger `TaskAndReport/TASK_TRACKING_LIST.md` (changing Next Actor to Luceon) and MUST explicitly `git push` the branch, report, and ledger to GitHub.**
 4. Luceon fetches GitHub, reviews Lucode's branch/report, runs required review checks and production validation when authorized, then accepts, returns, merges, or escalates.
 5. Luceon records the final decision in `TaskAndReport/`, updates `docs/codex/PROJECT_STATE.md` or `docs/codex/HANDOFF.md` when needed, and pushes GitHub.
 

@@ -92,8 +92,8 @@ When the user says `check task` to Lucode:
 6. Read only the directly relevant docs and source files named or implied by that task brief.
 7. Execute only the task scope.
 8. Write the required `*_REPORT.md`.
-9. Update `TaskAndReport/TASK_TRACKING_LIST.md` to `Lucode 已回报待 Luceon 审查`, `Next Actor=Luceon`.
-10. Commit and push the branch to GitHub.
+9. **CRITICAL**: Update `TaskAndReport/TASK_TRACKING_LIST.md` to `Lucode 已回报待 Luceon 审查`, `Next Actor=Luceon`.
+10. **CRITICAL**: Commit and `git push` the branch, report, and ledger to GitHub. Do NOT skip this step.
 
 Do not rely on stale local-only task state. If the local ledger differs from GitHub, GitHub wins after sync.
 
@@ -217,6 +217,8 @@ TaskAndReport/2026-05-16T16-00-00+0800_P1-Example-Task_REPORT.md
 ```
 
 ## 9. Ledger Update Rule
+
+**CRITICAL MANDATORY STEP**: Before finishing your turn, you MUST update the task row in `TaskAndReport/TASK_TRACKING_LIST.md` and MUST push it to GitHub. Failure to do so breaks the collaboration loop.
 
 After completing the task, update the task row:
 
