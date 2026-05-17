@@ -273,7 +273,7 @@ export function AuditPage() {
                   <th className="px-8 py-5">目标资产</th>
                   <th className="px-8 py-5">详细说明</th>
                   <th className="px-8 py-5">恢复建议</th>
-                  <th className="px-8 py-5">自动修复</th>
+                  <th className="px-8 py-5">处理方式</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -307,16 +307,7 @@ export function AuditPage() {
                       </div>
                     </td>
                     <td className="px-8 py-6">
-                      {f.repair ? (
-                        <div className="flex items-center gap-2 text-xs text-emerald-600 font-black">
-                          <div className="w-5 h-5 bg-emerald-50 rounded flex items-center justify-center">
-                            <CheckCircle2 className="w-3 h-3" />
-                          </div>
-                          READY
-                        </div>
-                      ) : (
-                        <div className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Manual Only</div>
-                      )}
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Manual Action Required</div>
                     </td>
                   </tr>
                 ))}

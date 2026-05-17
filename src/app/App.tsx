@@ -8,7 +8,6 @@ import { ProductsPage } from './pages/ProductsPage';
 import { MetadataManagementPage } from './pages/MetadataManagementPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { LatexToolPage } from './pages/backup/LatexToolPage';
 import { WorkspacePage } from './pages/WorkspacePage';
 import { TaskManagementPage } from './pages/TaskManagementPage';
 import { TaskDetailPage } from './pages/TaskDetailPage';
@@ -49,9 +48,6 @@ export default function App() {
                 <Route path="/audit" element={<AuditPage />} />
                 {/* 运维健康：系统组件健康状态监控 */}
                 <Route path="/ops/health" element={<OpsHealthPage />} />
-
-                {/* ── 子系统二：LaTeX 工具集 ──────────────────────── */}
-                <Route path="/backup/latex" element={<LatexToolPage />} />
 
                 {/* 兜底重定向 */}
                 <Route path="*" element={<Navigate to="/tasks" replace />} />

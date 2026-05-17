@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   Settings,
-  FileText,
   BookOpen,
   Bell,
   GraduationCap,
@@ -24,7 +23,6 @@ const BOTTOM_NAV = [
   { name: '一致性审计',   href: '/audit',             icon: ShieldCheck },
   { name: '系统健康',     href: '/ops/health',        icon: Activity },
   { name: '系统设置',     href: '/settings',          icon: Settings },
-  { name: 'LaTeX 工具',   href: '/backup/latex',      icon: FileText },
 ];
 
 interface LayoutProps {
