@@ -5,9 +5,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../store/appContext';
 import type { AiConfig, AiProvider, MinerUConfig, MinioConfig } from '../../store/types';
 import { checkLocalMinerUHealth } from '../../utils/mineruLocalApi';
-import { MetadataSettingsPanel } from '../components/MetadataSettingsPanel';
-
-type ActiveTab = 'ai' | 'mineru' | 'storage' | 'backup' | 'dictionary';
+type ActiveTab = 'ai' | 'mineru' | 'storage' | 'backup';
 
 // ─── 提示词字段中文标签映射 ──────────────────────────────────
 const PROMPT_LABELS: Record<string, string> = {
@@ -246,7 +244,7 @@ export function SettingsPage() {
 
   useEffect(() => {
     const tab = new URLSearchParams(location.search).get('tab');
-    const valid: ActiveTab[] = ['ai', 'mineru', 'storage', 'backup', 'dictionary'];
+    const valid: ActiveTab[] = ['ai', 'mineru', 'storage', 'backup'];
     if (tab && valid.includes(tab as ActiveTab)) {
       setActiveTab(tab as ActiveTab);
     }
@@ -892,14 +890,20 @@ export function SettingsPage() {
               <h2 className="font-semibold text-gray-800">本地大模型配置 (Local Provider)</h2>
             </div>
 
-            {(!aiForm.providers || aiForm.providers.length === 0) && (
-              <p className="text-xs text-gray-400 py-2">暂无提供商配置，请在后端预设配置。</p>
-            )}
-
-            {(aiForm.providers ?? []).slice(0, 1).map((provider, idx) => {
+            {(() => {
               const providers = aiForm.providers ?? [];
+              const realIdx = providers.findIndex(p => p.id === 'ollama' || (p.apiEndpoint || '').includes('11434'));
+              
+              if (providers.length === 0) {
+                return <p className="text-xs text-gray-400 py-2">暂无提供商配置，请在后端预设配置。</p>;
+              }
+              if (realIdx === -1) {
+                return <p className="text-sm text-amber-600 py-4">未找到本地 Ollama 提供商配置，请在后端预设本地模型配置。</p>;
+              }
+              
+              const provider = providers[realIdx];
               const updateProvider = (patch: Partial<AiProvider>) => {
-                const next = providers.map((p, i) => i === idx ? { ...p, ...patch } : p);
+                const next = providers.map((p, i) => i === realIdx ? { ...p, ...patch } : p);
                 updateAi({ providers: next });
               };
 
@@ -1010,7 +1014,7 @@ export function SettingsPage() {
                   </div>
                 </div>
               );
-            })}
+            })()}
 
             <p className="text-xs text-gray-400">
               * AI 分析默认使用本地模型提供商进行处理。Ollama 作为本地模型服务无需填写 API Key。
@@ -1649,9 +1653,7 @@ export function SettingsPage() {
 
 
 
-      {activeTab === 'dictionary' && (
-        <MetadataSettingsPanel />
-      )}
+
     </div>
   );
 }
