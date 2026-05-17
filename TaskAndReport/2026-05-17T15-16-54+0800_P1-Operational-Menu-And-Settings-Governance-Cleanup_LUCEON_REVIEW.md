@@ -111,4 +111,3 @@ The report does not provide exact exit codes for required checks, and it reports
 Luceon issues `TASK-20260517-151654-P1-Operational-Menu-And-Settings-Governance-Correction` to Lucode.
 
 The correction must be a scoped corrective commit on top of current `origin/main`; no force push, no production deployment, no service restart, no data mutation, no readiness/go-live claim.
-

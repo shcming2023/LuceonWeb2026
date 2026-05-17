@@ -170,4 +170,3 @@ Update `TaskAndReport/TASK_TRACKING_LIST.md`:
 - Include report path and HEAD.
 
 Use a scoped branch if possible. If working directly on current `main` because the previous bad commit already landed on `main`, say so explicitly in the report and do not rewrite history.
-
