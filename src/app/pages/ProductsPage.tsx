@@ -155,7 +155,7 @@ export function ProductsPage() {
       let statusColor = 'text-slate-500';
 
       const isTaskState = (states: string[]) => latestTask && states.includes(latestTask.state);
-      
+
       if (latestTask) {
         if (isTaskState(['completed', 'done'])) { derivedMineruStatus = 'completed'; statusDisplay = '解析完成'; statusColor = 'text-green-600'; }
         else if (isTaskState(['ai-pending', 'ai-running'])) { derivedMineruStatus = 'completed'; derivedAiStatus = isTaskState(['ai-running']) ? 'analyzing' : 'pending'; statusDisplay = 'AI 处理中'; statusColor = 'text-blue-600'; }
@@ -172,8 +172,8 @@ export function ProductsPage() {
 
       // 准入条件
       const isSuccessful = derivedMineruStatus === 'completed';
-      const isNotFailed = derivedMineruStatus !== 'failed' 
-        && !['failed', 'artifact-empty', 'mineru-failed', 'canceled'].includes(m.mineruStatus) 
+      const isNotFailed = derivedMineruStatus !== 'failed'
+        && !['failed', 'artifact-empty', 'mineru-failed', 'canceled'].includes(m.mineruStatus)
         && !['failed', 'artifact-empty', 'mineru-failed', 'canceled'].includes(m.status);
       const isUsable = isSuccessful && isNotFailed && hasProductEvidence;
 
@@ -203,7 +203,7 @@ export function ProductsPage() {
     if (gradeFilter !== 'all')        list = list.filter((m: any) => m.metadata?.grade === gradeFilter);
     if (languageFilter !== 'all')     list = list.filter((m: any) => m.metadata?.language === languageFilter);
     if (typeFilter !== 'all')         list = list.filter((m: any) => getMaterialType(m) === typeFilter);
-    
+
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(
@@ -395,7 +395,7 @@ export function ProductsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ materialIds, mode: 'cascade', dryRun: false, force })
       });
-      
+
       if (!execRes.ok) throw new Error(`HTTP ${execRes.status}`);
       const numericIds = materialIds
         .map((id) => Number(id))
@@ -446,12 +446,12 @@ export function ProductsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dryRun: false, force: true })
       });
-      
+
       if (!execRes.ok) {
         const errorData = await execRes.json().catch(() => ({}));
         throw new Error(errorData.error || `HTTP ${execRes.status}`);
       }
-      
+
       dispatch({ type: 'SET_MATERIALS', payload: [] });
       toast.success('测试环境已彻底清空。');
       setSelectedIds(new Set());

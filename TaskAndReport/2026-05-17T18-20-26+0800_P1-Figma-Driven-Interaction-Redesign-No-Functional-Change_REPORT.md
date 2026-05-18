@@ -5,7 +5,7 @@
 **Actor**: Lucode
 
 ## 1. Summary of Changes
-Completed a Figma-driven UX/UI refactoring to improve operator ergonomics, ensure visual consistency, and isolate destructive actions ("Danger Zones"). 
+Completed a Figma-driven UX/UI refactoring to improve operator ergonomics, ensure visual consistency, and isolate destructive actions ("Danger Zones").
 
 - **Figma URL**: `https://www.figma.com/design/CRfnwKnA6zwZkF0uvoBvLV`
 - **Branch**: `lucode/task-218-figma-interaction-redesign`
