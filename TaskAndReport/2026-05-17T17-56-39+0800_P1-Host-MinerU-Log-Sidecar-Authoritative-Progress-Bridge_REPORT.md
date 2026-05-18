@@ -14,7 +14,7 @@
 ## 2. 架构改动总结（第三次修复）
 已完成对 Sidecar 优先日志架构的最后修补，彻底阻断了任何形式的 stale `task.metadata` 复写：
 - **修复 `ParseTaskWorker.transition()` DB 写入竞争**: 将原来 `metadata: { ...(task.metadata || {}), progressEventKey: semanticKey }` 修改为仅更新 `progressEventKey` 字段。由于底层 `db-server` 的 `PATCH /tasks/:id` 默认执行 `metadata` 的浅合并，移除了 `task.metadata` 的展开操作，完美阻断了旧状态的回滚。
-- **修复 `local-adapter.mjs` 的 DB 写入竞争**: 
+- **修复 `local-adapter.mjs` 的 DB 写入竞争**:
   - `resumeWithLocalMinerU` 在更新 `metadata` 时现使用通过 `getLatestTask()` 抓取的 `currentMetadata`。
   - `updateCompletionObservation` 也移除了对旧 `task.metadata` 的铺平展开操作。
 - **确保 `reconcileLogObservations` 正确性**: 确保传入调和层的 baseline 是最新抓取的 metadata。
@@ -24,7 +24,7 @@
 - `node server/tests/mineru-log-progress-smoke.mjs`:
   - 156 passed, 0 failed (包含新增的 Test 35)
   - Exit code: 0
-- `npx pnpm@10.4.1 exec tsc --noEmit`: 
+- `npx pnpm@10.4.1 exec tsc --noEmit`:
   - Exit code: 0
 - `node --check server/services/mineru/local-adapter.mjs`:
   - Exit code: 0

@@ -1109,10 +1109,10 @@ async function run() {
   console.log('Test 35: ParseTaskWorker.transition does not spread stale metadata and prevents DB-write race');
   {
     const { ParseTaskWorker } = await import('../services/queue/task-worker.mjs');
-    
+
     let patchedTaskPayload = null;
     let updateTaskCalled = 0;
-    
+
     const mockTaskClient = {
       updateTask: async (id, update) => {
         patchedTaskPayload = update;
@@ -1120,11 +1120,11 @@ async function run() {
         return true;
       }
     };
-    
+
     const worker = new ParseTaskWorker({
       taskClient: mockTaskClient
     });
-    
+
     // Simulate a task in memory that has stale container metadata (20%)
     const staleTask = {
       id: 'task-123',
@@ -1137,7 +1137,7 @@ async function run() {
         }
       }
     };
-    
+
     // Simulate transition event that triggers progressEventKey generation
     const updateInfo = {
       metadata: {
@@ -1149,21 +1149,21 @@ async function run() {
         }
       }
     };
-    
+
     // This will call transition which calls updateTaskWithRetry twice:
     // 1. the main update (which we don't care about, it's just passing `updateInfo`)
     // 2. the progressEventKey update (which used to spread staleTask.metadata)
     await worker.transition(staleTask, updateInfo, 'progress-update');
-    
+
     assert(updateTaskCalled === 2, `updateTask should be called 2 times, got ${updateTaskCalled}`);
-    
+
     // The second call is the progressEventKey patch.
     // It should ONLY contain progressEventKey inside metadata, NOT mineruObservedProgress
     const finalPatchMetadata = patchedTaskPayload.metadata;
-    
+
     assert(finalPatchMetadata !== undefined, 'Final patch should include metadata');
     assert(finalPatchMetadata.progressEventKey !== undefined, 'Final patch should include progressEventKey');
-    
+
     // CRITICAL FIX: Ensure it does not contain mineruObservedProgress (so it doesn't overwrite DB)
     if ('mineruObservedProgress' in finalPatchMetadata) {
       throw new Error(`Regression: transition() progressEventKey patch spread stale metadata (mineruObservedProgress: ${JSON.stringify(finalPatchMetadata.mineruObservedProgress)})`);
