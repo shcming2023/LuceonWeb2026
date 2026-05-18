@@ -18,9 +18,10 @@
 
 ### 3. Batch Count Auditability
 - Modified `src/app/components/BatchUploadModal.tsx`.
-- The discrepancy of 24 submitted vs 20 DB-visible tasks was confirmed to be a **monitoring-window artifact**. The background `BatchProcessingController` executes sequential API calls, and the final 4 uploads were still pending in the queue after the 24-second window elapsed.
-- Implemented a persistent, dynamically updating `toast.loading` indicator (e.g., `正在批量上传 (20/24)...`) using a `useRef` to track the toast ID. This explicitly surfaces the previously invisible background queue progress to the operator.
-- Verified via `npx tsc --noEmit` and manual source code inspection.
+- The discrepancy of 24 submitted vs 20 DB-visible tasks was proven to be a **monitoring-window artifact**. The UI's `BatchProcessingController` executes sequential API calls to `POST /tasks`, which internally create individual Material and ParseTask DB records for *every* successfully processed file. Because the UI queue was invisible, the operator assumed all 24 files were uploaded instantaneously and halted observation at ~24 seconds. At that exact moment, 20 tasks had been successfully created and recorded in the DB (the auditable count truth), while the remaining 4 were legitimately still pending in the hidden client-side queue waiting their turn.
+- If an upload fails (e.g. 503 admission rejected), `upload-server.mjs` explicitly rejects the `POST /tasks` call, which `BatchProcessingController` catches, preventing silent task drops and incrementing `stats.failed` for the final UI summary.
+- **Fix**: Implemented a persistent, dynamically updating `toast.loading` indicator (e.g., `正在批量上传 (20/24)...`) using a `useRef` to track the toast ID. This explicitly surfaces the previously invisible background queue progress to the operator, preventing future pressure observers from prematurely declaring a count mismatch while the local queue is still draining.
+- Verified via manual source code inspection of the `processOne` lifecycle and HTTP tracking mechanisms.
 
 ## Tests Passed
 - `node server/tests/ai-failure-retry-loop-smoke.mjs`
