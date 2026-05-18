@@ -4,12 +4,8 @@ import {
   Loader2,
   RefreshCw,
   FileText,
-  Download,
-  Trash2,
   Eye,
   Clock,
-  RotateCw,
-  Sparkles,
   XCircle,
   ShieldCheck,
   AlertTriangle,
@@ -48,6 +44,81 @@ const BUCKET_LABELS: Record<BucketKey, string> = {
   failed: '已失败',
   canceled: '已取消',
   unknown: '未知',
+};
+
+const BUCKET_TREATMENTS = {
+  all: {
+    icon: FileText,
+    dot: 'bg-slate-500',
+    bg: 'bg-slate-50',
+    text: 'text-slate-700',
+    border: 'border-slate-200',
+    active: 'border-slate-900 bg-white shadow-sm',
+    accent: 'border-l-slate-300',
+  },
+  queued: {
+    icon: Clock,
+    dot: 'bg-slate-400',
+    bg: 'bg-slate-50',
+    text: 'text-slate-600',
+    border: 'border-slate-200',
+    active: 'border-slate-500 bg-white shadow-sm',
+    accent: 'border-l-slate-300',
+  },
+  processing: {
+    icon: Loader2,
+    dot: 'bg-blue-500',
+    bg: 'bg-blue-50',
+    text: 'text-blue-700',
+    border: 'border-blue-100',
+    active: 'border-blue-500 bg-blue-50 shadow-sm',
+    accent: 'border-l-blue-500',
+  },
+  reviewing: {
+    icon: ShieldCheck,
+    dot: 'bg-amber-500',
+    bg: 'bg-amber-50',
+    text: 'text-amber-700',
+    border: 'border-amber-100',
+    active: 'border-amber-500 bg-amber-50 shadow-sm',
+    accent: 'border-l-amber-500',
+  },
+  completed: {
+    icon: CheckCircle2,
+    dot: 'bg-emerald-500',
+    bg: 'bg-emerald-50',
+    text: 'text-emerald-700',
+    border: 'border-emerald-100',
+    active: 'border-emerald-500 bg-emerald-50 shadow-sm',
+    accent: 'border-l-emerald-500',
+  },
+  failed: {
+    icon: AlertTriangle,
+    dot: 'bg-red-500',
+    bg: 'bg-red-50',
+    text: 'text-red-700',
+    border: 'border-red-100',
+    active: 'border-red-500 bg-red-50 shadow-sm',
+    accent: 'border-l-red-500',
+  },
+  canceled: {
+    icon: XCircle,
+    dot: 'bg-zinc-400',
+    bg: 'bg-zinc-50',
+    text: 'text-zinc-600',
+    border: 'border-zinc-200',
+    active: 'border-zinc-500 bg-zinc-50 shadow-sm',
+    accent: 'border-l-zinc-400',
+  },
+  unknown: {
+    icon: AlertTriangle,
+    dot: 'bg-stone-400',
+    bg: 'bg-stone-50',
+    text: 'text-stone-600',
+    border: 'border-stone-200',
+    active: 'border-stone-500 bg-stone-50 shadow-sm',
+    accent: 'border-l-stone-400',
+  },
 };
 
 function bucketOf(state: string | undefined, stage?: string): BucketKey {
@@ -413,9 +484,9 @@ export function TaskManagementPage() {
   }, [tasks, materials]);
 
   return (
-    <div className="p-6 h-full flex flex-col space-y-5 max-w-[1400px] mx-auto">
+    <div className="min-h-full p-6 flex flex-col gap-5 max-w-[1440px] mx-auto">
       {unlinkedMaterialsCount > 0 && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl flex items-start gap-3">
+        <div className="bg-amber-50 border border-amber-200 text-amber-900 p-4 rounded-2xl flex items-start gap-3 shadow-sm">
           <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5 text-amber-600" />
           <div>
             <h4 className="font-semibold text-sm mb-1">发现未清理的产物记录</h4>
@@ -426,144 +497,153 @@ export function TaskManagementPage() {
           </div>
         </div>
       )}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">任务管理</h1>
-          <p className="text-sm text-gray-500 mt-1">监控文档解析与 AI 元数据提取的全生命周期（实时）。</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* P1 Patch: 直接在任务管理页发起上传，不再跳转 /workspace */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            className="hidden"
-            data-testid="task-upload-file-input"
-            onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ''; void upload(files); }}
-            accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.md"
-          />
-          <input
-            ref={folderInputRef}
-            type="file"
-            multiple
-            className="hidden"
-            data-testid="task-upload-folder-input"
-            onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ''; void upload(files); }}
-            accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.md"
-          />
-          <div className="flex bg-blue-600 rounded-lg overflow-hidden text-white text-sm shadow-sm">
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              className="flex items-center gap-2 px-4 py-2 hover:bg-blue-500 transition-colors disabled:opacity-60 font-medium"
-              data-testid="task-upload-file-button"
-            >
-              <Upload className="w-4 h-4" /> 上传文件
-            </button>
-            <div className="w-px bg-blue-500 my-2" />
-            <button
-              onClick={() => {
-                const el = folderInputRef.current as unknown as { webkitdirectory?: boolean; directory?: boolean; setAttribute?: (k: string, v: string) => void } | null;
-                if (el) { el.webkitdirectory = true; el.directory = true; el.setAttribute?.('webkitdirectory', ''); el.setAttribute?.('directory', ''); }
-                folderInputRef.current?.click();
-              }}
-              disabled={uploading}
-              className="flex items-center gap-2 px-3 py-2 hover:bg-blue-500 transition-colors disabled:opacity-60"
-              data-testid="task-upload-folder-button"
-              title="上传整个文件夹"
-            >
-              <FolderPlus className="w-4 h-4" />
-            </button>
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_20px_50px_rgba(15,23,42,0.06)]">
+        <div className="flex items-start justify-between gap-5 flex-wrap">
+          <div className="min-w-0">
+            <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+              <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+              实时队列
+            </div>
+            <h1 className="mt-3 text-2xl font-bold text-slate-950">任务管理</h1>
+            <p className="text-sm text-slate-500 mt-1 max-w-2xl">监控文档解析与 AI 元数据提取的全生命周期（实时）。</p>
           </div>
-          <button
-            onClick={fetchTasks}
-            disabled={loading}
-            className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-50"
-            title="刷新列表"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-
-          {/* Advanced / Destructive Actions Dropdown */}
-          <DropdownMenu
-            trigger={({ open, setOpen }) => (
+          <div className="flex items-center gap-2">
+            {/* P1 Patch: 直接在任务管理页发起上传，不再跳转 /workspace */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              data-testid="task-upload-file-input"
+              onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ''; void upload(files); }}
+              accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.md"
+            />
+            <input
+              ref={folderInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              data-testid="task-upload-folder-input"
+              onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ''; void upload(files); }}
+              accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.md"
+            />
+            <div className="flex bg-slate-950 rounded-xl overflow-hidden text-white text-sm shadow-sm">
               <button
-                onClick={() => setOpen(!open)}
-                className={`flex items-center gap-2 px-3 py-2 border rounded-lg text-sm font-medium transition-colors shadow-sm ${open ? 'bg-slate-100 border-slate-300 text-slate-900' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}
-                title="更多操作"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-800 transition-colors disabled:opacity-60 font-semibold"
+                data-testid="task-upload-file-button"
               >
-                <Settings2 className="w-4 h-4" />
+                <Upload className="w-4 h-4" /> 上传文件
               </button>
-            )}
-            items={[
-              {
-                kind: 'item',
-                label: '批量重试 (选中的失败任务)',
-                disabled: !hasFailedSelected,
-                onClick: batchRetry
-              },
-              { kind: 'divider' },
-              {
-                kind: 'item',
-                label: '批量取消 (选中任务)',
-                disabled: selectedIds.size === 0,
-                danger: true,
-                onClick: batchCancel
-              },
-              {
-                kind: 'item',
-                label: '批量删除 (选中任务)',
-                disabled: selectedIds.size === 0,
-                danger: true,
-                onClick: batchDelete
-              },
-              { kind: 'divider' },
-              {
-                kind: 'item',
-                label: '终止全部进行中任务',
-                danger: true,
-                onClick: cancelAllLive
-              },
-              {
-                kind: 'item',
-                label: '清空库表和 MinIO 产物 (重置环境)',
-                danger: true,
-                onClick: resetTestEnv
-              }
-            ]}
-          />
+              <div className="w-px bg-white/15 my-2" />
+              <button
+                onClick={() => {
+                  const el = folderInputRef.current as unknown as { webkitdirectory?: boolean; directory?: boolean; setAttribute?: (k: string, v: string) => void } | null;
+                  if (el) { el.webkitdirectory = true; el.directory = true; el.setAttribute?.('webkitdirectory', ''); el.setAttribute?.('directory', ''); }
+                  folderInputRef.current?.click();
+                }}
+                disabled={uploading}
+                className="flex items-center gap-2 px-3 py-2.5 hover:bg-slate-800 transition-colors disabled:opacity-60"
+                data-testid="task-upload-folder-button"
+                title="上传整个文件夹"
+              >
+                <FolderPlus className="w-4 h-4" />
+              </button>
+            </div>
+            <button
+              onClick={fetchTasks}
+              disabled={loading}
+              className="flex h-10 w-10 items-center justify-center bg-white border border-slate-200 rounded-xl text-slate-700 hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-50"
+              title="刷新列表"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+
+            {/* Advanced / Destructive Actions Dropdown */}
+            <DropdownMenu
+              trigger={({ open, setOpen }) => (
+                <button
+                  onClick={() => setOpen(!open)}
+                  className={`flex h-10 w-10 items-center justify-center border rounded-xl transition-colors shadow-sm ${open ? 'bg-slate-100 border-slate-300 text-slate-900' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}
+                  title="更多操作"
+                >
+                  <Settings2 className="w-4 h-4" />
+                </button>
+              )}
+              items={[
+                {
+                  kind: 'item',
+                  label: '批量重试 (选中的失败任务)',
+                  disabled: !hasFailedSelected,
+                  onClick: batchRetry
+                },
+                { kind: 'divider' },
+                {
+                  kind: 'item',
+                  label: '批量取消 (选中任务)',
+                  disabled: selectedIds.size === 0,
+                  danger: true,
+                  onClick: batchCancel
+                },
+                {
+                  kind: 'item',
+                  label: '批量删除 (选中任务)',
+                  disabled: selectedIds.size === 0,
+                  danger: true,
+                  onClick: batchDelete
+                },
+                { kind: 'divider' },
+                {
+                  kind: 'item',
+                  label: '终止全部进行中任务',
+                  danger: true,
+                  onClick: cancelAllLive
+                },
+                {
+                  kind: 'item',
+                  label: '清空库表和 MinIO 产物 (重置环境)',
+                  danger: true,
+                  onClick: resetTestEnv
+                }
+              ]}
+            />
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+          {(['all', 'queued', 'processing', 'reviewing', 'completed', 'failed', 'canceled'] as BucketKey[]).map((key) => {
+            const active = filter === key;
+            const treatment = BUCKET_TREATMENTS[key];
+            const BucketIcon = treatment.icon;
+            return (
+              <button
+                key={key}
+                onClick={() => setFilter(key)}
+                className={`group min-h-[88px] rounded-xl border p-3 text-left transition-all ${active ? treatment.active : 'border-slate-200 bg-slate-50/70 hover:border-slate-300 hover:bg-white'}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${active ? 'bg-slate-950 text-white' : `${treatment.bg} ${treatment.text}`}`}>
+                    <BucketIcon className={`h-4 w-4 ${key === 'processing' && counts[key] > 0 ? 'animate-spin' : ''}`} />
+                  </span>
+                  <span className={`h-2 w-2 rounded-full ${treatment.dot}`} />
+                </div>
+                <div className="mt-3 flex items-end justify-between gap-2">
+                  <div className="text-xs font-semibold text-slate-500">{BUCKET_LABELS[key]}</div>
+                  <div className="text-2xl font-bold text-slate-950">{counts[key]}</div>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <div className="flex items-center gap-2 border-b border-gray-200 pb-px overflow-x-auto no-scrollbar">
-        {(['all', 'queued', 'processing', 'reviewing', 'completed', 'failed', 'canceled'] as BucketKey[]).map((key) => {
-          const active = filter === key;
-          return (
-            <button
-              key={key}
-              onClick={() => setFilter(key)}
-              className={`px-4 py-2.5 text-sm font-medium transition-all relative ${
-                active ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                {BUCKET_LABELS[key]}
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${active ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
-                  {counts[key]}
-                </span>
-              </div>
-              {active && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full" />}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="flex-1 overflow-hidden flex flex-col bg-white border border-gray-200 rounded-xl shadow-sm">
+      <div className="flex-1 overflow-hidden flex flex-col bg-white border border-slate-200 rounded-2xl shadow-[0_20px_50px_rgba(15,23,42,0.05)]">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-gray-50 border-b border-gray-200">
+          <table className="w-full table-fixed text-sm text-left">
+            <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                <th className="px-3 py-4 w-10">
+                <th className="px-4 py-4 w-10">
                   <input
                     type="checkbox"
                     checked={selectedIds.size === filteredTasks.length && filteredTasks.length > 0}
@@ -571,14 +651,14 @@ export function TaskManagementPage() {
                     className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
                 </th>
-                <th className="px-6 py-4 font-semibold text-gray-600 text-xs uppercase tracking-wider">任务信息</th>
-                <th className="px-6 py-4 font-semibold text-gray-600 text-xs uppercase tracking-wider">处理引擎</th>
-                <th className="px-6 py-4 font-semibold text-gray-600 text-xs uppercase tracking-wider">当前状态</th>
-                <th className="px-6 py-4 font-semibold text-gray-600 text-xs uppercase tracking-wider">创建时间</th>
-                <th className="px-6 py-4 font-semibold text-gray-600 text-xs uppercase tracking-wider text-right">操作</th>
+                <th className="w-[34%] px-4 py-4 font-semibold text-slate-500 text-xs uppercase">任务信息</th>
+                <th className="w-[14%] px-4 py-4 font-semibold text-slate-500 text-xs uppercase">处理引擎</th>
+                <th className="w-[28%] px-4 py-4 font-semibold text-slate-500 text-xs uppercase xl:w-[24%]">当前状态</th>
+                <th className="hidden w-[14%] px-4 py-4 font-semibold text-slate-500 text-xs uppercase xl:table-cell">创建时间</th>
+                <th className="w-[24%] px-4 py-4 font-semibold text-slate-500 text-xs uppercase text-right xl:w-[14%]">操作</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-slate-100">
               {filteredTasks.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-16 text-center text-gray-400">
@@ -591,14 +671,15 @@ export function TaskManagementPage() {
               ) : (
                 filteredTasks.map((t) => {
                   const bucket = bucketOf(t.state, t.stage);
+                  const treatment = BUCKET_TREATMENTS[bucket];
                   const canRetry = t.state === 'failed';
                   const canReparse = t.state === 'failed' || t.state === 'completed' || t.state === 'review-pending' || t.state === 'canceled';
                   const canReAi = t.state === 'failed' || t.state === 'completed' || t.state === 'review-pending';
                   const canCancel = ['pending', 'running', 'ai-pending', 'ai-running', 'review-pending', 'result-store'].includes(t.state || '') ||
                                     ['mineru-queued', 'mineru-processing', 'submit-failed-retryable', 'result-fetching'].includes(t.stage || '');
                   return (
-                    <tr key={t.id} className="hover:bg-gray-50/80 transition-colors group">
-                      <td className="px-3 py-4">
+                    <tr key={t.id} className="group hover:bg-slate-50/80 transition-colors">
+                      <td className={`px-4 py-4 border-l-4 ${treatment.accent}`}>
                         <input
                           type="checkbox"
                           checked={selectedIds.has(t.id)}
@@ -606,39 +687,44 @@ export function TaskManagementPage() {
                           className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                         />
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col gap-1 min-w-0 max-w-[280px]">
-                          {/* P1 Patch: 主显示上传文件名，task id 为次级信息 */}
-                          <button
-                            onClick={() => navigate(`/tasks/${encodeURIComponent(t.id)}`)}
-                            className="font-semibold text-gray-900 hover:text-blue-600 text-left truncate text-sm"
-                            title={(t as any).fileName || (t as any).metadata?.fileName || (t as any).optionsSnapshot?.material?.fileName || t.id}
-                          >
-                            {(t as any).fileName
-                              || (t as any).metadata?.fileName
-                              || (t as any).optionsSnapshot?.material?.fileName
-                              || (() => {
-                                const mat = materials.find(m => String(m.id) === String(t.materialId));
-                                return mat?.metadata?.fileName || mat?.title || null;
-                              })()
-                              || '未命名文件'}
-                          </button>
-                          <div className="flex items-center gap-1.5 text-[11px] text-gray-400 font-mono truncate">
-                            <span className="truncate" title={t.id}>Task: {t.id.length > 16 ? t.id.slice(0, 16) + '…' : t.id}</span>
-                            {t.retryOf ? <span className="text-amber-600">(重试自 {t.retryOf.slice(0, 12)}…)</span> : null}
+                      <td className="px-4 py-4">
+                        <div className="flex min-w-0 items-start gap-3">
+                          <div className={`mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border ${treatment.bg} ${treatment.border} ${treatment.text}`}>
+                            <FileText className="h-5 w-5" />
                           </div>
-                          <div className="flex items-center gap-1.5 text-xs text-gray-400">
-                            <Clock size={12} />
-                            {t.stage || '准备中'}
+                          <div className="flex flex-col gap-1 min-w-0">
+                            {/* P1 Patch: 主显示上传文件名，task id 为次级信息 */}
+                            <button
+                              onClick={() => navigate(`/tasks/${encodeURIComponent(t.id)}`)}
+                              className="font-semibold text-slate-950 hover:text-blue-600 text-left truncate text-sm"
+                              title={(t as any).fileName || (t as any).metadata?.fileName || (t as any).optionsSnapshot?.material?.fileName || t.id}
+                            >
+                              {(t as any).fileName
+                                || (t as any).metadata?.fileName
+                                || (t as any).optionsSnapshot?.material?.fileName
+                                || (() => {
+                                  const mat = materials.find(m => String(m.id) === String(t.materialId));
+                                  return mat?.metadata?.fileName || mat?.title || null;
+                                })()
+                                || '未命名文件'}
+                            </button>
+                            <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-mono truncate">
+                              <span className="truncate" title={t.id}>Task: {t.id.length > 16 ? t.id.slice(0, 16) + '…' : t.id}</span>
+                              {t.retryOf ? <span className="text-amber-600">(重试自 {t.retryOf.slice(0, 12)}…)</span> : null}
+                            </div>
+                            <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                              <Clock size={12} />
+                              {t.stage || '准备中'}
+                            </div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-gray-100 text-gray-600 text-[11px] font-bold uppercase tracking-tight">
+                      <td className="px-4 py-4">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 text-[11px] font-bold uppercase">
                           {t.engine || 'mineru-local'}
                         </span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-4">
                         <div className="flex flex-col gap-2">
                           <div className="flex items-center gap-2">
                             <span className={`inline-flex items-center px-2 py-0.5 text-xs font-bold rounded-full ${stateBadgeClass(t.state, t.stage)}`}>
@@ -668,7 +754,7 @@ export function TaskManagementPage() {
                             );
                           })()}
                           {bucket === 'processing' && typeof t.progress === 'number' && t.metadata?.mineruProgressHealth !== 'log-observation-stale' && (t.metadata?.mineruObservedProgress as any)?.activityLevel !== 'log-observation-stale' && (
-                            <div className="w-32 h-1 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="w-40 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                               <div className="h-full bg-blue-500 transition-all duration-700 ease-in-out" style={{ width: `${t.progress || 0}%` }} />
                             </div>
                           )}
@@ -679,46 +765,42 @@ export function TaskManagementPage() {
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-gray-500 font-mono text-[11px]">
+                      <td className="hidden px-4 py-4 text-slate-500 font-mono text-[11px] xl:table-cell">
                         {t.createdAt ? new Date(t.createdAt).toLocaleString('zh-CN', { hour12: false }) : '—'}
                       </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex justify-end gap-1.5">
-                          <button onClick={() => navigate(`/tasks/${encodeURIComponent(t.id)}`)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all" title="查看详情">
+                      <td className="px-4 py-4 text-right">
+                        <div className="inline-flex justify-end gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+                          <button onClick={() => navigate(`/tasks/${encodeURIComponent(t.id)}`)} className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-white rounded-lg transition-all" title="查看详情">
                             <Eye size={16} />
                           </button>
-                          {canRetry && (
-                            <button onClick={() => callAction(t, 'retry')} className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all" title={`${TASK_ACTION_TERMS.retry}：${TASK_ACTION_TOOLTIPS.retry}`}>
-                              <RotateCw size={16} />
-                            </button>
-                          )}
-                          {canReparse && (
-                            <button onClick={() => callAction(t, 'reparse')} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all" title={`${TASK_ACTION_TERMS.reparse}：${TASK_ACTION_TOOLTIPS.reparse}`}>
-                              <RefreshCw size={16} />
-                            </button>
-                          )}
-                          {canReAi && (
-                            <button onClick={() => callAction(t, 're-ai')} className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all" title={`${TASK_ACTION_TERMS['re-ai']}：${TASK_ACTION_TOOLTIPS['re-ai']}`}>
-                              <Sparkles size={16} />
-                            </button>
-                          )}
                           {t.state === 'review-pending' && (
-                            <button onClick={() => navigate(`/tasks/${encodeURIComponent(t.id)}#review`)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all" title="审核">
+                            <button onClick={() => navigate(`/tasks/${encodeURIComponent(t.id)}#review`)} className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-white rounded-lg transition-all" title="审核">
                               <ShieldCheck size={16} />
-                            </button>
-                          )}
-                          {t.state === 'completed' && (
-                            <button className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all" title="下载解析结果 (ZIP)">
-                              <Download size={16} />
                             </button>
                           )}
                           <DropdownMenu
                             trigger={({ open, setOpen }) => (
-                              <button onClick={() => setOpen(!open)} className={`p-1.5 rounded-lg transition-all ${open ? 'bg-slate-200 text-slate-900' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'}`} title="更多">
+                              <button onClick={() => setOpen(!open)} className={`p-1.5 rounded-lg transition-all ${open ? 'bg-white text-slate-900' : 'text-slate-500 hover:bg-white hover:text-slate-700'}`} title="更多">
                                 <MoreVertical size={16} />
                               </button>
                             )}
                             items={[
+                              canRetry ? {
+                                kind: 'item',
+                                label: TASK_ACTION_TERMS.retry,
+                                onClick: () => callAction(t, 'retry')
+                              } : null,
+                              canReparse ? {
+                                kind: 'item',
+                                label: TASK_ACTION_TERMS.reparse,
+                                onClick: () => callAction(t, 'reparse')
+                              } : null,
+                              canReAi ? {
+                                kind: 'item',
+                                label: TASK_ACTION_TERMS['re-ai'],
+                                onClick: () => callAction(t, 're-ai')
+                              } : null,
+                              (canRetry || canReparse || canReAi) ? { kind: 'divider' } : null,
                               canCancel ? {
                                 kind: 'item',
                                 label: '取消任务',
