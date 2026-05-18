@@ -297,7 +297,7 @@ async function reparseTask(task, deps) {
  * @param {Object} deps - 依赖注入对象（用于资源校验）
  * @returns {Object} 更新后的任务
  */
-async function reAiTask(task, deps) {
+export async function reAiTask(task, deps) {
   const allowed = new Set(['completed', 'review-pending', 'failed']);
   if (!allowed.has(task.state)) {
     throw new Error(`Task state ${task.state} cannot trigger Re-AI`);

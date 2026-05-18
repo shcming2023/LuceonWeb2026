@@ -78,7 +78,8 @@ function defaultOperatorMessage({ phase, lagKind, directMineruStatus, logState, 
   if (logState === 'sidecar_missing' && dbState === 'running') return 'MinerU 正在处理，但主宿主机观测通道异常 (sidecar missing)';
   if (logState === 'container_mount_stale' && dbState === 'running') return 'MinerU 正在处理，容器挂载观测滞后 (container mount stale)';
 
-  if (directMineruStatus && DIRECT_PROCESSING_STATUSES.has(directMineruStatus)) return 'MinerU API 仍在处理';
+  const isTerminal = TERMINAL_STATES.has(dbState || '');
+  if (!isTerminal && directMineruStatus && DIRECT_PROCESSING_STATUSES.has(directMineruStatus)) return 'MinerU API 仍在处理';
   if ((logState === 'stale' || logState === 'sidecar_stale') && dbState === 'running') return '任务仍在处理中，但日志观测滞后';
   if (phase === 'result-ingestion') return '解析产物同步中';
   if (phase === 'review') return 'AI 识别完成，待人工复核';

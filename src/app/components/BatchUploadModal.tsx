@@ -127,7 +127,7 @@ export function BatchProcessingController() {
 
       if (stats.submitted > 0 || stats.failed > 0) {
         if (stats.failed === 0) {
-          toast.success(`已提交 ${stats.submitted} 个文件，任务状态请{`, {
+          toast.success(`已提交 ${stats.submitted} 个文件，任务状态请在任务管理查看`, {
             duration: 5000,
             action: {
               label: '前往任务管理',
