@@ -45,8 +45,10 @@ export function Layout({ children }: LayoutProps) {
       <header className="h-14 bg-white/60 backdrop-blur-md border-b border-slate-200 flex-shrink-0 z-50">
         <div className="h-full px-8 flex items-center justify-between">
           <div className="flex items-center gap-8">
-            <Link to="/tasks" className="font-bold text-lg text-blue-700 whitespace-nowrap">
-              EduDoc Platform
+            <Link to="/tasks" className="flex items-center gap-2">
+              <span className="font-extrabold text-xl tracking-tight text-slate-800">
+                Edu<span className="text-blue-600">Doc</span>
+              </span>
             </Link>
           </div>
 
@@ -90,10 +92,10 @@ export function Layout({ children }: LayoutProps) {
           </div>
 
           {/* 主导航 */}
-          <nav className="flex-1 px-3 py-2 overflow-y-auto">
-            <div className="mb-1 px-3 py-1.5">
-              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                内容管理
+          <nav className="flex-1 px-3 py-4 overflow-y-auto">
+            <div className="mb-2 px-3">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                核心工作区
               </span>
             </div>
             {SIDE_NAV.map((item) => {
@@ -102,13 +104,13 @@ export function Layout({ children }: LayoutProps) {
                 <button
                   key={item.href}
                   onClick={() => navigate(item.href)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 mb-0.5 rounded-lg text-sm font-medium transition-colors ${
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 mb-1 rounded-lg text-sm transition-all duration-200 ${
                     active
-                      ? 'bg-blue-50 text-blue-700'
-                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                      ? 'bg-blue-600 text-white font-medium shadow-sm shadow-blue-200'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-blue-600 font-medium'
                   }`}
                 >
-                  <item.icon className={`w-[18px] h-[18px] flex-shrink-0 ${active ? 'text-blue-600' : 'text-slate-400'}`} />
+                  <item.icon className={`w-4 h-4 flex-shrink-0 ${active ? 'text-blue-100' : 'text-slate-400 group-hover:text-blue-500'}`} />
                   <span className="text-xs font-semibold tracking-wide">{item.name}</span>
                 </button>
               );
@@ -116,20 +118,25 @@ export function Layout({ children }: LayoutProps) {
           </nav>
 
           {/* 底部导航 */}
-          <div className="px-3 py-3 border-t border-slate-100">
+          <div className="px-3 py-4 border-t border-slate-100 bg-slate-50/50">
+            <div className="mb-2 px-3">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                管理与治理
+              </span>
+            </div>
             {BOTTOM_NAV.map((item) => {
               const active = isActive(item.href);
               return (
                 <button
                   key={item.href}
                   onClick={() => navigate(item.href)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 mb-0.5 rounded-lg text-sm transition-colors ${
+                  className={`w-full flex items-center gap-2 px-3 py-1.5 mb-0.5 rounded-md text-xs transition-colors ${
                     active
-                      ? 'bg-blue-50 text-blue-700 font-medium'
-                      : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+                      ? 'bg-slate-200/50 text-slate-800 font-semibold'
+                      : 'text-slate-500 hover:bg-slate-200/30 hover:text-slate-700 font-medium'
                   }`}
                 >
-                  <item.icon className={`w-4 h-4 flex-shrink-0 ${active ? 'text-blue-600' : 'text-slate-400'}`} />
+                  <item.icon className={`w-[14px] h-[14px] flex-shrink-0 ${active ? 'text-slate-600' : 'text-slate-400'}`} />
                   <span className="text-xs font-semibold">{item.name}</span>
                 </button>
               );

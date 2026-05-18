@@ -20,7 +20,9 @@ import {
   X,
   Archive,
   Trash2,
+  MoreVertical,
 } from 'lucide-react';
+import { DropdownMenu } from '../components/DropdownMenu';
 import { useAppStore } from '../../store/appContext';
 import { toast } from 'sonner';
 import { sortMaterials } from '../../utils/sort';
@@ -825,13 +827,25 @@ export function ProductsPage() {
                               </a>
                             )}
                             {/* 删除成果 */}
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleDeleteProduct(m.id); }}
-                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="级联删除"
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                            <DropdownMenu
+                              trigger={({ open, setOpen }) => (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+                                  className={`p-1.5 rounded-lg transition-colors ${open ? 'bg-slate-200 text-slate-900' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'}`}
+                                  title="更多"
+                                >
+                                  <MoreVertical size={14} />
+                                </button>
+                              )}
+                              items={[
+                                {
+                                  kind: 'item',
+                                  label: '删除此成果',
+                                  danger: true,
+                                  onClick: () => handleDeleteProduct(m.id)
+                                }
+                              ]}
+                            />
                           </div>
                         </td>
                       </tr>
@@ -966,6 +980,7 @@ export function ProductsPage() {
                     )}
                     {mTags.length > 0 && (
                       <div className="flex gap-1 flex-wrap mb-3">
+
                         {mTags.slice(0, 2).map((tag: string) => (
                           <span key={tag} className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full">
                             {tag}
@@ -1009,19 +1024,33 @@ export function ProductsPage() {
                         <a
                           href={m.mineruZipUrl}
                           download
-                          className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg text-purple-600 hover:bg-purple-50 font-medium transition-colors"
+                          className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg text-amber-600 hover:bg-amber-50 font-medium transition-colors"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <Archive size={11} /> ZIP
                         </a>
                       )}
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleDeleteProduct(m.id); }}
-                        className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg text-red-600 hover:bg-red-50 font-medium transition-colors ml-auto"
-                        title="级联删除"
-                      >
-                        <Trash2 size={11} /> 删除
-                      </button>
+                      <div className="ml-auto">
+                        <DropdownMenu
+                          trigger={({ open, setOpen }) => (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+                              className={`flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg font-medium transition-colors ${open ? 'bg-slate-200 text-slate-900' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'}`}
+                              title="更多"
+                            >
+                              <MoreVertical size={11} />
+                            </button>
+                          )}
+                          items={[
+                            {
+                              kind: 'item',
+                              label: '删除此成果',
+                              danger: true,
+                              onClick: () => handleDeleteProduct(m.id)
+                            }
+                          ]}
+                        />
+                      </div>
                     </div>
                   </div>
 

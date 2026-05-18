@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, RefreshCw, FileText, Clock, AlertTriangle, CheckCircle2, Loader2, XCircle,
   ChevronDown, ChevronRight, Brain, RotateCw, Sparkles, ShieldCheck,
-  LayoutDashboard, File, Download, Database, Eye
+  LayoutDashboard, File, Download, Database, Eye, MoreVertical
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { MarkdownTab } from '../components/PreviewTabPanel';
@@ -12,6 +12,7 @@ import { PDFPreviewPanel } from '../components/PDFPreviewPanel';
 import { renderMarkdown } from '../utils/markdown';
 import { TASK_ACTION_TERMS, TASK_ACTION_TOOLTIPS, getTaskStatusLabel } from '../utils/taskTerms';
 import { deriveMineruProgressLine, deriveTaskDisplayStatus } from '../utils/taskView';
+import { DropdownMenu } from '../components/DropdownMenu';
 
 /**
  * ParseTask 详情数据结构
@@ -568,92 +569,118 @@ export function TaskDetailPage() {
 
   return (
     <div className="p-6 h-full overflow-y-auto space-y-6">
-      {/* ── 顶部导航栏 ────────────────────────────────────────── */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/tasks')}
-            className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
-            title="返回任务列表"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-              <FileText className="w-5 h-5 text-slate-400" />
-              任务详情
-            </h1>
-            <p className="text-xs text-slate-400 mt-0.5 font-mono">{task.id}</p>
+      {/* ── 顶部导航栏与面包屑 ────────────────────────────────────────── */}
+      <div className="flex flex-col gap-4 mb-2">
+        {/* Breadcrumbs */}
+        <nav className="flex items-center text-sm text-slate-500 font-medium">
+          <button onClick={() => navigate('/tasks')} className="hover:text-blue-600 transition-colors">任务管理</button>
+          <ChevronRight className="w-4 h-4 mx-2 text-slate-300" />
+          <span className="text-slate-800">任务详情</span>
+        </nav>
+
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate('/tasks')}
+              className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+              title="返回任务列表"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+                任务详情
+              </h1>
+              <p className="text-xs text-slate-400 mt-1 font-mono tracking-tight">{task.id}</p>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => fetchData({ background: true })}
-            className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors disabled:opacity-60"
-            title="刷新"
-            disabled={refreshing}
-          >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-            刷新
-          </button>
-          <button
-            onClick={() => callAction('retry')}
-            disabled={!canRetry}
-            className="flex items-center gap-2 px-3 py-2 bg-white border border-amber-200 text-amber-700 rounded-lg text-sm font-medium hover:bg-amber-50 disabled:opacity-40 transition-colors"
-            title={canRetry ? `${TASK_ACTION_TERMS.retry}：${TASK_ACTION_TOOLTIPS.retry}` : (resourceStatus.materialExists ? '需要原始文件才能重试' : '原始资料已删除，无法重试')}
-          >
-            <RotateCw className="w-4 h-4" /> {TASK_ACTION_TERMS.retry}
-          </button>
-          <button
-            onClick={() => callAction('reparse')}
-            disabled={!canReparse}
-            className="flex items-center gap-2 px-3 py-2 bg-white border border-indigo-200 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-50 disabled:opacity-40 transition-colors"
-            title={canReparse ? `${TASK_ACTION_TERMS.reparse}：${TASK_ACTION_TOOLTIPS.reparse}` : (resourceStatus.materialExists ? '需要原始文件才能重新解析' : '原始资料已删除，无法重新解析')}
-          >
-            <RefreshCw className="w-4 h-4" /> {TASK_ACTION_TERMS.reparse}
-          </button>
-          <button
-            onClick={() => callAction('re-ai')}
-            disabled={!canReAi}
-            className="flex items-center gap-2 px-3 py-2 bg-white border border-violet-200 text-violet-700 rounded-lg text-sm font-medium hover:bg-violet-50 disabled:opacity-40 transition-colors"
-            title={canReAi ? `${TASK_ACTION_TERMS['re-ai']}：${TASK_ACTION_TOOLTIPS['re-ai']}` : (resourceStatus.materialExists ? '需要 Markdown 产物才能重跑 AI' : '原始资料已删除，无法重跑 AI')}
-          >
-            <Sparkles className="w-4 h-4" /> {TASK_ACTION_TERMS['re-ai']}
-          </button>
-          <button
-            onClick={() => {
-              const mineruTaskId = task.metadata?.mineruTaskId;
-              const msg = mineruTaskId
-                ? '该任务已提交至 MinerU，取消操作【仅停止 Luceon 侧跟踪】，若 MinerU 已在外部环境执行，需通过运维清障确认。\n\n确定要取消吗？'
-                : '确定要取消该任务吗？';
-              if (window.confirm(msg)) callAction('cancel');
-            }}
-            disabled={!canCancel}
-            className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 disabled:opacity-40 transition-colors"
-            title={`${TASK_ACTION_TERMS.cancel}：${TASK_ACTION_TOOLTIPS.cancel}`}
-          >
-            <XCircle className="w-4 h-4" /> {TASK_ACTION_TERMS.cancel}
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => fetchData({ background: true })}
+              className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-60 shadow-sm"
+              title="刷新"
+              disabled={refreshing}
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
 
-          {/* W2-2: Review 按钮 */}
-          <button
-            onClick={handleReview}
-            disabled={String(task.state) !== 'review-pending'}
-            className={`flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-40 transition-colors ${String(task.state) === 'completed' ? 'hidden' : ''}`}
-            title="审核通过：确认元数据并完成任务"
-          >
-            <ShieldCheck className="w-4 h-4" /> 审核通过
-          </button>
+            {/* W2-2: Review 按钮 */}
+            {String(task.state) === 'review-pending' && (
+              <button
+                onClick={handleReview}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors shadow-sm"
+                title="审核通过：确认元数据并完成任务"
+              >
+                <ShieldCheck className="w-4 h-4" /> 审核通过
+              </button>
+            )}
 
-          {/* W2-3: ZIP 下载按钮 */}
-          <button
-            onClick={handleDownloadZip}
-            disabled={!(['completed', 'review-pending', 'failed'].includes(String(task.state)) && resourceStatus.markdownExists)}
-            className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 disabled:opacity-40 transition-colors"
-            title="下载解析产物 ZIP"
-          >
-            <Download className="w-4 h-4" /> 下载 ZIP
-          </button>
+            {/* W2-3: ZIP 下载按钮 */}
+            <button
+              onClick={handleDownloadZip}
+              disabled={!(['completed', 'review-pending', 'failed'].includes(String(task.state)) && resourceStatus.markdownExists)}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 disabled:opacity-40 transition-colors shadow-sm"
+              title="下载解析产物 ZIP"
+            >
+              <Download className="w-4 h-4" /> 下载产物
+            </button>
+
+            {/* Recovery Actions Grouping */}
+            <div className="flex bg-white border border-slate-200 rounded-lg overflow-hidden text-sm shadow-sm">
+              <button
+                onClick={() => callAction('retry')}
+                disabled={!canRetry}
+                className="flex items-center gap-2 px-3 py-2 text-amber-700 hover:bg-amber-50 disabled:opacity-40 transition-colors font-medium border-r border-slate-200 last:border-0"
+                title={canRetry ? `${TASK_ACTION_TERMS.retry}：${TASK_ACTION_TOOLTIPS.retry}` : (resourceStatus.materialExists ? '需要原始文件才能重试' : '原始资料已删除，无法重试')}
+              >
+                <RotateCw className="w-4 h-4" /> {TASK_ACTION_TERMS.retry}
+              </button>
+              <button
+                onClick={() => callAction('reparse')}
+                disabled={!canReparse}
+                className="flex items-center gap-2 px-3 py-2 text-indigo-700 hover:bg-indigo-50 disabled:opacity-40 transition-colors font-medium border-r border-slate-200 last:border-0"
+                title={canReparse ? `${TASK_ACTION_TERMS.reparse}：${TASK_ACTION_TOOLTIPS.reparse}` : (resourceStatus.materialExists ? '需要原始文件才能重新解析' : '原始资料已删除，无法重新解析')}
+              >
+                <RefreshCw className="w-4 h-4" /> {TASK_ACTION_TERMS.reparse}
+              </button>
+              <button
+                onClick={() => callAction('re-ai')}
+                disabled={!canReAi}
+                className="flex items-center gap-2 px-3 py-2 text-violet-700 hover:bg-violet-50 disabled:opacity-40 transition-colors font-medium border-r border-slate-200 last:border-0"
+                title={canReAi ? `${TASK_ACTION_TERMS['re-ai']}：${TASK_ACTION_TOOLTIPS['re-ai']}` : (resourceStatus.materialExists ? '需要 Markdown 产物才能重跑 AI' : '原始资料已删除，无法重跑 AI')}
+              >
+                <Sparkles className="w-4 h-4" /> {TASK_ACTION_TERMS['re-ai']}
+              </button>
+            </div>
+
+            {/* Destructive Actions Dropdown */}
+            <DropdownMenu
+              trigger={({ open, setOpen }) => (
+                <button
+                  onClick={() => setOpen(!open)}
+                  className={`flex items-center gap-2 px-3 py-2 border rounded-lg text-sm font-medium transition-colors shadow-sm ${open ? 'bg-slate-100 border-slate-300 text-slate-900' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}
+                  title="更多操作"
+                >
+                  <MoreVertical className="w-4 h-4" />
+                </button>
+              )}
+              items={[
+                {
+                  kind: 'item',
+                  label: '取消任务',
+                  danger: true,
+                  disabled: !canCancel,
+                  onClick: () => {
+                    const mineruTaskId = task.metadata?.mineruTaskId;
+                    const msg = mineruTaskId
+                      ? '该任务已提交至 MinerU，取消操作【仅停止 Luceon 侧跟踪】，若 MinerU 已在外部环境执行，需通过运维清障确认。\n\n确定要取消吗？'
+                      : '确定要取消该任务吗？';
+                    if (window.confirm(msg)) callAction('cancel');
+                  }
+                }
+              ]}
+            />
+          </div>
         </div>
       </div>
 

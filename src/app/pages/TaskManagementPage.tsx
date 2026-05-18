@@ -16,11 +16,14 @@ import {
   CheckCircle2,
   Upload,
   FolderPlus,
+  MoreVertical,
+  Settings2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { deriveMineruProgressLine, deriveTaskBucket, deriveTaskDisplayStatus, ParseTask, TaskBucket } from '../utils/taskView';
 import { TASK_ACTION_TERMS, TASK_ACTION_TOOLTIPS, getTaskStatusLabel } from '../utils/taskTerms';
 import { useFileUpload } from '../hooks/useFileUpload';
+import { DropdownMenu } from '../components/DropdownMenu';
 
 /**
  * TaskManagementPage — 任务管理
@@ -452,7 +455,7 @@ export function TaskManagementPage() {
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              className="flex items-center gap-2 px-4 py-2 hover:bg-blue-500 transition-colors disabled:opacity-60"
+              className="flex items-center gap-2 px-4 py-2 hover:bg-blue-500 transition-colors disabled:opacity-60 font-medium"
               data-testid="task-upload-file-button"
             >
               <Upload className="w-4 h-4" /> 上传文件
@@ -467,56 +470,68 @@ export function TaskManagementPage() {
               disabled={uploading}
               className="flex items-center gap-2 px-3 py-2 hover:bg-blue-500 transition-colors disabled:opacity-60"
               data-testid="task-upload-folder-button"
+              title="上传整个文件夹"
             >
-              <FolderPlus className="w-4 h-4" /> 文件夹
+              <FolderPlus className="w-4 h-4" />
             </button>
           </div>
           <button
             onClick={fetchTasks}
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-50"
+            className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-50"
+            title="刷新列表"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            刷新列表
           </button>
-          <button
-            onClick={batchRetry}
-            disabled={!hasFailedSelected}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-amber-200 text-amber-700 rounded-lg text-sm font-medium hover:bg-amber-50 disabled:opacity-40 transition-colors shadow-sm"
-            title="批量重试：对所选 failed 任务执行 retry"
-          >
-            <RotateCw className="w-4 h-4" /> 批量重试
-          </button>
-          <button
-            onClick={batchDelete}
-            disabled={selectedIds.size === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 disabled:opacity-40 transition-colors shadow-sm"
-            title="批量删除所选任务"
-          >
-            <Trash2 className="w-4 h-4" /> 批量删除
-          </button>
-          <button
-            onClick={batchCancel}
-            disabled={selectedIds.size === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 disabled:opacity-40 transition-colors shadow-sm"
-            title="批量取消所选任务"
-          >
-            <XCircle className="w-4 h-4" /> 批量取消
-          </button>
-          <button
-            onClick={cancelAllLive}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-orange-200 text-orange-600 rounded-lg text-sm font-medium hover:bg-orange-50 transition-colors shadow-sm"
-            title="终止压测/取消全部进行中任务"
-          >
-            <XCircle className="w-4 h-4" /> 终止全部进行中
-          </button>
-          <button
-            onClick={resetTestEnv}
-            className="flex items-center gap-2 px-4 py-2 bg-red-600 border border-red-700 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors shadow-sm"
-            title="清空库表和 MinIO 产物"
-          >
-            <Trash2 className="w-4 h-4" /> 重置测试环境
-          </button>
+
+          {/* Advanced / Destructive Actions Dropdown */}
+          <DropdownMenu
+            trigger={({ open, setOpen }) => (
+              <button
+                onClick={() => setOpen(!open)}
+                className={`flex items-center gap-2 px-3 py-2 border rounded-lg text-sm font-medium transition-colors shadow-sm ${open ? 'bg-slate-100 border-slate-300 text-slate-900' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}
+                title="更多操作"
+              >
+                <Settings2 className="w-4 h-4" />
+              </button>
+            )}
+            items={[
+              {
+                kind: 'item',
+                label: '批量重试 (选中的失败任务)',
+                disabled: !hasFailedSelected,
+                onClick: batchRetry
+              },
+              { kind: 'divider' },
+              {
+                kind: 'item',
+                label: '批量取消 (选中任务)',
+                disabled: selectedIds.size === 0,
+                danger: true,
+                onClick: batchCancel
+              },
+              {
+                kind: 'item',
+                label: '批量删除 (选中任务)',
+                disabled: selectedIds.size === 0,
+                danger: true,
+                onClick: batchDelete
+              },
+              { kind: 'divider' },
+              {
+                kind: 'item',
+                label: '终止全部进行中任务',
+                danger: true,
+                onClick: cancelAllLive
+              },
+              {
+                kind: 'item',
+                label: '清空库表和 MinIO 产物 (重置环境)',
+                danger: true,
+                onClick: resetTestEnv
+              }
+            ]}
+          />
         </div>
       </div>
 
@@ -669,72 +684,64 @@ export function TaskManagementPage() {
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex justify-end gap-1.5">
-                          <button onClick={() => navigate(`/tasks/${encodeURIComponent(t.id)}`)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all" title="查看详情">
+                          <button onClick={() => navigate(`/tasks/${encodeURIComponent(t.id)}`)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all" title="查看详情">
                             <Eye size={16} />
                           </button>
-                          <button
-                            onClick={() => callAction(t, 'retry')}
-                            disabled={!canRetry}
-                            className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all disabled:opacity-30"
-                            title={`${TASK_ACTION_TERMS.retry}：${TASK_ACTION_TOOLTIPS.retry}`}
-                          >
-                            <RotateCw size={16} />
-                          </button>
-                          <button
-                            onClick={() => callAction(t, 'reparse')}
-                            disabled={!canReparse}
-                            className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all disabled:opacity-30"
-                            title={`${TASK_ACTION_TERMS.reparse}：${TASK_ACTION_TOOLTIPS.reparse}`}
-                          >
-                            <RefreshCw size={16} />
-                          </button>
-                          <button
-                            onClick={() => callAction(t, 're-ai')}
-                            disabled={!canReAi}
-                            className="p-1.5 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all disabled:opacity-30"
-                            title={`${TASK_ACTION_TERMS['re-ai']}：${TASK_ACTION_TOOLTIPS['re-ai']}`}
-                          >
-                            <Sparkles size={16} />
-                          </button>
-                          <button
-                            onClick={() => {
-                              const mineruTaskId = t.metadata?.mineruTaskId;
-                              const msg = mineruTaskId
-                                ? '该任务已提交至 MinerU，取消操作【仅停止 Luceon 侧跟踪】，若 MinerU 已在外部环境执行，需通过运维清障确认。\n\n确定要取消吗？'
-                                : '确定要取消该任务吗？';
-                              if (window.confirm(msg)) callAction(t, 'cancel');
-                            }}
-                            disabled={!canCancel}
-                            className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-all disabled:opacity-30"
-                            title={`${TASK_ACTION_TERMS.cancel}：${TASK_ACTION_TOOLTIPS.cancel}`}
-                          >
-                            <XCircle size={16} />
-                          </button>
-                          <button
-                            onClick={() => navigate(`/tasks/${encodeURIComponent(t.id)}#review`)}
-                            disabled={t.state !== 'review-pending'}
-                            className={`p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all disabled:opacity-30 ${t.state === 'completed' ? 'hidden' : ''}`}
-                            title="审核"
-                          >
-                            <ShieldCheck size={16} />
-                          </button>
-                          <button
-                            className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all disabled:opacity-30"
-                            disabled={t.state !== 'completed'}
-                            title="下载解析结果 (ZIP)"
-                          >
-                            <Download size={16} />
-                          </button>
-                          <button
-                            onClick={() => {
-                              setSelectedIds(new Set([t.id]));
-                              setTimeout(batchDelete, 0);
-                            }}
-                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                            title="删除任务"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          {canRetry && (
+                            <button onClick={() => callAction(t, 'retry')} className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all" title={`${TASK_ACTION_TERMS.retry}：${TASK_ACTION_TOOLTIPS.retry}`}>
+                              <RotateCw size={16} />
+                            </button>
+                          )}
+                          {canReparse && (
+                            <button onClick={() => callAction(t, 'reparse')} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all" title={`${TASK_ACTION_TERMS.reparse}：${TASK_ACTION_TOOLTIPS.reparse}`}>
+                              <RefreshCw size={16} />
+                            </button>
+                          )}
+                          {canReAi && (
+                            <button onClick={() => callAction(t, 're-ai')} className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-all" title={`${TASK_ACTION_TERMS['re-ai']}：${TASK_ACTION_TOOLTIPS['re-ai']}`}>
+                              <Sparkles size={16} />
+                            </button>
+                          )}
+                          {t.state === 'review-pending' && (
+                            <button onClick={() => navigate(`/tasks/${encodeURIComponent(t.id)}#review`)} className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all" title="审核">
+                              <ShieldCheck size={16} />
+                            </button>
+                          )}
+                          {t.state === 'completed' && (
+                            <button className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all" title="下载解析结果 (ZIP)">
+                              <Download size={16} />
+                            </button>
+                          )}
+                          <DropdownMenu
+                            trigger={({ open, setOpen }) => (
+                              <button onClick={() => setOpen(!open)} className={`p-1.5 rounded-lg transition-all ${open ? 'bg-slate-200 text-slate-900' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'}`} title="更多">
+                                <MoreVertical size={16} />
+                              </button>
+                            )}
+                            items={[
+                              canCancel ? {
+                                kind: 'item',
+                                label: '取消任务',
+                                danger: true,
+                                onClick: () => {
+                                  const mineruTaskId = t.metadata?.mineruTaskId;
+                                  const msg = mineruTaskId
+                                    ? '该任务已提交至 MinerU，取消操作【仅停止 Luceon 侧跟踪】，若 MinerU 已在外部环境执行，需通过运维清障确认。\n\n确定要取消吗？'
+                                    : '确定要取消该任务吗？';
+                                  if (window.confirm(msg)) callAction(t, 'cancel');
+                                }
+                              } : null,
+                              {
+                                kind: 'item',
+                                label: '删除任务',
+                                danger: true,
+                                onClick: () => {
+                                  setSelectedIds(new Set([t.id]));
+                                  setTimeout(batchDelete, 0);
+                                }
+                              }
+                            ] as any}
+                          />
                         </div>
                       </td>
                     </tr>
