@@ -583,7 +583,11 @@ export async function inspectMineruLogChannelOwnership({
     }
   }
 
-  const selectedSource = [...sources].sort((a, b) => rankLogChannelState(b.state) - rankLogChannelState(a.state))[0] || null;
+  const selectedSource = [...sources].sort((a, b) => {
+    const rankDiff = rankLogChannelState(b.state) - rankLogChannelState(a.state);
+    if (rankDiff !== 0) return rankDiff;
+    return (a.ageMs || Infinity) - (b.ageMs || Infinity);
+  })[0] || null;
   const summaryState = selectedSource?.state || 'missing';
 
   return {

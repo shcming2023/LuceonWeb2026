@@ -24,6 +24,7 @@
 import { taskEventBus } from './task-events-bus.mjs';
 import { logTaskEvent } from '../services/logging/task-events.mjs';
 import { createOrphanHelpers } from './consistency-routes.mjs';
+import { createAiMetadataJob } from '../services/ai/metadata-job-client.mjs';
 
 const DB_BASE_URL = process.env.DB_BASE_URL || 'http://localhost:8789';
 
@@ -321,14 +322,34 @@ async function reAiTask(task, deps) {
       console.warn(`[task-actions] mark old AI job failed error: ${e.message}`);
     }
   }
+
+  // 立即创建新 AI Job（解决 ai-pending 卡住无任务的问题）
+  const jobResult = await createAiMetadataJob({
+    parseTaskId: task.id,
+    materialId: task.materialId,
+    inputMarkdownObjectName: task.metadata?.markdownObjectName || null,
+  });
+
+  if (!jobResult.created && jobResult.reason !== 'duplicate') {
+    const errorUpdate = {
+      state: 'failed',
+      stage: 'ai',
+      errorMessage: `Re-AI 创建 AI 任务失败: ${jobResult.reason}`,
+      aiJobId: null,
+      updatedAt: new Date().toISOString(),
+    };
+    await dbPatch(`/tasks/${encodeURIComponent(task.id)}`, errorUpdate);
+    throw new Error(`Re-AI 创建 AI 任务失败: ${jobResult.reason}`);
+  }
+
   const update = {
     state: 'ai-pending',
     stage: 'ai',
     progress: 80,
     message: '用户发起 Re-AI，等待 AI Worker 拾取',
     errorMessage: null,
-    aiJobId: null,
-    metadata: { ...(task.metadata || {}), aiJobId: null },
+    aiJobId: jobResult.jobId || null,
+    metadata: { ...(task.metadata || {}), aiJobId: jobResult.jobId || null },
     updatedAt: new Date().toISOString(),
   };
   await dbPatch(`/tasks/${encodeURIComponent(task.id)}`, update);

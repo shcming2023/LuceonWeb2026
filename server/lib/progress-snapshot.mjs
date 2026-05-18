@@ -147,6 +147,11 @@ export function buildProgressSnapshot(task = {}, options = {}) {
     sourcePriority = 'direct-mineru';
     freshness = 'terminal';
     confidence = 'high';
+  } else if (terminalTask) {
+    source = aiState === 'failed' ? 'ai' : 'db';
+    sourcePriority = aiState === 'failed' ? 'ai' : 'db';
+    freshness = 'terminal';
+    confidence = 'high';
   } else if (directProcessing) {
     source = (logState === 'fresh' || logState === 'sidecar_fresh') ? 'mixed' : 'direct-mineru';
     sourcePriority = 'direct-mineru';
@@ -157,11 +162,6 @@ export function buildProgressSnapshot(task = {}, options = {}) {
     sourcePriority = 'log';
     freshness = 'fresh';
     confidence = 'medium';
-  } else if (terminalTask) {
-    source = aiState === 'failed' ? 'ai' : 'db';
-    sourcePriority = aiState === 'failed' ? 'ai' : 'db';
-    freshness = 'terminal';
-    confidence = 'high';
   } else if (logState === 'stale' || logState === 'sidecar_stale' || logState === 'container_mount_stale') {
     source = 'mixed';
     sourcePriority = 'db';

@@ -93,6 +93,8 @@ export function BatchProcessingController() {
   const [working, setWorking] = useState(false);
   /** 本轮队列运行期间的提交统计 */
   const statsRef = useRef({ submitted: 0, failed: 0, failReasons: [] as string[] });
+  /** 用于更新相同的 toast */
+  const toastIdRef = useRef<string | number | null>(null);
 
   const items = state.batchProcessing.items;
   const running = state.batchProcessing.running;
@@ -112,12 +114,20 @@ export function BatchProcessingController() {
   useEffect(() => {
     if (!running || paused || working) return;
 
+    const stats = statsRef.current;
+    const processed = stats.submitted + stats.failed;
+    const total = items.length + processed;
+
     // 没有待提交项，且没有正在上传中的项 → 队列完成
     if (!nextPending && !activeUploading) {
-      const stats = statsRef.current;
+      if (toastIdRef.current) {
+        toast.dismiss(toastIdRef.current);
+        toastIdRef.current = null;
+      }
+
       if (stats.submitted > 0 || stats.failed > 0) {
         if (stats.failed === 0) {
-          toast.success(`已提交 ${stats.submitted} 个文件，任务状态请在任务管理查看`, {
+          toast.success(`已提交 ${stats.submitted} 个文件，任务状态请{`, {
             duration: 5000,
             action: {
               label: '前往任务管理',
@@ -141,6 +151,15 @@ export function BatchProcessingController() {
       // 停止队列并清空残余
       dispatch({ type: 'BATCH_CLEAR' });
       return;
+    }
+
+    if (total > 0) {
+      const msg = `正在批量上传 (${processed}/${total})...`;
+      if (!toastIdRef.current) {
+        toastIdRef.current = toast.loading(msg, { duration: Infinity });
+      } else {
+        toast.loading(msg, { id: toastIdRef.current, duration: Infinity });
+      }
     }
 
     if (!nextPending) return;
