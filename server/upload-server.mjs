@@ -1438,6 +1438,7 @@ app.get('/ops/mineru/active-task', async (req, res) => {
       result.takeoverRequiredTasks = takeoverRequiredTasks.map(attachDbSnapshot);
     }
 
+    result.globalObservation = globalLogObservation;
     return res.json(result);
   } catch (e) {
     return res.status(500).json({ error: e.message });

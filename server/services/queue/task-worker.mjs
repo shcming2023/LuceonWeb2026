@@ -1291,6 +1291,14 @@ export class ParseTaskWorker {
             mimeType: materialInfo.mimeType || 'application/pdf',
             timeoutMs: Number(task.optionsSnapshot?.localTimeout || 3600) * 1000,
             minioContext: this.minioContext,
+            getLatestTask: async () => {
+              try {
+                const allTasks = await this.taskClient.getAllTasks();
+                return allTasks.find(t => t.id === task.id) || null;
+              } catch (e) {
+                return null;
+              }
+            },
             updateProgress: async (updateInfo) => {
               const eventName = updateInfo.stage === 'store' ? 'stage-changed' : 'progress-update';
               await this.transition(task, updateInfo, eventName);
@@ -1864,6 +1872,14 @@ export class ParseTaskWorker {
         mineruTaskId,
         timeoutMs: Number(task.optionsSnapshot?.localTimeout || 3600) * 1000,
         minioContext: this.minioContext,
+        getLatestTask: async () => {
+          try {
+            const allTasks = await this.taskClient.getAllTasks();
+            return allTasks.find(t => t.id === task.id) || null;
+          } catch (e) {
+            return null;
+          }
+        },
         updateProgress
       });
 
@@ -1892,6 +1908,14 @@ export class ParseTaskWorker {
               mineruTaskId: completedMineruTaskId,
               timeoutMs: Number(task.optionsSnapshot?.localTimeout || 3600) * 1000,
               minioContext: this.minioContext,
+              getLatestTask: async () => {
+                try {
+                  const allTasks = await this.taskClient.getAllTasks();
+                  return allTasks.find(t => t.id === task.id) || null;
+                } catch (e) {
+                  return null;
+                }
+              },
               updateProgress
             });
             await this.completeResumedMineruResult(task, materialInfo, completedMineruTaskId, mineruResult);
@@ -2427,7 +2451,7 @@ export class ParseTaskWorker {
       }
       // 更新 progressEventKey 到 DB
       await this.updateTaskWithRetry(task.id, {
-        metadata: { ...(task.metadata || {}), progressEventKey: semanticKey }
+        metadata: { progressEventKey: semanticKey }
       }, { enqueueOnFailure: true });
       // 同步更新内存对象，避免长轮询中旧 task 对象导致去重失效
       if (!task.metadata) task.metadata = {};

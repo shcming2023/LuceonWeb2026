@@ -692,28 +692,28 @@ async function run() {
       '2026-04-20 10:00:10 | INFO | GET /health',
       '2026-04-20 10:00:15 | INFO | GET /health'
     ];
-    
+
     const mockErrLog = path.join(process.cwd(), 'uat', 'scratch', 'mineru-api.err.log');
     const mockOutLog = path.join(process.cwd(), 'uat', 'scratch', 'mineru-api.log');
-    
+
     fs.writeFileSync(mockErrLog, errLines.join('\n'));
     fs.writeFileSync(mockOutLog, outLines.join('\n'));
-    
+
     process.env.MINERU_ERR_LOG_PATH = mockErrLog;
     process.env.MINERU_LOG_PATH = mockOutLog;
 
     const { parseLatestMineruProgress } = await import('../lib/ops-mineru-log-parser.mjs');
-    
+
     // Test with minObservedAt earlier than log content timestamps (日志中为 2026-04-20 10:00:xx 本地时间)
     const minObservedAt = '2026-04-20T01:00:00Z';
     const latestObservation = await parseLatestMineruProgress(minObservedAt, null, { backendRequested: 'pipeline' });
-    
+
     assert(latestObservation.activityLevel !== 'log-observation-unattributed', 'Should not be unattributed when valid business logs exist');
     assert(latestObservation.activityLevel !== 'api-alive-only', 'API noise should not override business signals');
     assert(latestObservation.stage?.rawPhase === 'Predict Layout', 'Must pick business signal from stderr despite older mtime');
     assert(latestObservation.stage?.current === 12, 'Must extract current from stderr');
     assert(latestObservation.signals.hasBusinessSignal === true, 'Must have business signal');
-    
+
     console.log('Test 24 Pass ✅\n');
   }
 
@@ -722,7 +722,7 @@ async function run() {
   {
     const mockErrLog = path.join(scratchPath, 'mineru-api.err.log');
     const mockOutLog = path.join(scratchPath, 'mineru-api.log');
-    
+
     // 构造同一个 err.log：先有旧任务 Table-ocr，再有当前任务 Hybrid + Predict
     const errLines = [
       // ── 上一任务的日志（旧时间戳） ──
@@ -741,49 +741,49 @@ async function run() {
       'Predict:   4%|▍         | 1/24 [00:08<03:04, 8.00s/it]',
       'Predict:  38%|███▊      | 9/24 [01:12<02:00, 8.00s/it]'
     ];
-    
+
     fs.writeFileSync(mockErrLog, errLines.join('\n'));
     // stdout 只有 API noise
     fs.writeFileSync(mockOutLog, 'GET /health 200\n');
-    
+
     process.env.MINERU_ERR_LOG_PATH = mockErrLog;
     process.env.MINERU_LOG_PATH = mockOutLog;
-    
+
     // minObservedAt 设为当前任务开始后（旧任务的 Table-ocr 必须被排除）
     // 日志时间戳为本地时间（UTC+8），JS 解析后为 UTC
     // 旧任务最后时间戳 2026-04-26 10:01:30 → UTC 02:01:30Z
     // 当前任务时间戳 2026-04-26 11:33:33 → UTC 03:33:33Z
     // minObservedAt 设在两者之间
     const minObservedAt = new Date('2026-04-26 11:00:00').toISOString();
-    
+
     const result = await parseLatestMineruProgress(minObservedAt, null, { backendRequested: 'hybrid-auto-engine' });
-    
+
     assert(result !== null, 'Should return result');
     assert(result.phase === 'Predict', `Phase should be Predict, got: ${result.phase}`);
     assert(result.current === 9, `Current should be 9, got: ${result.current}`);
     assert(result.total === 24, `Total should be 24, got: ${result.total}`);
     assert(result.activityLevel === 'active-progress', `ActivityLevel should be active-progress, got: ${result.activityLevel}`);
-    
+
     // 关键：不得返回 Table-ocr rec ch
     assert(result.phase !== 'Table-ocr rec ch', 'Must NOT return old Table-ocr rec ch phase');
     assert(result.rawLine === null || !result.rawLine.includes('336/349'), 'Must NOT contain old 336/349 progress');
-    
+
     // stage 必须反映当前任务的 Predict 相位
     assert(result.stage !== null, 'Stage should be present');
     assert(result.stage.rawPhase === 'Predict', `Stage rawPhase should be Predict, got: ${result.stage?.rawPhase}`);
     assert(result.stage.current === 9, `Stage current should be 9, got: ${result.stage?.current}`);
     assert(result.stage.total === 24, `Stage total should be 24, got: ${result.stage?.total}`);
-    
+
     // window 应反映当前任务的 Hybrid window (pages 1-24/24)
     assert(result.window !== null, 'Window should be present');
     assert(result.window.pageTotal === 24, `Window pageTotal should be 24, got: ${result.window?.pageTotal}`);
-    
+
     // businessSignals 不应包含旧任务信号
-    const hasOldTableOcr = result.businessSignals?.some(s => 
+    const hasOldTableOcr = result.businessSignals?.some(s =>
       s.raw?.includes('336/349') || s.raw?.includes('Table-ocr')
     );
     assert(!hasOldTableOcr, 'businessSignals must NOT contain old Table-ocr signals');
-    
+
     console.log('Test 25 Pass ✅\n');
   }
 
@@ -792,7 +792,7 @@ async function run() {
   {
     const mockErrLog = path.join(scratchPath, 'mineru-api.err.log');
     const mockOutLog = path.join(scratchPath, 'mineru-api.log');
-    
+
     // 构造：只有旧时间戳 + 无时间戳 tqdm，且 minObservedAt 晚于旧时间戳
     const errLines = [
       '2026-04-26 08:00:00.000 | INFO | Hybrid processing-window run. page_count=16',
@@ -800,20 +800,20 @@ async function run() {
       'Predict:  50%|█████     | 8/16 [01:00<01:00, 8.00s/it]',
       'Table-ocr rec ch:  96%|█████████▋| 336/349 [00:45<00:02, 7.47it/s]'
     ];
-    
+
     fs.writeFileSync(mockErrLog, errLines.join('\n'));
     fs.writeFileSync(mockOutLog, '');
-    
+
     process.env.MINERU_ERR_LOG_PATH = mockErrLog;
     process.env.MINERU_LOG_PATH = mockOutLog;
-    
+
     // minObservedAt 设为远晚于旧时间戳
     const minObservedAt = '2026-04-26T10:00:00.000Z';
-    
+
     const result = await parseLatestMineruProgress(minObservedAt, null, null);
-    
+
     assert(result !== null, 'Should return result (not null)');
-    
+
     // 不得把旧 tqdm 当当前任务进度
     // 行级切片后所有业务信号都应被过滤掉
     const isUnattributed = (
@@ -825,12 +825,12 @@ async function run() {
       !result.signals?.hasBusinessSignal
     );
     assert(isUnattributed, `Should not have valid business signal for current task, got activityLevel: ${result.activityLevel}`);
-    
+
     // 关键：phase 不应是旧任务的 Predict 或 Table-ocr
     if (result.phase) {
       assert(false, `Phase should be null (no current task signals), but got: ${result.phase}`);
     }
-    
+
     console.log('Test 26 Pass ✅\n');
   }
 
@@ -839,7 +839,7 @@ async function run() {
   {
     const mockLog = path.join(scratchPath, 'mineru-api.log');
     const mockErrLog = path.join(scratchPath, 'mineru-api.err.log');
-    
+
     // 构造只有长尾部分（无时间戳）的当前日志
     const lines = [
       'Predict:  95%|█████████▌| 336/355 [09:10<00:23,  1.21s/it]',
@@ -880,7 +880,7 @@ async function run() {
     assert(result.window.pageStart === 1, `Expected window.pageStart=1, got ${result.window.pageStart}`);
     assert(result.window.pageEnd === 24, `Expected window.pageEnd=24, got ${result.window.pageEnd}`);
     assert(result.window.pageTotal === 24, `Expected window.pageTotal=24, got ${result.window.pageTotal}`);
-    
+
     console.log('Test 27 Pass ✅\n');
   }
 
@@ -889,7 +889,7 @@ async function run() {
   {
     const mockLog = path.join(scratchPath, 'mineru-api.log');
     const mockErrLog = path.join(scratchPath, 'mineru-api.err.log');
-    
+
     const lines = [
       'Predict:  99%|█████████▊| 350/355 [09:45<00:11,  2.32s/it]'
     ];
@@ -901,7 +901,7 @@ async function run() {
     const minObservedAt = '2020-01-01T16:00:00.000Z';
     // 无 previousObservation
     const result = await parseLatestMineruProgress(minObservedAt, null, null);
-    
+
     if (result) {
       assert(result.activityLevel === 'log-observation-unattributed' || result.activityLevel === 'log-observation-no-business-signal' || !result.signals?.hasBusinessSignal, `Should not be attributed properly, got activityLevel=${result.activityLevel}`);
     }
@@ -913,7 +913,7 @@ async function run() {
   {
     const mockLog = path.join(scratchPath, 'mineru-api.log');
     const mockErrLog = path.join(scratchPath, 'mineru-api.err.log');
-    
+
     // 旧日志，时间较早
     const lines = [
       '2020-01-01 15:00:00 | INFO ... start',
@@ -933,7 +933,7 @@ async function run() {
     };
 
     const result = await parseLatestMineruProgress(minObservedAt, previousObservation, null);
-    
+
     if (result) {
       assert(result.activityLevel === 'log-observation-unattributed' || result.activityLevel === 'log-observation-no-business-signal' || !result.signals?.hasBusinessSignal, `Should not be attributed to new task, got activityLevel=${result.activityLevel}`);
       if (result.phase) {
@@ -1025,6 +1025,152 @@ async function run() {
     console.log('Test 32 Pass ✅\n');
   }
 
+
+  // ─── Test 33: reconcileLogObservations prefers fresh sidecar observation over stale container observation ───
+  console.log('Test 33: reconcileLogObservations prefers fresh sidecar over stale container');
+  {
+    const { reconcileLogObservations } = await import('../lib/ops-mineru-log-parser.mjs');
+    const sidecarObs = {
+      observer: 'host-mineru-log-observer',
+      contextTime: '2026-05-17T10:05:00.000Z',
+      activityLevel: 'active-progress',
+      phase: 'Predict Layout',
+      current: 12,
+      total: 24,
+      observationStale: false
+    };
+    const containerObsStale = {
+      contextTime: '2026-05-17T10:00:00.000Z',
+      activityLevel: 'log-observation-stale',
+      observationStale: true,
+      logFreshnessDiagnostic: 'Container mount log is stale'
+    };
+
+    // Test: Sidecar is fresher and container is stale
+    const reconciled = reconcileLogObservations(containerObsStale, sidecarObs);
+    assert(reconciled.observer === 'host-mineru-log-observer', 'Reconciled should keep sidecar observation');
+    assert(reconciled.container_mount_stale === true, 'Reconciled should be marked with container_mount_stale=true');
+    assert(reconciled.current === 12, 'Reconciled should keep sidecar progress');
+
+    // Test: Container is actually fresher (unlikely but possible if sidecar dies and container recovers)
+    const containerObsFresh = {
+      contextTime: '2026-05-17T10:10:00.000Z',
+      activityLevel: 'active-progress',
+      observationStale: false,
+      phase: 'Predict Layout',
+      current: 20,
+      total: 24
+    };
+    const reconciled2 = reconcileLogObservations(containerObsFresh, sidecarObs);
+    assert(reconciled2.observer !== 'host-mineru-log-observer', 'Reconciled should use container observation if it is newer and not stale');
+    assert(reconciled2.current === 20, 'Reconciled should use newer container progress');
+
+    console.log('Test 33 Pass ✅\n');
+  }
+
+  // ─── Test 34: progressSnapshot semantics handles sidecar_missing and container_mount_stale ───
+  console.log('Test 34: progressSnapshot semantics handles sidecar_missing and container_mount_stale');
+  {
+    const { buildProgressSnapshot } = await import('../lib/progress-snapshot.mjs');
+
+    const taskStaleMount = {
+      state: 'running',
+      stage: 'mineru-processing',
+      metadata: {
+        mineruObservedProgress: {
+          observer: 'host-mineru-log-observer',
+          container_mount_stale: true,
+          activityLevel: 'active-progress'
+        }
+      }
+    };
+    const snapshot1 = buildProgressSnapshot(taskStaleMount, { directMineruStatus: 'processing' });
+    assert(snapshot1.logState === 'container_mount_stale', `logState should be container_mount_stale, got ${snapshot1.logState}`);
+    assert(snapshot1.operatorMessage.includes('容器挂载观测滞后'), 'operatorMessage should mention container mount stale');
+
+    const taskMissingSidecar = {
+      state: 'running',
+      stage: 'mineru-processing',
+      metadata: {
+        mineruObservedProgress: {
+          sidecar_missing: true,
+          activityLevel: 'active-progress' // Even if it claims progress, sidecar is missing
+        }
+      }
+    };
+    const snapshot2 = buildProgressSnapshot(taskMissingSidecar, { directMineruStatus: 'processing' });
+    assert(snapshot2.logState === 'sidecar_missing', `logState should be sidecar_missing, got ${snapshot2.logState}`);
+    assert(snapshot2.operatorMessage.includes('主宿主机观测通道异常'), 'operatorMessage should mention sidecar missing');
+
+    console.log('Test 34 Pass ✅\n');
+  }
+
+  // ─── Test 35: ParseTaskWorker.transition does not spread stale metadata and prevents DB-write race ───
+  console.log('Test 35: ParseTaskWorker.transition does not spread stale metadata and prevents DB-write race');
+  {
+    const { ParseTaskWorker } = await import('../services/queue/task-worker.mjs');
+    
+    let patchedTaskPayload = null;
+    let updateTaskCalled = 0;
+    
+    const mockTaskClient = {
+      updateTask: async (id, update) => {
+        patchedTaskPayload = update;
+        updateTaskCalled++;
+        return true;
+      }
+    };
+    
+    const worker = new ParseTaskWorker({
+      taskClient: mockTaskClient
+    });
+    
+    // Simulate a task in memory that has stale container metadata (20%)
+    const staleTask = {
+      id: 'task-123',
+      state: 'running',
+      stage: 'mineru-processing',
+      metadata: {
+        mineruObservedProgress: {
+          observer: 'container-mounted-log',
+          current: 20
+        }
+      }
+    };
+    
+    // Simulate transition event that triggers progressEventKey generation
+    const updateInfo = {
+      metadata: {
+        mineruObservedProgress: {
+          logSource: { logSourceSelectedReason: 'exists' },
+          activityLevel: 'active-progress',
+          phase: 'Predict Layout',
+          current: 20
+        }
+      }
+    };
+    
+    // This will call transition which calls updateTaskWithRetry twice:
+    // 1. the main update (which we don't care about, it's just passing `updateInfo`)
+    // 2. the progressEventKey update (which used to spread staleTask.metadata)
+    await worker.transition(staleTask, updateInfo, 'progress-update');
+    
+    assert(updateTaskCalled === 2, `updateTask should be called 2 times, got ${updateTaskCalled}`);
+    
+    // The second call is the progressEventKey patch.
+    // It should ONLY contain progressEventKey inside metadata, NOT mineruObservedProgress
+    const finalPatchMetadata = patchedTaskPayload.metadata;
+    
+    assert(finalPatchMetadata !== undefined, 'Final patch should include metadata');
+    assert(finalPatchMetadata.progressEventKey !== undefined, 'Final patch should include progressEventKey');
+    
+    // CRITICAL FIX: Ensure it does not contain mineruObservedProgress (so it doesn't overwrite DB)
+    if ('mineruObservedProgress' in finalPatchMetadata) {
+      throw new Error(`Regression: transition() progressEventKey patch spread stale metadata (mineruObservedProgress: ${JSON.stringify(finalPatchMetadata.mineruObservedProgress)})`);
+    }
+
+    console.log('Test 35 Pass ✅\n');
+  }
 
   // ── 环境恢复 ──
   if (origLogPath !== undefined) process.env.MINERU_LOG_PATH = origLogPath;
