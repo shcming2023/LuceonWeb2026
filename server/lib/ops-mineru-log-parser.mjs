@@ -846,7 +846,7 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
         }
         continue;
       }
-      
+
       logSource.logSourceExists = true;
       const stats = fs.statSync(filePath);
       logSource.logSourceSize = stats.size;
@@ -864,7 +864,7 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
         }
         continue;
       }
-      
+
       logSource.logSourceReadable = true;
       const lines = content.split(/[\r\n]+/);
 
@@ -891,7 +891,7 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
       if (previousObservation) {
         if (minObservedMs === 0 || (previousObservation.contextTime && new Date(previousObservation.contextTime).getTime() >= minObservedMs)) {
           lastContextTime = previousObservation.contextTime || null;
-          
+
           if (previousObservation.window) {
             latestWindow = {
               windowCurrent: previousObservation.window.index,
@@ -994,7 +994,7 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
 
       const signalSummary = { progressCount, stageChangeCount, businessLogCount, apiNoiseCount, errorCount, errorSignalCount, lastBusinessSignalTime };
       let activityLevel = determineActivityLevel(signalSummary, previousObservation, latestProgress);
-      
+
       if (activityLevel === 'no-business-signal') {
         activityLevel = 'log-observation-no-business-signal';
       }
@@ -1145,7 +1145,7 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
 
   if (candidates.length > 0) {
     let minObservedMs = minObservedAt ? new Date(minObservedAt).getTime() : 0;
-    
+
     for (const c of candidates) {
       const res = c.result;
       let businessMs = 0;
@@ -1159,12 +1159,12 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
       // 注意：mtime 仅用于日志源可达性/新鲜度，不用于业务信号归因
       c.hasValidBusiness = res.signals.hasBusinessSignal;
     }
-    
+
     candidates.sort((a, b) => {
       // 1. 优先选择有合法业务信号的
       if (a.hasValidBusiness && !b.hasValidBusiness) return -1;
       if (!a.hasValidBusiness && b.hasValidBusiness) return 1;
-      
+
       // 2. 如果都有或都没有，比较业务信号时间 / mtime
       if (a.hasValidBusiness) {
         if (a.businessMs > 0 && b.businessMs > 0) {
@@ -1194,7 +1194,7 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
 
     let activityLevel = 'log-observation-unavailable';
     let observationStaleReason = 'no valid business signal found';
-    
+
     if (!finalLogSource.logSourceExists) {
       activityLevel = 'log-observation-missing';
       observationStaleReason = 'log file does not exist';
@@ -1278,4 +1278,39 @@ export async function parseLatestMineruProgress(minObservedAt, previousObservati
   }
 
   return attachProgressSemantics(bestResult);
+}
+
+/**
+ * 调和本地 Worker 轮询与 Sidecar 推送的日志观测结果。
+ * 防止容器挂载的滞后日志覆盖由宿主机 Sidecar 提交的更新日志快照。
+ *
+ * @param {object|null} currentObs - 当前解析出的观测结果（通常来自 container-mounted-log）
+ * @param {object|null} previousObs - 任务元数据中已存在的上次观测结果
+ * @returns {object|null} - 调和后的最终观测结果
+ */
+export function reconcileLogObservations(currentObs, previousObs) {
+  if (!previousObs) return currentObs;
+  if (!currentObs) return previousObs;
+
+  const prevIsSidecar = previousObs.observer === 'host-mineru-log-observer';
+
+  if (prevIsSidecar) {
+    // 比较时间戳
+    const prevTimeMs = new Date(previousObs.contextTime || previousObs.observedAt || previousObs.logFileUpdatedAt || 0).getTime();
+    const currTimeMs = new Date(currentObs.contextTime || currentObs.observedAt || currentObs.logFileUpdatedAt || 0).getTime();
+
+    // 检查当前是不是滞后或无效的
+    const currStale = currentObs.observationStale === true || currentObs.activityLevel?.includes('stale') || currentObs.activityLevel === 'log-observation-unreadable' || currentObs.activityLevel === 'log-observation-empty' || currentObs.activityLevel === 'log-observation-missing';
+
+    // 如果 previous 更准确更新，或者当前已经 stale 且 previous 看起来更好，则保留 previousObs
+    if (prevTimeMs >= currTimeMs || currStale) {
+      return {
+        ...previousObs,
+        container_mount_stale: currStale,
+        containerMountDiagnostic: currStale ? (currentObs.logFreshnessDiagnostic || 'Container mount log is stale or unreadable') : null
+      };
+    }
+  }
+
+  return currentObs;
 }

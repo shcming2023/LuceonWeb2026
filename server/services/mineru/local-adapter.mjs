@@ -138,7 +138,7 @@ async function updateCompletionObservation({ task, mineruTaskId, executionProfil
 }
 
 
-export async function processWithLocalMinerU({ task, material, fileStream, fileName, mimeType, timeoutMs, minioContext, updateProgress }) {
+export async function processWithLocalMinerU({ task, material, fileStream, fileName, mimeType, timeoutMs, minioContext, updateProgress, getLatestTask }) {
   const options = task.optionsSnapshot || {};
   let localEndpoint = options.localEndpoint;
   if (!localEndpoint) throw new Error('缺少 localEndpoint');
@@ -174,7 +174,7 @@ export async function processWithLocalMinerU({ task, material, fileStream, fileN
   const fileSize = material?.fileSize || 0;
   const submitTimeoutMs = Math.max(timeoutMs, Math.max(120_000, Math.ceil(fileSize / 1024) * 50));
   const effectiveBackend = (fileSize > 0 && fileSize < 2 * 1024 * 1024 && /hybrid/i.test(backend)) ? 'pipeline' : backend;
-  
+
   let finalParseMethod = parseMethod || 'auto';
   if (enableOcr && !parseMethod) finalParseMethod = 'ocr';
 
@@ -302,16 +302,30 @@ export async function processWithLocalMinerU({ task, material, fileStream, fileN
           mineruStatus = 'queued';
         }
 
+        // Fetch the latest task from the database to ensure we don't overwrite sidecar observations
+        let currentMetadata = task.metadata || {};
+        if (getLatestTask) {
+          try {
+            const latest = await getLatestTask();
+            if (latest && latest.metadata) {
+              currentMetadata = latest.metadata;
+            }
+          } catch (e) {
+            // ignore
+          }
+        }
+
         // Sidecar log parsing
         let observation = null;
         if (mineruStatus === 'processing') {
           try {
-            const { parseLatestMineruProgress } = await import('../../lib/ops-mineru-log-parser.mjs');
-            observation = await parseLatestMineruProgress(
-               startedAt || task.metadata?.mineruStartedAt || new Date().toISOString(),
-               task.metadata?.mineruObservedProgress,
+            const { parseLatestMineruProgress, reconcileLogObservations } = await import('../../lib/ops-mineru-log-parser.mjs');
+            const containerObservation = await parseLatestMineruProgress(
+               startedAt || currentMetadata.mineruStartedAt || new Date().toISOString(),
+               currentMetadata.mineruObservedProgress,
                executionProfile
             );
+            observation = reconcileLogObservations(containerObservation, currentMetadata.mineruObservedProgress);
           } catch (e) {
             // ignore
           }
@@ -327,7 +341,7 @@ export async function processWithLocalMinerU({ task, material, fileStream, fileN
           progress,
           message: msg,
           metadata: {
-            ...(task.metadata || {}),
+            ...currentMetadata,
             mineruTaskId,
             mineruStatus,
             mineruQueuedAhead: queuedAhead,
@@ -482,7 +496,7 @@ export async function processWithLocalMinerU({ task, material, fileStream, fileN
 
         const objectName = `${parsedPrefix}${safeRelativePath}`;
         const contentType = inferContentTypeByExt(safeRelativePath);
-        
+
         const fileObj = zip.file(name);
         let size = null;
         if (fileObj._data && typeof fileObj._data.uncompressedSize === 'number') {
@@ -588,9 +602,10 @@ export async function processWithLocalMinerU({ task, material, fileStream, fileN
  * @param {number} params.timeoutMs 轮询与等待超时时间（毫秒）
  * @param {Object} params.minioContext MinIO 上下文客户端，用于产物存储
  * @param {Function} params.updateProgress 进度与状态回调函数
+ * @param {Function} params.getLatestTask 用于获取最新任务状态的回调函数
  * @returns {Promise<Object>} 包含 markdown 文本和解析产物元数据的对象
  */
-export async function resumeWithLocalMinerU({ task, material, mineruTaskId, timeoutMs, minioContext, updateProgress }) {
+export async function resumeWithLocalMinerU({ task, material, mineruTaskId, timeoutMs, minioContext, updateProgress, getLatestTask }) {
   const options = task.optionsSnapshot || {};
   let localEndpoint = options.localEndpoint;
   if (!localEndpoint) throw new Error('缺少 localEndpoint');
@@ -622,7 +637,7 @@ export async function resumeWithLocalMinerU({ task, material, mineruTaskId, time
     let mineruStatus = 'processing';
 
     const isDone = ['done', 'success', 'completed', 'succeeded', 'finished', 'complete'].includes(status);
-    if (isDone) return; 
+    if (isDone) return;
 
     if (status === 'pending' || status === 'queued' || (!startedAt && status !== 'processing') || queuedAhead > 0) {
       stage = 'mineru-queued';
@@ -631,16 +646,30 @@ export async function resumeWithLocalMinerU({ task, material, mineruTaskId, time
       mineruStatus = 'queued';
     }
 
+    // Fetch the latest task from the database to ensure we don't overwrite sidecar observations
+    let currentMetadata = task.metadata || {};
+    if (getLatestTask) {
+      try {
+        const latest = await getLatestTask();
+        if (latest && latest.metadata) {
+          currentMetadata = latest.metadata;
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
     // Sidecar log parsing
     let observation = null;
     if (mineruStatus === 'processing') {
       try {
-        const { parseLatestMineruProgress } = await import('../../lib/ops-mineru-log-parser.mjs');
-        observation = await parseLatestMineruProgress(
-           startedAt || task.metadata?.mineruStartedAt || new Date().toISOString(),
-           task.metadata?.mineruObservedProgress,
-           task.metadata?.mineruExecutionProfile
+        const { parseLatestMineruProgress, reconcileLogObservations } = await import('../../lib/ops-mineru-log-parser.mjs');
+        const containerObservation = await parseLatestMineruProgress(
+           startedAt || currentMetadata.mineruStartedAt || new Date().toISOString(),
+           currentMetadata.mineruObservedProgress,
+           currentMetadata.mineruExecutionProfile
         );
+        observation = reconcileLogObservations(containerObservation, currentMetadata.mineruObservedProgress);
       } catch (e) {
         // ignore
       }
@@ -783,7 +812,7 @@ export async function resumeWithLocalMinerU({ task, material, mineruTaskId, time
 
       const objectName = `${parsedPrefix}${safeRelativePath}`;
       const contentType = inferContentTypeByExt(safeRelativePath);
-      
+
       const fileObj = zip.file(name);
       let size = null;
       if (fileObj._data && typeof fileObj._data.uncompressedSize === 'number') {
@@ -895,13 +924,13 @@ async function waitMinerUTask(localEndpoint, taskId, timeoutMs, onProgress) {
       const response = await fetch(`${localEndpoint}/tasks/${encodeURIComponent(taskId)}`, { signal: AbortSignal.timeout(10000) });
       const payload = await response.json();
       if (!response.ok) throw new Error(`查询状态失败: HTTP ${response.status}`);
-      
+
       lastPayload = payload;
       const status = String(payload?.status || payload?.state || payload?.task_status || payload?.data?.status || payload?.data?.state).toLowerCase();
       lastKnownStatus = status;
 
       if (onProgress) await onProgress(payload);
-      
+
       if (['done', 'success', 'completed', 'succeeded', 'finished', 'complete'].includes(status)) return payload;
       if (['failed', 'error', 'failure', 'canceled', 'cancelled'].includes(status)) throw new Error(payload?.error || payload?.message || '任务执行失败');
     } catch (err) {
@@ -914,7 +943,7 @@ async function waitMinerUTask(localEndpoint, taskId, timeoutMs, onProgress) {
         throw err;
       }
     }
-    
+
     await new Promise(r => setTimeout(r, 1500));
   }
   throw new MineruTimeoutError(taskId, lastKnownStatus, timeoutMs);

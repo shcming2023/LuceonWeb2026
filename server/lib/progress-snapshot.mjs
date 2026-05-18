@@ -27,9 +27,22 @@ function hasArtifacts(task = {}) {
 function readLogState(observation) {
   const activityLevel = observation?.activityLevel || observation?.progressSemantics?.activityLevel || null;
   if (!observation) return 'missing';
+
+  if (observation.sidecar_missing) return 'sidecar_missing';
+  if (observation.container_mount_stale) return 'container_mount_stale';
+
   if (activityLevel === 'fast-complete-no-business-signal') return 'terminal-diagnostic';
-  if (activityLevel === 'log-observation-stale' || observation?.observationStale === true || observation?.progressSemantics?.freshness === 'stale') return 'stale';
-  if (['active-progress', 'active-stage-change', 'active-business-log'].includes(activityLevel || '')) return 'fresh';
+
+  const isStale = activityLevel === 'log-observation-stale' || observation?.observationStale === true || observation?.progressSemantics?.freshness === 'stale';
+  const isFresh = ['active-progress', 'active-stage-change', 'active-business-log'].includes(activityLevel || '');
+
+  if (observation.observer === 'host-mineru-log-observer') {
+    if (isStale) return 'sidecar_stale';
+    if (isFresh) return 'sidecar_fresh';
+  }
+
+  if (isStale) return 'stale';
+  if (isFresh) return 'fresh';
   if (activityLevel === 'api-alive-only') return 'api-alive-only';
   if (activityLevel?.startsWith('log-observation-')) return 'missing';
   return activityLevel || 'unknown';
@@ -61,8 +74,12 @@ function defaultOperatorMessage({ phase, lagKind, directMineruStatus, logState, 
     ? 'MinerU 解析已完成，AI 识别失败，需人工判断后续处理'
     : 'MinerU 解析已完成，已进入 AI/审核阶段';
   if (directMineruStatus && DIRECT_FAILED_STATUSES.has(directMineruStatus)) return 'MinerU API 返回终态失败';
+
+  if (logState === 'sidecar_missing' && dbState === 'running') return 'MinerU 正在处理，但主宿主机观测通道异常 (sidecar missing)';
+  if (logState === 'container_mount_stale' && dbState === 'running') return 'MinerU 正在处理，容器挂载观测滞后 (container mount stale)';
+
   if (directMineruStatus && DIRECT_PROCESSING_STATUSES.has(directMineruStatus)) return 'MinerU API 仍在处理';
-  if (logState === 'stale' && dbState === 'running') return '任务仍在处理中，但日志观测滞后';
+  if ((logState === 'stale' || logState === 'sidecar_stale') && dbState === 'running') return '任务仍在处理中，但日志观测滞后';
   if (phase === 'result-ingestion') return '解析产物同步中';
   if (phase === 'review') return 'AI 识别完成，待人工复核';
   if (phase === 'ai') return 'AI 元数据识别阶段';
@@ -131,11 +148,11 @@ export function buildProgressSnapshot(task = {}, options = {}) {
     freshness = 'terminal';
     confidence = 'high';
   } else if (directProcessing) {
-    source = logState === 'fresh' ? 'mixed' : 'direct-mineru';
+    source = (logState === 'fresh' || logState === 'sidecar_fresh') ? 'mixed' : 'direct-mineru';
     sourcePriority = 'direct-mineru';
-    freshness = logState === 'fresh' ? 'fresh' : 'unknown';
-    confidence = logState === 'fresh' ? 'high' : 'medium';
-  } else if (logState === 'fresh') {
+    freshness = (logState === 'fresh' || logState === 'sidecar_fresh') ? 'fresh' : 'unknown';
+    confidence = (logState === 'fresh' || logState === 'sidecar_fresh') ? 'high' : 'medium';
+  } else if (logState === 'fresh' || logState === 'sidecar_fresh') {
     source = 'log';
     sourcePriority = 'log';
     freshness = 'fresh';
@@ -145,7 +162,7 @@ export function buildProgressSnapshot(task = {}, options = {}) {
     sourcePriority = aiState === 'failed' ? 'ai' : 'db';
     freshness = 'terminal';
     confidence = 'high';
-  } else if (logState === 'stale') {
+  } else if (logState === 'stale' || logState === 'sidecar_stale' || logState === 'container_mount_stale') {
     source = 'mixed';
     sourcePriority = 'db';
     freshness = 'stale';

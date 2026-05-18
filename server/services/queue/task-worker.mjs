@@ -1291,6 +1291,14 @@ export class ParseTaskWorker {
             mimeType: materialInfo.mimeType || 'application/pdf',
             timeoutMs: Number(task.optionsSnapshot?.localTimeout || 3600) * 1000,
             minioContext: this.minioContext,
+            getLatestTask: async () => {
+              try {
+                const allTasks = await this.taskClient.getAllTasks();
+                return allTasks.find(t => t.id === task.id) || null;
+              } catch (e) {
+                return null;
+              }
+            },
             updateProgress: async (updateInfo) => {
               const eventName = updateInfo.stage === 'store' ? 'stage-changed' : 'progress-update';
               await this.transition(task, updateInfo, eventName);
@@ -1864,6 +1872,14 @@ export class ParseTaskWorker {
         mineruTaskId,
         timeoutMs: Number(task.optionsSnapshot?.localTimeout || 3600) * 1000,
         minioContext: this.minioContext,
+        getLatestTask: async () => {
+          try {
+            const allTasks = await this.taskClient.getAllTasks();
+            return allTasks.find(t => t.id === task.id) || null;
+          } catch (e) {
+            return null;
+          }
+        },
         updateProgress
       });
 
@@ -1892,6 +1908,14 @@ export class ParseTaskWorker {
               mineruTaskId: completedMineruTaskId,
               timeoutMs: Number(task.optionsSnapshot?.localTimeout || 3600) * 1000,
               minioContext: this.minioContext,
+              getLatestTask: async () => {
+                try {
+                  const allTasks = await this.taskClient.getAllTasks();
+                  return allTasks.find(t => t.id === task.id) || null;
+                } catch (e) {
+                  return null;
+                }
+              },
               updateProgress
             });
             await this.completeResumedMineruResult(task, materialInfo, completedMineruTaskId, mineruResult);
