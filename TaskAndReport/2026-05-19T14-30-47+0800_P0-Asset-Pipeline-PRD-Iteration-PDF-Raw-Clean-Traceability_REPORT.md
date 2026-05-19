@@ -4,7 +4,7 @@
 - Issued at: `2026-05-19T14:30:47+0800`
 - Executed by: `Lucode`
 - Date: `2026-05-19`
-- Branch: `lucode/task-220-asset-pipeline-prd-iteration`
+- Branch: `lucode/task-220-asset-pipeline-prd-iteration` (HEAD `caeda22c26649afeb532ea81ead616937fe0b249`)
 
 ## 1. Execution Summary
 
@@ -24,7 +24,9 @@ Based on the Task 220 directive, I have updated the PRD and architecture contrac
 - `docs/contracts/CleanService-Protocol-v1.md`: Clarified that `toc-rebuild` is a preparation step for the subsequent cleaning stage.
 - `docs/contracts/CleanService-Mineru2Table-Adaptation-Plan.md`: Updated role definitions.
 - `docs/codex/PROJECT_STATE.md`: Noted the new PRD v0.4 architecture contract in non-blocking residuals.
-- `TaskAndReport/TASK_TRACKING_LIST.md`: (Pending update via ledger commit)
+- `.gitignore`: Added ignore rules for `.agents/` and `AGENTS.md`.
+- `AGENTS.md` and `.agents/**`: Removed from Git tracking (kept as untracked local private files).
+- `TaskAndReport/TASK_TRACKING_LIST.md`: Updated Task 220 ledger row and resolved merge conflict with `origin/main`.
 - `TaskAndReport/2026-05-19T14-30-47+0800_P0-Asset-Pipeline-PRD-Iteration-PDF-Raw-Clean-Traceability_REPORT.md` (this file)
 
 ## 3. Mandatory Safety Assertions
@@ -34,9 +36,10 @@ Based on the Task 220 directive, I have updated the PRD and architecture contrac
 
 ## 4. Validation
 
-- `git diff HEAD~1 --check` exited with code `0`
+- `git diff origin/main --check` exited with code `0`.
+- Path audit (`git diff origin/main --name-status`) verified only PRD documentation, reports, `.gitignore`, and the de-tracking of local agents files were included in the commit.
 - Markdown syntax in updated files is valid.
-- No unexpected changes were introduced.
+- Branch has been successfully merged/rebased with the latest `origin/main`.
 
 ## 5. Ledger Update
 
