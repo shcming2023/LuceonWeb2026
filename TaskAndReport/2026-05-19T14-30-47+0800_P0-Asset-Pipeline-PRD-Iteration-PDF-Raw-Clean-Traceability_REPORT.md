@@ -34,7 +34,7 @@ Based on the Task 220 directive, I have updated the PRD and architecture contrac
 
 ## 4. Validation
 
-- `git diff --check` passed.
+- `git diff HEAD~1 --check` exited with code `0`
 - Markdown syntax in updated files is valid.
 - No unexpected changes were introduced.
 
