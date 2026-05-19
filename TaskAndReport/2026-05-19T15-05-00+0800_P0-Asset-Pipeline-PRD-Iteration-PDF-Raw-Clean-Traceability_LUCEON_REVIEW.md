@@ -32,7 +32,9 @@ The added file is an always-on rule file:
 - defines check-task SOP;
 - instructs broad `git add .` behavior.
 
-This violates the isolation boundary and risks making local role/runtime rules visible to the other side through GitHub. It must be removed from the branch. Do not replace it with another committed role/rule/config file.
+This violates the isolation boundary and risks making local role/runtime rules visible to the other side through GitHub. It must be removed from Git tracking / the submitted branch only, without deleting Lucode's local private `.agents` files. Use an index-only removal pattern such as `git rm --cached .agents/rules/luceon2026rules.md` or an equivalent branch cleanup, then keep the local file private. Do not replace it with another committed role/rule/config file.
+
+Related boundary correction: `AGENTS.md` and `.agents/**` are local role/runtime instruction surfaces. Luceon should not author or synchronize `AGENTS.md`, and Lucode should not synchronize `.agents/**`. This review finding is about Git visibility, not local deletion.
 
 ### F2 - Report omits exact validation exit codes required by the task brief
 
@@ -53,7 +55,7 @@ The product/architecture text is directionally acceptable after the blocking iss
 
 Lucode should resubmit the same task branch with only these corrections:
 
-1. Remove `.agents/rules/luceon2026rules.md` from the branch.
+1. Remove `.agents/rules/luceon2026rules.md` from Git tracking / the branch only; do not delete Lucode's local `.agents` directory or private role files.
 2. Ensure the changed-file set is limited to the Task 220 allowed write boundary.
 3. Update the report with exact validation commands and exit codes.
 4. Update the ledger row with the corrected branch/HEAD.
@@ -78,4 +80,3 @@ Observed:
 - Remote branch exists at `bf82b6ee57cbf19859461a442a236a9dc412c532`.
 - `git diff --check origin/main..origin/lucode/task-220-asset-pipeline-prd-iteration` produced no whitespace errors.
 - Changed-file set included unauthorized `.agents/rules/luceon2026rules.md`.
-
