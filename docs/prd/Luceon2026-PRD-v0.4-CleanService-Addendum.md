@@ -28,14 +28,16 @@ The expected product value is:
 
 CleanService is a future pipeline extension after the existing MinerU parse stage. It must not invalidate the current PRD v0.4 mainline or erase current pressure-test, AI-residual, runtime-recovery, or release-boundary evidence.
 
-The intended future product sequence is:
+The intended future product sequence follows the Director-confirmed `PDF -> Raw Material -> Clean Material` asset chain:
 
-1. Operator uploads a PDF or supported document.
-2. Luceon performs the current raw intake and MinerU parse flow.
-3. Luceon submits eligible parsed artifacts to a `toc-rebuild` CleanService backed by Mineru2Table.
-4. Mineru2Table produces clean TOC/table/anchor outputs through a protocol agreed by Architect and Director.
-5. Luceon stores clean outputs as a separate asset stage and exposes them for operator review.
-6. Downstream AI metadata or future chapter-level workflows may consume the clean outputs only after the clean stage is accepted or explicitly marked as partial.
+1. Operator uploads a PDF or supported document (Source Asset).
+2. Luceon performs the current raw intake and MinerU parse flow. The outputs (parsed artifacts and initial AI metadata) form the **Raw Material**.
+3. **Raw Material is a durable asset layer and prerequisite**, not a temporary buffer. It remains inspectable and is never overwritten.
+4. Luceon submits eligible Raw Material artifacts to a `toc-rebuild` CleanService backed by Mineru2Table. Mineru2Table acts as the **first Clean Material preparation service**, reconstructing chapter/TOC/table/logical structure from the Raw Material evidence.
+5. Mineru2Table produces structured outputs through a protocol agreed by Architect and Director.
+6. A later stage, **RawMaterial2CleanMaterial**, consumes both the Raw Material and the Mineru2Table structural outputs to produce the final, cleaned, normalized **Clean Material**. This stage is distinct and must not be collapsed into Mineru2Table.
+7. Luceon stores Clean Material as a separate asset stage and exposes it for operator review. Every derived asset must preserve source references, object refs, hashes, task IDs, service versions, and options (strict Provenance).
+8. Downstream AI metadata or future chapter-level workflows may consume the clean outputs only after the clean stage is accepted or explicitly marked as partial.
 
 This addendum does not decide whether `toc-rebuild` must run before all AI metadata or only before future chapter-level AI extraction. That remains an explicit product/architecture decision before implementation.
 
@@ -55,7 +57,9 @@ The UI must avoid implying that clean output is authoritative when unresolved an
 
 In scope for a future CleanService/Mineru2Table integration:
 
-- Treat Mineru2Table as a future `toc-rebuild` CleanService after MinerU parsing.
+- Treat Mineru2Table as the first clean-preparation service (reconstructing logical structure) after MinerU parsing.
+- Treat RawMaterial2CleanMaterial as a distinct later cleaning stage.
+- Treat Raw Material as a durable, non-overwritable prerequisite asset layer.
 - Use durable MinIO object references as the product-level handoff model, not user-facing re-upload.
 - Preserve Luceon as the orchestrator for material, version, task, cost decision, review, audit, and acceptance semantics.
 - Store raw parse artifacts and clean outputs as separate lifecycle stages.

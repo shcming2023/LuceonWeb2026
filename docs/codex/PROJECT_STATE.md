@@ -53,7 +53,7 @@ These are known residuals but do not block the 6.9.1 milestone:
 
 - One AI-stage failure from the 24-PDF run is manually retry eligible, but retry/re-AI is not performed by this cleanup.
 - MinerU log-channel ownership/freshness diagnostics still have an observability gap: host logs can be fresh while the configured/container log channel appears stale.
-- CleanService / Mineru2Table work remains future direction only and is not part of the active milestone.
+- CleanService / Mineru2Table work remains future direction only and is not part of the active milestone. The PRD v0.4 architecture contract establishes the next direction as the `PDF -> Raw Material -> Clean Material` durable asset chain (Raw Material as prerequisite, Mineru2Table as prep, RawMaterial2CleanMaterial as final cleaning).
 - Broader release hardening, rollback rehearsal, security review, and multi-user boundaries remain future work.
 
 ## 5. Collaboration State

@@ -12,6 +12,11 @@ This document defines the future asset-pipeline direction for introducing CleanS
 It does not replace the current PRD v0.4 mainline:
 
 ```text
+PDF source asset -> Raw Material -> Clean Material
+```
+
+Specifically, the Phase 1 trace begins with:
+```text
 upload -> local MinerU -> MinIO -> Ollama qwen3.5:9b -> AI metadata -> operator review
 ```
 
@@ -39,8 +44,9 @@ Future new assets may use these layers after implementation is authorized and ac
 | Layer | Purpose | Example |
 | --- | --- | --- |
 | Source | Original uploaded PDF/document | original object and upload metadata |
-| RawMaterial | MinerU parse and current AI metadata outputs | `content_list_v2.json`, `full.md`, AI metadata |
-| CleanMaterial | CleanService outputs | `toc-rebuild` outputs such as `flooded_content.json` and `logic_tree.json` |
+| RawMaterial | **Durable layer** for MinerU parse and current AI metadata outputs | `content_list_v2.json`, `full.md`, AI metadata |
+| CleanMaterial (Prep) | Mineru2Table outputs (chapter/TOC/table logical structure) | `toc-rebuild` outputs such as `flooded_content.json` and `logic_tree.json` |
+| CleanMaterial (Final) | RawMaterial2CleanMaterial final normalized cleaning | Cleaned and normalized text/blocks ready for downstream |
 | Downstream | Future educational workflows | chapter-aware metadata, exercise extraction, knowledge graph inputs |
 
 Existing `eduassets` / `eduassets-parsed` data remains legacy unless a separate migration task is authorized. No pseudo-provenance should be invented for legacy data.

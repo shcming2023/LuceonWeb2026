@@ -9,7 +9,7 @@ Mirror requirement: this file must be kept byte-identical with the approved copy
 
 This protocol defines the target contract for future CleanService integrations with Luceon2026. It is not evidence that any service already implements the contract and does not authorize runtime, production, or deployment changes.
 
-The first intended implementation is Mineru2Table2026 as `service_name="toc-rebuild"`.
+The first intended implementation is Mineru2Table2026 as `service_name="toc-rebuild"`, serving as a preparation step. A subsequent cleaning stage, such as `RawMaterial2CleanMaterial`, will consume these structural outputs along with the original Raw Material to produce the final normalized Clean Material.
 
 ## 2. Design Principles
 

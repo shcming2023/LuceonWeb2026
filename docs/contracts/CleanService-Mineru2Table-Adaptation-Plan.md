@@ -13,7 +13,7 @@ It does not implement or verify Mineru2Table changes. It does not authorize Luce
 
 ## 2. Target Role
 
-Mineru2Table2026 becomes the first CleanService:
+Mineru2Table2026 becomes the first Clean Material preparation service:
 
 | Field | Target |
 | --- | --- |
@@ -24,7 +24,7 @@ Mineru2Table2026 becomes the first CleanService:
 | Output prefix | `toc-rebuild/{materialId}/{assetVersion}/` |
 | Protocol | `CleanService Protocol v1` |
 
-Luceon remains orchestrator and owns `materialId`, `parseTaskId`, `assetVersion`, job submission, review, audit, cost decisions, and task state.
+Luceon remains orchestrator and owns `materialId`, `parseTaskId`, `assetVersion`, job submission, review, audit, cost decisions, and task state. The outputs of this service, along with the original Raw Material, will be consumed by the subsequent `RawMaterial2CleanMaterial` stage to produce final Clean Material.
 
 ## 3. Current Known Gap
 
