@@ -58,9 +58,16 @@ function eligibleTask(overrides = {}) {
     state: 'review-pending',
     metadata: {
       mineruStatus: 'completed',
-      parsedFilesCount: 12,
-      artifactManifestObjectName: 'parsed/mat-clean-1/artifact-manifest.json',
-      parsedPrefix: 'parsed/mat-clean-1/',
+      rawMaterial: {
+        version: 'v1',
+        mineru: {
+          contentListV2: {
+            bucket: 'eduassets-raw',
+            object: 'mineru/mat-clean-1/v1/content_list_v2.json',
+            sha256: 'abc12345'
+          }
+        }
+      }
     },
     ...overrides,
   };
@@ -116,31 +123,34 @@ async function main() {
   });
   const jobRequest = buildCleanServiceJobRequest(eligibleTask(), enabledConfig);
   assert.equal(jobRequest.job_id, 'luceon-task-clean-1-toc-rebuild-v1');
-  assert.equal(jobRequest.inputs[0].role, 'mineru-artifact-manifest');
+  assert.equal(jobRequest.inputs[0].role, 'mineru-content');
+  assert.equal(jobRequest.inputs[0].source.object, 'mineru/mat-clean-1/v1/content_list_v2.json');
   assert.equal(jobRequest.options.max_cost_cny, 8);
   assert.throws(
     () => buildCleanServiceJobRequest(eligibleTask({ metadata: { mineruStatus: 'completed' } }), enabledConfig),
-    /cleanservice-input-object-ref-missing/,
+    /no-raw-material-evidence/,
   );
 
-  const markdownRequest = buildCleanServiceJobRequest(eligibleTask({
-    metadata: {
-      markdownObjectName: 'parsed/mat-clean-1/full.md',
-      parsedPrefix: 'parsed/mat-clean-1/',
-      parsedFilesCount: 12,
-    },
-  }), enabledConfig);
-  assert.equal(markdownRequest.inputs[0].role, 'mineru-markdown');
-  assert.equal(markdownRequest.inputs[0].source.object, 'parsed/mat-clean-1/full.md');
+  assert.throws(
+    () => buildCleanServiceJobRequest(eligibleTask({
+      metadata: {
+        markdownObjectName: 'parsed/mat-clean-1/full.md',
+        parsedPrefix: 'parsed/mat-clean-1/',
+        parsedFilesCount: 12,
+      },
+    }), enabledConfig),
+    /legacy-parsed-evidence-skipped/
+  );
 
-  const parsedPrefixRequest = buildCleanServiceJobRequest(eligibleTask({
-    metadata: {
-      parsedPrefix: 'parsed/mat-clean-1/',
-      parsedFilesCount: 12,
-    },
-  }), enabledConfig);
-  assert.equal(parsedPrefixRequest.inputs[0].role, 'mineru-parsed-prefix');
-  assert.equal(parsedPrefixRequest.inputs[0].source.object, 'parsed/mat-clean-1/');
+  assert.throws(
+    () => buildCleanServiceJobRequest(eligibleTask({
+      metadata: {
+        parsedPrefix: 'parsed/mat-clean-1/',
+        parsedFilesCount: 12,
+      },
+    }), enabledConfig),
+    /legacy-parsed-evidence-skipped/
+  );
 
   const persisted = [];
   const submittedRequests = [];
