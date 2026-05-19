@@ -221,7 +221,7 @@ Received via Webhook callback `POST /api/v1/cleanservice/callback`.
 }
 ```
 
-**Verification Requirement**: 
+**Verification Requirement**:
 The signature verification **must** use the raw body bytes and the secret reference `callback_secret_ref`. The system must reject malformed or missing signature headers with HTTP `401`/`403` before any internal DB mutation occurs. Once verified, this payload is mapped to internal task events.
 
 ## 5. Mandatory Data-Governance Red Lines
