@@ -5,18 +5,19 @@
 - Executed by: `Lucode`
 - Date: `2026-05-19`
 - Final Branch: `lucode/task-221-mineru2table-design`
-- Final HEAD: `6ad2a08ddb9c06ef5af9ee08d2ba91e73f6c2ffa` (Base for this report)
+- Design Baseline HEAD: `233a9a40f09a56c4293f773cdab443e0d86e9cd4`
+- Final HEAD: *(Matches the ultimate commit of this branch on remote)*
 
 ## 1. Execution Summary
 
-Based on the Task 221 return review feedback, I have completely revised the Pre-Implementation Design artifact for the Mineru2Table CleanService integration. The updated design rigorously addresses all Luceon blocking findings (F1-F6).
+Based on the Task 221 second return review, I have further refined the Pre-Implementation Design and aligned the control plane perfectly.
 
 Key corrections:
-- **F1 (Data Contract)**: Provided exact JSON-like bounded shapes for the job request, task/material metadata summaries, outputs, and event payloads. Clarified DB vs MinIO persistence.
-- **F2 (Red Lines)**: Added explicit, mandatory governance rules for ID-only extraction, asset hash locking, and pure layout boundaries, to be verified by Task D.
-- **F3 (Implementation Gates)**: Expanded Tasks A-F to include feature-flag posture, negative acceptance criteria, minimum test scope, and explicit non-goals for every task.
-- **F4 (Cost Semantics)**: Corrected the semantics to ensure hard limit (`¥8`) explicitly maps to non-retriable failure, entirely separated from the soft limit (`¥5`) `cost-decision` pause.
-- **F5 (Legacy ObjectRef)**: Reworded the legacy compatibility drop as a recommendation pending Luceon acceptance, clearly defining the safe `skipped-policy` fallback.
+- **F1 (Report HEAD)**: Explicitly labeled the baseline commit and designated the final remote HEAD as the ultimate authority, resolving the mismatch constraint.
+- **F2 (Ledger Update)**: Actually merged `origin/main`'s ledger state and updated Task 221 to `Ready for luceon Review / Next Actor=Luceon`. `TASK_TRACKING_LIST.md` is now correctly present in the branch diff.
+- **F3 (Webhook HMAC)**: Corrected the webhook event representation to require HTTP protocol headers (`X-CleanService-Signature`) and verification against the raw JSON body, removing the insecure `signature` field from the body itself.
+- **F4 (PostgreSQL Wording)**: Replaced references to PostgreSQL with the neutral "existing DB/API metadata abstraction (task/material metadata)", matching current repo evidence.
+- **F5 (Metadata Persistence)**: Expanded the required DB metadata boundaries (roles, buckets, identities, ObjectRef hashes) to ensure CleanService can resume and reconcile idempotently without storing large artifacts.
 
 ## 2. Implementation Sequence Proposed
 
@@ -30,9 +31,9 @@ The design strictly sequences mock-tested, feature-flagged work:
 
 ## 3. Files Changed
 
-- `TaskAndReport/2026-05-19T15-26-58+0800_P0-Mineru2Table-Integration-PreImplementation-Design_DESIGN.md` (Revised)
+- `TaskAndReport/2026-05-19T15-26-58+0800_P0-Mineru2Table-Integration-PreImplementation-Design_DESIGN.md` (Revised F3, F4, F5)
 - `TaskAndReport/2026-05-19T15-26-58+0800_P0-Mineru2Table-Integration-PreImplementation-Design_REPORT.md` (This Report)
-- `TaskAndReport/TASK_TRACKING_LIST.md` (Ledger Updated)
+- `TaskAndReport/TASK_TRACKING_LIST.md` (Ledger Updated F2)
 
 ## 4. Mandatory Safety Assertions
 
@@ -62,7 +63,7 @@ Exit code: `0`.
 The TASK_TRACKING_LIST row for Task 221 has been marked:
 - Status: `Ready for luceon Review`
 - Next Actor: `Luceon`
-- Next Action: Review revised design addressing F1-F6 and authorize future Task A implementation.
+- Next Action: Review revised design addressing F1-F5 of second review and authorize future Task A implementation.
 - Branch/HEAD: Updated to reflect `lucode/task-221-mineru2table-design`.
 
 ## 7. Open Questions for Luceon / Director
