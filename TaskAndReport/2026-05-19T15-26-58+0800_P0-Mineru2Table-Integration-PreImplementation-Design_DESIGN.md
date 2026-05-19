@@ -86,7 +86,7 @@ To safely approach integration, work must be split into strictly mock/safe tasks
 
 ## 4. Exact Data And State Contract
 
-**Note**: All large text artifacts (JSON trees, MD files) MUST remain in MinIO. Only ObjectRefs and structural summaries are persisted in the PostgreSQL database.
+**Note**: All large text artifacts (JSON trees, MD files) MUST remain in MinIO. Only ObjectRefs and structural summaries are persisted via the existing DB/API metadata abstraction (task/material metadata).
 
 ### 4.1 Job Request Record Shape
 Dispatched as JSON payload to `POST /api/v1/jobs`. Not stored entirely in DB; only `jobId` and state are synced.
@@ -129,10 +129,24 @@ In `task.metadata.cleanServiceJobs.toc-rebuild`:
 {
   "jobId": "luceon-pt_abc123-toc-rebuild-v1",
   "cleanState": "running",
+  "service": "toc-rebuild",
+  "protocol": "v1",
   "assetVersion": "v1",
+  "parseTaskId": "pt_abc123",
+  "materialId": "sha256:a1b2c3d4e5f60718",
+  "input": {
+    "role": "mineru-content",
+    "bucket": "eduassets-raw",
+    "object": "mineru/sha256:a1b2c3d4e5f60718/v1/content_list_v2.json"
+  },
+  "sink": {
+    "bucket": "eduassets-clean",
+    "prefix": "toc-rebuild/sha256:a1b2c3d4e5f60718/v1/"
+  },
   "submittedAt": "2026-05-19T10:00:00Z",
   "costCny": 0.0,
-  "error": null
+  "error": null,
+  "isRetriable": true
 }
 ```
 
@@ -140,11 +154,18 @@ In `task.metadata.cleanServiceJobs.toc-rebuild`:
 In `material.metadata.cleanMaterials.toc-rebuild`:
 ```json
 {
+  "jobId": "luceon-pt_abc123-toc-rebuild-v1",
   "assetVersion": "v1",
-  "provenanceHash": "sha256:1a2b3c...",
+  "service": "toc-rebuild",
+  "protocol": "v1",
   "status": "completed",
   "costCny": 4.5,
-  "completedAt": "2026-05-19T10:05:00Z"
+  "completedAt": "2026-05-19T10:05:00Z",
+  "provenanceHash": "sha256:1a2b3c...",
+  "outputs": {
+    "provenanceRef": "toc-rebuild/sha256:a1b2c3d4e5f60718/v1/provenance.json",
+    "floodedContentRef": "toc-rebuild/sha256:a1b2c3d4e5f60718/v1/flooded_content.json"
+  }
 }
 ```
 
@@ -177,7 +198,15 @@ Written to MinIO as `provenance.json` in the sink directory:
 ```
 
 ### 4.5 Clean-Stage Task-Event Payload (HMAC Secured)
-Received via Webhook callback:
+Received via Webhook callback `POST /api/v1/cleanservice/callback`.
+
+**HTTP Headers**:
+- `X-CleanService-Job-Id`: `luceon-pt_abc123-toc-rebuild-v1`
+- `X-CleanService-Delivery`: `uuid-v4`
+- `X-CleanService-Attempt`: `1`
+- `X-CleanService-Signature`: `hmac-sha256=hex_signature`
+
+**Raw JSON Terminal Job-State Body**:
 ```json
 {
   "job_id": "luceon-pt_abc123-toc-rebuild-v1",
@@ -188,10 +217,12 @@ Received via Webhook callback:
     "cost_cny": 4.5,
     "duration_ms": 300000
   },
-  "error": null,
-  "signature": "hmac-sha256=hex_signature"
+  "error": null
 }
 ```
+
+**Verification Requirement**: 
+The signature verification **must** use the raw body bytes and the secret reference `callback_secret_ref`. The system must reject malformed or missing signature headers with HTTP `401`/`403` before any internal DB mutation occurs. Once verified, this payload is mapped to internal task events.
 
 ## 5. Mandatory Data-Governance Red Lines
 
