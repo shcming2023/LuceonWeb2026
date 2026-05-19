@@ -3,7 +3,7 @@
 - Task ID: `TASK-20260519-160753-P0-CleanService-Raw-Material-Canonical-Adapter-And-AssetVersion-Allocator`
 - Executed by: `Lucode`
 - Date: `2026-05-19`
-- Final Branch: `lucode/task-222-mineru2table-adapter`
+- Final Branch: `lucode/TASK-20260519-160753-P0-CleanService-Raw-Material-Canonical-Adapter-And-AssetVersion-Allocator`
 - Final HEAD: *(Matches the ultimate commit of this branch on remote)*
 
 ## 1. Execution Summary
@@ -35,7 +35,7 @@ I have successfully implemented Task A: the Mock-Safe Raw Material Canonical Ada
 
 ## 3. Mandatory Safety Assertions
 
-- **No Source/Runtime/Data Mutation Outside Scope**: No modifications were made to `server/upload-server.mjs`, `server/lib/**`, `src/**`, or other forbidden boundaries. 
+- **No Source/Runtime/Data Mutation Outside Scope**: No modifications were made to `server/upload-server.mjs`, `server/lib/**`, `src/**`, or other forbidden boundaries.
 - **No External/Environment Impact**: No actual HTTP transport, MinIO objects, database rows, or external `Mineru2Table` repositories were mutated. The `.agents` directory and `AGENTS.md` were strictly untouched.
 - **No Execution/Dispatch**: No actual `CleanServiceWorker` interactions, E2E validations, or real Mineru2Table dispatch occurred.
 - **Task 219 Unaffected**: Task 219 remains explicitly separate and open.
@@ -80,4 +80,4 @@ The TASK_TRACKING_LIST row for Task 222 has been marked:
 - Status: `Ready for luceon Review`
 - Next Actor: `Luceon`
 - Next Action: Review Canonical Adapter and AssetVersion Allocator mock-safe implementation.
-- Branch/HEAD: Updated to reflect `lucode/task-222-mineru2table-adapter`.
+- Branch/HEAD: Updated to reflect `lucode/TASK-20260519-160753-P0-CleanService-Raw-Material-Canonical-Adapter-And-AssetVersion-Allocator`.
