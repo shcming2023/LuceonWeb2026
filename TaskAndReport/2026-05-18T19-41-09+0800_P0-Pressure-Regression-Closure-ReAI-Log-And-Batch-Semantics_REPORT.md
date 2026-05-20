@@ -2,7 +2,7 @@
 
 - **任务 ID**：`TASK-20260518-194109-P0-Pressure-Regression-Closure-ReAI-Log-And-Batch-Semantics`
 - **执行分支**：`lucode/task-219-pressure-regression-closure`
-- **最终提交 HEAD**：`lucode/task-219-pressure-regression-closure@f53baba59476733b8d41dbc28fc22f9597c14c24`
+- **最终提交 HEAD**：`lucode/task-219-pressure-regression-closure@cd943d59d5bb3bfbad334cb35944b1a8619dd67b`
 - **基础提交 (Base)**：`009b5d1 Accept Task 223 CleanService docs`
 - **报告时间**：2026-05-20
 - **执行人**：`lucode`
