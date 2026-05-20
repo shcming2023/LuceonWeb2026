@@ -57,4 +57,4 @@ We formally adopt the **Independent CleanService Service Model**:
 * **Surgical Iterability**: Mineru2Table and RawMaterial2CleanMaterial can be updated, redeployed, and patched independently without restarting Luceon.
 * **Flexible Scalability**: Heavy CleanService Docker containers can be scaled out to specialized GPU instances while Luceon remains on a lightweight host.
 * **Immutable Provenance**: By enforcing MinIO ObjectRefs and strict `provenance.json` handoffs, we guarantee a tamper-proof and fully auditable pipeline of derived learning assets.
-* **Mainline Safety**: Since CleanServices run strictly post-mainline, our Phase 1 production evidence remains completely safe, isolated, and operational.
+* **Mainline Safety**: Since CleanServices run strictly post-mainline, our Phase 1 production evidence remains structurally isolated and unaffected by this control-plane model.

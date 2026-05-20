@@ -6,7 +6,7 @@
 - **Reviewer / Owner**: Luceon (Architect & Director)
 - **Status**: Ready for luceon Review
 - **Branch**: `lucode/task-223-independent-cleanservice-service-model`
-- **Final Committed HEAD**: `0d75df5b5e7d5df2f7c00de0c4c478aef6a4be5a`
+- **Baseline HEAD**: `a0c65b21b44903ec6608423aab8ebd5f44926d45` (Report Authored Against Baseline HEAD; final remote HEAD to be confirmed by Luceon)
 
 ---
 
@@ -100,7 +100,7 @@ M	docs/prd/README.md
 
 ## 5. Remaining Luceon/User Decisions
 
-1. **Option A Implementation Schedule**: Authorize the development task on `/Users/concm/prod_workspace/Mineru2Table` to implement the CleanService Protocol v1.
+1. **Option A Implementation Schedule**: Authorize the development task on `/Users/concm/prod_workspace/Mineru2Tables` to implement the CleanService Protocol v1.
 2. **Cost Triage Threshold Tuning**: Confirm if the `¥5` (soft warning) and `¥8` (hard stop) cost ceilings require environment-specific overrides in multi-user settings.
 3. **Task 222 Verification**: Review and accept the pending evidence-only correction for Task 222 (Raw Material Canonical Adapter).
 

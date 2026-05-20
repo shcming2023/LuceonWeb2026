@@ -141,12 +141,12 @@ To orchestrate independent, Docker-deployed services safely, Luceon maintains a 
 | **containerIdentity** | `mineru2table-api` | `raw2clean-api` (Proposed) |
 | **endpointBinding** | `http://mineru2table-api:8000/api/v1/jobs` | `http://raw2clean-api:8000/api/v1/jobs` (Proposed) |
 | **protocolVersion** | `v1` | `v1` |
-| **admissionStatus** | `enabled` (Proposed Candidate) | `disabled` (Proposed Future) |
+| **admissionStatus** | `disabled (Proposed Candidate)` | `disabled` (Proposed Future) |
 | **inputBucketObjectContract** | `eduassets-raw:mineru/{materialId}/v{N}/content_list_v2.json` | `eduassets-raw:mineru/{materialId}/v{N}/content_list_v2.json`<br>`eduassets-clean:toc-rebuild/{materialId}/v{N}/logic_tree.json` |
 | **outputBucketPrefixContract** | `eduassets-clean:toc-rebuild/{materialId}/v{N}/` | `eduassets-clean:raw2clean/{materialId}/v{N}/` |
 | **costPolicy** | `soft_limit: ¥5`, `hard_limit: ¥8` | `soft_limit: ¥5`, `hard_limit: ¥8` |
 | **featureFlags** | `["enable_table_extraction", "strict_anchors"]` | `["latex_normalization", "tikz_code_standardize"]` |
-| **integrationState** | `Sandbox_Active` (Candidate) | `Proposed` |
+| **integrationState** | `Proposed (Not Integrated)` | `Proposed` |
 | **owner** | Lucode (Development) / Luceon (Audit) | Lucode (Development) / Luceon (Audit) |
 | **reviewBoundary** | Expose TOC tree diff, unresolved anchor count, and layout cockpit. | Expose markdown diff, TikZ code syntax warnings, block comparison. |
 
