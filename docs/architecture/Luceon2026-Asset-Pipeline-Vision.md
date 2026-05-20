@@ -1,6 +1,6 @@
 # Luceon2026 Asset Pipeline Vision
 
-Status: Proposed / Candidate architecture direction, aligned with independent CleanService service model (TASK-223)
+Status: Accepted docs-level architecture direction, aligned with independent CleanService service model (TASK-223); no runtime implementation or production activation
 Last updated: 2026-05-20
 Historical owner: Architect; role retired after 6.9.1. Current Lucode updates active.
 Related PRD: `docs/prd/Luceon2026-PRD-v0.4.md`, `docs/prd/Luceon2026-PRD-v0.4-Independent-CleanService-Services-Addendum.md`

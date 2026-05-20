@@ -1,10 +1,10 @@
 # Architectural Decision Record (ADR): Independent CleanService Service Model
 
-- **Status**: Proposed (Candidate / Pending Review)
+- **Status**: Accepted docs-level decision; no runtime implementation or production activation
 - **Task ID**: `TASK-20260520-143129-P0-Independent-CleanService-Service-Model-PRD-And-Architecture-Alignment`
 - **Date**: 2026-05-20
 - **Authors**: Lucode (Development Engineer & Product Manager)
-- **Approved By**: Pending Luceon Review
+- **Approved By**: Luceon docs-level review on 2026-05-20
 
 ---
 

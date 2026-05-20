@@ -1,6 +1,6 @@
 # CleanService Mineru2Table Adaptation Plan
 
-Status: Candidate/Proposed architecture planning document for future external dependency work
+Status: Accepted docs-level architecture planning document for future external dependency work; no runtime implementation or production activation
 Last updated: 2026-05-15
 Historical owner: Architect; role retired after 6.9.1
 External repository: `shcming2023/Mineru2Table2026`

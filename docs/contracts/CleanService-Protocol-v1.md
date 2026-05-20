@@ -1,6 +1,6 @@
 # CleanService Protocol v1
 
-Status: Proposed / Candidate protocol direction for future implementation
+Status: Accepted docs-level protocol direction for future implementation; no runtime implementation or production activation
 Last updated: 2026-05-15
 Historical owner: Architect; role retired after 6.9.1
 Mirror requirement: this file must be kept byte-identical with the approved copy in CleanService implementation repositories, starting with Mineru2Table2026.

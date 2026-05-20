@@ -6,11 +6,11 @@
 
 - 当前唯一有效 PRD 主体：[Luceon2026-PRD-v0.4.md](./Luceon2026-PRD-v0.4.md)
 
-## 待评审候选补充附件 (Candidate Addenda)
+## 受控补充附件 (Controlled Addenda)
 
 - 独立 CleanService 服务模型补充 PRD：[Luceon2026-PRD-v0.4-Independent-CleanService-Services-Addendum.md](./Luceon2026-PRD-v0.4-Independent-CleanService-Services-Addendum.md)
-  - **状态**：候选 / 待评审 (Candidate / Pending Review - TASK-223 阶段)。
-  - **定位**：待 Luceon 审核通过并正式生效后，将作为 v0.4 主体的受控补充条款，不作为独立竞争的主体，亦不改变 v0.4 唯一有效主体的地位。
+  - **状态**：docs-level accepted by Luceon in TASK-223; no runtime implementation or production activation.
+  - **定位**：作为 v0.4 主体的受控补充条款，不作为独立竞争的主体，亦不改变 v0.4 唯一有效主体的地位。
 
 ## 协同与维护状态
 

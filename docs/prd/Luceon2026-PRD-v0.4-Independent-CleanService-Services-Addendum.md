@@ -1,6 +1,6 @@
 # Luceon2026 PRD v0.4 Independent CleanService Services Addendum
 
-- **Document status**: Candidate Product Requirement Addendum (Proposed / Pending Review)
+- **Document status**: Accepted docs-level Product Requirement Addendum (no runtime implementation or production activation)
 - **Task ID**: `TASK-20260520-143129-P0-Independent-CleanService-Service-Model-PRD-And-Architecture-Alignment`
 - **Date**: 2026-05-20
 - **Scope**: Product-scoped requirements for independent, Docker-deployed CleanService integrations (including Mineru2Table and future RawMaterial2CleanMaterial services).
