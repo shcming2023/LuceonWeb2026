@@ -64,3 +64,5 @@ uat/playwright-report/
 .trae/
 .codebuddy/
 .lucia-e2e/
+.agents/
+AGENTS.md

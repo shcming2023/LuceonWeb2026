@@ -1,7 +1,7 @@
 # CleanService Protocol v1
 
-Status: Canonical protocol direction for future implementation  
-Last updated: 2026-05-15  
+Status: Accepted docs-level protocol direction for future implementation; no runtime implementation or production activation
+Last updated: 2026-05-15
 Historical owner: Architect; role retired after 6.9.1
 Mirror requirement: this file must be kept byte-identical with the approved copy in CleanService implementation repositories, starting with Mineru2Table2026.
 
@@ -9,7 +9,7 @@ Mirror requirement: this file must be kept byte-identical with the approved copy
 
 This protocol defines the target contract for future CleanService integrations with Luceon2026. It is not evidence that any service already implements the contract and does not authorize runtime, production, or deployment changes.
 
-The first intended implementation is Mineru2Table2026 as `service_name="toc-rebuild"`.
+The first intended implementation is Mineru2Table2026 as `service_name="toc-rebuild"`, serving as a preparation step. A subsequent cleaning stage, such as `RawMaterial2CleanMaterial`, will consume these structural outputs along with the original Raw Material to produce the final normalized Clean Material.
 
 ## 2. Design Principles
 
@@ -136,6 +136,27 @@ Required constraints:
 
 MinIO credentials must not appear in request bodies. Services must read credentials from their environment and enforce endpoint/bucket allowlists.
 
+### 5.1 API Security & Credential Isolation (Independent Deployment Controls)
+
+Since CleanServices are deployed as isolated, independent Docker containers, the following strict security and boundary policies are mandatory:
+
+1. **Storage Credential Segregation**:
+   * MinIO access credentials (`MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY`) **must never** be passed in HTTP request payloads or returned in API responses.
+   * CleanService containers must load MinIO credentials exclusively from local container environment variables.
+2. **Access Control Allowlist Enforcement**:
+   * Each CleanService implementation must parse and enforce environment-based allowlists:
+     * `ALLOWED_MINIO_ENDPOINTS`: Semicolon-separated list of approved endpoints (e.g., `minio:9000;127.0.0.1:9000`).
+     * `ALLOWED_INPUT_BUCKETS`: Approved source buckets (e.g., `eduassets-raw`).
+     * `ALLOWED_OUTPUT_BUCKETS`: Approved target buckets (e.g., `eduassets-clean`).
+   * Attempting to read from or write to buckets/endpoints outside these allowlists must fail immediately with a `forbidden_storage_target` structured error.
+3. **API Key Token Verification**:
+   * Every incoming job submission or status check HTTP request must carry an authorization token (e.g., `Authorization: Bearer <API_KEY>`) loaded via the container's environment variable `API_KEY`. Requests without a valid key must return HTTP 401 with `unauthorized`.
+4. **Network Access / Ingress Isolation**:
+   * In multi-container environments, ingress to the CleanService container (port 8000 by default) should be restricted to loopback binding (`127.0.0.1:8000:8000`) or within isolated internal Docker networks populated only by approved control plane containers (e.g., Luceon `cms-upload-server`).
+
+> [!NOTE]
+> **Current-vs-Target Compliance Note**: The security controls and isolated internal ingress described above (such as bearer auth and restricted loopback binding) represent the **Target Protocol Compliance Standard** for production deployment. The current standalone/legacy Mineru2Table container deployment (exposed on port 8000 in sandbox) is a development artifact and **does not** satisfy these target auth and network policies yet. This protocol document must not be cited as evidence of current runtime compliance.
+
 ## 6. Job State Schema
 
 Allowed job states:
@@ -169,10 +190,48 @@ Terminal response example:
       "content_type": "application/json",
       "sha256": "..."
     },
-    "logic_tree": { "bucket": "eduassets-clean", "object": "toc-rebuild/sha256:a1b2c3d4e5f60718/v1/logic_tree.json" },
-    "readable_tree": { "bucket": "eduassets-clean", "object": "toc-rebuild/sha256:a1b2c3d4e5f60718/v1/readable_tree.md" },
-    "skeleton": { "bucket": "eduassets-clean", "object": "toc-rebuild/sha256:a1b2c3d4e5f60718/v1/skeleton.json" },
-    "provenance": { "bucket": "eduassets-clean", "object": "toc-rebuild/sha256:a1b2c3d4e5f60718/v1/provenance.json" }
+    "logic_tree": {
+      "bucket": "eduassets-clean",
+      "object": "toc-rebuild/sha256:a1b2c3d4e5f60718/v1/logic_tree.json",
+      "size_bytes": 204850,
+      "content_type": "application/json",
+      "sha256": "..."
+    },
+    "readable_tree": {
+      "bucket": "eduassets-clean",
+      "object": "toc-rebuild/sha256:a1b2c3d4e5f60718/v1/readable_tree.md",
+      "size_bytes": 10543,
+      "content_type": "text/markdown",
+      "sha256": "..."
+    },
+    "skeleton": {
+      "bucket": "eduassets-clean",
+      "object": "toc-rebuild/sha256:a1b2c3d4e5f60718/v1/skeleton.json",
+      "size_bytes": 8500,
+      "content_type": "application/json",
+      "sha256": "..."
+    },
+    "unresolved_anchors": {
+      "bucket": "eduassets-clean",
+      "object": "toc-rebuild/sha256:a1b2c3d4e5f60718/v1/unresolved_anchors.json",
+      "size_bytes": 450,
+      "content_type": "application/json",
+      "sha256": "..."
+    },
+    "provenance": {
+      "bucket": "eduassets-clean",
+      "object": "toc-rebuild/sha256:a1b2c3d4e5f60718/v1/provenance.json",
+      "size_bytes": 3820,
+      "content_type": "application/json",
+      "sha256": "..."
+    },
+    "metrics": {
+      "bucket": "eduassets-clean",
+      "object": "toc-rebuild/sha256:a1b2c3d4e5f60718/v1/metrics.json",
+      "size_bytes": 950,
+      "content_type": "application/json",
+      "sha256": "..."
+    }
   },
   "stats": {
     "tokens": { "prompt": 152034, "completion": 8123, "total": 160157 },
@@ -185,6 +244,29 @@ Terminal response example:
 ```
 
 Every completed job must include `artifacts.provenance`.
+
+## 6.1 Proposed Data Handoff and Output Contract for RawMaterial2CleanMaterial
+
+> [!NOTE]
+> **Proposed/Future Stage Contract**: The contracts detailed below are for the future content cleaning stage (`RawMaterial2CleanMaterial`) and are not yet active in the current implementation.
+
+For the future content cleaning stage, the protocol requires a structured handoff mapping raw content and structural elements to clean outputs.
+
+### Inputs
+1. Primary Raw Parse: `eduassets-raw/mineru/{materialId}/v{N}/content_list_v2.json`
+2. TOC Hierarchy Tree: `eduassets-clean/toc-rebuild/{materialId}/v{N}/logic_tree.json`
+3. Structure Block Mappings: `eduassets-clean/toc-rebuild/{materialId}/v{N}/flooded_content.json`
+
+### Proposed Outputs
+All clean service outputs are written to the target bucket `eduassets-clean` under the prefix `raw2clean/{materialId}/v{N}/`.
+The minimum proposed artifacts written are:
+1. `clean_blocks.json` (role: `clean_blocks`): Standardized, normalized block-level elements.
+2. `clean_markdown.md` (role: `clean_markdown`): High-fidelity markdown content with correct LaTeX math block bindings.
+3. `clean_manifest.json` (role: `clean_manifest`): Catalog of all cleaned blocks and media files.
+4. `quality_report.json` (role: `quality_report`): Compliance scoring and format verification logs.
+5. `unresolved_items.json` (role: `unresolved_items`): Low-confidence translation or block extraction exceptions.
+6. `provenance.json` (role: `provenance`): Standard cryptographic pipeline lineage.
+7. `metrics.json` (role: `metrics`): Token count and cost tracking data.
 
 ## 7. Webhook Protocol
 
@@ -248,7 +330,13 @@ Minimum shape:
     "max_tokens_total": 500000
   },
   "outputs": [
-    { "role": "flooded_content", "object": "flooded_content.json", "sha256": "...", "size_bytes": 4823910 }
+    { "role": "flooded_content", "object": "flooded_content.json", "sha256": "...", "size_bytes": 4823910 },
+    { "role": "logic_tree", "object": "logic_tree.json", "sha256": "...", "size_bytes": 204850 },
+    { "role": "readable_tree", "object": "readable_tree.md", "sha256": "...", "size_bytes": 10543 },
+    { "role": "skeleton", "object": "skeleton.json", "sha256": "...", "size_bytes": 8500 },
+    { "role": "unresolved_anchors", "object": "unresolved_anchors.json", "sha256": "...", "size_bytes": 450 },
+    { "role": "provenance", "object": "provenance.json", "sha256": "...", "size_bytes": 3820 },
+    { "role": "metrics", "object": "metrics.json", "sha256": "...", "size_bytes": 950 }
   ],
   "stats": {
     "tokens": { "total": 160157 },
