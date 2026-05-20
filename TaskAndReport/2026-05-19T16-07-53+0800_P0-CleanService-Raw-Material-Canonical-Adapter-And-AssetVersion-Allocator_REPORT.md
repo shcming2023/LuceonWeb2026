@@ -4,7 +4,10 @@
 - Executed by: `Lucode`
 - Date: `2026-05-19`
 - Final Branch: `lucode/TASK-20260519-160753-P0-CleanService-Raw-Material-Canonical-Adapter-And-AssetVersion-Allocator`
-- Final HEAD: *(Matches the ultimate commit of this branch on remote)*
+- Implementation baseline HEAD: `481346cbf00a916ec762f418af3846108b3b300a`
+- Submitted remote branch HEAD observed before Luceon review: `b0e58df5076f4e07dc587a4814f843228a57d990`
+- Rebased branch HEAD before report correction: `0d1adba7595d0e77763d3245a07026b598937f89`
+- Pushed correction branch HEAD: `7ead10b72fd428bb1e8c367119cc5a9c57faf331` (Pre-amend baseline)
 
 ## 1. Execution Summary
 
@@ -44,11 +47,13 @@ I have successfully implemented Task A: the Mock-Safe Raw Material Canonical Ada
 
 **Verification Commands (`git diff` and `node --check`)**:
 ```bash
-$ git diff --check origin/main
+$ git diff --check origin/main..HEAD
 (No output)
 Exit code: 0
 
-$ git diff --name-status origin/main
+$ git diff --name-status origin/main..HEAD
+A       TaskAndReport/2026-05-19T16-07-53+0800_P0-CleanService-Raw-Material-Canonical-Adapter-And-AssetVersion-Allocator_REPORT.md
+M       TaskAndReport/TASK_TRACKING_LIST.md
 A       server/services/cleanservice/asset-version.mjs
 M       server/services/cleanservice/cleanservice-worker.mjs
 A       server/services/cleanservice/raw-material-adapter.mjs
