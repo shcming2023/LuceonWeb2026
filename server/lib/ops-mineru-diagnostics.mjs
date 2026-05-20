@@ -1,4 +1,4 @@
-import { parseLatestMineruProgress } from './ops-mineru-log-parser.mjs';
+import { parseLatestMineruProgress, inspectMineruLogChannelOwnership } from './ops-mineru-log-parser.mjs';
 
 function isLocalMineruTask(task) {
   return task?.engine === 'local-mineru' && task.state !== 'canceled' && !task.metadata?.canceledAt;
@@ -80,7 +80,7 @@ export function classifyMineruActiveTasks(tasks = []) {
 export function registerMineruDiagnosticsRoutes(app, getDbBaseUrl) {
   app.get('/ops/mineru/diagnostics', async (req, res) => {
     const dbBaseUrl = getDbBaseUrl();
-    
+
     let localEndpoint = process.env.LOCAL_MINERU_ENDPOINT || 'http://host.docker.internal:8083';
     try {
       const setResp = await fetch(`${dbBaseUrl}/settings`, { signal: AbortSignal.timeout(1000) });
@@ -104,10 +104,15 @@ export function registerMineruDiagnosticsRoutes(app, getDbBaseUrl) {
       takeoverRequiredTasks: [],
       historicalAiFailureTasks: [],
       completedButNotIngestedTasks: [],
-      submitRetryableTasks: []
+      submitRetryableTasks: [],
+      observabilityDetails: {
+        realMineruLifecycle: 'unknown',
+        dbTaskState: 'unknown',
+        hostLogFreshness: null,
+        containerLogFreshness: null,
+        activeDisplaySource: 'none'
+      }
     };
-
-    // logObservation will be populated later if there is an active processing task
 
     // 1. Fetch MinerU health
     try {
@@ -130,10 +135,11 @@ export function registerMineruDiagnosticsRoutes(app, getDbBaseUrl) {
     }
 
     // 2. Fetch Luceon Tasks
+    let tasks = [];
     try {
       const tasksRes = await fetch(`${dbBaseUrl}/tasks`, { signal: AbortSignal.timeout(3000) });
       if (tasksRes.ok) {
-        const tasks = await tasksRes.json();
+        tasks = await tasksRes.json();
         const activeStates = ['pending', 'running', 'result-store', 'ai-pending', 'ai-running'];
         const classifiedTasks = classifyMineruActiveTasks(tasks);
 
@@ -145,7 +151,7 @@ export function registerMineruDiagnosticsRoutes(app, getDbBaseUrl) {
         result.submitRetryableTasks = classifiedTasks.submitRetryableTasks.map(t => t.id);
         result.takeoverRequiredTasks = classifiedTasks.takeoverRequiredTasks.map(t => t.id);
         result.historicalAiFailureTasks = classifiedTasks.historicalAiFailureTasks.map(t => t.id);
-        
+
         if (result.luceon.mineruProcessingTasks.length > 0) {
           const targetTaskId = result.luceon.mineruProcessingTasks[0];
           const targetTask = tasks.find(t => t.id === targetTaskId);
@@ -154,7 +160,7 @@ export function registerMineruDiagnosticsRoutes(app, getDbBaseUrl) {
             result.logObservation = await parseLatestMineruProgress(minObservedAt, targetTask.metadata?.mineruObservedProgress, targetTask.metadata?.mineruExecutionProfile).catch(() => null);
           }
         }
-        
+
         // Find all known MinerU task IDs
         const knownIdsMap = new Map();
         for (const t of tasks) {
@@ -164,18 +170,36 @@ export function registerMineruDiagnosticsRoutes(app, getDbBaseUrl) {
         }
         result.luceon.knownMineruTaskIds = Array.from(knownIdsMap.keys());
         result.luceon.knownMineruTaskMap = Object.fromEntries(knownIdsMap);
+      } else {
+        result.diagnosis.status = 'error';
+        result.diagnosis.message = '无法从 db-server 获取 Luceon 任务';
+        return res.json(result);
       }
-      } catch (e) {
-      // If DB fails, we can't fully diagnose
+    } catch (e) {
       result.diagnosis.status = 'error';
-      result.diagnosis.message = '无法连接到 db-server 获取 Luceon 任务';
+      result.diagnosis.message = `无法连接到 db-server 获取 Luceon 任务: ${e.message}`;
       return res.json(result);
     }
+
     // 3. Diagnosis Logic
     if (result.mineru.processingTasks === 0) {
       result.diagnosis.status = 'healthy';
       result.diagnosis.kind = 'idle';
       result.diagnosis.message = 'MinerU 当前空闲';
+
+      // Calculate observability details even when idle
+      let targetTaskForDiagnostics = tasks.find(isLocalMineruTask);
+      if (targetTaskForDiagnostics) {
+        await populateObservabilityDetails(result, targetTaskForDiagnostics);
+      } else {
+        result.observabilityDetails = {
+          realMineruLifecycle: 'idle',
+          dbTaskState: 'none',
+          hostLogFreshness: null,
+          containerLogFreshness: null,
+          activeDisplaySource: 'none'
+        };
+      }
       return res.json(result);
     }
 
@@ -216,7 +240,7 @@ export function registerMineruDiagnosticsRoutes(app, getDbBaseUrl) {
         result.diagnosis.blockingMineruTaskId = actualProcessingMineruTaskId;
         result.diagnosis.blockingLuceonTaskId = actualProcessingLuceonTaskInfo.id;
         result.diagnosis.safeToAutoRecover = false;
-        
+
         const minObservedAt = actualMineruTaskStartedAt || actualProcessingLuceonTaskInfo.metadata?.mineruStartedAt || actualProcessingLuceonTaskInfo.updatedAt || actualProcessingLuceonTaskInfo.createdAt;
         result.logObservation = await parseLatestMineruProgress(minObservedAt, actualProcessingLuceonTaskInfo.metadata?.mineruObservedProgress, actualProcessingLuceonTaskInfo.metadata?.mineruExecutionProfile).catch(() => null);
       } else {
@@ -233,13 +257,28 @@ export function registerMineruDiagnosticsRoutes(app, getDbBaseUrl) {
       result.diagnosis.safeToAutoRecover = false;
     }
 
+    // Populate observabilityDetails for processing cases
+    let targetTaskForDiagnostics = null;
+    if (result.luceon.mineruProcessingTasks.length > 0) {
+      const targetTaskId = result.luceon.mineruProcessingTasks[0];
+      targetTaskForDiagnostics = tasks.find(t => t.id === targetTaskId);
+    } else if (actualProcessingLuceonTaskInfo) {
+      targetTaskForDiagnostics = actualProcessingLuceonTaskInfo;
+    } else {
+      targetTaskForDiagnostics = tasks.find(isLocalMineruTask);
+    }
+
+    if (targetTaskForDiagnostics) {
+      await populateObservabilityDetails(result, targetTaskForDiagnostics);
+    }
+
     res.json(result);
   });
 
   app.post('/ops/mineru/recover', async (req, res) => {
     const isDryRun = req.body?.dryRun !== false; // default true
     const confirm = req.body?.confirm === true;
-    
+
     if (isDryRun || !confirm) {
       return res.json({
         ok: true,
@@ -261,4 +300,42 @@ export function registerMineruDiagnosticsRoutes(app, getDbBaseUrl) {
       error: '服务端直接重启尚未实现，请参考 dryRun 提供的 instructions 手动清障。'
     });
   });
+}
+
+async function populateObservabilityDetails(result, targetTask) {
+  const minObservedAt = targetTask.metadata?.mineruStartedAt || targetTask.updatedAt || targetTask.createdAt;
+  const logChannelDiagnostics = await inspectMineruLogChannelOwnership({
+    minObservedAt,
+    nowMs: Date.now()
+  }).catch(() => null);
+
+  if (logChannelDiagnostics) {
+    const hostLog = logChannelDiagnostics.sources.find(s => s.logSourceContext === 'host-filesystem');
+    const containerLog = logChannelDiagnostics.sources.find(s => s.logSourceContext === 'container-mounted-log');
+
+    result.observabilityDetails = {
+      realMineruLifecycle: targetTask.metadata?.mineruStatus || 'unknown',
+      dbTaskState: `${targetTask.state || 'unknown'} / ${targetTask.stage || 'unknown'}`,
+      hostLogFreshness: hostLog ? {
+        exists: hostLog.exists,
+        size: hostLog.size,
+        mtime: hostLog.mtime,
+        ageMs: hostLog.ageMs,
+        state: hostLog.state
+      } : null,
+      containerLogFreshness: containerLog ? {
+        exists: containerLog.exists,
+        size: containerLog.size,
+        mtime: containerLog.mtime,
+        ageMs: containerLog.ageMs,
+        state: containerLog.state
+      } : null,
+      activeDisplaySource: logChannelDiagnostics.selectedSource ? {
+        logSourceContext: logChannelDiagnostics.selectedSource.logSourceContext,
+        logSourceBaseName: logChannelDiagnostics.selectedSource.logSourceBaseName,
+        state: logChannelDiagnostics.selectedSource.state,
+        ageMs: logChannelDiagnostics.selectedSource.ageMs
+      } : 'none'
+    };
+  }
 }

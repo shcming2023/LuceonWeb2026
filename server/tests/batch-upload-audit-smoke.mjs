@@ -3,7 +3,7 @@ import * as http from 'http';
 
 /**
  * P0 Batch Upload Auditability Smoke Test
- * Verifies that sequential batch upload tasks explicitly capture 
+ * Verifies that sequential batch upload tasks explicitly capture
  * success and failure for each file, providing durable counting truth
  * rather than silently dropping tasks during monitoring.
  */
@@ -76,10 +76,10 @@ async function run() {
   mockUploadServer.close();
 
   console.log('\n--- Assertions ---');
-  
+
   assert(processedCount === 2, `Expected 2 files processed successfully, got ${processedCount}`);
   assert(rejectedCount === 1, `Expected 1 file explicitly rejected, got ${rejectedCount}`);
-  
+
   assert(stats.submitted === 2, `Expected UI to track 2 submitted, got ${stats.submitted}`);
   assert(stats.failed === 1, `Expected UI to track 1 failed, got ${stats.failed}`);
   assert(stats.failReasons.length === 1, `Expected 1 explicit fail reason`);

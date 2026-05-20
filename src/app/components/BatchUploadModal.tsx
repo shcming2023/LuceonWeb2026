@@ -92,7 +92,19 @@ export function BatchProcessingController() {
   const { state, dispatch } = useAppStore();
   const [working, setWorking] = useState(false);
   /** 本轮队列运行期间的提交统计 */
-  const statsRef = useRef({ submitted: 0, failed: 0, failReasons: [] as string[] });
+  const statsRef = useRef({
+    submitted: 0,
+    failed: 0,
+    failReasons: [] as string[],
+    auditLogs: [] as Array<{
+      fileName: string;
+      materialId: string;
+      taskId?: string;
+      ok: boolean;
+      error?: string;
+      timestamp: string;
+    }>
+  });
   /** 用于更新相同的 toast */
   const toastIdRef = useRef<string | number | null>(null);
 
@@ -126,9 +138,25 @@ export function BatchProcessingController() {
       }
 
       if (stats.submitted > 0 || stats.failed > 0) {
+        // 输出持久化的详细审计日志到控制台
+        console.group(`[Luceon Batch Upload Audit Log] ${new Date().toLocaleString()}`);
+        console.log(`Total: ${total}, Submitted: ${stats.submitted}, Failed: ${stats.failed}`);
+        console.table(stats.auditLogs);
+        console.groupEnd();
+
+        // 挂载到全局，方便在浏览器 DevTools 中查询
+        (globalThis as any).__luceonLastBatchAudit = {
+          timestamp: new Date().toISOString(),
+          total,
+          submitted: stats.submitted,
+          failed: stats.failed,
+          logs: stats.auditLogs,
+        };
+
         if (stats.failed === 0) {
           toast.success(`已提交 ${stats.submitted} 个文件，任务状态请在任务管理查看`, {
-            duration: 5000,
+            description: `成功率: 100% (${stats.submitted}/${total})。对账单已输出至控制台，可在 DevTools 中输入 __luceonLastBatchAudit 查看。`,
+            duration: 6000,
             action: {
               label: '前往任务管理',
               onClick: () => { window.location.href = '/cms/tasks'; },
@@ -138,14 +166,15 @@ export function BatchProcessingController() {
           const uniqueReasons = [...new Set(stats.failReasons)].slice(0, 3);
           toast.error(`${stats.failed} 个文件提交失败`, {
             description: [
-              stats.submitted > 0 ? `成功提交 ${stats.submitted} 个` : null,
+              `成功: ${stats.submitted}/${total}，失败: ${stats.failed}/${total}`,
               ...uniqueReasons,
+              `详细失败对账单请在 DevTools 控制台查看 (window.__luceonLastBatchAudit)`
             ].filter(Boolean).join('；'),
-            duration: 8000,
+            duration: 10000,
           });
         }
         // 重置统计
-        statsRef.current = { submitted: 0, failed: 0, failReasons: [] };
+        statsRef.current = { submitted: 0, failed: 0, failReasons: [], auditLogs: [] };
       }
 
       // 停止队列并清空残余
@@ -264,6 +293,13 @@ export function BatchProcessingController() {
         batchRemoveFile(item.id);
         dispatch({ type: 'BATCH_REMOVE_ITEM', payload: { id: item.id } });
         statsRef.current.submitted += 1;
+        statsRef.current.auditLogs.push({
+          fileName,
+          materialId: String(materialId),
+          taskId,
+          ok: true,
+          timestamp: new Date().toISOString(),
+        });
       } catch (error) {
         const raw = error instanceof Error ? error.message : String(error);
         const lowered = raw.toLowerCase();
@@ -289,6 +325,13 @@ export function BatchProcessingController() {
                 batchRemoveFile(item.id);
                 dispatch({ type: 'BATCH_REMOVE_ITEM', payload: { id: item.id } });
                 statsRef.current.submitted += 1;
+                statsRef.current.auditLogs.push({
+                  fileName: f.name,
+                  materialId: String(materialId),
+                  taskId: related.id,
+                  ok: true,
+                  timestamp: new Date().toISOString(),
+                });
                 return;
               }
             }
@@ -302,6 +345,13 @@ export function BatchProcessingController() {
         dispatch({ type: 'BATCH_REMOVE_ITEM', payload: { id: item.id } });
         statsRef.current.failed += 1;
         statsRef.current.failReasons.push(raw.length > 80 ? raw.slice(0, 80) + '…' : raw);
+        statsRef.current.auditLogs.push({
+          fileName: f.name,
+          materialId: String(materialId || ''),
+          ok: false,
+          error: raw,
+          timestamp: new Date().toISOString(),
+        });
       }
     };
 

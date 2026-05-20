@@ -67,6 +67,15 @@ function phaseFromTask(task = {}, directMineruStatus = '') {
 }
 
 function defaultOperatorMessage({ phase, lagKind, directMineruStatus, logState, aiState, dbState, dbStage }) {
+  const isTerminal = TERMINAL_STATES.has(dbState || '');
+  if (isTerminal) {
+    if (dbState === 'completed') return '任务已完成';
+    if (dbState === 'confirmed') return '任务已归账';
+    if (dbState === 'review-pending') return 'AI 识别完成，待人工复核';
+    if (dbState === 'failed') return aiState === 'failed' ? 'AI 识别失败' : '解析或 AI 识别失败';
+    if (dbState === 'canceled') return '任务已取消';
+  }
+
   if (lagKind === 'db-behind-direct-mineru') return 'MinerU API 已完成，Luceon 正在同步解析结果';
   if (lagKind === 'log-stale-after-terminal') return '任务已进入终态，日志通道无新增业务进度';
   if (lagKind === 'dependency-health-readiness-only') return '依赖健康检查仅代表就绪性，不代表单个任务进度';
@@ -78,7 +87,6 @@ function defaultOperatorMessage({ phase, lagKind, directMineruStatus, logState, 
   if (logState === 'sidecar_missing' && dbState === 'running') return 'MinerU 正在处理，但主宿主机观测通道异常 (sidecar missing)';
   if (logState === 'container_mount_stale' && dbState === 'running') return 'MinerU 正在处理，容器挂载观测滞后 (container mount stale)';
 
-  const isTerminal = TERMINAL_STATES.has(dbState || '');
   if (!isTerminal && directMineruStatus && DIRECT_PROCESSING_STATUSES.has(directMineruStatus)) return 'MinerU API 仍在处理';
   if ((logState === 'stale' || logState === 'sidecar_stale') && dbState === 'running') return '任务仍在处理中，但日志观测滞后';
   if (phase === 'result-ingestion') return '解析产物同步中';

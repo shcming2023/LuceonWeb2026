@@ -586,7 +586,24 @@ export async function inspectMineruLogChannelOwnership({
   const selectedSource = [...sources].sort((a, b) => {
     const rankDiff = rankLogChannelState(b.state) - rankLogChannelState(a.state);
     if (rankDiff !== 0) return rankDiff;
-    return (a.ageMs || Infinity) - (b.ageMs || Infinity);
+
+    // Enhance sorting: if states are the same, prioritize host-filesystem if it is significantly fresher (ageMs is smaller by > 1000ms)
+    const aContext = a.logSourceContext;
+    const bContext = b.logSourceContext;
+    const aAge = a.ageMs ?? Infinity;
+    const bAge = b.ageMs ?? Infinity;
+
+    if (aContext !== bContext) {
+      if (aContext === 'host-filesystem' && bContext === 'container-mounted-log') {
+        if (aAge < bAge - 1000) return -1;
+        if (bAge < aAge - 1000) return 1;
+      } else if (aContext === 'container-mounted-log' && bContext === 'host-filesystem') {
+        if (bAge < aAge - 1000) return 1;
+        if (aAge < bAge - 1000) return -1;
+      }
+    }
+
+    return aAge - bAge;
   })[0] || null;
   const summaryState = selectedSource?.state || 'missing';
 

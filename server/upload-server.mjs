@@ -3483,7 +3483,12 @@ app.post('/tasks', upload.single('file'), async (req, res) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('[upload-server] /tasks failed:', message);
-    res.status(500).json({ error: message });
+    res.status(500).json({
+      ok: false,
+      error: message,
+      fileName: typeof fixedOriginalName !== 'undefined' ? fixedOriginalName : (req.file ? req.file.originalname : 'unknown'),
+      materialId: typeof materialId !== 'undefined' ? materialId : 'unknown'
+    });
   } finally {
     cleanupTempFile(req.file);
   }
