@@ -1,6 +1,6 @@
 # Luceon2026 Asset Pipeline Vision
 
-Status: Canonical architecture direction, aligned with independent CleanService service model (TASK-223)
+Status: Proposed / Candidate architecture direction, aligned with independent CleanService service model (TASK-223)
 Last updated: 2026-05-20
 Historical owner: Architect; role retired after 6.9.1. Current Lucode updates active.
 Related PRD: `docs/prd/Luceon2026-PRD-v0.4.md`, `docs/prd/Luceon2026-PRD-v0.4-Independent-CleanService-Services-Addendum.md`
@@ -96,17 +96,59 @@ eduassets-clean/
     unresolved_anchors.json
     provenance.json
     metrics.json
+  raw2clean/{materialId}/v{N}/ (Proposed / Future)
+    clean_blocks.json
+    clean_markdown.md
+    clean_manifest.json
+    quality_report.json
+    unresolved_items.json
+    provenance.json
+    metrics.json
 ```
 
 This layout is not an immediate migration instruction. Existing buckets and objects remain legacy until a future approved migration plan exists.
 
-## 7. CleanService Directory
+## 7. CleanService Registry Contract
 
-| Service | External implementation | Status | Primary input | Primary outputs |
-| --- | --- | --- | --- | --- |
-| `toc-rebuild` | `shcming2023/Mineru2Table2026` | future first CleanService | MinerU `content_list_v2.json` | `flooded_content.json`, `logic_tree.json`, `readable_tree.md`, `skeleton.json`, `unresolved_anchors.json`, `provenance.json`, `metrics.json` |
-| `md-clean` | TBD | future | raw/clean structure assets | cleaned Markdown and structured blocks |
-| `figure-rebuild` | TBD | future | images and structure assets | figure metadata/assets |
+To orchestrate independent, Docker-deployed services safely, Luceon maintains a central control plane registry definition. Every registered CleanService must strictly satisfy the fields and data contracts defined below.
+
+### 7.1 Service Registry Schema Definition
+
+| Schema Field | Type | Description |
+| --- | --- | --- |
+| `serviceName` | String | Unique system identifier for the clean stage. |
+| `serviceType` | Enum | Classification of workload (`structural_preparation`, `content_cleaning`, `feature_extraction`). |
+| `implementationRepo` | String | Git repository URL of the external service implementation. |
+| `containerIdentity` | String | Docker image name and standard container identifier. |
+| `endpointBinding` | String | Local loopback or internal Docker network base URL and health path. |
+| `protocolVersion` | String | Supported version of the CleanService Protocol (e.g. `v1`). |
+| `admissionStatus` | Enum | Control plane activation status (`enabled`, `disabled`, `dry_run`). |
+| `inputBucketObjectContract` | String | Strict MinIO bucket and key path pattern allowed for reads. |
+| `outputBucketPrefixContract` | String | Strict MinIO bucket and output directory prefix allowed for writes. |
+| `costPolicy` | Struct | Cost governance limits: `{ soft_limit_cny, hard_limit_cny }`. |
+| `featureFlags` | Array | Toggles and flags enabled for this service runtime configuration. |
+| `integrationState` | Enum | Stage of platform validation (`Proposed`, `Sandbox_Active`, `Production_Active`). |
+| `owner` | String | Technical team or role responsible for the service. |
+| `reviewBoundary` | Struct | UI views and unresolved exception parameters to render for operator triage. |
+
+### 7.2 Active & Proposed Registry Records
+
+| Field | Record 1: Structural Prep (`toc-rebuild`) | Record 2: Content Cleaning (`md-clean`) |
+| --- | --- | --- |
+| **serviceName** | `toc-rebuild` | `md-clean` |
+| **serviceType** | `structural_preparation` | `content_cleaning` |
+| **implementationRepo** | `shcming2023/Mineru2Table2026` | `shcming2023/RawMaterial2CleanMaterial2026` (Proposed) |
+| **containerIdentity** | `mineru2table-api` | `raw2clean-api` (Proposed) |
+| **endpointBinding** | `http://mineru2table-api:8000/api/v1/jobs` | `http://raw2clean-api:8000/api/v1/jobs` (Proposed) |
+| **protocolVersion** | `v1` | `v1` |
+| **admissionStatus** | `enabled` (Proposed Candidate) | `disabled` (Proposed Future) |
+| **inputBucketObjectContract** | `eduassets-raw:mineru/{materialId}/v{N}/content_list_v2.json` | `eduassets-raw:mineru/{materialId}/v{N}/content_list_v2.json`<br>`eduassets-clean:toc-rebuild/{materialId}/v{N}/logic_tree.json` |
+| **outputBucketPrefixContract** | `eduassets-clean:toc-rebuild/{materialId}/v{N}/` | `eduassets-clean:raw2clean/{materialId}/v{N}/` |
+| **costPolicy** | `soft_limit: ¥5`, `hard_limit: ¥8` | `soft_limit: ¥5`, `hard_limit: ¥8` |
+| **featureFlags** | `["enable_table_extraction", "strict_anchors"]` | `["latex_normalization", "tikz_code_standardize"]` |
+| **integrationState** | `Sandbox_Active` (Candidate) | `Proposed` |
+| **owner** | Lucode (Development) / Luceon (Audit) | Lucode (Development) / Luceon (Audit) |
+| **reviewBoundary** | Expose TOC tree diff, unresolved anchor count, and layout cockpit. | Expose markdown diff, TikZ code syntax warnings, block comparison. |
 
 Each service must follow `docs/contracts/CleanService-Protocol-v1.md` before Luceon binds production code to it.
 

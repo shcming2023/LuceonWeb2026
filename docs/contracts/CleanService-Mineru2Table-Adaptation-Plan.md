@@ -1,7 +1,7 @@
 # CleanService Mineru2Table Adaptation Plan
 
-Status: Architecture planning document for future external dependency work  
-Last updated: 2026-05-15  
+Status: Candidate/Proposed architecture planning document for future external dependency work
+Last updated: 2026-05-15
 Historical owner: Architect; role retired after 6.9.1
 External repository: `shcming2023/Mineru2Table2026`
 
@@ -49,7 +49,7 @@ To bridge the gap between Mineru2Table's current standalone API and the target C
 
 | Option | Description | Pros | Cons | Recommendation |
 | --- | --- | --- | --- | --- |
-| **Option A (Recommended)** | **Direct Protocol Implementation**: Modify the external Mineru2Table service codebase directly to implement CleanService Protocol v1 (MinIO ObjectRefs, `/api/v1/jobs` endpoints, persistent jobs, environment-based credentials). | • Zero file-copy network overhead.<br>• Guaranteed immutable provenance.<br>• Cleanest, production-ready architecture. | • Requires development effort in the external Python repository. | **Highly Recommended**. This is the only option approved for stable production integration and scale deployment. |
+| **Option A (Recommended)** | **Direct Protocol Implementation**: Modify the external Mineru2Table service codebase directly to implement CleanService Protocol v1 (MinIO ObjectRefs, `/api/v1/jobs` endpoints, persistent jobs, environment-based credentials). | • Zero file-copy network overhead.<br>• Guaranteed immutable provenance.<br>• Cleanest, production-ready architecture. | • Requires development effort in the external Python repository. | **Highly Recommended**. This is the recommended option for stable production integration and scale deployment. |
 | **Option B (Rejected)** | **Luceon-Side Multipart Adapter**: Luceon's `CleanServiceWorker` downloads files from MinIO locally, creates a multipart HTTP request to Mineru2Table's `/api/v1/tasks`, polls it, downloads output files, and writes them back to MinIO. | • No changes needed in Mineru2Table codebase. | • Severe network and local disk bottleneck (double-copy).<br>• High risk of silent failure and provenance corruption.<br>• Exposes temporary local files to host volume. | **Strictly Rejected**. Not safe for production or multi-user pipelines due to file isolation and provenance risks. |
 | **Option C (Temporary Gate)** | **Hybrid Local Sidecar Adapter**: Deploy a lightweight local sidecar next to Mineru2Table that exposes Protocol v1 to Luceon and translates it internally to Mineru2Table's multipart API. | • Allows early prototyping of Luceon control plane without Python changes. | • High architectural complexity.<br>• Overhead of managing an extra container.<br>• Remains subject to double-copy network overhead. | **Staged Prototyping Only**. Permitted strictly as a temporary development gate under rigid Sunset Controls. |
 
@@ -59,6 +59,13 @@ If Option C (Hybrid Sidecar Adapter) is utilized for initial sandbox verificatio
 2. **Hard Sample Ceiling**: The sandbox runtime must limit total processed assets to at most **5 unique materials**. Attempting to process more must throw a `quota_exceeded` error.
 3. **Hard Date Sunset**: The sidecar code and registration must be fully retired and deleted (Sunset) by **2026-06-15** or upon the initiation of Task 224 (whichever comes first), shifting exclusively to Option A.
 4. **No Write Privilege**: The sidecar must have zero write access to the Phase 1 mainline buckets (`eduassets-raw`, `eduassets-parsed`) to avoid dirty-source contamination.
+
+### 3.2 Current-vs-Target Security & Ingress Gap Note
+
+> [!WARNING]
+> **Deployment Gap Warning**: While the target CleanService Protocol v1 defines restricted ingress, internal networks, and Bearer token authentication, the **current sandbox Mineru2Table container deployment (listening on port 8000)** is exposing basic unauthenticated API routes for dev testing.
+>
+> This temporary deployment is purely for initial verification and **does not** prove target compliance or network security isolation are satisfied. These target security constraints must be fully implemented in `shcming2023/Mineru2Table2026` before production integration is approved.
 
 ## 4. Required External Changes
 

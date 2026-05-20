@@ -1,10 +1,10 @@
 # Architectural Decision Record (ADR): Independent CleanService Service Model
 
-- **Status**: Accepted
+- **Status**: Proposed (Candidate / Pending Review)
 - **Task ID**: `TASK-20260520-143129-P0-Independent-CleanService-Service-Model-PRD-And-Architecture-Alignment`
 - **Date**: 2026-05-20
 - **Authors**: Lucode (Development Engineer & Product Manager)
-- **Approved By**: Luceon (Architect & Director)
+- **Approved By**: Pending Luceon Review
 
 ---
 
@@ -34,7 +34,7 @@ We formally adopt the **Independent CleanService Service Model**:
    * No direct file sharing through local mounts. Input and output assets are transferred exclusively via MinIO ObjectRefs.
 3. **Control Plane Supremacy**:
    * Luceon remains the absolute authority for resource identity (`materialId`), processing tasks (`parseTaskId`), monotonic version allocation (`assetVersion`), and job idempotency keys (`job_id`).
-   * CleanServices act as pure stateless workers: they consume Luceon-provided inputs and write verified structural or cleaned objects to Luceon-assigned prefixes under `eduassets-clean`.
+   * CleanServices act as isolated service-owned workers with their own bounded job store: they manage their own persistent job state (which must survive service restart) to process Luceon-provided inputs and write verified structural or cleaned objects to Luceon-assigned prefixes under `eduassets-clean`.
 
 ---
 

@@ -1,6 +1,6 @@
 # Luceon2026 PRD v0.4 Independent CleanService Services Addendum
 
-- **Document status**: Approved Product Requirement Addendum
+- **Document status**: Candidate Product Requirement Addendum (Proposed / Pending Review)
 - **Task ID**: `TASK-20260520-143129-P0-Independent-CleanService-Service-Model-PRD-And-Architecture-Alignment`
 - **Date**: 2026-05-20
 - **Scope**: Product-scoped requirements for independent, Docker-deployed CleanService integrations (including Mineru2Table and future RawMaterial2CleanMaterial services).
@@ -95,3 +95,49 @@ If a clean service produces or standardizes code-like educational assets (e.g. L
 * Legacy assets are exempted from CleanService pipeline requirements and must remain discoverable in their historical form.
 * **No Pseudo-Provenance**: Do not invent fake provenance records or backfill version numbers for legacy assets.
 * Wording in the UI must explicitly indicate `Legacy Asset (No Clean Stage Available)` for all such items.
+
+---
+
+## 7. MinIO Input & Output Contracts (Data Handoff Protocols)
+
+To ensure strict data boundaries and quality control, this section defines the product-level data contracts (inputs and outputs) for both the `toc-rebuild` and `RawMaterial2CleanMaterial` pipeline stages.
+
+### 7.1 TOC Rebuild (Mineru2Table) Contract
+
+* **Service Identifier**: `toc-rebuild`
+* **Logical Role**: Structural parsing and layout analysis.
+* **Input Contract**:
+  * Source document raw parsing results stored under `eduassets-raw/mineru/{materialId}/v{N}/`.
+  * The primary consumed file **must** be the canonical MinerU output `content_list_v2.json` containing block indices and parsed segments.
+* **Output Contract**:
+  * All generated structural assets must be written to `eduassets-clean/toc-rebuild/{materialId}/v{N}/`.
+  * The service **must** successfully write exactly the following **7 required files** to consider a job successful:
+    1. `flooded_content.json` (role: `flooded_content`): Contains fully mapped logic structures matching text segments.
+    2. `logic_tree.json` (role: `logic_tree`): The reconstructed hierarchical document tree representation.
+    3. `readable_tree.md` (role: `readable_tree`): A human-readable Markdown outline of the table-of-contents structure.
+    4. `skeleton.json` (role: `skeleton`): A fallback schema structure mapping raw page/block metrics.
+    5. `unresolved_anchors.json` (role: `unresolved_anchors`): Records of any section links or header references that could not be resolved during reconstruction.
+    6. `provenance.json` (role: `provenance`): The tamper-proof metadata and cryptographic signature file.
+    7. `metrics.json` (role: `metrics`): Contains LLM token usage, estimated costs, and structural validation scores.
+
+### 7.2 Raw Material to Clean Material (RawMaterial2CleanMaterial) Contract
+
+* **Service Identifier**: `md-clean` (or proposed stage name)
+* **Logical Role**: Comprehensive block cleaning, LaTeX/TikZ code normalization, text standardization, and final Clean Material delivery.
+* **Status**: **Future / Proposed Stage**. The contracts specified here are candidate specifications and are not yet active in the runtime.
+* **Input Contract**:
+  * The service requires **both** the mainline raw parse and the completed TOC rebuild structural prep.
+  * Inputs are retrieved from:
+    * `eduassets-raw/mineru/{materialId}/v{N}/content_list_v2.json` (Raw Material)
+    * `eduassets-clean/toc-rebuild/{materialId}/v{N}/logic_tree.json` (TOC structure)
+    * `eduassets-clean/toc-rebuild/{materialId}/v{N}/flooded_content.json` (Structure-to-block mapping)
+* **Proposed Output Prefix**: `eduassets-clean/raw2clean/{materialId}/v{N}/`
+* **Proposed Output Contract (Minimum Proposed Files)**:
+  * The clean service proposes to write the following core assets upon successful execution:
+    1. `clean_blocks.json` (role: `clean_blocks`): Standardized, normalized block-level elements.
+    2. `clean_markdown.md` (role: `clean_markdown`): A high-fidelity, clean Markdown document with correct rendering-compliant math blocks.
+    3. `clean_manifest.json` (role: `clean_manifest`): A catalog of all cleaned assets and valid external image/media hash bindings.
+    4. `quality_report.json` (role: `quality_report`): Detailed metrics on text cleanliness, code validation, and schema compliance scores.
+    5. `unresolved_items.json` (role: `unresolved_items`): Log of untranslated formulas or unrecognized block layouts requiring human intervention.
+    6. `provenance.json` (role: `provenance`): Standard cryptographic pipeline lineage linking back to the raw source, Mineru2Table structural outputs, and the clean service version.
+    7. `metrics.json` (role: `metrics`): Detailed LLM cost and execution metrics.

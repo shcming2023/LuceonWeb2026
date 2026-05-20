@@ -1,7 +1,7 @@
 # CleanService Protocol v1
 
-Status: Canonical protocol direction for future implementation  
-Last updated: 2026-05-15  
+Status: Proposed / Candidate protocol direction for future implementation
+Last updated: 2026-05-15
 Historical owner: Architect; role retired after 6.9.1
 Mirror requirement: this file must be kept byte-identical with the approved copy in CleanService implementation repositories, starting with Mineru2Table2026.
 
@@ -154,6 +154,9 @@ Since CleanServices are deployed as isolated, independent Docker containers, the
 4. **Network Access / Ingress Isolation**:
    * In multi-container environments, ingress to the CleanService container (port 8000 by default) should be restricted to loopback binding (`127.0.0.1:8000:8000`) or within isolated internal Docker networks populated only by approved control plane containers (e.g., Luceon `cms-upload-server`).
 
+> [!NOTE]
+> **Current-vs-Target Compliance Note**: The security controls and isolated internal ingress described above (such as bearer auth and restricted loopback binding) represent the **Target Protocol Compliance Standard** for production deployment. The current standalone/legacy Mineru2Table container deployment (exposed on port 8000 in sandbox) is a development artifact and **does not** satisfy these target auth and network policies yet. This protocol document must not be cited as evidence of current runtime compliance.
+
 ## 6. Job State Schema
 
 Allowed job states:
@@ -241,6 +244,29 @@ Terminal response example:
 ```
 
 Every completed job must include `artifacts.provenance`.
+
+## 6.1 Proposed Data Handoff and Output Contract for RawMaterial2CleanMaterial
+
+> [!NOTE]
+> **Proposed/Future Stage Contract**: The contracts detailed below are for the future content cleaning stage (`RawMaterial2CleanMaterial`) and are not yet active in the current implementation.
+
+For the future content cleaning stage, the protocol requires a structured handoff mapping raw content and structural elements to clean outputs.
+
+### Inputs
+1. Primary Raw Parse: `eduassets-raw/mineru/{materialId}/v{N}/content_list_v2.json`
+2. TOC Hierarchy Tree: `eduassets-clean/toc-rebuild/{materialId}/v{N}/logic_tree.json`
+3. Structure Block Mappings: `eduassets-clean/toc-rebuild/{materialId}/v{N}/flooded_content.json`
+
+### Proposed Outputs
+All clean service outputs are written to the target bucket `eduassets-clean` under the prefix `raw2clean/{materialId}/v{N}/`.
+The minimum proposed artifacts written are:
+1. `clean_blocks.json` (role: `clean_blocks`): Standardized, normalized block-level elements.
+2. `clean_markdown.md` (role: `clean_markdown`): High-fidelity markdown content with correct LaTeX math block bindings.
+3. `clean_manifest.json` (role: `clean_manifest`): Catalog of all cleaned blocks and media files.
+4. `quality_report.json` (role: `quality_report`): Compliance scoring and format verification logs.
+5. `unresolved_items.json` (role: `unresolved_items`): Low-confidence translation or block extraction exceptions.
+6. `provenance.json` (role: `provenance`): Standard cryptographic pipeline lineage.
+7. `metrics.json` (role: `metrics`): Token count and cost tracking data.
 
 ## 7. Webhook Protocol
 
