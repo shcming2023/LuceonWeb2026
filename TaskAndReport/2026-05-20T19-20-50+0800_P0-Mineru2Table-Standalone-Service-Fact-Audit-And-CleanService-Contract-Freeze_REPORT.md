@@ -4,7 +4,7 @@
 - **Executed by**: `Lucode`
 - **Date**: `2026-05-20`
 - **Final Branch**: `lucode/TASK-20260520-192050-P0-Mineru2Table-Standalone-Service-Fact-Audit-And-CleanService-Contract-Freeze`
-- **Final Branch HEAD**: `1c738e1ac7770297f2d509f559fea5f463461d90`
+- **Final Branch HEAD**: `441e06d649dbb064c585c54d7d4ecb9feee3c3f3`
 
 ---
 
@@ -12,16 +12,17 @@
 
 I have successfully completed the technical fact audit and contract freeze for the `Mineru2Table` standalone service integration, strictly operating under a **docs-only / read-only control-plane restriction**. No runtime modifications were made to the Luceon2026 codebase, and no remote or local mutative actions were executed against the Mineru2Table deployment or external services.
 
-**Key Achievements:**
-1. **Source Code Level Audit Completed**: 100% read-only inspection of the cloned `shcming2023/Mineru2Table2026` repository has been performed, auditing routes, authentication, MinIO bucket policies, persistent atomic disk store mechanisms, and HMAC signature signatures.
-2. **Fact Audit Document Created**: Generated [Mineru2Table-Standalone-Service-Fact-Audit.md](file:///workspace/dev/Luceon2026/docs/contracts/Mineru2Table-Standalone-Service-Fact-Audit.md) which freezes all technical details, and identifies three critical implementation gaps in the external standalone service.
-3. **Adaptation Plan Updated**: Revised [CleanService-Mineru2Table-Adaptation-Plan.md](file:///workspace/dev/Luceon2026/docs/contracts/CleanService-Mineru2Table-Adaptation-Plan.md) to formally recommend and freeze **Option A (Direct Protocol Alignment)**, deprecating early Option C proxies, and specifying the exact Phase 1 external corrections and Phase 2 mock-safe Luceon integration tasks.
+**Key Achievements (Narrow Return Alignment & Corrections):**
+1. **Fact Separation Audited**: Clarified that the local running container `mineru2table-api` is built from an older state (HEAD `43754fa`) and does not support Protocol v1 endpoints, while the remote upstream codebase (HEAD `7e9e592`) natively implements over 90% of the CleanService Protocol v1.
+2. **Storage Allowlist Code Bug Uncovered**: Identified the exception gap where `minio_backend.py` throws built-in `PermissionError` but the runner catches `StoragePermissionError`, preventing compliant `forbidden_storage_target` HTTP 403 response.
+3. **Fact Audit Document Updated**: Generated and corrected [Mineru2Table-Standalone-Service-Fact-Audit.md](file:///workspace/dev/Luceon2026/docs/contracts/Mineru2Table-Standalone-Service-Fact-Audit.md) to split deployed-vs-upstream states, document the allowlist exception mismatch, and freeze all technical facts.
+4. **Adaptation Plan Updated**: Revised [CleanService-Mineru2Table-Adaptation-Plan.md](file:///workspace/dev/Luceon2026/docs/contracts/CleanService-Mineru2Table-Adaptation-Plan.md) to downgrade `Option A` to a recommended candidate for Luceon approval, and add `M-4` task to align allowlist exception mapping.
 
 ---
 
 ## 2. Current-vs-Target Standalone Service Gaps
 
-Our audit has revealed that `Mineru2Table2026` already implements over 90% of the CleanService Protocol v1 specification natively. The remaining gaps are limited to **three precise items** in the external codebase:
+Our audit has revealed that `Mineru2Table2026` upstream remote codebase already implements over 90% of the CleanService Protocol v1 specification natively. The remaining gaps are narrowed down to **five precise items** (including the exception type and deployment gaps):
 
 1. **Unresolved Anchors (Missing Artifact)**:
    - **Current**: The external runner does not generate or upload the required `unresolved_anchors.json` artifact, violating the Seven-File Target Output Contract.
@@ -32,6 +33,12 @@ Our audit has revealed that `Mineru2Table2026` already implements over 90% of th
 3. **Storage Cleanup Hygiene (Disk Saturation Risk)**:
    - **Current**: Temporary directories generated under `/tmp/mineru2table_{job_id}` during run execution are never physically purged.
    - **Target**: Wrap execution inside a `try...finally` block in `runner.py` to call `shutil.rmtree(temp_dir, ignore_errors=True)`.
+4. **Allowlist Exception Mismatch (Diverged Error Gap)**:
+   - **Current**: `minio_backend.py` raises standard `PermissionError` upon allowlist violation, but `runner.py` catches `StoragePermissionError`. This type mismatch makes the exception fall through to a generic HTTP 500 error instead of the compliant `forbidden_storage_target` HTTP 403 error.
+   - **Target**: Align exceptions by having `minio_backend.py` raise `StoragePermissionError` directly.
+5. **Local Deployment OpenAPI Endpoints (Deployment Gap)**:
+   - **Current**: The local running container (`mineru2table-api`) is on HEAD `43754fa` and lacks all `/api/v1/jobs` endpoints entirely.
+   - **Target**: Redeploy the local container using the latest upstream code (`7e9e592` or later) after other code adaptations are ready.
 
 ---
 
@@ -39,7 +46,7 @@ Our audit has revealed that `Mineru2Table2026` already implements over 90% of th
 
 | Option | Strategy | Feasibility / Recommendation |
 | --- | --- | --- |
-| **Option A (Approved)** | **Direct Protocol Alignment** (Directly fix the three gaps in the external Mineru2Table codebase). | **Highly Recommended**. Due to native Protocol v1 support, direct fixes are low-risk (only requires modifying a few lines in `runner.py` in the external repo). This avoids all proxy overhead and ensures compliant provenance. |
+| **Option A (Lucode Recommended)** | **Direct Protocol Alignment** (Directly fix the gaps in the external Mineru2Table codebase). | **Highly Recommended Candidate for Luceon Approval**. Due to native Protocol v1 support in remote upstream, direct fixes are low-risk. This avoids all proxy overhead and ensures compliant provenance. |
 | **Option B (Rejected)** | **Luceon-Side Multipart Adapter** (Keep Mineru2Table as-is, make Luceon wrap and call deprecated multipart HTTP routes). | **Strictly Rejected**. Introduces massive disk/network double-copy overhead and breaks storage security isolation boundaries. |
 | **Option C (Deprecated)** | **Hybrid Local Sidecar Adapter** (Deploy a local proxy translating protocol requests). | **Deprecated**. Rendered redundant by native Protocol v1 capability in the latest Mineru2Table codebase. |
 

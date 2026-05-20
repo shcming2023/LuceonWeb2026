@@ -42,7 +42,7 @@ The remaining compliance gaps have been narrowed down to **three precise technic
 
 | Option | Description | Pros | Cons | Recommendation |
 | --- | --- | --- | --- | --- |
-| **Option A (Approved)** | **Direct Protocol Alignment**: Modify the external Mineru2Table service codebase directly to fix the remaining artifact gaps (rename stats, upload unresolved anchors, add temp-file cleanup). | • Zero double-copy overhead.<br>• Native, compliant provenance.<br>• Cleanest, production-ready architecture. | • Requires three minor Python file changes in the external repo. | **Highly Recommended**. This is the only approved transition strategy for stable integration. |
+| **Option A (Lucode Recommended / Candidate for Luceon approval)** | **Direct Protocol Alignment**: Modify the external Mineru2Table service codebase directly to fix the remaining artifact and exception gaps (rename stats, upload unresolved anchors, add temp-file cleanup, fix allowlist exception class). | • Zero double-copy overhead.<br>• Native, compliant provenance.<br>• Cleanest, production-ready architecture. | • Requires minor Python file changes in the external repo. | **Highly Recommended**. This is the recommended candidate transition strategy for stable integration pending final Luceon approval. |
 | **Option B (Rejected)** | **Luceon-Side Multipart Adapter**: Luceon's worker downloads MinIO files, creates a multipart HTTP request to Mineru2Table's deprecated `/api/v1/tasks`, and downloads results back. | • No changes in Mineru2Table codebase. | • High network/disk bottleneck.<br>• Risk of silent failure.<br>• Volatile provenance lineage. | **Strictly Rejected**. Not safe for production due to network overhead and lack of storage isolation. |
 | **Option C (Deprecated)** | **Hybrid Local Sidecar Adapter**: Deploy a local proxy next to Mineru2Table that exposes Protocol v1 and translates it internally to the deprecated multipart API. | • Permitted only for early prototyping. | • Deprecated by the emergence of native Protocol v1 support in Mineru2Table. | **Deprecated**. Shifting exclusively to Option A. |
 
@@ -66,6 +66,10 @@ The following surgical modifications are required in `shcming2023/Mineru2Table20
   - `JOB_STORE_PATH` pointing to a writable, persistent JSON path (e.g. `/app/data/jobs.json`).
   - `API_KEY` for secure ingress control.
   - `ALLOWED_MINIO_ENDPOINTS`, `ALLOWED_INPUT_BUCKETS`, and `ALLOWED_OUTPUT_BUCKETS` to maintain storage access isolation.
+
+### M-4. Allowlist Exception Mapping Alignment (Gap Fix)
+- **File**: `src/core/storage/minio_backend.py`
+- **Correction**: Change the exception raised during allowlist validation from the built-in Python `PermissionError` to the project's custom `StoragePermissionError`. This ensures the background job runner's try-except block can correctly catch it and return the protocol-compliant `forbidden_storage_target` error payload (HTTP 403) instead of leaking a generic HTTP 500 error.
 
 ---
 
