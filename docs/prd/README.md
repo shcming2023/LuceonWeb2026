@@ -4,7 +4,8 @@
 
 ## 当前有效 PRD
 
-- 当前唯一有效 PRD：[Luceon2026-PRD-v0.4.md](./Luceon2026-PRD-v0.4.md)
+- 当前唯一有效 PRD 主体：[Luceon2026-PRD-v0.4.md](./Luceon2026-PRD-v0.4.md)
+- 独立 CleanService 服务模型补充 PRD：[Luceon2026-PRD-v0.4-Independent-CleanService-Services-Addendum.md](./Luceon2026-PRD-v0.4-Independent-CleanService-Services-Addendum.md) (TASK-223 引入)
 - 当前维护状态：6.9.1 里程碑后采用 Luceon/Lucode 双角色流程；Lucode 可提出产品/需求修订，Luceon 负责架构/验收边界审查和最终文档落账。
 - 历史维护规程：[Lucia PRD 维护规程](../../archive/team-model-retired-2026-05-16/docs-prd/lucia-prd-maintenance.md)
 

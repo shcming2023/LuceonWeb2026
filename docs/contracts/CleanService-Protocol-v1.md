@@ -136,6 +136,24 @@ Required constraints:
 
 MinIO credentials must not appear in request bodies. Services must read credentials from their environment and enforce endpoint/bucket allowlists.
 
+### 5.1 API Security & Credential Isolation (Independent Deployment Controls)
+
+Since CleanServices are deployed as isolated, independent Docker containers, the following strict security and boundary policies are mandatory:
+
+1. **Storage Credential Segregation**:
+   * MinIO access credentials (`MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY`) **must never** be passed in HTTP request payloads or returned in API responses.
+   * CleanService containers must load MinIO credentials exclusively from local container environment variables.
+2. **Access Control Allowlist Enforcement**:
+   * Each CleanService implementation must parse and enforce environment-based allowlists:
+     * `ALLOWED_MINIO_ENDPOINTS`: Semicolon-separated list of approved endpoints (e.g., `minio:9000;127.0.0.1:9000`).
+     * `ALLOWED_INPUT_BUCKETS`: Approved source buckets (e.g., `eduassets-raw`).
+     * `ALLOWED_OUTPUT_BUCKETS`: Approved target buckets (e.g., `eduassets-clean`).
+   * Attempting to read from or write to buckets/endpoints outside these allowlists must fail immediately with a `forbidden_storage_target` structured error.
+3. **API Key Token Verification**:
+   * Every incoming job submission or status check HTTP request must carry an authorization token (e.g., `Authorization: Bearer <API_KEY>`) loaded via the container's environment variable `API_KEY`. Requests without a valid key must return HTTP 401 with `unauthorized`.
+4. **Network Access / Ingress Isolation**:
+   * In multi-container environments, ingress to the CleanService container (port 8000 by default) should be restricted to loopback binding (`127.0.0.1:8000:8000`) or within isolated internal Docker networks populated only by approved control plane containers (e.g., Luceon `cms-upload-server`).
+
 ## 6. Job State Schema
 
 Allowed job states:
@@ -169,10 +187,48 @@ Terminal response example:
       "content_type": "application/json",
       "sha256": "..."
     },
-    "logic_tree": { "bucket": "eduassets-clean", "object": "toc-rebuild/sha256:a1b2c3d4e5f60718/v1/logic_tree.json" },
-    "readable_tree": { "bucket": "eduassets-clean", "object": "toc-rebuild/sha256:a1b2c3d4e5f60718/v1/readable_tree.md" },
-    "skeleton": { "bucket": "eduassets-clean", "object": "toc-rebuild/sha256:a1b2c3d4e5f60718/v1/skeleton.json" },
-    "provenance": { "bucket": "eduassets-clean", "object": "toc-rebuild/sha256:a1b2c3d4e5f60718/v1/provenance.json" }
+    "logic_tree": {
+      "bucket": "eduassets-clean",
+      "object": "toc-rebuild/sha256:a1b2c3d4e5f60718/v1/logic_tree.json",
+      "size_bytes": 204850,
+      "content_type": "application/json",
+      "sha256": "..."
+    },
+    "readable_tree": {
+      "bucket": "eduassets-clean",
+      "object": "toc-rebuild/sha256:a1b2c3d4e5f60718/v1/readable_tree.md",
+      "size_bytes": 10543,
+      "content_type": "text/markdown",
+      "sha256": "..."
+    },
+    "skeleton": {
+      "bucket": "eduassets-clean",
+      "object": "toc-rebuild/sha256:a1b2c3d4e5f60718/v1/skeleton.json",
+      "size_bytes": 8500,
+      "content_type": "application/json",
+      "sha256": "..."
+    },
+    "unresolved_anchors": {
+      "bucket": "eduassets-clean",
+      "object": "toc-rebuild/sha256:a1b2c3d4e5f60718/v1/unresolved_anchors.json",
+      "size_bytes": 450,
+      "content_type": "application/json",
+      "sha256": "..."
+    },
+    "provenance": {
+      "bucket": "eduassets-clean",
+      "object": "toc-rebuild/sha256:a1b2c3d4e5f60718/v1/provenance.json",
+      "size_bytes": 3820,
+      "content_type": "application/json",
+      "sha256": "..."
+    },
+    "metrics": {
+      "bucket": "eduassets-clean",
+      "object": "toc-rebuild/sha256:a1b2c3d4e5f60718/v1/metrics.json",
+      "size_bytes": 950,
+      "content_type": "application/json",
+      "sha256": "..."
+    }
   },
   "stats": {
     "tokens": { "prompt": 152034, "completion": 8123, "total": 160157 },
@@ -248,7 +304,13 @@ Minimum shape:
     "max_tokens_total": 500000
   },
   "outputs": [
-    { "role": "flooded_content", "object": "flooded_content.json", "sha256": "...", "size_bytes": 4823910 }
+    { "role": "flooded_content", "object": "flooded_content.json", "sha256": "...", "size_bytes": 4823910 },
+    { "role": "logic_tree", "object": "logic_tree.json", "sha256": "...", "size_bytes": 204850 },
+    { "role": "readable_tree", "object": "readable_tree.md", "sha256": "...", "size_bytes": 10543 },
+    { "role": "skeleton", "object": "skeleton.json", "sha256": "...", "size_bytes": 8500 },
+    { "role": "unresolved_anchors", "object": "unresolved_anchors.json", "sha256": "...", "size_bytes": 450 },
+    { "role": "provenance", "object": "provenance.json", "sha256": "...", "size_bytes": 3820 },
+    { "role": "metrics", "object": "metrics.json", "sha256": "...", "size_bytes": 950 }
   ],
   "stats": {
     "tokens": { "total": 160157 },

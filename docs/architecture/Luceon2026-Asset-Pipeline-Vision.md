@@ -1,9 +1,9 @@
 # Luceon2026 Asset Pipeline Vision
 
-Status: Canonical architecture direction for future planning  
-Last updated: 2026-05-15  
-Historical owner: Architect; role retired after 6.9.1
-Related PRD: `docs/prd/Luceon2026-PRD-v0.4.md`, `docs/prd/Luceon2026-PRD-v0.4-CleanService-Addendum.md`
+Status: Canonical architecture direction, aligned with independent CleanService service model (TASK-223)
+Last updated: 2026-05-20
+Historical owner: Architect; role retired after 6.9.1. Current Lucode updates active.
+Related PRD: `docs/prd/Luceon2026-PRD-v0.4.md`, `docs/prd/Luceon2026-PRD-v0.4-Independent-CleanService-Services-Addendum.md`
 
 ## 1. Boundary
 
@@ -26,13 +26,16 @@ It does not claim CleanService implementation acceptance, production readiness, 
 
 Luceon2026 should evolve from a parse-and-review CMS into a durable educational asset pipeline. In that pipeline, each stage creates assets that can be inspected, versioned, reviewed, and traced.
 
-The first future CleanService is expected to be Mineru2Table as `toc-rebuild`: it consumes MinerU `content_list_v2.json` and produces rebuilt table-of-contents / logical structure assets for operator review and downstream educational workflows.
+The project formally establishes the **Independent CleanService Service Model**:
+* **Mineru2Table** is the first independent CleanService, responsible for `toc-rebuild` (structural table-of-contents prep). It is developed in its own repository (`shcming2023/Mineru2Table2026`) and deployed as an independent Docker container.
+* **RawMaterial2CleanMaterial** is a subsequent, distinct clean stage with a separate repository and deployment boundary, responsible for final block-level cleaning and normalization. It must not be collapsed into Mineru2Table.
+* **Collaborative API Model**: Both services are separately developed, separately Docker-deployed, and integrate with Luceon asynchronously using the stable CleanService Protocol API using MinIO ObjectRefs as the hands-off interface.
 
 ## 3. Principles
 
 1. Asset first: each important stage output is a durable MinIO asset, not an invisible temporary file.
 2. Luceon orchestrates: Luceon owns material identity, task identity, asset version assignment, scheduling, review, audit, admission circuits, cost decisions, and acceptance semantics.
-3. Services are isolated: each CleanService is an external service with its own repository, version, health, job state, and failure domain.
+3. Services are isolated: each CleanService is an external service with its own repository, version, health, job state, and failure domain. Both Mineru2Table and RawMaterial2CleanMaterial are strictly independent repos and Docker containers, communicating with Luceon via the CleanService Protocol API.
 4. Provenance is mandatory for new CleanService assets: future clean outputs must include enough provenance to explain inputs, service version, options, cost, and output object hashes.
 5. Failure is explicit: raw MinerU output, skeleton output, placeholder output, or partial unresolved anchors must never be presented as successful clean output.
 6. Current evidence remains separate: future CleanService validation must not overwrite existing pressure-test, AI residual, recovery, or release-boundary evidence.
@@ -90,8 +93,9 @@ eduassets-clean/
     logic_tree.json
     readable_tree.md
     skeleton.json
-    token_stats.json
+    unresolved_anchors.json
     provenance.json
+    metrics.json
 ```
 
 This layout is not an immediate migration instruction. Existing buckets and objects remain legacy until a future approved migration plan exists.
@@ -100,7 +104,7 @@ This layout is not an immediate migration instruction. Existing buckets and obje
 
 | Service | External implementation | Status | Primary input | Primary outputs |
 | --- | --- | --- | --- | --- |
-| `toc-rebuild` | `shcming2023/Mineru2Table2026` | future first CleanService | MinerU `content_list_v2.json` | `flooded_content.json`, `logic_tree.json`, `readable_tree.md`, `skeleton.json`, `provenance.json` |
+| `toc-rebuild` | `shcming2023/Mineru2Table2026` | future first CleanService | MinerU `content_list_v2.json` | `flooded_content.json`, `logic_tree.json`, `readable_tree.md`, `skeleton.json`, `unresolved_anchors.json`, `provenance.json`, `metrics.json` |
 | `md-clean` | TBD | future | raw/clean structure assets | cleaned Markdown and structured blocks |
 | `figure-rebuild` | TBD | future | images and structure assets | figure metadata/assets |
 
