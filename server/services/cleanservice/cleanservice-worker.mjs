@@ -55,22 +55,28 @@ export function isCleanServiceTaskEligible(task = {}, { serviceName = 'toc-rebui
   return true;
 }
 
-export function buildCleanServiceJobRequest(task = {}, config = loadCleanServiceConfig()) {
+export function buildCleanServiceJobRequest(task = {}, config = loadCleanServiceConfig(), { submittedAt = new Date().toISOString() } = {}) {
   const serviceName = config.serviceName || 'toc-rebuild';
   const { assetVersion } = allocateAssetVersion(task, serviceName);
 
   const inputRef = buildCanonicalRawMaterialRef(task);
+  inputRef.source.endpoint = config.storageEndpoint;
+  inputRef.source.use_ssl = config.storageUseSsl;
 
   return {
     job_id: `luceon-${task.id}-${serviceName}-${assetVersion}`,
     material_id: task.materialId,
     parse_task_id: task.id,
     asset_version: assetVersion,
+    submitted_at: submittedAt,
+    submitted_by: config.submittedBy,
     inputs: [inputRef],
     sink: {
       type: 'minio',
       bucket: task.metadata?.cleanOutputBucket || 'eduassets-clean',
       prefix: `${serviceName}/${task.materialId}/${assetVersion}/`,
+      endpoint: config.storageEndpoint,
+      use_ssl: config.storageUseSsl,
     },
     callback_secret_ref: config.callbackSecretRef,
     options: {
@@ -133,7 +139,7 @@ export class CleanServiceWorker {
 
     let request;
     try {
-      request = buildCleanServiceJobRequest(eligible, this.config);
+      request = buildCleanServiceJobRequest(eligible, this.config, { submittedAt: this.now() });
     } catch (err) {
       if (err.code === 'skipped-policy' || err.code === 'not-applicable') {
         const cleanState = err.code;
