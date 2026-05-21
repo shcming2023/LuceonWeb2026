@@ -65,7 +65,7 @@ export function normalizeCleanServiceTransportError(error) {
     error: {
       code: timeout ? 'timeout' : 'transport_error',
       message,
-      retriable: timeout,
+      retriable: timeout || error?.retriable === true,
     },
   };
   return {
