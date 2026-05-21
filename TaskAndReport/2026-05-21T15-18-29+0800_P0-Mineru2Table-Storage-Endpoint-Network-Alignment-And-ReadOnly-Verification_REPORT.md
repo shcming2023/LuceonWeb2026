@@ -4,7 +4,7 @@
 
 **主线先决问题判定**：
 > Can Mineru2Table be configured to use Luceon's intended storage endpoint semantics (`minio:9000` on `cms-network`) without injecting credentials, reading/writing MinIO, or activating real dispatch?
-> 
+>
 > **YES (能)**。经完成耐久化 Compose 及环境变量配置，且在未注入任何 MinIO/LLM 凭证、绝不发送 POST 任务的前提下，`mineru2table-api` 容器已顺利连入外部桥接网络 `cms-network` 并与 `minio:9000` 端点对齐，完整通过了全部只读验证检查。
 
 ---
@@ -14,10 +14,11 @@
 ### 2.1 Mineru2Tables (外部独立容器服务仓库)
 - **Branch**: `lucode/task-235-mineru2table-storage-network-alignment`
 - **Exact HEAD Commit**: `f487fd82337bbef550e79789440ca45a5a2dd424`
-- **Changed Files**:
+- **Git-tracked Changed Files**:
   - `docker-compose.yml`
   - `.env.example`
-  - `.env` (只读容器部署配置对齐，无任何 Credentials)
+- **Local Runtime Config**:
+  - `.env` was updated only in the local deployment workspace to set `DATA_DIR=/Users/concm/prod_workspace/Mineru2Tables/data`; it remains a local runtime file and contains no credentials.
 - **Git Diff Check**:
 ```diff
 diff --git a/.env.example b/.env.example
@@ -32,7 +33,7 @@ index dfde40c..81d8df5 100644
 +ALLOWED_MINIO_ENDPOINTS=minio:9000
  ALLOWED_INPUT_BUCKETS=eduassets-raw
  ALLOWED_OUTPUT_BUCKETS=eduassets-clean
- 
+
 diff --git a/docker-compose.yml b/docker-compose.yml
 index 09231a2..b47e637 100644
 --- a/docker-compose.yml
@@ -69,7 +70,7 @@ index 09231a2..b47e637 100644
 
 ### 2.2 Luceon2026 (控制端仓库)
 - **Branch**: `lucode/task-235-storage-network-alignment`
-- **Control-Plane HEAD Commit**: `a6e0caca9941539509cf8c91056a669bb6cbe16e`
+- **Submitted Control-Plane Branch HEAD**: `3e1772a5312ed63f86b771d978dfaf0e4a204c7b`
 - **Changed Files**:
   - `TaskAndReport/TASK_TRACKING_LIST.md` (台账状态更新)
   - `TaskAndReport/2026-05-21T15-18-29+0800_P0-Mineru2Table-Storage-Endpoint-Network-Alignment-And-ReadOnly-Verification_REPORT.md` (本报告)
@@ -173,7 +174,7 @@ index 09231a2..b47e637 100644
 ```
 
 ### 4.3 GET /health API 只读健康检查
-向 `mineru2table-api` 发生只读 `/health` 探测：
+向 `mineru2table-api` 发起只读 `/health` 探测：
 ```json
 {"status":"unhealthy","service_name":"toc-rebuild","service_version":"1.0.0","protocol_version":"v1","checks":{"minio":"unconfigured","llm":"not_configured","dependencies":"ok"},"timestamp":"2026-05-21T13:17:16.687370Z"}
 ```
@@ -181,41 +182,20 @@ index 09231a2..b47e637 100644
 
 ### 4.4 GET /openapi.json API 路径暴露列表验证
 读取 OpenAPI JSON 接口路径：
-```json
-{
-  "paths": {
-    "/api/v1/jobs:from-storage": {
-      "post": {
-        "tags": ["CleanService v1"],
-        "summary": "Submit Job",
-        "description": "提交异步作业（Protocol v1）"
-      }
-    },
-    "/api/v1/extract": {
-      "post": {
-        "tags": ["旧版废弃"],
-        "deprecated": true
-      }
-    },
-    "/api/v1/tasks": {
-      "post": {
-        "tags": ["旧版废弃"],
-        "deprecated": true
-      }
-    },
-    "/health": {
-      "get": {
-        "summary": "Health Check"
-      }
-    }
-  }
-}
+```text
+/api/v1/extract
+/api/v1/jobs
+/api/v1/jobs/{job_id}
+/api/v1/jobs:from-storage
+/api/v1/tasks
+/api/v1/tasks/{task_id}
+/health
 ```
-*结论：包含了 Protocol v1 的关键 `/api/v1/jobs` 接口，但本次未做任何 POST 调用。*
+*结论：包含了 Protocol v1 的关键 `/api/v1/jobs` 与 `/api/v1/jobs:from-storage` 接口，但本次未做任何 POST 调用。*
 
 ### 4.5 Jobs Store Durability (jobs.json 未改动验证)
-- **Before Size/Hash**: `2 bytes`, SHA256: `44136fa355b3678a1146ad16f7e8649e94fb4fc77e8310c060f61caaff8a`
-- **After Size/Hash**: `2 bytes`, SHA256: `44136fa355b3678a1146ad16f7e8649e94fb4fc77e8310c060f61caaff8a`
+- **Before Size/Hash**: `2 bytes`, SHA256: `44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a`
+- **After Size/Hash**: `2 bytes`, SHA256: `44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a`
 - **jobs.json Content Excerpt**:
 ```json
 {}
@@ -237,4 +217,4 @@ index 09231a2..b47e637 100644
 ## 6. Residual Next Steps (交接说明)
 
 1. 控制权现正式移交给 `luceon` (架构总控)。
-2. 本次 Runtime 配置对齐及只读验证完成后，Luceon 可进行验收。验收通过后，可再次激活 Task 233 分支，安全重试具有完整 Payload 契约的 Controlled Failure-mode Loopback Ingress 真实 POST 验证。
+2. 本次 Runtime 配置对齐及只读验证完成后，Luceon 可进行验收。验收通过后，可下达新的窄任务，安全重试具有完整 Payload 契约的 Controlled Failure-mode Loopback Ingress 单次 POST 验证。
