@@ -18,8 +18,8 @@
 仅新增 2 个允许文件，未修改任何既有文件：
 
 ```
- server/services/cleanservice/http-transport.mjs       | [NEW] 163 lines
- server/tests/cleanservice-http-transport-smoke.mjs    | [NEW] 297 lines
+ server/services/cleanservice/http-transport.mjs       | [NEW] 173 lines
+ server/tests/cleanservice-http-transport-smoke.mjs    | [NEW] 387 lines
  2 files changed, 560 insertions(+)
 ```
 
@@ -101,7 +101,7 @@ $ node server/tests/cleanservice-http-transport-smoke.mjs
   [2] canonical Raw Material sends exactly one mock POST /api/v1/jobs... PASS
   [3] legacy parsed-only skipped-policy makes no HTTP request... PASS
   [4] mock 4xx response is recorded as explicit dispatch failure... PASS
-  [5] mock 5xx response is recorded as explicit failure with retriable... PASS
+  [5] mock 5xx response is recorded as explicit failure... PASS
   [6] timeout/network failure is bounded and reported... PASS
   [7] no test calls real 127.0.0.1:8000... PASS
 PASS cleanservice http transport smoke (7/7)
@@ -164,7 +164,7 @@ $ npx tsc --noEmit
 - **MinIO 输出验证**：需要真实 job 完成后验证
 - **Operator UI 状态**：clean job 状态未连接前端
 - **RawMaterial2CleanMaterial 服务集成**：明确后置
-- **Retry/backoff 硬化**：超出当前 focused mock failure 语义
+- **Retry/backoff 硬化**：超出当前 focused mock failure 语义；client 层 5xx `retriable` 传播仍需后续任务收口
 - **`POST /api/v1/jobs:from-storage` 路径**：未在本次 transport 中实现（当前仅覆盖 `/api/v1/jobs`）
 
 ---
