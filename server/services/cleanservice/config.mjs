@@ -22,7 +22,7 @@ export function loadCleanServiceConfig(env = process.env) {
   const softCostLimitCny = finiteNumberOr(env.CLEANSERVICE_SOFT_COST_LIMIT_CNY, CLEAN_SERVICE_SOFT_COST_CNY);
   const hardCostLimitCny = finiteNumberOr(env.CLEANSERVICE_HARD_COST_LIMIT_CNY, CLEAN_SERVICE_HARD_COST_CNY);
   const timeoutMs = finiteNumberOr(env.CLEANSERVICE_TIMEOUT_MS, CLEAN_SERVICE_DEFAULT_TIMEOUT_MS);
-  
+
   const storageEndpoint = env.CLEANSERVICE_STORAGE_ENDPOINT || 'minio:9000';
   const storageUseSsl = isTruthy(env.CLEANSERVICE_STORAGE_USE_SSL);
   const submittedBy = env.CLEANSERVICE_SUBMITTED_BY || 'luceon2026/cleanservice-worker';
