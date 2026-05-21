@@ -8,7 +8,7 @@
 1. **外部主干合并 (Phase A)**：在外部仓库 `shcming2023/Mineru2Table2026` 中，确认 `origin/main` 仍为 `lucode/task-225-mineru2table-protocol-gap-fixes`（SHA: `b43852485d9f0e7d2918578df494afefe6b2f687`）的直接祖先。成功以 Fast-forward 方式将外部 `main` 分支前进并推送到 GitHub 远端。
 2. **宿主机部署区同步 (Phase B)**：利用容器环境与宿主机双重目录挂载，通过完全离线的本地文件源同步协议，完美将宿主机工作区 `/Users/concm/prod_workspace/Mineru2Tables` 快进同步到最新。
 3. **独立容器重建与只读校验 (Phase C)**：在挂载了 Docker.sock 的客户端环境中重建了 `mineru2table` 服务镜像（以 `GIT_COMMIT` 作为 build arg 构建），重建拉起了 `mineru2table-api` 容器。
-4. **只读健康与 OpenAPI 审计**：测试了 `/health` 与 `/openapi.json`，证明了 Protocol v1 读/写 API 的三个关键路径完美就绪，没有运行任何写操作或数据变更。
+4. **只读健康与 OpenAPI 审计**：测试了 `/health` 与 `/openapi.json`，证明了 Protocol v1 读/写 API 的三个关键路径已出现在 OpenAPI 中；行为联调仍未执行，且没有运行任何写操作或数据变更。
 
 本次操作未越过任何业务红线，未做任何真实数据写入，未进行任何 Luceon 侧的主线代码连线，完全保持了控制面与外部模块的无损集成状态。
 
@@ -192,9 +192,9 @@ python3 -c "import urllib.request, json; data = json.loads(urllib.request.urlope
   /api/v1/tasks/{task_id}
   ```
 * **符合度审计**：
-  * `[YES]` `/api/v1/jobs` (GET/POST) 完美就绪
-  * `[YES]` `/api/v1/jobs/{job_id}` (GET) 完美就绪
-  * `[YES]` `/api/v1/jobs:from-storage` (POST) 完美就绪
+  * `[YES]` `/api/v1/jobs` (POST) 已出现在 OpenAPI 中
+  * `[YES]` `/api/v1/jobs/{job_id}` (GET) 已出现在 OpenAPI 中
+  * `[YES]` `/api/v1/jobs:from-storage` (POST) 已出现在 OpenAPI 中
   * `[DEPRECATED]` 旧版的 `/api/v1/extract`、`/api/v1/tasks` 标记为 `deprecated: true` 并予以保留（平滑过渡）。
 
 ---
@@ -234,7 +234,7 @@ python3 -c "import urllib.request, json; data = json.loads(urllib.request.urlope
 
 ## 9. Final Status Recommendation (最终状态建议)
 
-由于我们在外部 mainline 成功完成了分支 fast-forward 整合并推送，宿主机部署区无损同步，独立容器重建通过健康检查，且只读端点和 OpenAPI 定义被 100% 验证符合 Protocol v1 规范：
+由于我们在外部 mainline 成功完成了分支 fast-forward 整合并推送，宿主机部署区无损同步，独立容器重建通过 Docker HTTP 健康检查，且只读端点和 OpenAPI 核心路径已被确认：
 
 > [!IMPORTANT]
 > **Lucode 角色建议**：本任务已完全实现所有正面验收条件，并且 100% 避开了所有禁止事项。建议将本任务状态推荐为 **ACCEPTED**。
