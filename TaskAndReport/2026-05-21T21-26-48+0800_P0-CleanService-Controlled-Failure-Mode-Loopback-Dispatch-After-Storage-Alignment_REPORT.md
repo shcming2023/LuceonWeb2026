@@ -5,6 +5,7 @@
 - **Task ID**: TASK-20260521-212648-P0-CleanService-Controlled-Failure-Mode-Loopback-Dispatch-After-Storage-Alignment
 - **Execution Time**: 2026-05-21T21:45:00Z
 - **Luceon Branch**: `lucode/TASK-20260521-212648-P0-CleanService-Controlled-Failure-Mode-Loopback-Dispatch-After-Storage-Alignment`
+- **Luceon Delivery HEAD**: `17e899b4b85328b3926f55ce11fa6b67f091ebf6`
 - **Luceon BASE HEAD**: `b00d015a272829b005b5f096a8d407e5b53b13ca` (TASK-235: 接收存储网络对齐并下达受控调度重试)
 - **Mineru2Table Workspace HEAD**: `f487fd82337bbef550e79789440ca45a5a2dd424` (TASK-235: 对齐网络至cms-network及存储端点至minio:9000)
 - **Was POST Sent**: `yes`
@@ -185,7 +186,10 @@
 
 ## 5. 存储层 (jobs.json) 变化对比
 
-验证了宿主机映射文件 `/workspace/ops/Mineru2Tables/data/jobs.json` 在执行单次 POST 后的状态变动：
+验证了部署 job-store 文件在执行单次 POST 后的状态变动：
+
+- Dev container observed path: `/workspace/ops/Mineru2Tables/data/jobs.json`
+- Host path verified by Luceon: `/Users/concm/prod_workspace/Mineru2Tables/data/jobs.json`
 
 ### 5.1. 运行前 (Baseline)
 - **大小**: `2` 字节
