@@ -3,7 +3,7 @@
 ## 1. 任务基本信息
 
 - **Branch**: `lucode/task-237` (基于 `main`)
-- **HEAD Commit**: `ae9708bc5a76b87ccc912e860fc8d87d74f94ddd`
+- **Final Remote HEAD Commit**: `5bee9cddf03ff47d4dca5d919ed161855889315a`
 - **操作环境**: Docker 运行时/开发容器网络 `cms-network`
 - **执行时间**: 2026-05-21T22:11Z
 
@@ -96,7 +96,8 @@ $ docker-compose config | grep CLEANSERVICE
 
 | 校验维度 | 任务前基准 (Task 236 终态) | 任务后实际状态 | 是否发生变化 |
 | :--- | :--- | :--- | :--- |
-| **Path** | `/workspace/ops/Mineru2Tables/data/jobs.json` | `/workspace/ops/Mineru2Tables/data/jobs.json` | 否 |
+| **Dev container path** | `/workspace/ops/Mineru2Tables/data/jobs.json` | `/workspace/ops/Mineru2Tables/data/jobs.json` | 否 |
+| **Host path verified by Luceon** | `/Users/concm/prod_workspace/Mineru2Tables/data/jobs.json` | `/Users/concm/prod_workspace/Mineru2Tables/data/jobs.json` | 否 |
 | **Size** | `718` 字节 | `718` 字节 | 否 |
 | **SHA256 Hash** | `29d5621bcca3d626b8f27289caabd13ba6cd835913a76b9e2cbd8fd8d4577413` | `29d5621bcca3d626b8f27289caabd13ba6cd835913a76b9e2cbd8fd8d4577413` | **否** |
 | **Key/Mock Job** | `luceon-optionb-mock-job-1779399902295` | `luceon-optionb-mock-job-1779399902295` | 否 |
