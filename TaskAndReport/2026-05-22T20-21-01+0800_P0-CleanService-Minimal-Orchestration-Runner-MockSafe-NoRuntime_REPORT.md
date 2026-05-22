@@ -7,7 +7,7 @@
 本项工作严格限定在依赖注入、纯内存 mock 以及 dry-run 的安全边界内，没有触发任何真实的网络 POST、DB 写入、MinIO 读取、LLM 访问或 Docker/Compose/worker 激活。所有新写的 8 个场景集成测试以及全部 8 套关联的已有 CleanService 模块 smoke 测试、TypeScript 类型检查已全量跑通，未引入任何回归破坏。
 
 - **交付分支 (Branch)**: `lucode/TASK-20260522-202101-P0-CleanService-Minimal-Orchestration-Runner-MockSafe-NoRuntime` (远端已推送至 `origin`)
-- **提交哈希 (HEAD Commit)**: `02d841c9402de0678b22b350256a9dc88227a082` (已将所有代码、测试、报告及台账修改固化提交)
+- **提交哈希 (HEAD Commit)**: `025b15858cfd799cb68d904b7264a2cb459b3986` (已将所有代码、测试、报告及台账修改固化提交)
 - **报告生成时间**: 2026-05-22
 
 ---
@@ -18,8 +18,8 @@
 ```text
 A       TaskAndReport/2026-05-22T20-21-01+0800_P0-CleanService-Minimal-Orchestration-Runner-MockSafe-NoRuntime_REPORT.md
 M       TaskAndReport/TASK_TRACKING_LIST.md
-A       server/services/cleanservice/orchestration-runner.mjs
-A       server/tests/cleanservice-orchestration-runner-smoke.mjs
+M       server/services/cleanservice/orchestration-runner.mjs
+M       server/tests/cleanservice-orchestration-runner-smoke.mjs
 ```
 
 ## 3. 空白字符与格式检查 (Whitespace Diff Check)
@@ -54,7 +54,7 @@ Test 3 result: {
     costSource: 'unavailable',
     tokensTotal: 6266,
     cleanState: 'completed',
-    timestamp: '2026-05-22T12:51:07.583Z'
+    timestamp: '2026-05-22T13:17:00.494Z'
   },
   warnings: [],
   verificationSummary: {
@@ -72,14 +72,17 @@ Test 3 result: {
     },
     costSource: 'unavailable'
   },
-  observedAt: '2026-05-22T12:51:07.583Z'
+  observedAt: '2026-05-22T13:17:00.495Z'
 }
   [4] Testing verifier failure blocking...
   [5] Testing dispatch failure blocking...
   [6] Testing incompatible existing metadata blocking...
   [7] Testing zero reset/cleanup behavior in happy-path persistence plan...
   [8] Testing output filtering of heavy parsed textual content...
-ALL cleanservice orchestration runner smoke tests PASSED! (8/8)
+  [9] Testing in-progress job status early return...
+  [10] Testing unknown/unsupported job status early return...
+  [11] Testing dynamic raw input propagation without hardcoding...
+ALL cleanservice orchestration runner smoke tests PASSED! (11/11)
 ```
 
 ### 4.2 关联模块 Smoke 测试回归校验
