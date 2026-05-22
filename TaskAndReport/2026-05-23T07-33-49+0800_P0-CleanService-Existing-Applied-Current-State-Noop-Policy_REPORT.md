@@ -9,7 +9,8 @@
 ### 1.1 Git 环境与 Baseline 分支状态
 * **当前分支**：`lucode/TASK-20260523-073349-P0-CleanService-Existing-Applied-Current-State-Noop-Policy`
 * **对比基线 (origin/main)**：`a2b9178a1e4ab6e6ab478ee3d34880bc9717677c` (已与之保持完全对齐)
-* **HEAD Commit Hash**：`c0e3b34ec1cb4a30ff13994e43faec3b6ce18683` (将在本次提交合并后在台账中最终锁定)
+* **远端交付 HEAD (Remote Delivery HEAD)**：`331e94e578394e53f2f9c6af53ee327c4600a0ab`
+* **Luceon 验收修正说明**：Luceon 在验收合入时仅修正报告和台账中的最终远端 HEAD 证据，不改变业务逻辑。
 
 ### 1.2 物理变更文件清单 (Git Status & Diff)
 根据任务书安全红线，本任务仅允许且仅修改了授权的 2 个源文件/测试文件，以及报告与台账：
