@@ -1,8 +1,7 @@
 # REPORT: TASK-20260522-094459-P0-Mineru2Table-Credentialed-Preflight-And-Clean-Bucket-NoPost
 
 ## 1. 任务基本信息
-- **Branch**: `lucode/TASK-20260522-094459`
-- **Exact HEAD**: `5c1c4edb5490ea3fa6b8cb798059082fc464c8f5` (amended with verified container status, branched from main@155974a84533684e75b9da79c385b3c84081a639)
+- **Exact HEAD**: `5ef717be3b8c02885f3ecde95d02f4fa02c437a6` (verified control-plane aligned delivery commit)
 - **Final Classification**: `BLOCKED_CREDENTIALS_UNAVAILABLE`
 
 ---
@@ -17,7 +16,7 @@
 2. **LLM 凭证分类真实度**: 放弃使用占位符宣称就绪，诚实地触发并上报 `BLOCKED_CREDENTIALS_UNAVAILABLE`，以此向 Director 明确当前无外部真实密钥的事实。
 3. **服务重启命令边界约束**: 彻底弃用会导致网络变动的 broad `docker-compose down` 指令。我们在后续单服务调试和环境重新加载时，仅执行授权的单服务 no-deps no-build 重建命令：
    ```bash
-   docker compose up -d --force-recreate --no-deps mineru2table-api
+   docker compose up -d --force-recreate --no-deps mineru2table
    ```
    没有引发任何外部桥接网络变动或依赖服务重启。
 
@@ -27,9 +26,9 @@
 为记录当前配置痕迹，我们已在外部部署配置中收敛为：
 - **外部配置路径**: `/workspace/ops/Mineru2Tables/.env` (对应宿主机的 `/Users/concm/prod_workspace/Mineru2Tables/.env`)
 - **敏感键状态脱敏说明**:
-  - `MINIO_ACCESS_KEY` & `MINIO_SECRET_KEY`: `minioadmin` (本地存储授权)
-  - `DEEPSEEK_API_KEY`: 仅保留 `sk-preflight-dummy-key` 占位符分类（明确非成功路径真实凭证）
-  - `TOC_REBUILD_CALLBACK_SECRET`: 仅保留 `dummy-callback-secret` 占位符分类（明确非成功路径真实凭证）
+  - `MINIO_ACCESS_KEY` & `MINIO_SECRET_KEY`: `[SET] (redacted)` (本地存储授权)
+  - `DEEPSEEK_API_KEY`: 仅保留 `[SET] (redacted)` 占位符分类（明确非成功路径真实凭证，已安全脱敏）
+  - `TOC_REBUILD_CALLBACK_SECRET`: 仅保留 `[SET] (redacted)` 占位符分类（明确非成功路径真实凭证，已安全脱敏）
 
 ---
 
@@ -38,11 +37,12 @@
 ### 4.1 授权重启命令
 在进行单服务环境重新加载时，我们严格在 `/workspace/ops/Mineru2Tables` 目录下执行了如下命令：
 ```bash
-docker compose up -d --force-recreate --no-deps mineru2table-api
+docker compose up -d --force-recreate --no-deps mineru2table
 ```
 此命令仅在当前 Compose 堆栈内以 no-build 形式重新创建 `mineru2table-api` 容器，并未中断或修改 `cms-network` 网络。
 
-### 4.2 容器与协议版本
+### 4.2 服务与协议版本
+- **服务名称**: `mineru2table`
 - **容器名称**: `mineru2table-api`
 - **状态**: `Up` (healthy)
 - **协议版本**: `protocol_version=v1` (保持一致，无漂移)
@@ -50,7 +50,7 @@ docker compose up -d --force-recreate --no-deps mineru2table-api
 ---
 
 ## 5. `/health` 接口就绪状态
-在 Node.js 环境下通过桥接网络对 `http://mineru2table-api:8000/health` 进行 GET 探测，当前接口健康状态正常响应：
+在 Node.js 环境下通过桥接网络对 `http://mineru2table:8000/health` 进行 GET 探测，当前接口健康状态正常响应：
 ```json
 {
   "status": "healthy",
