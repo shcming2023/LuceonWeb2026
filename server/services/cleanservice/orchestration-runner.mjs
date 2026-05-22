@@ -156,14 +156,51 @@ export async function runCleanServiceTocRebuildOnce({
   }
 
   const queryResult = await queryJobFn(request.job_id);
-  if (!queryResult || !queryResult.ok || !queryResult.job || queryResult.job.status === 'failed') {
-    const cleanState = queryResult?.job?.cleanState || 'protocol-failure';
+  if (!queryResult || !queryResult.ok || !queryResult.job) {
+    return {
+      ok: false,
+      status: 'protocol-failure',
+      classification: 'protocol-failure',
+      reason: 'Job query failed or returned empty payload',
+      error: queryResult?.job?.error || 'Unknown query error',
+      observedAt: getNow(),
+    };
+  }
+
+  const job = queryResult.job;
+  const jobStatus = job.status;
+
+  if (jobStatus === 'failed') {
+    const cleanState = job.cleanState || 'protocol-failure';
     return {
       ok: false,
       status: cleanState,
       classification: cleanState,
       reason: 'Job execution failed during query phase',
-      error: queryResult?.job?.error || 'Query returned failed or invalid job status',
+      error: job.error || 'Query returned failed or invalid job status',
+      observedAt: getNow(),
+    };
+  }
+
+  // Handle known active in-progress job states
+  if (['submitted', 'queued', 'pending', 'running', 'processing'].includes(jobStatus)) {
+    return {
+      ok: true,
+      status: 'ORCHESTRATION_IN_PROGRESS',
+      classification: 'ORCHESTRATION_IN_PROGRESS',
+      reason: `Job is currently in active state: ${jobStatus}`,
+      jobId: request.job_id,
+      observedAt: getNow(),
+    };
+  }
+
+  // Handle unknown/unsupported job states
+  if (jobStatus !== 'completed') {
+    return {
+      ok: false,
+      status: 'UNSUPPORTED_STATUS',
+      classification: 'UNSUPPORTED_STATUS',
+      reason: `Job query returned an unsupported or unknown status: ${jobStatus}`,
       observedAt: getNow(),
     };
   }
@@ -182,17 +219,51 @@ export async function runCleanServiceTocRebuildOnce({
   }
 
   const inputRef = request.inputs?.[0] || {};
+  const rawMaterialMineru = task.metadata?.rawMaterial?.mineru?.contentListV2 || {};
+
+  // Extract raw input SHA256 using hierarchical priority
+  const expectedSha256 = inputRef.hash || 
+                         inputRef.source?.sha256 || 
+                         inputRef.sha256 || 
+                         rawMaterialMineru.sha256 || 
+                         null;
+
+  // Extract raw input sizeBytes (avoiding any sample-level hardcoding)
+  let expectedSizeBytes = rawMaterialMineru.size_bytes ?? 
+                           rawMaterialMineru.sizeBytes ?? 
+                           inputRef.source?.size_bytes ?? 
+                           inputRef.source?.sizeBytes ?? 
+                           inputRef.size_bytes ?? 
+                           inputRef.sizeBytes ?? 
+                           null;
+
+  // Support injected mock fact for sizeBytes if not found elsewhere
+  if (expectedSizeBytes === null && typeof deps.mockSizeBytes === 'number') {
+    expectedSizeBytes = deps.mockSizeBytes;
+  }
+  if (expectedSizeBytes === null && typeof task.metadata?.mockSizeBytes === 'number') {
+    expectedSizeBytes = task.metadata.mockSizeBytes;
+  }
+
+  const rawInput = {
+    bucket: inputRef.source?.bucket || inputRef.bucket || rawMaterialMineru.bucket || null,
+    object: inputRef.source?.object || inputRef.object || rawMaterialMineru.object || null,
+  };
+
+  if (expectedSha256) {
+    rawInput.sha256 = expectedSha256;
+  }
+
+  if (typeof expectedSizeBytes === 'number') {
+    rawInput.sizeBytes = expectedSizeBytes;
+  }
+
   const verifierOptions = {
     expected: {
       materialId: task.materialId,
       assetVersion: request.asset_version,
       jobId: request.job_id,
-      rawInput: {
-        bucket: inputRef.source?.bucket || inputRef.bucket,
-        object: inputRef.source?.object || inputRef.object,
-        sha256: inputRef.source?.sha256 || inputRef.sha256,
-        sizeBytes: 31543,
-      },
+      rawInput,
     },
     artifactReader: reader,
   };

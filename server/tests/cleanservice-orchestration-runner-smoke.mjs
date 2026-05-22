@@ -459,7 +459,126 @@ async function runTests() {
     assert.ok(resultStr.length < 2000, 'Result size should be bounded and lightweight');
   }
 
-  console.log('ALL cleanservice orchestration runner smoke tests PASSED! (8/8)');
+  // Test 9: in-progress job status (e.g. processing) returns `ORCHESTRATION_IN_PROGRESS` and performs zero verify/apply
+  {
+    console.log('  [9] Testing in-progress job status early return...');
+    const task = makeBaseTask();
+    const material = makeBaseMaterial();
+    const config = makeBaseConfig();
+
+    let verifyCalled = false;
+    let applyCalled = false;
+
+    const deps = {
+      submitJob: async (req) => {
+        return { ok: true, job: { job_id: req.job_id, status: 'submitted' } };
+      },
+      queryJob: async (jobId) => {
+        return { ok: true, job: { job_id: jobId, status: 'processing' } };
+      },
+      verifyCleanServiceOutputArtifacts: async () => {
+        verifyCalled = true;
+        return { ok: true };
+      },
+      applyCleanMetadataPersistencePlan: async () => {
+        applyCalled = true;
+        return { ok: true };
+      },
+      dbClient: {},
+    };
+
+    const result = await runCleanServiceTocRebuildOnce({ task, material, config, deps });
+    assert.equal(result.ok, true);
+    assert.equal(result.status, 'ORCHESTRATION_IN_PROGRESS');
+    assert.equal(result.classification, 'ORCHESTRATION_IN_PROGRESS');
+    assert.equal(verifyCalled, false, 'Verifier must not be called for in-progress status');
+    assert.equal(applyCalled, false, 'Apply must not be called for in-progress status');
+  }
+
+  // Test 10: unknown job status returns `UNSUPPORTED_STATUS` and performs zero verify/apply
+  {
+    console.log('  [10] Testing unknown/unsupported job status early return...');
+    const task = makeBaseTask();
+    const material = makeBaseMaterial();
+    const config = makeBaseConfig();
+
+    let verifyCalled = false;
+
+    const deps = {
+      submitJob: async (req) => {
+        return { ok: true, job: { job_id: req.job_id, status: 'submitted' } };
+      },
+      queryJob: async (jobId) => {
+        return { ok: true, job: { job_id: jobId, status: 'unknown_xyz_status' } };
+      },
+      verifyCleanServiceOutputArtifacts: async () => {
+        verifyCalled = true;
+        return { ok: true };
+      },
+      dbClient: {},
+    };
+
+    const result = await runCleanServiceTocRebuildOnce({ task, material, config, deps });
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 'UNSUPPORTED_STATUS');
+    assert.equal(result.classification, 'UNSUPPORTED_STATUS');
+    assert.equal(verifyCalled, false, 'Verifier must not be called for unsupported status');
+  }
+
+  // Test 11: expected raw input hash and size are dynamically propagated without sample hardcoding
+  {
+    console.log('  [11] Testing dynamic raw input propagation without hardcoding...');
+    const customHash = 'my-custom-test-hash-sha256';
+    const customSize = 987654;
+
+    const task = makeBaseTask({
+      metadata: {
+        rawMaterial: {
+          version: 'v1',
+          mineru: {
+            contentListV2: {
+              bucket: 'eduassets-raw',
+              object: 'mineru/1842780526581841/v1/content_list_v2.json',
+              sha256: customHash,
+              size_bytes: customSize,
+            }
+          }
+        }
+      }
+    });
+
+    const material = makeBaseMaterial();
+    const config = makeBaseConfig();
+
+    let capturedExpected = null;
+
+    const deps = {
+      submitJob: async (req) => {
+        return { ok: true, job: { job_id: req.job_id, status: 'submitted' } };
+      },
+      queryJob: async (jobId) => {
+        return { ok: true, job: mockCompletedJob({ jobId, assetVersion: 'v1' }) };
+      },
+      verifyCleanServiceOutputArtifacts: async (job, opts) => {
+        capturedExpected = opts.expected;
+        // Return protocol-failure to abort further candidate/apply steps cleanly
+        return { ok: false, cleanState: 'protocol-failure', errors: ['aborted-for-assertion'] };
+      },
+      artifactReader: new FakeArtifactReader(generateFixtures({ assetVersion: 'v1' })),
+      dbClient: {},
+    };
+
+    await runCleanServiceTocRebuildOnce({ task, material, config, deps });
+
+    assert.ok(capturedExpected);
+    assert.ok(capturedExpected.rawInput);
+    assert.equal(capturedExpected.rawInput.bucket, 'eduassets-raw');
+    assert.equal(capturedExpected.rawInput.object, 'mineru/1842780526581841/v1/content_list_v2.json');
+    assert.equal(capturedExpected.rawInput.sha256, customHash);
+    assert.equal(capturedExpected.rawInput.sizeBytes, customSize, 'sizeBytes must propagate customSize instead of hardcoded 31543');
+  }
+
+  console.log('ALL cleanservice orchestration runner smoke tests PASSED! (11/11)');
 }
 
 runTests().catch(err => {
