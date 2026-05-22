@@ -3,8 +3,8 @@
 ## 1. Execution Overview
 
 - **Branch**: `lucode/TASK-20260522-102956`
-- **Exact HEAD**: `bfffc7326ca62ca8c5065d9b3fd1a666df4b5b44`
-- **Final Classification**: `MINERU2TABLE_SINGLE_SAMPLE_SUCCESS_PATH_COMPLETED`
+- **Exact HEAD**: `8ecfa4afe6a5d8c2b77e4a01af52dd9be15de5bf`
+- **Final Classification**: `BLOCKED_LLM_RUNTIME_FAILURE`
 
 ---
 
@@ -32,7 +32,7 @@
 ### B. Target Output Prefix
 - **Bucket**: `eduassets-clean`
 - **Prefix**: `toc-rebuild/1842780526581841/v1/`
-- **Pre-Submit Object Count**: `0` (Verified empty)
+- **Pre-Submit Object Count**: `0` (Verified empty before the initial submission)
 
 ---
 
@@ -83,66 +83,67 @@
 ### Polling Timeline
 - `2026-05-22T02:51:36Z`: Submitted and accepted (`202 Accepted`).
 - `2026-05-22T02:51:36Z`: Transitioned to running (`started_at`).
-- `2026-05-22T02:51:39Z`: Job reached final terminal state `completed` (`finished_at`).
+- `2026-05-22T02:51:39Z`: Job reached terminal state `completed` (`finished_at`).
 - **Total Duration**: `3` seconds.
 
 ---
 
-## 5. Output Verification & Contract Audits
+## 5. Mainline Defect: False Success on LLM Authentication Failure
 
-Exactly the 7 expected CleanService `toc-rebuild` output artifacts were generated under `eduassets-clean/toc-rebuild/1842780526581841/v1/`. No extra or unexpected objects were generated.
+During independent audit, container logs for this job run revealed a severe runtime error:
+- **Error message**: `HTTP 401 Authorization Required` from DeepSeek chat completions.
+- **Root cause**: LLM authentication failure due to an invalid/blocked test API key during the run.
 
-### Output Object List & Hashes
-1. **`flooded_content.json`**: Size `14090` bytes | SHA256 `9cda588e28c65085a4928895a6091ab520e2a7d7381766ac2d538f6505567db6`
-2. **`logic_tree.json`**: Size `138` bytes | SHA256 `135e32777cd03442827110e179a7c95868c600a3b919d0b3b4aa2830ea2fb2ef`
-3. **`readable_tree.md`**: Size `39` bytes | SHA256 `4dce26d3b9c196b3b7003502eebadbc64ffae62a1bb942c5aacb85960d0f0b60`
-4. **`skeleton.json`**: Size `21160` bytes | SHA256 `c004915e79dde976f68cbb460ae3e6bf34e81be6b7cc8bdc28d5252d5ec15f9e`
-5. **`unresolved_anchors.json`**: Size `2` bytes | SHA256 `4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945`
-6. **`metrics.json`**: Size `105` bytes | SHA256 `798fe58889e401d53721ed6014a268bd8183c74567f7719057594d6ee55c56d8`
-7. **`provenance.json`**: Size `2050` bytes | SHA256 `b6d938419466cd11de4ce59982508311ef0212e06a0c7e9bce1fbb5afbfa4bd9`
-
-### Verification of Content Contract
-- **JSON Parsability**: All 6 JSON files were parsed and validated successfully.
-- **`readable_tree.md` Non-Empty**: Confirmed. Content contains `# 【可视版】重构逻辑树预览\n`.
-- **`unresolved_anchors.json`**: Valid empty JSON array `[]`.
-- **`metrics.json` Token/Cost Summary**:
-  - `tokens`: `{"prompt": 0, "completion": 0, "total": 0}` (Pure structural rebuild with rules matching, zero LLM tokens used).
-  - `cost_cny_estimated`: `0.0`
-  - `cost_cny_actual`: `0.0`
-- **`provenance.json` Traceability**: Verified. Correctly records the original input ObjectRef (`mineru/1842780526581841/v1/content_list_v2.json`) and SHA256 (`f05394af3ad6107cdb7324fcffeb13fb43dcbcbaff46f838f291828867e182db`).
+### Crucial Mainline Defect:
+Despite the LLM authentication failure, Mineru2Table **incorrectly converted the failure into a success state**, marking the job `completed` in the job store and generating empty/skeletal outputs. This is a severe pipeline control-flow bug that must be resolved before routing real orchestration logic.
 
 ---
 
-## 6. Standalone Database (jobs.json) Sync Verification
+## 6. Output Verification & Contaminated Prefix Artifacts
 
-The `jobs.json` file updated safely without redundant operations. It matches precisely a single additional completed job entry.
+Exactly the 7 expected CleanService `toc-rebuild` output artifacts were generated under `eduassets-clean/toc-rebuild/1842780526581841/v1/`. However, due to the LLM failure, these artifacts are skeletal/empty and represent **failed-run evidence**.
+
+### Failed-Run Artifact List & Hashes:
+1. **`flooded_content.json`**: Size `14090` bytes | SHA256 `9cda588e28c65085a4928895a6091ab520e2a7d7381766ac2d538f6505567db6`
+2. **`logic_tree.json`**: Size `138` bytes | SHA256 `135e32777cd03442827110e179a7c95868c600a3b919d0b3b4aa2830ea2fb2ef` (Only contains a skeletal root node `文档根节点`, status `pending_anchor` with `children: []`)
+3. **`readable_tree.md`**: Size `39` bytes | SHA256 `4dce26d3b9c196b3b7003502eebadbc64ffae62a1bb942c5aacb85960d0f0b60` (Only contains a title heading `# 【可视版】重构逻辑树预览\n`)
+4. **`skeleton.json`**: Size `21160` bytes | SHA256 `c004915e79dde976f68cbb460ae3e6bf34e81be6b7cc8bdc28d5252d5ec15f9e`
+5. **`unresolved_anchors.json`**: Size `2` bytes | SHA256 `4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945` (Empty JSON array `[]`)
+6. **`metrics.json`**: Size `105` bytes | SHA256 `798fe58889e401d53721ed6014a268bd8183c74567f7719057594d6ee55c56d8` (Zero token metrics: `{"tokens": {"prompt": 0, "completion": 0, "total": 0}}` resulting in estimated/actual cost `0.0`)
+7. **`provenance.json`**: Size `2050` bytes | SHA256 `b6d938419466cd11de4ce59982508311ef0212e06a0c7e9bce1fbb5afbfa4bd9` (Provenance has `implementation_commit: unknown` and `input size_bytes: 0` which represent quality gaps for later correction).
+
+> [!WARNING]
+> **Contamination Warning**: The target prefix `eduassets-clean/toc-rebuild/1842780526581841/v1/` is now contaminated with failed-run evidence. Do not attempt another run into this prefix unless explicitly authorized by the Director to clean/replace the prefix, or unless a new asset version (e.g., `v2`) is specified.
+
+---
+
+## 7. Standalone Database (jobs.json) Sync Verification
+
+The `jobs.json` file contains 2 keys, including the failed task-242 run marked `completed` (due to the false-success defect).
 
 - **Storage Location**: `/workspace/ops/Mineru2Tables/data/jobs.json`
-- **Before Status**:
-  - Size: `718` bytes
-  - SHA256: `29d5621bcca3d626b8f27289caabd13ba6cd835913a76b9e2cbd8fd8d4577413`
-  - Key Count: `1`
-- **After Status**:
+- **Status**:
   - Size: `3581` bytes
   - SHA256: `683bbbb94a13c84e62e6ed2dd6a13c87fb7042efa4e03c9d16920046e80cf330`
   - Key Count: `2`
 
 ---
 
-## 7. Absolute Boundaries & Constraints Compliance
+## 8. Absolute Boundaries & Constraints Compliance
 
 We strictly assert that the execution complied with all security and action boundaries.
-- **Zero DB writes on Luceon**: Confirmed. No SQLite or Luceon DB database was touched.
-- **No Worker Activation**: CleanService worker is still disabled (`CLEANSERVICE_ENABLED=false`).
-- **No Source Code Mutated**: Verified. `git status` confirms zero business source files were edited.
+- **No cleanup or retry done after LLM failure discovery**: Verified.
+- **Zero DB writes on Luceon**: Confirmed.
+- **No Worker Activation**: CleanService worker remains disabled.
+- **No Source Code Mutated**: Confirmed.
 - **No Docker Image Rebuild**: Confirmed.
 - **No Broad Compose Down**: Confirmed.
 - **No Docker Network or Volume Mutation**: Confirmed.
-- **No Cleanups / Object Deletions**: Checked. The target prefix was verified as empty beforehand, and no existing MinIO objects were deleted or modified.
+- **No Cleanups / Object Deletions**: Checked. No objects were deleted, overwritten, or modified.
 - **No Premature Claims**: This report **does not** claim UAT, L3, release readiness, production readiness, pressure PASS, production上线, or go-live. It represents only standalone success-path verification.
 
 ---
 
-## 8. Conclusion
+## 9. Conclusion
 
-Standalone success path for Mineru2Table Async Job execution has been fully validated with robust, verified artifacts generated cleanly under the exact target location. We are returning control back to `luceon` for review.
+The standalone success path run for Mineru2Table was completed but **failed during LLM execution due to DeepSeek authentication failure (401)**. Furthermore, the run exposed a critical false-success mainline defect in Mineru2Table's control flow. The generated artifacts are skeletal failed-run evidence. Control is returned to `luceon` with classification `BLOCKED_LLM_RUNTIME_FAILURE`.
