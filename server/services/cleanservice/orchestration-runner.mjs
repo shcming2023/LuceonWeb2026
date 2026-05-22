@@ -222,19 +222,19 @@ export async function runCleanServiceTocRebuildOnce({
   const rawMaterialMineru = task.metadata?.rawMaterial?.mineru?.contentListV2 || {};
 
   // Extract raw input SHA256 using hierarchical priority
-  const expectedSha256 = inputRef.hash || 
-                         inputRef.source?.sha256 || 
-                         inputRef.sha256 || 
-                         rawMaterialMineru.sha256 || 
+  const expectedSha256 = inputRef.hash ||
+                         inputRef.source?.sha256 ||
+                         inputRef.sha256 ||
+                         rawMaterialMineru.sha256 ||
                          null;
 
   // Extract raw input sizeBytes (avoiding any sample-level hardcoding)
-  let expectedSizeBytes = rawMaterialMineru.size_bytes ?? 
-                           rawMaterialMineru.sizeBytes ?? 
-                           inputRef.source?.size_bytes ?? 
-                           inputRef.source?.sizeBytes ?? 
-                           inputRef.size_bytes ?? 
-                           inputRef.sizeBytes ?? 
+  let expectedSizeBytes = rawMaterialMineru.size_bytes ??
+                           rawMaterialMineru.sizeBytes ??
+                           inputRef.source?.size_bytes ??
+                           inputRef.source?.sizeBytes ??
+                           inputRef.size_bytes ??
+                           inputRef.sizeBytes ??
                            null;
 
   // Support injected mock fact for sizeBytes if not found elsewhere

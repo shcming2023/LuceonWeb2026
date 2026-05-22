@@ -4,10 +4,11 @@
 
 本任务（TASK-252）已圆满完成。在保持**完全 Mock-Safe** 和**默认关闭（disabled-by-default）**的前置条件下，我们成功在 `/workspace/dev/Luceon2026` 开发工作区内实现了 CleanService `toc-rebuild` 的极简编排运行器（orchestration runner），将 dispatch, query, verifier, candidate, planner 和 apply executor 有机串联。
 
-本项工作严格限定在依赖注入、纯内存 mock 以及 dry-run 的安全边界内，没有触发任何真实的网络 POST、DB 写入、MinIO 读取、LLM 访问或 Docker/Compose/worker 激活。所有新写的 8 个场景集成测试以及全部 8 套关联的已有 CleanService 模块 smoke 测试、TypeScript 类型检查已全量跑通，未引入任何回归破坏。
+本项工作严格限定在依赖注入、纯内存 mock 以及 dry-run 的安全边界内，没有触发任何真实的网络 POST、DB 写入、MinIO 读取、LLM 访问或 Docker/Compose/worker 激活。所有新写的 11 个场景集成测试以及关联的已有 CleanService 模块 smoke 测试、TypeScript 类型检查已全量跑通，未引入任何回归破坏。
 
 - **交付分支 (Branch)**: `lucode/TASK-20260522-202101-P0-CleanService-Minimal-Orchestration-Runner-MockSafe-NoRuntime` (远端已推送至 `origin`)
-- **提交哈希 (HEAD Commit)**: `025b15858cfd799cb68d904b7264a2cb459b3986` (已将所有代码、测试、报告及台账修改固化提交)
+- **远端交付 HEAD (Remote Delivery HEAD)**: `d04af5890862ae3b19da5f18b62c4a94628ecfe6`
+- **Luceon 验收修正说明**: Luceon 在验收合入时仅修正源码尾随空格与控制面 HEAD 记录，不改变业务逻辑。
 - **报告生成时间**: 2026-05-22
 
 ---
