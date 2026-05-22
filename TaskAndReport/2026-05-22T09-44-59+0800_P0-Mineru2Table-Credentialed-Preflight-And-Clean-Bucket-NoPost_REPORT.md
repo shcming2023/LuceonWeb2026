@@ -1,7 +1,7 @@
 # REPORT: TASK-20260522-094459-P0-Mineru2Table-Credentialed-Preflight-And-Clean-Bucket-NoPost
 
 ## 1. 任务基本信息
-- **Exact HEAD**: `5ef717be3b8c02885f3ecde95d02f4fa02c437a6` (verified control-plane aligned delivery commit)
+- **Exact HEAD**: `f1660e6c8a6117138b9b1ec771a2098315a74daf` (remote delivery branch HEAD verified and corrected by Luceon during acceptance)
 - **Final Classification**: `BLOCKED_CREDENTIALS_UNAVAILABLE`
 
 ---
