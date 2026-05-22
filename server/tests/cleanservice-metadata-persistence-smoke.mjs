@@ -144,6 +144,21 @@ async function runTests() {
     assert.equal(existingTask.metadata.cleanServiceJobs['toc-rebuild'], undefined);
     assert.equal(existingMaterial.metadata.cleanMaterials['toc-rebuild'], undefined);
 
+    // 校验 sourceInput 被成功持久化至两端 Patch 中 (F1)
+    const taskJobSummary = taskPatch.metadata.cleanServiceJobs['toc-rebuild'];
+    assert.ok(taskJobSummary.sourceInput);
+    assert.equal(taskJobSummary.sourceInput.bucket, 'eduassets-raw');
+    assert.equal(taskJobSummary.sourceInput.object, 'mineru/1842780526581841/v1/content_list_v2.json');
+    assert.equal(taskJobSummary.sourceInput.sha256, 'f05394af3ad6107cdb7324fcffeb13fb43dcbcbaff46f838f291828867e182db');
+    assert.equal(taskJobSummary.sourceInput.size_bytes, 31543);
+
+    const materialJobSummary = materialPatch.metadata.cleanMaterials['toc-rebuild'];
+    assert.ok(materialJobSummary.sourceInput);
+    assert.equal(materialJobSummary.sourceInput.bucket, 'eduassets-raw');
+    assert.equal(materialJobSummary.sourceInput.object, 'mineru/1842780526581841/v1/content_list_v2.json');
+    assert.equal(materialJobSummary.sourceInput.sha256, 'f05394af3ad6107cdb7324fcffeb13fb43dcbcbaff46f838f291828867e182db');
+    assert.equal(materialJobSummary.sourceInput.size_bytes, 31543);
+
     // 校验 audit
     assert.ok(plan.audit);
     assert.equal(plan.audit.costSource, 'job-stats');
@@ -452,7 +467,96 @@ async function runTests() {
     }
   }
 
-  console.log('PASS cleanservice metadata persistence smoke tests (6/6)');
+  // Case 7: Core Identity Field Missing Gates (F2)
+  {
+    console.log('  [7] core identity missing gates (materialId, assetVersion, jobId)...');
+
+    // 7.1 Missing materialId
+    {
+      const job = mockJob();
+      const verification = {
+        ok: true,
+        cleanState: 'completed',
+        errors: [],
+        warnings: [],
+        unresolvedAnchorCount: 0,
+        inputSizeBytes: 31543,
+      };
+      const candidate = buildVerifiedCleanOutputMetadataCandidate({
+        job,
+        verification,
+        now: customNow,
+      });
+
+      // 故意删除 materialId
+      delete candidate.materialId;
+
+      const plan = buildCleanMetadataPersistencePlan({
+        candidate,
+        now: customNow,
+      });
+      assert.equal(plan.shouldApply, false);
+      assert.equal(plan.reason, 'missing-material-id');
+    }
+
+    // 7.2 Missing assetVersion
+    {
+      const job = mockJob();
+      const verification = {
+        ok: true,
+        cleanState: 'completed',
+        errors: [],
+        warnings: [],
+        unresolvedAnchorCount: 0,
+        inputSizeBytes: 31543,
+      };
+      const candidate = buildVerifiedCleanOutputMetadataCandidate({
+        job,
+        verification,
+        now: customNow,
+      });
+
+      // 故意删除 assetVersion
+      delete candidate.assetVersion;
+
+      const plan = buildCleanMetadataPersistencePlan({
+        candidate,
+        now: customNow,
+      });
+      assert.equal(plan.shouldApply, false);
+      assert.equal(plan.reason, 'missing-asset-version');
+    }
+
+    // 7.3 Missing jobId
+    {
+      const job = mockJob();
+      const verification = {
+        ok: true,
+        cleanState: 'completed',
+        errors: [],
+        warnings: [],
+        unresolvedAnchorCount: 0,
+        inputSizeBytes: 31543,
+      };
+      const candidate = buildVerifiedCleanOutputMetadataCandidate({
+        job,
+        verification,
+        now: customNow,
+      });
+
+      // 故意删除 jobId
+      delete candidate.jobId;
+
+      const plan = buildCleanMetadataPersistencePlan({
+        candidate,
+        now: customNow,
+      });
+      assert.equal(plan.shouldApply, false);
+      assert.equal(plan.reason, 'missing-job-id');
+    }
+  }
+
+  console.log('PASS cleanservice metadata persistence smoke tests (7/7)');
 }
 
 runTests().catch(err => {

@@ -3,15 +3,15 @@
 ## 1. Executive Summary
 
 - **Final Branch**: `lucode/TASK-20260522-164820`
-- **Final HEAD Commit**: `94dbb9f6139e6da06f7ec75af56d3c546ae7f0a1`
-- **Objective Achieved**: Designed and implemented a pure, mock-safe, in-memory CleanService Metadata Persistence Payload Planner that turns a verified candidate into shallow-merge-safe task/material DB PATCH payloads without writing to the database or touching runtime states.
+- **Final HEAD Commit**: `345fc10b78a000413f855d385519cfecedaaf925`
+- **Objective Achieved**: Designed and implemented a pure, mock-safe, in-memory CleanService Metadata Persistence Payload Planner that turns a verified candidate into shallow-merge-safe task/material DB PATCH payloads without writing to the database or touching runtime states. Incorporates Review v2 enhancements: sourceInput physical persistence and core identity missing gates.
 
 ## 2. Changed File List
 
 ```text
 M  server/services/cleanservice/metadata-summary.mjs               # Surgical cost fallback and costSource classification
-A  server/services/cleanservice/metadata-persistence.mjs           # Pure in-memory DB PATCH payload planner
-A  server/tests/cleanservice-metadata-persistence-smoke.mjs        # New smoke test suite with 100% gate coverage
+A  server/services/cleanservice/metadata-persistence.mjs           # Pure in-memory DB PATCH payload planner with identity gates and sourceInput persistence
+A  server/tests/cleanservice-metadata-persistence-smoke.mjs        # New smoke test suite with 100% gate coverage (7 Cases)
 ```
 
 ## 3. Validation Logs & Exit Codes
@@ -28,7 +28,8 @@ $ node server/tests/cleanservice-metadata-persistence-smoke.mjs
   [4] non-persistable candidate gate...
   [5] traceability gate violations (missing fields)...
   [6] ID-only integrity check (no full contents in patches)...
-PASS cleanservice metadata persistence smoke tests (6/6)
+  [7] core identity missing gates (materialId, assetVersion, jobId)...
+PASS cleanservice metadata persistence smoke tests (7/7)
 Exit Code: 0
 
 # 2. Regression Ingestion Candidate Smoke Check

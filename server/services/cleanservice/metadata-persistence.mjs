@@ -50,7 +50,43 @@ export function buildCleanMetadataPersistencePlan({
 
   const serviceName = candidate.serviceName || 'toc-rebuild';
   const materialId = candidate.materialId;
+  const assetVersion = candidate.assetVersion;
+  const jobId = candidate.jobId;
   const parseTaskId = candidate.parseTaskId;
+
+  // 1.5 Gate Check: Core Identity Fields
+  if (!materialId || typeof materialId !== 'string' || materialId.trim().length === 0) {
+    return {
+      ok: false,
+      shouldApply: false,
+      dryRun: true,
+      taskPatch: null,
+      materialPatch: null,
+      reason: 'missing-material-id',
+    };
+  }
+
+  if (!assetVersion || typeof assetVersion !== 'string' || assetVersion.trim().length === 0) {
+    return {
+      ok: false,
+      shouldApply: false,
+      dryRun: true,
+      taskPatch: null,
+      materialPatch: null,
+      reason: 'missing-asset-version',
+    };
+  }
+
+  if (!jobId || typeof jobId !== 'string' || jobId.trim().length === 0) {
+    return {
+      ok: false,
+      shouldApply: false,
+      dryRun: true,
+      taskPatch: null,
+      materialPatch: null,
+      reason: 'missing-job-id',
+    };
+  }
 
   // 2. Gate Check: Task Summary existence
   const taskSummary = candidate.metadataPatch?.taskMetadata?.cleanServiceJobs?.[serviceName];
@@ -134,6 +170,12 @@ export function buildCleanMetadataPersistencePlan({
         ...existingJobs,
         [serviceName]: {
           ...taskSummary,
+          sourceInput: {
+            bucket: sourceInput.bucket,
+            object: sourceInput.object,
+            sha256: sourceInput.sha256,
+            size_bytes: sourceInput.sizeBytes ?? sourceInput.size_bytes ?? 0,
+          },
         },
       },
     },
@@ -146,6 +188,12 @@ export function buildCleanMetadataPersistencePlan({
         ...existingMaterials,
         [serviceName]: {
           ...materialSummary,
+          sourceInput: {
+            bucket: sourceInput.bucket,
+            object: sourceInput.object,
+            sha256: sourceInput.sha256,
+            size_bytes: sourceInput.sizeBytes ?? sourceInput.size_bytes ?? 0,
+          },
         },
       },
     },
