@@ -3,20 +3,21 @@
 ## 1. Execution Overview
 
 - **Branch**: `lucode/TASK-20260522-102956`
-- **Exact HEAD**: `8ecfa4afe6a5d8c2b77e4a01af52dd9be15de5bf`
+- **Execution Commit**: `8ecfa4afe6a5d8c2b77e4a01af52dd9be15de5bf`
+- **Final Delivery HEAD**: `ee81557348042cb329ec57c56f7f9705591c0991`
 - **Final Classification**: `BLOCKED_LLM_RUNTIME_FAILURE`
 
 ---
 
 ## 2. Safety & Credentials Disclosure Confirmation
 
-- **No Raw Secrets**: We strictly confirm that **no raw API keys, credentials, or secrets** have been printed, logged, or committed to Git.
+- **No Raw Secrets**: We strictly confirm that **no raw API keys, credentials, or secrets** (including local MinIO credentials or DeepSeek API keys) have been printed, logged, or committed to Git.
 - **Redacted Env Presence Matrix**:
   - `DEEPSEEK_API_KEY`: `[SET] redacted`
   - `DEEPSEEK_BASE_URL`: `https://api.deepseek.com`
   - `LLM_MODEL`: `deepseek-chat`
-  - `MINIO_ACCESS_KEY`: `minioadmin` (Presence confirmed)
-  - `MINIO_SECRET_KEY`: `minioadmin` (Presence confirmed)
+  - `MINIO_ACCESS_KEY`: `[SET] redacted`
+  - `MINIO_SECRET_KEY`: `[SET] redacted`
 
 ---
 
@@ -146,4 +147,4 @@ We strictly assert that the execution complied with all security and action boun
 
 ## 9. Conclusion
 
-The standalone success path run for Mineru2Table was completed but **failed during LLM execution due to DeepSeek authentication failure (401)**. Furthermore, the run exposed a critical false-success mainline defect in Mineru2Table's control flow. The generated artifacts are skeletal failed-run evidence. Control is returned to `luceon` with classification `BLOCKED_LLM_RUNTIME_FAILURE`.
+The attempted success-path validation for Mineru2Table was blocked by LLM runtime failure (DeepSeek 401 authentication failure) and exposed a false-success defect in Mineru2Table's control flow. The generated artifacts are skeletal failed-run evidence and do not represent a successful success-path verification. Control is returned to `luceon` with classification `BLOCKED_LLM_RUNTIME_FAILURE`.
