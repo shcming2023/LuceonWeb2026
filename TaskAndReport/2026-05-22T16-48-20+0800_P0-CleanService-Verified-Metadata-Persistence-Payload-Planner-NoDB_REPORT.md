@@ -65,6 +65,17 @@ Exit Code: 0
 # 5. Git White-space Diff Check
 $ git diff --check origin/main..HEAD
 Exit Code: 0 (No whitespace trailing issues)
+
+# 6. Control-Plane Delivery Evidence
+$ git diff --name-status origin/main..HEAD
+A       TaskAndReport/2026-05-22T16-48-20+0800_P0-CleanService-Verified-Metadata-Persistence-Payload-Planner-NoDB_REPORT.md
+M       TaskAndReport/TASK_TRACKING_LIST.md
+A       server/services/cleanservice/metadata-persistence.mjs
+M       server/services/cleanservice/metadata-summary.mjs
+A       server/tests/cleanservice-metadata-persistence-smoke.mjs
+
+$ git diff --check origin/main..HEAD
+(No output, Exit Code: 0)
 ```
 
 ## 4. Bounded Metadata Shape (No Full Content)

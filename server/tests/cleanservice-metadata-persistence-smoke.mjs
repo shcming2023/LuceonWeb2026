@@ -192,7 +192,7 @@ async function runTests() {
     assert.equal(plan.ok, true);
     assert.equal(plan.shouldApply, true);
     assert.equal(plan.audit.costSource, 'verification/candidate');
-    
+
     const taskSummary = plan.taskPatch.metadata.cleanServiceJobs['toc-rebuild'];
     assert.equal(taskSummary.stats.costCnyActual, 0.003);
     assert.equal(taskSummary.stats.costCnyEstimated, 0.004);
@@ -236,7 +236,7 @@ async function runTests() {
     assert.equal(plan.ok, true);
     assert.equal(plan.shouldApply, true);
     assert.equal(plan.audit.costSource, 'unavailable');
-    
+
     const taskSummary = plan.taskPatch.metadata.cleanServiceJobs['toc-rebuild'];
     assert.equal(taskSummary.stats.costCnyActual, null);
     assert.equal(taskSummary.stats.costCnyEstimated, null);
