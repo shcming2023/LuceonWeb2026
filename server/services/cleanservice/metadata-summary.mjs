@@ -46,8 +46,8 @@ export function buildCleanTaskSummary(job = {}, verification = {}) {
       tokensPrompt: job.stats?.tokens?.prompt ?? job.stats?.tokensPrompt ?? verification.tokensPrompt ?? null,
       tokensCompletion: job.stats?.tokens?.completion ?? job.stats?.tokensCompletion ?? verification.tokensCompletion ?? null,
       tokensTotal: job.stats?.tokens?.total ?? job.stats?.tokensTotal ?? verification.tokensTotal ?? null,
-      costCnyEstimated: job.stats?.cost_cny_estimated ?? job.stats?.costCnyEstimated ?? null,
-      costCnyActual: job.stats?.cost_cny_actual ?? job.stats?.costCnyActual ?? null,
+      costCnyEstimated: job.stats?.cost_cny_estimated ?? job.stats?.costCnyEstimated ?? verification.costCnyEstimated ?? null,
+      costCnyActual: job.stats?.cost_cny_actual ?? job.stats?.costCnyActual ?? verification.costCnyActual ?? null,
       unresolvedAnchorCount: verification.unresolvedAnchorCount ?? job.stats?.unresolved_anchor_count ?? null,
     },
     error: (verification.errors && verification.errors.length > 0)
@@ -141,6 +141,25 @@ export function buildVerifiedCleanOutputMetadataCandidate({ job = {}, verificati
 
   const isOk = verification.ok === true && !isBlocked;
 
+  let costSource = 'unavailable';
+  const hasJobStatsCost = job.stats && (
+    (job.stats.cost_cny_estimated !== undefined && job.stats.cost_cny_estimated !== null) ||
+    (job.stats.costCnyEstimated !== undefined && job.stats.costCnyEstimated !== null) ||
+    (job.stats.cost_cny_actual !== undefined && job.stats.cost_cny_actual !== null) ||
+    (job.stats.costCnyActual !== undefined && job.stats.costCnyActual !== null)
+  );
+
+  const hasVerificationCost = verification && (
+    (verification.costCnyEstimated !== undefined && verification.costCnyEstimated !== null) ||
+    (verification.costCnyActual !== undefined && verification.costCnyActual !== null)
+  );
+
+  if (hasJobStatsCost) {
+    costSource = 'job-stats';
+  } else if (hasVerificationCost) {
+    costSource = 'verification/candidate';
+  }
+
   const verificationSummary = {
     ok: isOk,
     cleanState: isOk ? (verification.cleanState || 'completed') : 'protocol-failure',
@@ -149,6 +168,7 @@ export function buildVerifiedCleanOutputMetadataCandidate({ job = {}, verificati
     unresolvedAnchorCount: verification.unresolvedAnchorCount || 0,
     inputSizeBytes,
     sourceInput,
+    costSource,
   };
 
   if (!isOk) {
