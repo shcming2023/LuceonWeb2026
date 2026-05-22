@@ -65,7 +65,13 @@ function generateFixtures(overrides = {}) {
   const skeleton = overrides.skeleton !== undefined ? overrides.skeleton : JSON.stringify({ nodes: [] });
   const unresolved = overrides.unresolved !== undefined ? overrides.unresolved : JSON.stringify([]);
   const metrics = overrides.metrics !== undefined ? overrides.metrics : JSON.stringify({
-    stats: { tokens: { total: 6266 } },
+    stats: {
+      tokens: {
+        prompt: 6212,
+        completion: 54,
+        total: 6266
+      }
+    },
     cost_cny_estimated: 0.00632,
     cost_cny_actual: 0.0,
   });
@@ -132,6 +138,17 @@ async function runTests() {
     assert.equal(result.errors.length, 0);
     assert.equal(result.unresolvedAnchorCount, 0);
     assert.equal(result.inputSizeBytes, 31543);
+
+    // 强断言：打通真实 verifier -> candidate 链路所需的 metrics / sourceInput 细节
+    assert.ok(result.sourceInput);
+    assert.equal(result.sourceInput.bucket, 'eduassets-raw');
+    assert.equal(result.sourceInput.object, 'mineru/1842780526581841/v1/content_list_v2.json');
+    assert.equal(result.sourceInput.sha256, 'f05394af3ad6107cdb7324fcffeb13fb43dcbcbaff46f838f291828867e182db');
+    assert.equal(result.sourceInput.sizeBytes, 31543);
+
+    assert.equal(result.tokensTotal, 6266);
+    assert.equal(result.tokensPrompt, 6212);
+    assert.equal(result.tokensCompletion, 54);
   }
 
   // Case 2: 部分未解析（unresolved_anchors > 0 -> review-pending-partial）

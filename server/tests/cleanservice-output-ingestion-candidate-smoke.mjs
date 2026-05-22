@@ -302,7 +302,104 @@ async function runTests() {
     assert.ok(verif.errors.includes('BLOCKED_VERIFIER_CONTRACT_GAP'));
   }
 
-  console.log('PASS cleanservice output ingestion candidate smoke tests (6/6)');
+  // Case 7: 真实完整链路集成验证 (verifyCleanServiceOutputArtifacts -> buildVerifiedCleanOutputMetadataCandidate)
+  {
+    console.log('  [7] full verification -> candidate chain with zero inline job provenance/stats...');
+    const rawJob = mockJob();
+    delete rawJob.stats;
+    delete rawJob.provenance;
+
+    const files = {
+      'eduassets-clean/toc-rebuild/1842780526581841/v2/flooded_content.json': JSON.stringify([{ id: 1, text: "block 1" }]),
+      'eduassets-clean/toc-rebuild/1842780526581841/v2/logic_tree.json': JSON.stringify({ root: {} }),
+      'eduassets-clean/toc-rebuild/1842780526581841/v2/readable_tree.md': "## Title\n\nContent here.",
+      'eduassets-clean/toc-rebuild/1842780526581841/v2/skeleton.json': JSON.stringify({ nodes: [] }),
+      'eduassets-clean/toc-rebuild/1842780526581841/v2/unresolved_anchors.json': JSON.stringify([]),
+      'eduassets-clean/toc-rebuild/1842780526581841/v2/metrics.json': JSON.stringify({
+        stats: {
+          tokens: {
+            prompt: 6212,
+            completion: 54,
+            total: 6266
+          }
+        },
+        cost_cny_estimated: 0.00632,
+        cost_cny_actual: 0.0,
+      }),
+      'eduassets-clean/toc-rebuild/1842780526581841/v2/provenance.json': JSON.stringify({
+        schema: 'luceon-provenance/v1',
+        service: { name: 'toc-rebuild', version: '1.0.0', protocol_version: 'v1' },
+        asset: { material_id: '1842780526581841', asset_version: 'v2' },
+        job: { job_id: 'luceon-task-249-rebuild-v2', parse_task_id: 'task-clean-249' },
+        inputs: [
+          {
+            bucket: 'eduassets-raw',
+            object: 'mineru/1842780526581841/v1/content_list_v2.json',
+            sha256: 'f05394af3ad6107cdb7324fcffeb13fb43dcbcbaff46f838f291828867e182db',
+            size_bytes: 31543,
+          }
+        ],
+      }),
+    };
+
+    const reader = {
+      async readArtifact(role, ref) {
+        const key = `${ref.bucket}/${ref.object}`;
+        return files[key];
+      }
+    };
+
+    const { verifyCleanServiceOutputArtifacts } = await import('../services/cleanservice/output-verifier.mjs');
+    const verification = await verifyCleanServiceOutputArtifacts(rawJob, {
+      artifactReader: reader,
+      expected: {
+        serviceName: 'toc-rebuild',
+        protocolVersion: 'v1',
+        materialId: '1842780526581841',
+        assetVersion: 'v2',
+        jobId: 'luceon-task-249-rebuild-v2',
+        rawInput: {
+          bucket: 'eduassets-raw',
+          object: 'mineru/1842780526581841/v1/content_list_v2.json',
+          sha256: 'f05394af3ad6107cdb7324fcffeb13fb43dcbcbaff46f838f291828867e182db',
+          sizeBytes: 31543,
+        },
+      }
+    });
+
+    const candidate = buildVerifiedCleanOutputMetadataCandidate({
+      job: rawJob,
+      verification,
+      now: customNow,
+    });
+
+    assert.equal(candidate.ok, true);
+    assert.equal(candidate.shouldPersist, true);
+    assert.equal(candidate.cleanState, 'completed');
+
+    // 验证 sourceInput 无损传递到了 verificationSummary 与 candidate 中
+    const verif = candidate.verificationSummary;
+    assert.equal(verif.ok, true);
+    assert.ok(verif.sourceInput);
+    assert.equal(verif.sourceInput.bucket, 'eduassets-raw');
+    assert.equal(verif.sourceInput.object, 'mineru/1842780526581841/v1/content_list_v2.json');
+    assert.equal(verif.sourceInput.sha256, 'f05394af3ad6107cdb7324fcffeb13fb43dcbcbaff46f838f291828867e182db');
+    assert.equal(verif.sourceInput.sizeBytes, 31543);
+
+    // 验证 prompt / completion tokens 保留无损！
+    const taskSummary = candidate.metadataPatch.taskMetadata.cleanServiceJobs['toc-rebuild'];
+    const materialSummary = candidate.metadataPatch.materialMetadata.cleanMaterials['toc-rebuild'];
+
+    assert.equal(taskSummary.stats.tokensPrompt, 6212);
+    assert.equal(taskSummary.stats.tokensCompletion, 54);
+    assert.equal(taskSummary.stats.tokensTotal, 6266);
+
+    assert.equal(materialSummary.stats.tokensPrompt, 6212);
+    assert.equal(materialSummary.stats.tokensCompletion, 54);
+    assert.equal(materialSummary.stats.tokensTotal, 6266);
+  }
+
+  console.log('PASS cleanservice output ingestion candidate smoke tests (7/7)');
 }
 
 runTests().catch(err => {

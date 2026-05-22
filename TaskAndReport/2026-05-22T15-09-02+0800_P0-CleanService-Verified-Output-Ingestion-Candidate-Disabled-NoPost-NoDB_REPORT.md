@@ -4,13 +4,15 @@
 
 - **Development Branch**: `lucode/TASK-20260522-150902`
 - **Base Branch**: `origin/main` (`3cc55362d53cc0feb0c5fdb295c8ab3c3ea7365e`)
-- **HEAD Commit**: `196c5ff54224e5e43a9aeb65494e8c556e03e712` (to be committed by Lucode)
+- **HEAD Commit**: `76d9ac5` (physically verified and aligned)
 
 ## 2. Exact Changed File List
 
 ```text
 M  server/services/cleanservice/metadata-summary.mjs
-A  server/tests/cleanservice-output-ingestion-candidate-smoke.mjs
+M  server/services/cleanservice/output-verifier.mjs
+M  server/tests/cleanservice-output-ingestion-candidate-smoke.mjs
+M  server/tests/cleanservice-output-verifier-smoke.mjs
 A  TaskAndReport/2026-05-22T15-09-02+0800_P0-CleanService-Verified-Output-Ingestion-Candidate-Disabled-NoPost-NoDB_REPORT.md
 M  TaskAndReport/TASK_TRACKING_LIST.md
 ```
@@ -42,7 +44,8 @@ node server/tests/cleanservice-output-ingestion-candidate-smoke.mjs
   [4] verification failure candidate blocking...
   [5] real-shape job with no inline provenance, using verification.sourceInput...
   [6] verifier contract gap detection (missing traceability elements triggers BLOCKED_VERIFIER_CONTRACT_GAP)...
-PASS cleanservice output ingestion candidate smoke tests (6/6)
+  [7] full verification -> candidate chain with zero inline job provenance/stats...
+PASS cleanservice output ingestion candidate smoke tests (7/7)
 # Exit Code: 0
 ```
 

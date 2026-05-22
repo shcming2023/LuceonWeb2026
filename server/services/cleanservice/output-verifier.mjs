@@ -97,6 +97,11 @@ export async function verifyCleanServiceOutputArtifacts(job = {}, options = {}) 
   const expected = options.expected || {};
   const artifactReader = options.artifactReader;
 
+  let tokensPrompt = null;
+  let tokensCompletion = null;
+  let tokensTotal = null;
+  let sourceInput = null;
+
   if (!artifactReader) {
     throw new Error('verifyCleanServiceOutputArtifacts requires options.artifactReader');
   }
@@ -239,6 +244,10 @@ export async function verifyCleanServiceOutputArtifacts(job = {}, options = {}) 
     const totalTokens = metrics.stats?.tokens?.total ?? metrics.tokens?.total ?? metrics.total_tokens ?? metrics.stats?.total_tokens;
     if (!Number.isFinite(totalTokens) || totalTokens <= 0) {
       errors.push('zero-or-missing-tokens');
+    } else {
+      tokensTotal = totalTokens;
+      tokensPrompt = metrics.stats?.tokens?.prompt ?? metrics.tokens?.prompt ?? metrics.prompt_tokens ?? metrics.stats?.prompt_tokens ?? null;
+      tokensCompletion = metrics.stats?.tokens?.completion ?? metrics.tokens?.completion ?? metrics.completion_tokens ?? metrics.stats?.completion_tokens ?? null;
     }
   } catch (e) {
     errors.push('invalid-metrics-json');
@@ -279,10 +288,20 @@ export async function verifyCleanServiceOutputArtifacts(job = {}, options = {}) 
     }
 
     // size_bytes=0 债务补偿
-    const provInputSize = provInput.size_bytes ?? provInput.sizeBytes;
+    let provInputSize = provInput.size_bytes ?? provInput.sizeBytes ?? null;
     if (provInputSize === 0) {
       warnings.push('input-size-bytes-zero');
+      if (expected.rawInput?.sizeBytes) {
+        provInputSize = expected.rawInput.sizeBytes;
+      }
     }
+
+    sourceInput = {
+      bucket: provInput.bucket || null,
+      object: provInput.object || null,
+      sha256: provInput.sha256 || provInput.sha256_hex || null,
+      sizeBytes: provInputSize,
+    };
   } catch (e) {
     errors.push('invalid-provenance-json');
   }
@@ -328,6 +347,10 @@ export async function verifyCleanServiceOutputArtifacts(job = {}, options = {}) 
       warnings,
       unresolvedAnchorCount,
       inputSizeBytes,
+      sourceInput,
+      tokensPrompt,
+      tokensCompletion,
+      tokensTotal,
     };
   }
 
@@ -338,5 +361,9 @@ export async function verifyCleanServiceOutputArtifacts(job = {}, options = {}) 
     warnings,
     unresolvedAnchorCount,
     inputSizeBytes,
+    sourceInput,
+    tokensPrompt,
+    tokensCompletion,
+    tokensTotal,
   };
 }
