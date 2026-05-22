@@ -43,17 +43,26 @@ export function buildCleanTaskSummary(job = {}, verification = {}) {
     finishedAt: job.finished_at || job.finishedAt || null,
     artifacts: compactArtifacts(job.artifacts),
     stats: {
-      tokensTotal: job.stats?.tokens?.total ?? job.stats?.tokensTotal ?? null,
+      tokensPrompt: job.stats?.tokens?.prompt ?? job.stats?.tokensPrompt ?? verification.tokensPrompt ?? null,
+      tokensCompletion: job.stats?.tokens?.completion ?? job.stats?.tokensCompletion ?? verification.tokensCompletion ?? null,
+      tokensTotal: job.stats?.tokens?.total ?? job.stats?.tokensTotal ?? verification.tokensTotal ?? null,
       costCnyEstimated: job.stats?.cost_cny_estimated ?? job.stats?.costCnyEstimated ?? null,
       costCnyActual: job.stats?.cost_cny_actual ?? job.stats?.costCnyActual ?? null,
       unresolvedAnchorCount: verification.unresolvedAnchorCount ?? job.stats?.unresolved_anchor_count ?? null,
     },
-    error: job.error ? {
-      code: job.error.code || 'protocol_error',
-      message: job.error.message || String(job.error),
-      retriable: job.error.retriable === true,
-    } : null,
-    updatedAt: job.finished_at || job.updated_at || new Date().toISOString(),
+    error: (verification.errors && verification.errors.length > 0)
+      ? {
+          code: 'verification_failed',
+          message: verification.errors.join(', '),
+          retriable: false,
+        }
+      : job.error ? {
+          code: job.error.code || 'protocol_error',
+          message: job.error.message || String(job.error),
+          retriable: job.error.retriable === true,
+        } : null,
+    warnings: verification.warnings || [],
+    updatedAt: verification.updatedAt || job.finished_at || job.updated_at || new Date().toISOString(),
   };
 }
 
@@ -66,6 +75,8 @@ export function buildCleanMaterialSummary(job = {}, taskSummary = buildCleanTask
     prefix: job.sink?.prefix || null,
     provenanceObjectName: taskSummary.artifacts?.provenance?.object || null,
     stats: {
+      tokensPrompt: taskSummary.stats.tokensPrompt,
+      tokensCompletion: taskSummary.stats.tokensCompletion,
       tokensTotal: taskSummary.stats.tokensTotal,
       costCnyActual: taskSummary.stats.costCnyActual,
       unresolvedAnchorCount: taskSummary.stats.unresolvedAnchorCount,
@@ -89,5 +100,90 @@ export function buildCleanMetadataPatch(job = {}, verification = {}) {
         [serviceName]: materialSummary,
       },
     },
+  };
+}
+
+export function buildVerifiedCleanOutputMetadataCandidate({ job = {}, verification = {}, now = null }) {
+  const getNow = typeof now === 'function' ? now : () => new Date().toISOString();
+
+  // 1. Source input 提取与溯源补偿逻辑
+  const vSourceInput = verification.sourceInput || {};
+  const provenanceObj = job.provenance || {};
+  const provInput = (provenanceObj.inputs && Array.isArray(provenanceObj.inputs) && provenanceObj.inputs[0])
+    || provenanceObj.input
+    || {};
+
+  const bucket = vSourceInput.bucket || provInput.bucket || null;
+  const object = vSourceInput.object || provInput.object || null;
+  const sha256 = vSourceInput.sha256 || vSourceInput.sha256_hex || provInput.sha256 || provInput.sha256_hex || null;
+  const inputSizeBytes = verification.inputSizeBytes ?? vSourceInput.sizeBytes ?? vSourceInput.size_bytes ?? provInput.size_bytes ?? provInput.sizeBytes ?? null;
+
+  const sourceInput = {
+    bucket,
+    object,
+    sha256,
+    sizeBytes: inputSizeBytes,
+  };
+
+  const serviceName = job.service_name || job.serviceName || 'toc-rebuild';
+  const materialId = job.material_id || job.materialId || null;
+  const parseTaskId = job.parse_task_id || job.parseTaskId || null;
+  const assetVersion = job.asset_version || job.assetVersion || null;
+  const jobId = job.job_id || job.jobId || null;
+
+  // 2. 溯源契约缺口检查（当验证结果 ok 时，如果核心数据缺失，则执行 stop-rule 阻断）
+  let isBlocked = false;
+  const errors = [...(verification.errors || [])];
+  if (verification.ok === true && (!bucket || !object || !sha256)) {
+    isBlocked = true;
+    errors.push('BLOCKED_VERIFIER_CONTRACT_GAP');
+  }
+
+  const isOk = verification.ok === true && !isBlocked;
+
+  const verificationSummary = {
+    ok: isOk,
+    cleanState: isOk ? (verification.cleanState || 'completed') : 'protocol-failure',
+    errors,
+    warnings: verification.warnings || [],
+    unresolvedAnchorCount: verification.unresolvedAnchorCount || 0,
+    inputSizeBytes,
+    sourceInput,
+  };
+
+  if (!isOk) {
+    return {
+      ok: false,
+      shouldPersist: false,
+      serviceName,
+      materialId,
+      parseTaskId,
+      assetVersion,
+      jobId,
+      cleanState: isOk ? (verification.cleanState || 'completed') : 'protocol-failure',
+      metadataPatch: null,
+      verificationSummary,
+    };
+  }
+
+  const targetTime = getNow();
+  const enhancedVerification = {
+    ...verification,
+    updatedAt: targetTime,
+  };
+
+  const metadataPatch = buildCleanMetadataPatch(job, enhancedVerification);
+
+  return {
+    ok: true,
+    shouldPersist: true,
+    serviceName,
+    materialId,
+    parseTaskId,
+    assetVersion,
+    jobId,
+    cleanState: verification.cleanState || 'completed',
+    metadataPatch,
+    verificationSummary,
   };
 }
