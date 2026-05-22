@@ -30,14 +30,14 @@ No runtime command, POST, retry, cleanup, MinIO object mutation, DB write, LLM c
 
 ## 4. Mainline Implication
 
-Task 242 does not prove the Mineru2Table success path. It proves the next critical blocker:
+Task 242 does not prove the Mineru2Table success path. Luceon's follow-up read-only diagnosis refined the next critical blocker:
 
 ```text
-LLM runtime failure currently leaks into a false completed job state and skeletal outputs.
+The running Mineru2Table service appears to have used a different or invalid DeepSeek key, causing HTTP 401 before a valid success-path attempt could be evaluated.
 ```
 
-The next mainline task should therefore fix Mineru2Table failure semantics before another real success-path sample run.
+The false-success completed state is a real guardrail defect, but it is not the first mainline question. The next mainline task should first correct the DeepSeek test credential injection and run a minimal auth-only probe. Only after auth is proven should Luceon authorize a new success-path sample run.
 
 ## 5. Ledger Action
 
-Task 242 is closed as accepted failed evidence with a required follow-up. The next task should be scoped narrowly to Mineru2Table runtime failure semantics and output suppression on LLM failure.
+Task 242 is closed as accepted failed evidence with a required follow-up. The next task is scoped narrowly to Mineru2Table DeepSeek test credential injection and a minimal auth probe. Failure semantics and output suppression are deferred side work unless the auth probe proves credentials are valid and the mainline still fails.
