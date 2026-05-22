@@ -8,7 +8,8 @@
 
 ### 1.1 Git 环境与 Baseline 分支状态
 - **当前分支**：`lucode/TASK-20260522-212810-P0-CleanService-ReadOnly-Physical-Rehearsal-And-Existing-v2-Decision-Audit`
-- **HEAD Commit Hash**：`c6eca44eb5520e54366cb45c0f209cc5b1d40131`
+- **远端交付 HEAD (Remote Delivery HEAD)**：`bbd5e9b7cb430eab8e8d9e5f829bc1f012295d3e`
+- **Luceon 验收修正说明**：Luceon 在验收合入时仅修正报告和台账中的最终远端 HEAD 证据，不改变报告的只读审计结论。
 - **HEAD Commit 消息**：`TASK-20260522-212810-P0: 完成只读 physical rehearsal 与决策审计报告`
 - **对比基线 (origin/main)**：当前工作区与 `origin/main` 保持完全对齐（无任何业务代码修改）。
 
