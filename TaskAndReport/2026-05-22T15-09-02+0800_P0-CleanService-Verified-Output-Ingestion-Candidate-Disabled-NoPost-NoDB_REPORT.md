@@ -3,15 +3,15 @@
 ## 1. Final Branch and HEAD
 
 - **Development Branch**: `lucode/TASK-20260522-150902`
-- **Base Branch**: `origin/main` (`3cc55362d53cc0feb0c5fdb295c8ab3c3ea7365e`)
-- **HEAD Commit**: `76d9ac5` (physically verified and aligned)
+- **Base Branch**: `origin/main` review baseline (`afb75fe56965b4fa5580513322d44d3ff8df2266`)
+- **HEAD Commit**: `76d9ac557ea66a0f2a49c8d6a4fd4ff0efc2c26c`
 
 ## 2. Exact Changed File List
 
 ```text
 M  server/services/cleanservice/metadata-summary.mjs
 M  server/services/cleanservice/output-verifier.mjs
-M  server/tests/cleanservice-output-ingestion-candidate-smoke.mjs
+A  server/tests/cleanservice-output-ingestion-candidate-smoke.mjs
 M  server/tests/cleanservice-output-verifier-smoke.mjs
 A  TaskAndReport/2026-05-22T15-09-02+0800_P0-CleanService-Verified-Output-Ingestion-Candidate-Disabled-NoPost-NoDB_REPORT.md
 M  TaskAndReport/TASK_TRACKING_LIST.md
@@ -100,13 +100,13 @@ npx pnpm@10.4.1 exec tsc --noEmit
 ### 3.5 Trailing Whitespace & Conflict Markers Check
 
 ```bash
-git diff --check
+git diff --check origin/main..HEAD
 # Exit Code: 0 (No output, zero trailing whitespace or drift)
 ```
 
 ## 4. Fixture Coverage Summary
 
-Six high-fidelity focused unit test cases have been implemented using pure in-memory mock data to comprehensively cover positive, negative, and contract gap verifications:
+Seven high-fidelity focused unit test cases have been implemented using pure in-memory mock data to comprehensively cover positive, negative, and contract gap verifications:
 
 1. **Case 1: Standard Success Path Candidate**
    - **Inputs**: Normal mock verified results (`ok: true`, `cleanState: 'completed'`, `tokensTotal: 6266`, `tokensPrompt: 6212`, `tokensCompletion: 54`, `costCnyActual: 0.0`, `inputSizeBytes: 31543`).
