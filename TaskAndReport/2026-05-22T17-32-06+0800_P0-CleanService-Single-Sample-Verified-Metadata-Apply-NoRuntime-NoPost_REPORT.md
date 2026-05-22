@@ -3,7 +3,7 @@
 ## 1. 最终提交与变更拓扑
 
 - **最终分支 (Final Branch)**: `lucode/TASK-20260522-173206`
-- **提交哈希 (HEAD Commit Hash)**: `86d63b6526abf752feb14b9265b54d0d883f590f`
+- **提交哈希 (HEAD Commit Hash)**: `218964ee7fd2fcef55c3a432d0570033fcaec631`
 - **变更文件列表**:
   - `[NEW]` [metadata-apply-executor.mjs](file:///workspace/dev/Luceon2026/server/services/cleanservice/metadata-apply-executor.mjs)
   - `[NEW]` [cleanservice-metadata-apply-executor-smoke.mjs](file:///workspace/dev/Luceon2026/server/tests/cleanservice-metadata-apply-executor-smoke.mjs)
