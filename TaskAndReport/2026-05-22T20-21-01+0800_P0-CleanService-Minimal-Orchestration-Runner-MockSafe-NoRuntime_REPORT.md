@@ -7,7 +7,7 @@
 本项工作严格限定在依赖注入、纯内存 mock 以及 dry-run 的安全边界内，没有触发任何真实的网络 POST、DB 写入、MinIO 读取、LLM 访问或 Docker/Compose/worker 激活。所有新写的 8 个场景集成测试以及全部 8 套关联的已有 CleanService 模块 smoke 测试、TypeScript 类型检查已全量跑通，未引入任何回归破坏。
 
 - **交付分支 (Branch)**: `lucode/TASK-20260522-202101-P0-CleanService-Minimal-Orchestration-Runner-MockSafe-NoRuntime` (远端已推送至 `origin`)
-- **提交哈希 (HEAD Commit)**: `1631397750868f7f2b9631627b0cb8972e391ca0` (已将所有代码、测试、报告及台账修改固化提交)
+- **提交哈希 (HEAD Commit)**: `02d841c9402de0678b22b350256a9dc88227a082` (已将所有代码、测试、报告及台账修改固化提交)
 - **报告生成时间**: 2026-05-22
 
 ---
