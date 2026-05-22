@@ -578,7 +578,166 @@ async function runTests() {
     assert.equal(capturedExpected.rawInput.sizeBytes, customSize, 'sizeBytes must propagate customSize instead of hardcoded 31543');
   }
 
-  console.log('ALL cleanservice orchestration runner smoke tests PASSED! (11/11)');
+  // Test 12: aligned completed task and material metadata returns `CURRENT_CLEAN_MATERIAL_NOOP` and performs zero dependency calls
+  {
+    console.log('  [12] Testing CURRENT_CLEAN_MATERIAL_NOOP positive aligned path...');
+    const jobId = 'luceon-task-clean-123-toc-rebuild-v2';
+    const assetVersion = 'v2';
+
+    const task = makeBaseTask({
+      metadata: {
+        cleanServiceJobs: {
+          'toc-rebuild': { jobId, assetVersion, status: 'completed' },
+        },
+      },
+    });
+    const material = makeBaseMaterial({
+      metadata: {
+        cleanMaterials: {
+          'toc-rebuild': { latestVersion: assetVersion, status: 'completed' },
+        },
+      },
+    });
+    const config = makeBaseConfig();
+
+    const failFn = () => { throw new Error('Dependency should not be called during current-state noop preflight'); };
+    const deps = {
+      submitJob: failFn,
+      queryJob: failFn,
+      verifyCleanServiceOutputArtifacts: failFn,
+      buildVerifiedCleanOutputMetadataCandidate: failFn,
+      buildCleanMetadataPersistencePlan: failFn,
+      applyCleanMetadataPersistencePlan: failFn,
+      dbClient: { updateTask: failFn, updateMaterial: failFn },
+      artifactReader: { readArtifact: failFn },
+    };
+
+    const result = await runCleanServiceTocRebuildOnce({ task, material, config, deps });
+    assert.equal(result.ok, true);
+    assert.equal(result.status, 'CURRENT_CLEAN_MATERIAL_NOOP');
+    assert.equal(result.classification, 'CURRENT_CLEAN_MATERIAL_NOOP');
+    assert.equal(result.materialId, material.id);
+    assert.equal(result.taskId, task.id);
+    assert.equal(result.assetVersion, assetVersion);
+    assert.equal(result.jobId, jobId);
+    assert.equal(result.cleanState, 'completed');
+  }
+
+  // Test 13: misaligned metadata (different assetVersion) does not return noop and stays blocked
+  {
+    console.log('  [13] Testing mismatched assetVersion blocking...');
+    const task = makeBaseTask({
+      metadata: {
+        cleanServiceJobs: {
+          'toc-rebuild': { jobId: 'luceon-task-clean-123-toc-rebuild-v2', assetVersion: 'v2', status: 'completed' },
+        },
+      },
+    });
+    const material = makeBaseMaterial({
+      metadata: {
+        cleanMaterials: {
+          'toc-rebuild': { latestVersion: 'v1', status: 'completed' }, // mismatched: v1 !== v2
+        },
+      },
+    });
+    const config = makeBaseConfig();
+
+    const failFn = () => { throw new Error('Should not be called'); };
+    const deps = {
+      submitJob: failFn,
+      queryJob: failFn,
+    };
+
+    const result = await runCleanServiceTocRebuildOnce({ task, material, config, deps });
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 'BLOCKED_EXISTING_TOC_REBUILD_METADATA');
+  }
+
+  // Test 14: non-completed existing task status does not return noop and stays blocked
+  {
+    console.log('  [14] Testing non-completed task status blocking...');
+    const task = makeBaseTask({
+      metadata: {
+        cleanServiceJobs: {
+          'toc-rebuild': { jobId: 'luceon-task-clean-123-toc-rebuild-v2', assetVersion: 'v2', status: 'failed' }, // failed
+        },
+      },
+    });
+    const material = makeBaseMaterial({
+      metadata: {
+        cleanMaterials: {
+          'toc-rebuild': { latestVersion: 'v2', status: 'completed' },
+        },
+      },
+    });
+    const config = makeBaseConfig();
+
+    const failFn = () => { throw new Error('Should not be called'); };
+    const deps = {
+      submitJob: failFn,
+      queryJob: failFn,
+    };
+
+    const result = await runCleanServiceTocRebuildOnce({ task, material, config, deps });
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 'BLOCKED_EXISTING_TOC_REBUILD_METADATA');
+  }
+
+  // Test 15: missing jobId in task metadata does not return noop and stays blocked
+  {
+    console.log('  [15] Testing missing jobId blocking...');
+    const task = makeBaseTask({
+      metadata: {
+        cleanServiceJobs: {
+          'toc-rebuild': { assetVersion: 'v2', status: 'completed' }, // missing jobId
+        },
+      },
+    });
+    const material = makeBaseMaterial({
+      metadata: {
+        cleanMaterials: {
+          'toc-rebuild': { latestVersion: 'v2', status: 'completed' },
+        },
+      },
+    });
+    const config = makeBaseConfig();
+
+    const failFn = () => { throw new Error('Should not be called'); };
+    const deps = {
+      submitJob: failFn,
+      queryJob: failFn,
+    };
+
+    const result = await runCleanServiceTocRebuildOnce({ task, material, config, deps });
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 'BLOCKED_EXISTING_TOC_REBUILD_METADATA');
+  }
+
+  // Test 16: missing task metadata (single-sided material-only exists) does not return noop and stays blocked
+  {
+    console.log('  [16] Testing one-sided metadata blocking...');
+    const task = makeBaseTask(); // missing cleanServiceJobs
+    const material = makeBaseMaterial({
+      metadata: {
+        cleanMaterials: {
+          'toc-rebuild': { latestVersion: 'v2', status: 'completed' },
+        },
+      },
+    });
+    const config = makeBaseConfig();
+
+    const failFn = () => { throw new Error('Should not be called'); };
+    const deps = {
+      submitJob: failFn,
+      queryJob: failFn,
+    };
+
+    const result = await runCleanServiceTocRebuildOnce({ task, material, config, deps });
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 'BLOCKED_EXISTING_TOC_REBUILD_METADATA');
+  }
+
+  console.log('ALL cleanservice orchestration runner smoke tests PASSED! (16/16)');
 }
 
 runTests().catch(err => {

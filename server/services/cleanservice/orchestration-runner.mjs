@@ -66,11 +66,36 @@ export async function runCleanServiceTocRebuildOnce({
   }
 
   const serviceName = config.serviceName || 'toc-rebuild';
-  const { assetVersion } = allocateAssetVersion(task, serviceName);
-  const jobId = `luceon-${task.id}-${serviceName}-${assetVersion}`;
 
+  // 3. Preflight - Current State Noop Check (MUST run before allocateAssetVersion)
   const existingTaskJob = task.metadata?.cleanServiceJobs?.[serviceName];
   const existingMaterialJob = material.metadata?.cleanMaterials?.[serviceName];
+
+  if (existingTaskJob && existingMaterialJob) {
+    const assetVersionAligned = existingTaskJob.assetVersion === existingMaterialJob.latestVersion;
+    const taskCompleted = existingTaskJob.status === 'completed' || existingTaskJob.cleanState === 'completed';
+    const materialCompleted = existingMaterialJob.status === 'completed';
+    const jobIdExists = !!existingTaskJob.jobId;
+
+    if (assetVersionAligned && taskCompleted && materialCompleted && jobIdExists) {
+      return {
+        ok: true,
+        status: 'CURRENT_CLEAN_MATERIAL_NOOP',
+        classification: 'CURRENT_CLEAN_MATERIAL_NOOP',
+        materialId: material.id,
+        taskId: task.id,
+        serviceName,
+        assetVersion: existingTaskJob.assetVersion,
+        jobId: existingTaskJob.jobId,
+        cleanState: existingTaskJob.cleanState || existingTaskJob.status || 'completed',
+        reason: 'Already-applied completed clean material matches task and material current records exactly',
+        observedAt: getNow(),
+      };
+    }
+  }
+
+  const { assetVersion } = allocateAssetVersion(task, serviceName);
+  const jobId = `luceon-${task.id}-${serviceName}-${assetVersion}`;
 
   // 3. Preflight - Already Applied Noop Check
   if (existingTaskJob && existingMaterialJob) {
