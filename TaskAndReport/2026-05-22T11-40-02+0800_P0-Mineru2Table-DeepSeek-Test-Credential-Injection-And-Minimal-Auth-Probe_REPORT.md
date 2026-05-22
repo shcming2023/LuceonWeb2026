@@ -9,7 +9,7 @@
 > 本报告曾因远端分支未推送且分类定性不准，被 `luceon` 架构总控退回。
 > 随后，在 resubmit 后由于基于旧 main、报告中含有占位 key 的敏感前缀/后缀/长度/完整值、以及分类定性与台账流转逻辑不一致，被 `luceon` 架构总控进行了 **v2 退回**。
 > 按照运行态与交付事实，执行端并未真正获得有效的 Director 授权 Key，因而更准确的分类应为 **`BLOCKED_CREDENTIAL_NOT_DELIVERED_TO_EXECUTOR`**（“授权 Key 未交付到执行端”）。
-> 我们现已完成本地 rebase 最新 main（保留了所有历史 Luceon reviews），并对报告和台账进行了彻底的去敏感信息（去前缀/后缀/长度/占位完整值）脱敏，将分类统一修正为 `BLOCKED_CREDENTIAL_NOT_DELIVERED_TO_EXECUTOR`，在台账中同步记为 `未接受已退回` 且 Next Actor 为 `Lucode`。
+> 我们现已完成本地 rebase 最新 main（保留了所有历史 Luceon reviews），并对报告和台账进行了彻底的去敏感信息（去前缀/后缀/长度/占位完整值）脱敏，将分类统一修正为 `BLOCKED_CREDENTIAL_NOT_DELIVERED_TO_EXECUTOR`，并交还 Luceon 进行最终 blocked-result 验收归档。
 > 特此在报告和台账中记录本次控制面 v2 退回历史，以作归档。
 
 鉴于在当前开发工作区、系统环境变量、容器运行态以及过去全部 1500+ 行 Chat logs 中，**均无法获得 Director 授权的官方 DeepSeek 真实测试 Key**（当前仅能感知到系统预设的 placeholder 占位符以及其他平台测试占位值，二者均与官方 API 端点完全不匹配），本特工**立即触发了任务书 Section 8 的第一条 Stop Rule（特工无可用授权 Key）**，安全中止后续的 runtime recreate 动作与 LLM 探测。
@@ -18,7 +18,7 @@
 > [!IMPORTANT]
 > **最终分类 (Final Classification): `BLOCKED_CREDENTIAL_NOT_DELIVERED_TO_EXECUTOR`**
 >
-> 核心结论：由于授权的官方 DeepSeek 测试凭证在执行端根本未交付（仍为 dummy 占位符），导致注入与探测链路无法打通。我们保持运行态零变动、零 job 提交、数据状态完全不变，以最诚实和最安全的原则结课，作为退回历史记录在案，并由 `Lucode` 完成最终的控制面 v2 退回历史归档。
+> 核心结论：由于授权的官方 DeepSeek 测试凭证在执行端根本未交付（仍为 dummy 占位符），导致注入与探测链路无法打通。我们保持运行态零变动、零 job 提交、数据状态完全不变，以最诚实和最安全的原则结课，并交回 `Luceon` 完成最终 blocked-result 验收归档。
 
 ---
 
@@ -78,5 +78,5 @@ INFO:     127.0.0.1:43132 - "GET /health HTTP/1.1" 200 OK
 ## 4. 交付与分支固化信息
 
 - **交付分支**: `lucode/TASK-20260522-114002`
-- **Execution Commit (HEAD SHA)**: dd3b90a
-- **控制权状态**: **控制面已被 v2 退回。已在本地完成 rebase 与脱敏修正，固化 commit 并已将交付分支推送至 origin，控制权回归 Lucode 以进行此控制面 v2 退回历史的最终归档。**
+- **Final Delivery HEAD**: `dd3b98eec5756efca7efd714056c0100feffc631`
+- **控制权状态**: **已完成 v2 退回后的 rebase 与脱敏修正，固化 commit 并将交付分支推送至 origin，控制权交还给 Luceon 进行最终 blocked-result 验收归档。**
