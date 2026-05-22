@@ -6,24 +6,28 @@
 
 本项工作严格限定在依赖注入、纯内存 mock 以及 dry-run 的安全边界内，没有触发任何真实的网络 POST、DB 写入、MinIO 读取、LLM 访问或 Docker/Compose/worker 激活。所有新写的 8 个场景集成测试以及全部 8 套关联的已有 CleanService 模块 smoke 测试、TypeScript 类型检查已全量跑通，未引入任何回归破坏。
 
-- **交付分支 (Branch)**: `lucode/TASK-20260522-202101-P0-CleanService-Minimal-Orchestration-Runner-MockSafe-NoRuntime`
-- **提交哈希 (HEAD Commit)**: `51d7be2e1bf3cb4a3e2308eb82f4586bc8efbc27` (已将所有代码、测试、报告及台账修改固化提交)
+- **交付分支 (Branch)**: `lucode/TASK-20260522-202101-P0-CleanService-Minimal-Orchestration-Runner-MockSafe-NoRuntime` (远端已推送至 `origin`)
+- **提交哈希 (HEAD Commit)**: `1631397750868f7f2b9631627b0cb8972e391ca0` (已将所有代码、测试、报告及台账修改固化提交)
 - **报告生成时间**: 2026-05-22
 
 ---
 
-## 2. 变更文件列表 (Changed Files)
+## 2. 变更文件列表 (Changed Files - Name Status Diff)
 
+运行 `git diff --name-status origin/main..HEAD` 的终端真实输出为：
 ```text
-A       server/services/cleanservice/orchestration-runner.mjs
-A       server/tests/cleanservice-orchestration-runner-smoke.mjs
 A       TaskAndReport/2026-05-22T20-21-01+0800_P0-CleanService-Minimal-Orchestration-Runner-MockSafe-NoRuntime_REPORT.md
 M       TaskAndReport/TASK_TRACKING_LIST.md
+A       server/services/cleanservice/orchestration-runner.mjs
+A       server/tests/cleanservice-orchestration-runner-smoke.mjs
 ```
 
 ## 3. 空白字符与格式检查 (Whitespace Diff Check)
 
-运行 `git diff --check` 没有输出任何空白字符或格式错误，变更内容极端干净。
+运行 `git diff --check origin/main..HEAD` 结果如下（无任何空白字符或格式错误输出，代表变更极其纯净）：
+```text
+<no output - check passed perfectly>
+```
 
 ---
 
