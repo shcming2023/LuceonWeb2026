@@ -90,11 +90,43 @@ export async function runCleanServiceTocRebuildOnce({
     }
   }
 
-  // 3. Preflight - Current State Noop Check (MUST run before allocateAssetVersion)
+  // 3. Preflight - Current State Noop Check & Explicit New-Version Precondition Check (MUST run before allocateAssetVersion)
   const existingTaskJob = task.metadata?.cleanServiceJobs?.[serviceName];
   const existingMaterialJob = material.metadata?.cleanMaterials?.[serviceName];
 
-  const hasNewVersionIntent = config && config.intent === 'create-new-version';
+  const isRerunRequested = config && config.intent === 'create-new-version';
+
+  // Explicit new-version precondition gate: must have aligned, completed, two-sided history with a jobId
+  if (isRerunRequested) {
+    if (!existingTaskJob || !existingMaterialJob) {
+      return {
+        ok: false,
+        status: 'BLOCKED_EXISTING_TOC_REBUILD_METADATA',
+        classification: 'BLOCKED_EXISTING_TOC_REBUILD_METADATA',
+        reason: 'Explicit create-new-version intent requires existing completed toc-rebuild metadata on both task and material',
+        observedAt: getNow(),
+      };
+    }
+
+    const assetVersionAligned = existingTaskJob.assetVersion === existingMaterialJob.latestVersion;
+    const taskCompleted = existingTaskJob.status === 'completed' || existingTaskJob.cleanState === 'completed';
+    const materialCompleted = existingMaterialJob.status === 'completed';
+    const jobIdExists = !!existingTaskJob.jobId;
+
+    if (!assetVersionAligned || !taskCompleted || !materialCompleted || !jobIdExists) {
+      return {
+        ok: false,
+        status: 'BLOCKED_EXISTING_TOC_REBUILD_METADATA',
+        classification: 'BLOCKED_EXISTING_TOC_REBUILD_METADATA',
+        reason: 'Explicit create-new-version intent requires completed, aligned historical metadata with a valid jobId',
+        observedAt: getNow(),
+      };
+    }
+  }
+
+  // Only if rerun is requested and has successfully passed the precondition checks,
+  // we bypass the CURRENT_CLEAN_MATERIAL_NOOP check and the incompatible checks.
+  const hasNewVersionIntent = isRerunRequested;
 
   if (existingTaskJob && existingMaterialJob && !hasNewVersionIntent) {
     const assetVersionAligned = existingTaskJob.assetVersion === existingMaterialJob.latestVersion;

@@ -887,7 +887,149 @@ async function runTests() {
     assert.equal(result.classification, 'BLOCKED_UNSUPPORTED_CLEANSERVICE_INTENT');
   }
 
-  console.log('ALL cleanservice orchestration runner smoke tests PASSED! (19/19)');
+  // Test 20: create-new-version rerun intent + failed existing task job is blocked and throws zero tripwire leaks
+  {
+    console.log('  [20] Testing rerun intent + failed existing task job blocking...');
+    const task = makeBaseTask({
+      metadata: {
+        cleanServiceJobs: {
+          'toc-rebuild': { jobId: 'luceon-task-clean-123-toc-rebuild-v2', assetVersion: 'v2', status: 'failed' },
+        },
+      },
+    });
+    const material = makeBaseMaterial({
+      metadata: {
+        cleanMaterials: {
+          'toc-rebuild': { latestVersion: 'v2', status: 'completed' },
+        },
+      },
+    });
+
+    const config = makeBaseConfig({
+      intent: 'create-new-version',
+      newVersionReason: 'operator-requested-rerun',
+    });
+
+    const failFn = () => { throw new Error('Dependency should not be called during validation failure'); };
+    const deps = {
+      submitJob: failFn,
+      queryJob: failFn,
+      verifyCleanServiceOutputArtifacts: failFn,
+      applyCleanMetadataPersistencePlan: failFn,
+    };
+
+    const result = await runCleanServiceTocRebuildOnce({ task, material, config, deps });
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 'BLOCKED_EXISTING_TOC_REBUILD_METADATA');
+    assert.equal(result.classification, 'BLOCKED_EXISTING_TOC_REBUILD_METADATA');
+  }
+
+  // Test 21: create-new-version rerun intent + version mismatch history is blocked and throws zero tripwire leaks
+  {
+    console.log('  [21] Testing rerun intent + version mismatch blocking...');
+    const task = makeBaseTask({
+      metadata: {
+        cleanServiceJobs: {
+          'toc-rebuild': { jobId: 'luceon-task-clean-123-toc-rebuild-v2', assetVersion: 'v2', status: 'completed' },
+        },
+      },
+    });
+    const material = makeBaseMaterial({
+      metadata: {
+        cleanMaterials: {
+          'toc-rebuild': { latestVersion: 'v1', status: 'completed' }, // mismatched
+        },
+      },
+    });
+
+    const config = makeBaseConfig({
+      intent: 'create-new-version',
+      newVersionReason: 'operator-requested-rerun',
+    });
+
+    const failFn = () => { throw new Error('Dependency should not be called during validation failure'); };
+    const deps = {
+      submitJob: failFn,
+      queryJob: failFn,
+      verifyCleanServiceOutputArtifacts: failFn,
+      applyCleanMetadataPersistencePlan: failFn,
+    };
+
+    const result = await runCleanServiceTocRebuildOnce({ task, material, config, deps });
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 'BLOCKED_EXISTING_TOC_REBUILD_METADATA');
+    assert.equal(result.classification, 'BLOCKED_EXISTING_TOC_REBUILD_METADATA');
+  }
+
+  // Test 22: create-new-version rerun intent + one-sided metadata history is blocked and throws zero tripwire leaks
+  {
+    console.log('  [22] Testing rerun intent + one-sided metadata blocking...');
+    const task = makeBaseTask(); // missing cleanServiceJobs
+    const material = makeBaseMaterial({
+      metadata: {
+        cleanMaterials: {
+          'toc-rebuild': { latestVersion: 'v2', status: 'completed' },
+        },
+      },
+    });
+
+    const config = makeBaseConfig({
+      intent: 'create-new-version',
+      newVersionReason: 'operator-requested-rerun',
+    });
+
+    const failFn = () => { throw new Error('Dependency should not be called during validation failure'); };
+    const deps = {
+      submitJob: failFn,
+      queryJob: failFn,
+      verifyCleanServiceOutputArtifacts: failFn,
+      applyCleanMetadataPersistencePlan: failFn,
+    };
+
+    const result = await runCleanServiceTocRebuildOnce({ task, material, config, deps });
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 'BLOCKED_EXISTING_TOC_REBUILD_METADATA');
+    assert.equal(result.classification, 'BLOCKED_EXISTING_TOC_REBUILD_METADATA');
+  }
+
+  // Test 23: create-new-version rerun intent + missing task jobId history is blocked and throws zero tripwire leaks
+  {
+    console.log('  [23] Testing rerun intent + missing task jobId blocking...');
+    const task = makeBaseTask({
+      metadata: {
+        cleanServiceJobs: {
+          'toc-rebuild': { assetVersion: 'v2', status: 'completed' }, // missing jobId
+        },
+      },
+    });
+    const material = makeBaseMaterial({
+      metadata: {
+        cleanMaterials: {
+          'toc-rebuild': { latestVersion: 'v2', status: 'completed' },
+        },
+      },
+    });
+
+    const config = makeBaseConfig({
+      intent: 'create-new-version',
+      newVersionReason: 'operator-requested-rerun',
+    });
+
+    const failFn = () => { throw new Error('Dependency should not be called during validation failure'); };
+    const deps = {
+      submitJob: failFn,
+      queryJob: failFn,
+      verifyCleanServiceOutputArtifacts: failFn,
+      applyCleanMetadataPersistencePlan: failFn,
+    };
+
+    const result = await runCleanServiceTocRebuildOnce({ task, material, config, deps });
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 'BLOCKED_EXISTING_TOC_REBUILD_METADATA');
+    assert.equal(result.classification, 'BLOCKED_EXISTING_TOC_REBUILD_METADATA');
+  }
+
+  console.log('ALL cleanservice orchestration runner smoke tests PASSED! (23/23)');
 }
 
 runTests().catch(err => {

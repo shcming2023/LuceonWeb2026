@@ -9,7 +9,7 @@
 ### 1.1 Git 环境与 Baseline 分支状态
 * **当前分支**：`lucode/TASK-20260523-080011-P0-CleanService-Explicit-New-Version-Intent-Policy-MockSafe-NoRuntime`
 * **对比基线 (origin/main)**：`06663bb8f379d1b71ad6d8e507217ff86a482567` (已与之完全对齐)
-* **HEAD Commit Hash**：`8889ee898b04a8bca2eb8488e0b62e49c8d5069d` (将在本次提交合并后在台账中最终锁定)
+* **HEAD Commit Hash**：`69a948f4dda8003745b1fabfb6b7f6730845e1da` (最终锁定物理提交 SHA)
 
 ### 1.2 物理变更文件清单 (Git Status & Diff)
 根据任务书安全红线，本任务仅允许且仅修改了授权的 2 个源文件/测试文件，以及报告与台账：
@@ -88,19 +88,31 @@
 
 ---
 
-## 3. 单元测试与 Focused Smoke Cases (19/19 Passed)
+## 3. 单元测试与 Focused Smoke Cases (23/23 Passed)
 
-我们在 `cleanservice-orchestration-runner-smoke.mjs` 中追加了 Test 17、Test 18 和 Test 19 聚焦测试。所有的负向阻断测试均使用 tripwire dependencies 抛出错误以物理证明零外部依赖泄露：
+我们在 `cleanservice-orchestration-runner-smoke.mjs` 中追加了 Test 17 至 Test 23 聚焦测试。所有的负向阻断与安全边界测试均使用 tripwire dependencies 抛出错误（`failFn`）以物理证明零外部依赖泄露，杜绝安全泄漏：
 
 * **Test 17: Positive rerun intent + reason path (v3 dry-run bypass noop)**
-  * *条件*：传入 `intent: 'create-new-version'`，`newVersionReason: 'operator-requested-rerun'`。
-  * *验证*：成功绕过 noop 分支，升级并分配 `v3` 临时版本进行 Mock dry-run 编排跑通，且返回结果中注入完备的自解释 audit 审计块。
+  * *条件*：配置显式 `intent: 'create-new-version'`，`newVersionReason: 'operator-requested-rerun'`。
+  * *验证*：在有完美对齐、已完成且带 jobId 历史的前提下，成功绕过 noop 分支，升级并分配 `v3` 临时版本进行 Mock dry-run 编排跑通，且返回结果中注入完备的自解释 audit 审计块。
 * **Test 18: create-new-version without reason blocking**
   * *条件*：传入 `intent: 'create-new-version'`，但 `newVersionReason` 缺失或为空。
   * *验证*：前置阻断返回 `BLOCKED_NEW_VERSION_REASON_REQUIRED`，且零依赖泄露。
 * **Test 19: Unsupported intent blocking**
   * *条件*：传入不支持的非法 `intent`。
   * *验证*：前置阻断返回 `BLOCKED_UNSUPPORTED_CLEANSERVICE_INTENT`，且零依赖泄露。
+* **Test 20: rerun intent + failed existing task job blocking**
+  * *条件*：传入 rerun 意图，但历史 task 元数据状态为 `failed`（未完成）。
+  * *验证*：前置门控坚决拦截，返回 `BLOCKED_EXISTING_TOC_REBUILD_METADATA`，且零外部依赖泄漏。
+* **Test 21: rerun intent + version mismatch blocking**
+  * *条件*：传入 rerun 意图，但历史 task 为 `v2` 且 material 为 `v1`（错配）。
+  * *验证*：前置门控坚决拦截，返回 `BLOCKED_EXISTING_TOC_REBUILD_METADATA`，且零外部依赖泄漏。
+* **Test 22: rerun intent + one-sided metadata blocking**
+  * *条件*：传入 rerun 意图，但历史元数据单侧缺失（例如仅 material 有历史 `v2`，task 缺省）。
+  * *验证*：前置门控坚决拦截，返回 `BLOCKED_EXISTING_TOC_REBUILD_METADATA`，且零外部依赖泄漏。
+* **Test 23: rerun intent + missing task jobId blocking**
+  * *条件*：传入 rerun 意图，但历史 task `jobId` 缺失。
+  * *验证*：前置门控坚决拦截，返回 `BLOCKED_EXISTING_TOC_REBUILD_METADATA`，且零外部依赖泄漏。
 
 ---
 
@@ -117,7 +129,11 @@
       [17] Testing CURRENT_CLEAN_MATERIAL_NOOP bypass on create-new-version rerun...
       [18] Testing create-new-version without reason blocking...
       [19] Testing unsupported intent blocking...
-    ALL cleanservice orchestration runner smoke tests PASSED! (19/19)
+      [20] Testing rerun intent + failed existing task job blocking...
+      [21] Testing rerun intent + version mismatch blocking...
+      [22] Testing rerun intent + one-sided metadata blocking...
+      [23] Testing rerun intent + missing task jobId blocking...
+    ALL cleanservice orchestration runner smoke tests PASSED! (23/23)
     ```
 * **单测与 Smoke 脚本套件全量跑通**
   * `for f in server/tests/cleanservice-*.mjs; do node "$f" || exit 1; done` -> **Exit Code: 0**
@@ -133,10 +149,10 @@
 我们在此作出绝对诚实的控制面声明，在本任务中**没有任何高危、脏写或超出授权的操作**：
 1. **零 DB 写入/修改**：没有发起任何真实的 DB API 写入、修改、删除或重写操作；
 2. **零 MinIO 写入/清理**：没有对 MinIO bucket 或对象执行任何写、静默清理、删除操作；
-3. **零实际任务派发**：没有发送任何真实的 `POST /api/v1/jobs`，没有与 Mineru2Table 进行任何实际的网络 job query；
+3. **零实际派发 POST**：没有向外发送任何真实的 `POST /api/v1/jobs`，没有与 Mineru2Table 进行任何实际的网络 job query；
 4. **零外部 LLM/Ollama 交互**：绝对没有调用任何大模型 API；
 5. **零非授权文件修改**：未改变 `server/upload-server.mjs`、`docker-compose`、`.env` 等任何禁用范围的文件；
-6. **零超前承诺**：没有声称实现了完整的 runtime 自动重跑、webhook 连通或生产/UAT 就绪。
+6. **零超前承诺**：没有声称实现了任何 runtime 自动重跑、物理数据重置、或已就绪的 acceptance/readiness 宣称。
 
 ---
 
@@ -146,5 +162,5 @@
 * 当前的显式重新清洗意图完全在 Mock-Safe 单元/Smoke测试下得到了闭环校验。在真正的端到端 runtime 执行路径中，尚不具备真正的 `v3` 实体重新从 Mineru2Table 进行真实 POST 调度、物理 MinIO 材质写入以及最终的真实的 DB PATCH 写入与授权。
 
 ### 6.2 建议的下一个 mainline 窄任务 (Next Task)
-既然显式意图、重新清洗理由、前置阻断以及 Mock 审计结构已经极其完备：
-1. **支持 UAT 级 Success-path Rerun 物理执行规划 (UAT Planning)**：在一个单独的、得到 Director 显式授权的新版本运行任务中，开始允许将 `v3` 调度任务物理 POST 分发给真实/Ephemeral 挂载在 cms-network 的 Mineru2Table，验证其完成性并在 dry-run 状态下输出全新的 `v3` 材质。
+既然显式意图、重新清洗理由、前置阻断以及 Mock 审计结构已经极其完备，我们建议的后续演进路线为：
+1. **支持受控单样本运行时验证规划 (Controlled Single-Sample Runtime Validation Planning)**：在一个单独的、得到 Director 显式授权的新版本运行任务中，开始允许将 `v3` 调度任务物理 POST 分发给真实/Ephemeral 挂载在 cms-network 的 Mineru2Table，验证其完成性并在 dry-run 状态下输出全新的 `v3` 材质。
