@@ -737,7 +737,157 @@ async function runTests() {
     assert.equal(result.status, 'BLOCKED_EXISTING_TOC_REBUILD_METADATA');
   }
 
-  console.log('ALL cleanservice orchestration runner smoke tests PASSED! (16/16)');
+  // Test 17: positive rerun intent + reason bypasses noop and proceeds to mock dry-run with v3
+  {
+    console.log('  [17] Testing CURRENT_CLEAN_MATERIAL_NOOP bypass on create-new-version rerun...');
+    const prevJobId = 'luceon-task-clean-123-toc-rebuild-v2';
+    const prevAssetVersion = 'v2';
+
+    const task = makeBaseTask({
+      metadata: {
+        ...makeBaseTask().metadata,
+        cleanServiceJobs: {
+          'toc-rebuild': { jobId: prevJobId, assetVersion: prevAssetVersion, status: 'completed' },
+        },
+      },
+    });
+    const material = makeBaseMaterial({
+      metadata: {
+        cleanMaterials: {
+          'toc-rebuild': { latestVersion: prevAssetVersion, status: 'completed' },
+        },
+      },
+    });
+
+    const config = makeBaseConfig({
+      intent: 'create-new-version',
+      newVersionReason: 'operator-requested-rerun',
+    });
+
+    const files = generateFixtures({ assetVersion: 'v3' });
+    const reader = new FakeArtifactReader(files);
+
+    const deps = {
+      submitJob: async (req) => {
+        return { ok: true, job: { job_id: req.job_id, status: 'submitted' } };
+      },
+      queryJob: async (jobId) => {
+        return { ok: true, job: mockCompletedJob({ jobId, assetVersion: 'v3' }) };
+      },
+      artifactReader: reader,
+      buildCleanMetadataPersistencePlan: (opts) => {
+        return {
+          ok: true,
+          shouldApply: true,
+          audit: {
+            costSource: 'unavailable',
+            tokensTotal: 6266,
+            cleanState: 'completed',
+            timestamp: '2026-05-23T00:00:00.000Z',
+          },
+          warnings: [],
+        };
+      },
+      applyCleanMetadataPersistencePlan: async () => {
+        return { ok: true, classification: 'DRY_RUN_SUCCESS' };
+      },
+      dbClient: {
+        updateTask: async () => { throw new Error('DB writes forbidden during dry-run'); },
+        updateMaterial: async () => { throw new Error('DB writes forbidden during dry-run'); },
+      },
+    };
+
+    const result = await runCleanServiceTocRebuildOnce({ task, material, config, deps });
+    assert.equal(result.ok, true);
+    assert.equal(result.status, 'DRY_RUN_SUCCESS');
+    assert.equal(result.classification, 'DRY_RUN_SUCCESS');
+    assert.equal(result.assetVersion, 'v3');
+    assert.equal(result.jobId, 'luceon-task-clean-123-toc-rebuild-v3');
+
+    assert.ok(result.audit);
+    assert.ok(result.audit.newVersionIntent);
+    assert.equal(result.audit.newVersionIntent.intent, 'create-new-version');
+    assert.equal(result.audit.newVersionIntent.triggerReason, 'operator-requested-rerun');
+    assert.equal(result.audit.newVersionIntent.previousAssetVersion, prevAssetVersion);
+    assert.equal(result.audit.newVersionIntent.previousJobId, prevJobId);
+    assert.equal(result.audit.newVersionIntent.newAssetVersion, 'v3');
+  }
+
+  // Test 18: create-new-version without reason returns BLOCKED_NEW_VERSION_REASON_REQUIRED
+  {
+    console.log('  [18] Testing create-new-version without reason blocking...');
+    const task = makeBaseTask({
+      metadata: {
+        cleanServiceJobs: {
+          'toc-rebuild': { jobId: 'luceon-task-clean-123-toc-rebuild-v2', assetVersion: 'v2', status: 'completed' },
+        },
+      },
+    });
+    const material = makeBaseMaterial({
+      metadata: {
+        cleanMaterials: {
+          'toc-rebuild': { latestVersion: 'v2', status: 'completed' },
+        },
+      },
+    });
+
+    const config = makeBaseConfig({
+      intent: 'create-new-version',
+      // missing newVersionReason
+    });
+
+    const failFn = () => { throw new Error('Dependency should not be called during validation failure'); };
+    const deps = {
+      submitJob: failFn,
+      queryJob: failFn,
+      verifyCleanServiceOutputArtifacts: failFn,
+      applyCleanMetadataPersistencePlan: failFn,
+    };
+
+    const result = await runCleanServiceTocRebuildOnce({ task, material, config, deps });
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 'BLOCKED_NEW_VERSION_REASON_REQUIRED');
+    assert.equal(result.classification, 'BLOCKED_NEW_VERSION_REASON_REQUIRED');
+  }
+
+  // Test 19: unsupported intent returns BLOCKED_UNSUPPORTED_CLEANSERVICE_INTENT
+  {
+    console.log('  [19] Testing unsupported intent blocking...');
+    const task = makeBaseTask({
+      metadata: {
+        cleanServiceJobs: {
+          'toc-rebuild': { jobId: 'luceon-task-clean-123-toc-rebuild-v2', assetVersion: 'v2', status: 'completed' },
+        },
+      },
+    });
+    const material = makeBaseMaterial({
+      metadata: {
+        cleanMaterials: {
+          'toc-rebuild': { latestVersion: 'v2', status: 'completed' },
+        },
+      },
+    });
+
+    const config = makeBaseConfig({
+      intent: 'some-unsupported-garbage-intent',
+      newVersionReason: 'operator-requested-rerun',
+    });
+
+    const failFn = () => { throw new Error('Dependency should not be called during validation failure'); };
+    const deps = {
+      submitJob: failFn,
+      queryJob: failFn,
+      verifyCleanServiceOutputArtifacts: failFn,
+      applyCleanMetadataPersistencePlan: failFn,
+    };
+
+    const result = await runCleanServiceTocRebuildOnce({ task, material, config, deps });
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 'BLOCKED_UNSUPPORTED_CLEANSERVICE_INTENT');
+    assert.equal(result.classification, 'BLOCKED_UNSUPPORTED_CLEANSERVICE_INTENT');
+  }
+
+  console.log('ALL cleanservice orchestration runner smoke tests PASSED! (19/19)');
 }
 
 runTests().catch(err => {

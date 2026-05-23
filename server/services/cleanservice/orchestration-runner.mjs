@@ -67,11 +67,36 @@ export async function runCleanServiceTocRebuildOnce({
 
   const serviceName = config.serviceName || 'toc-rebuild';
 
+  // Preflight - Intent Validation Check (MUST run before any metadata checks or allocation)
+  if (config && config.intent !== undefined) {
+    if (config.intent === 'create-new-version') {
+      if (!config.newVersionReason || typeof config.newVersionReason !== 'string' || config.newVersionReason.trim() === '') {
+        return {
+          ok: false,
+          status: 'BLOCKED_NEW_VERSION_REASON_REQUIRED',
+          classification: 'BLOCKED_NEW_VERSION_REASON_REQUIRED',
+          reason: 'Explicit create-new-version intent requires a non-empty newVersionReason',
+          observedAt: getNow(),
+        };
+      }
+    } else {
+      return {
+        ok: false,
+        status: 'BLOCKED_UNSUPPORTED_CLEANSERVICE_INTENT',
+        classification: 'BLOCKED_UNSUPPORTED_CLEANSERVICE_INTENT',
+        reason: `Unsupported CleanService intent: ${config.intent}`,
+        observedAt: getNow(),
+      };
+    }
+  }
+
   // 3. Preflight - Current State Noop Check (MUST run before allocateAssetVersion)
   const existingTaskJob = task.metadata?.cleanServiceJobs?.[serviceName];
   const existingMaterialJob = material.metadata?.cleanMaterials?.[serviceName];
 
-  if (existingTaskJob && existingMaterialJob) {
+  const hasNewVersionIntent = config && config.intent === 'create-new-version';
+
+  if (existingTaskJob && existingMaterialJob && !hasNewVersionIntent) {
     const assetVersionAligned = existingTaskJob.assetVersion === existingMaterialJob.latestVersion;
     const taskCompleted = existingTaskJob.status === 'completed' || existingTaskJob.cleanState === 'completed';
     const materialCompleted = existingMaterialJob.status === 'completed';
@@ -115,7 +140,7 @@ export async function runCleanServiceTocRebuildOnce({
   }
 
   // 4. Preflight - Incompatible Existing Metadata Check
-  if (existingTaskJob || existingMaterialJob) {
+  if ((existingTaskJob || existingMaterialJob) && !hasNewVersionIntent) {
     const taskMatches = existingTaskJob && existingTaskJob.jobId === jobId && existingTaskJob.assetVersion === assetVersion;
     const materialMatches = existingMaterialJob && existingMaterialJob.latestVersion === assetVersion;
     if (!taskMatches || !materialMatches) {
@@ -130,7 +155,7 @@ export async function runCleanServiceTocRebuildOnce({
   }
 
   // 5. Preflight - Task Eligibility Check
-  const eligible = isCleanServiceTaskEligible(task, { serviceName });
+  const eligible = hasNewVersionIntent || isCleanServiceTaskEligible(task, { serviceName });
   if (!eligible) {
     return {
       ok: true,
@@ -393,6 +418,13 @@ export async function runCleanServiceTocRebuildOnce({
       tokensTotal: plan.audit.tokensTotal,
       cleanState: plan.audit.cleanState,
       timestamp: plan.audit.timestamp,
+      newVersionIntent: config.intent === 'create-new-version' ? {
+        intent: config.intent,
+        triggerReason: config.newVersionReason,
+        previousAssetVersion: existingTaskJob?.assetVersion || null,
+        previousJobId: existingTaskJob?.jobId || null,
+        newAssetVersion: request.asset_version,
+      } : null,
     } : null,
     warnings: plan.warnings || [],
     verificationSummary: filteredVerificationSummary,
