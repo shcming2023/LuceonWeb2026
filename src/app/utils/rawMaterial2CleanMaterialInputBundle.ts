@@ -183,6 +183,26 @@ function expectedArtifactPrefix(serviceName: string, materialId: string, assetVe
   return `${serviceName}/${materialId}/${assetVersion}/`;
 }
 
+function assetVersionSignals({
+  cleanMaterialSummary,
+  cleanServiceTaskSummary,
+  snapshot,
+  currentAssetVersion,
+}: {
+  cleanMaterialSummary: CleanMaterialSummary;
+  cleanServiceTaskSummary: CleanServiceTaskSummary;
+  snapshot: Record<string, unknown> | null;
+  currentAssetVersion?: string | null;
+}) {
+  return [
+    { source: 'material.latestVersion', value: compactString(cleanMaterialSummary.latestVersion) },
+    { source: 'material.assetVersion', value: compactString(cleanMaterialSummary.assetVersion) },
+    { source: 'task.assetVersion', value: compactString(cleanServiceTaskSummary.assetVersion) },
+    { source: 'operatorDecision.artifactSnapshot.assetVersion', value: compactString(snapshot?.assetVersion) },
+    { source: 'currentAssetVersion', value: compactString(currentAssetVersion) },
+  ].filter((signal): signal is { source: string; value: string } => Boolean(signal.value));
+}
+
 export function buildRawMaterial2CleanMaterialInputBundle({
   material,
   task,
@@ -237,21 +257,24 @@ export function buildRawMaterial2CleanMaterialInputBundle({
   }
 
   const snapshot = asRecord(operatorDecision.artifactSnapshot);
-  const discoveredAssetVersion = pickString(
-    cleanMaterialSummary.latestVersion,
-    cleanMaterialSummary.assetVersion,
-    cleanServiceTaskSummary.assetVersion,
-    snapshot?.assetVersion,
-  );
-  if (!discoveredAssetVersion) {
+  const versionSignals = assetVersionSignals({
+    cleanMaterialSummary,
+    cleanServiceTaskSummary,
+    snapshot,
+    currentAssetVersion,
+  });
+  const metadataVersionSignals = versionSignals.filter((signal) => signal.source !== 'currentAssetVersion');
+  if (metadataVersionSignals.length === 0) {
     return blocked('MISSING_ASSET_VERSION', 'current Clean Material asset version is required');
   }
 
-  const expectedAssetVersion = compactString(currentAssetVersion) || discoveredAssetVersion;
-  if (discoveredAssetVersion !== expectedAssetVersion) {
-    return blocked('ASSET_VERSION_MISMATCH', 'Clean Material asset version does not match the requested current version', {
+  const discoveredAssetVersion = metadataVersionSignals[0].value;
+  const mismatchedSignals = versionSignals.filter((signal) => signal.value !== discoveredAssetVersion);
+  if (mismatchedSignals.length > 0) {
+    return blocked('ASSET_VERSION_MISMATCH', 'Clean Material asset version signals must match before building a downstream bundle', {
       assetVersion: discoveredAssetVersion,
-      currentAssetVersion: expectedAssetVersion,
+      signals: versionSignals,
+      mismatchedSignals,
     });
   }
 

@@ -195,7 +195,36 @@ console.log('=== RawMaterial2CleanMaterial Input Bundle Smoke ===');
 }
 
 {
-  console.log('  [6] missing jobId blocks...');
+  console.log('  [6] material/task/snapshot/current assetVersion signals must align...');
+  {
+    const fixture = makeFixture();
+    fixture.task.metadata.cleanServiceJobs['toc-rebuild'].assetVersion = 'v5';
+    assertBlocked(buildRawMaterial2CleanMaterialInputBundle({
+      ...fixture,
+      currentAssetVersion: 'v4',
+    }), 'ASSET_VERSION_MISMATCH');
+  }
+
+  {
+    const fixture = makeFixture();
+    fixture.material.metadata.cleanMaterials['toc-rebuild'].operatorDecision.artifactSnapshot.assetVersion = 'v5';
+    assertBlocked(buildRawMaterial2CleanMaterialInputBundle({
+      ...fixture,
+      currentAssetVersion: 'v4',
+    }), 'ASSET_VERSION_MISMATCH');
+  }
+
+  {
+    const fixture = makeFixture();
+    assertBlocked(buildRawMaterial2CleanMaterialInputBundle({
+      ...fixture,
+      currentAssetVersion: 'v5',
+    }), 'ASSET_VERSION_MISMATCH');
+  }
+}
+
+{
+  console.log('  [7] missing jobId blocks...');
   const fixture = makeFixture();
   delete fixture.task.metadata.cleanServiceJobs['toc-rebuild'].jobId;
   delete fixture.material.metadata.cleanMaterials['toc-rebuild'].operatorDecision.artifactSnapshot.jobId;
@@ -203,14 +232,14 @@ console.log('=== RawMaterial2CleanMaterial Input Bundle Smoke ===');
 }
 
 {
-  console.log('  [7] artifact prefix mismatch blocks...');
+  console.log('  [8] artifact prefix mismatch blocks...');
   const fixture = makeFixture();
   fixture.task.metadata.cleanServiceJobs['toc-rebuild'].artifacts.readable_tree.object = 'toc-rebuild/wrong/v4/readable_tree.md';
   assertBlocked(buildRawMaterial2CleanMaterialInputBundle(fixture), 'ARTIFACT_PREFIX_MISMATCH');
 }
 
 {
-  console.log('  [8] missing material/task and body-shaped refs block without live reads...');
+  console.log('  [9] missing material/task and body-shaped refs block without live reads...');
   assertBlocked(buildRawMaterial2CleanMaterialInputBundle({ material: null, task: makeFixture().task }), 'MATERIAL_MISSING');
   assertBlocked(buildRawMaterial2CleanMaterialInputBundle({ material: makeFixture().material, task: null }), 'TASK_MISSING');
 
