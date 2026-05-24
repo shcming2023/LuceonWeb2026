@@ -81,6 +81,54 @@ export interface MaterialMetadata {
   [key: string]: any;
 }
 
+export interface CleanObjectRef {
+  bucket?: string;
+  object?: string;
+  sha256?: string;
+  size_bytes?: number;
+  sizeBytes?: number;
+  content_type?: string;
+  contentType?: string;
+  [key: string]: any;
+}
+
+export interface CleanServiceTaskSummary {
+  serviceName?: string;
+  protocolVersion?: string;
+  jobId?: string | null;
+  status?: string | null;
+  cleanState?: string | null;
+  productLabel?: string | null;
+  materialId?: string | number | null;
+  parseTaskId?: string | null;
+  assetVersion?: string | null;
+  submittedAt?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  artifacts?: Record<string, CleanObjectRef | null | undefined>;
+  sourceInput?: CleanObjectRef | null;
+  stats?: Record<string, any>;
+  warnings?: string[];
+  updatedAt?: string | null;
+  [key: string]: any;
+}
+
+export interface CleanMaterialSummary {
+  serviceName?: string;
+  latestVersion?: string | null;
+  assetVersion?: string | null;
+  status?: string | null;
+  cleanState?: string | null;
+  productLabel?: string | null;
+  prefix?: string | null;
+  provenanceObjectName?: string | null;
+  sourceInput?: CleanObjectRef | null;
+  stats?: Record<string, any>;
+  warnings?: string[];
+  updatedAt?: string | null;
+  [key: string]: any;
+}
+
 /**
  * 原始资料
  */

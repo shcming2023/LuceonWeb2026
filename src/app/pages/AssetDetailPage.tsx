@@ -7,9 +7,11 @@ import { StatusBadge } from '../components/StatusBadge';
 import { PDFPreviewPanel } from '../components/PDFPreviewPanel';
 import { PreviewTabPanel } from '../components/PreviewTabPanel';
 import { ProcessPipelineCard } from '../components/ProcessPipelineCard';
+import { CleanMaterialSummaryCard } from '../components/CleanMaterialSummaryCard';
 import { deriveMaterialTaskView, ParseTask, deriveTaskBucket } from '../utils/taskView';
 import { AlertTriangle, ExternalLink, RotateCw, RefreshCw, Sparkles, XCircle, ShieldCheck } from 'lucide-react';
 import { appendMineruTaskOptions } from '../utils/mineruTaskOptions';
+import { buildCleanMaterialView } from '../utils/cleanMaterialView';
 
 // ── 工具函数 ──────────────────────────────────────────────
 const getMaterialTags = (m: any) =>
@@ -74,6 +76,7 @@ export function AssetDetailPage() {
   // P0 Patch: 资产详情页运行态事实源统一
   const taskView = deriveMaterialTaskView(material, relatedTasks);
   const currentTask = taskView.currentTask;
+  const cleanMaterialView = buildCleanMaterialView({ material, task: currentTask });
   
   const mineruRunning = currentTask ? deriveTaskBucket(currentTask.state) === 'processing' : false;
   const mineruProgress = currentTask?.progress || 0;
@@ -538,6 +541,7 @@ export function AssetDetailPage() {
             onAiAnalyze={handleAiAnalyze}
             aiDisabledReason={(!material?.metadata?.markdownObjectName && !material?.metadata?.markdownUrl && !material?.mineruZipUrl && !mineruMarkdown) ? '请先完成 MinerU 解析' : ''}
           />
+          <CleanMaterialSummaryCard view={cleanMaterialView} />
 
           {/* [P0] 当前任务卡片 */}
           <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">

@@ -13,6 +13,8 @@ import { renderMarkdown } from '../utils/markdown';
 import { TASK_ACTION_TERMS, TASK_ACTION_TOOLTIPS, getTaskStatusLabel } from '../utils/taskTerms';
 import { deriveMineruProgressLine, deriveTaskDisplayStatus } from '../utils/taskView';
 import { DropdownMenu } from '../components/DropdownMenu';
+import { CleanMaterialSummaryCard } from '../components/CleanMaterialSummaryCard';
+import { buildCleanMaterialView } from '../utils/cleanMaterialView';
 
 /**
  * ParseTask 详情数据结构
@@ -555,6 +557,7 @@ export function TaskDetailPage() {
                     ['mineru-queued', 'mineru-processing', 'submit-failed-retryable', 'result-fetching'].includes(String(task.stage));
   const taskDisplayStatus = deriveTaskDisplayStatus(task as any);
   const mineruProgressLine = deriveMineruProgressLine(task as any);
+  const cleanMaterialView = buildCleanMaterialView({ material, task });
 
   // 资源缺失提示文案
   const resourceWarning = (() => {
@@ -723,6 +726,8 @@ export function TaskDetailPage() {
       <div className="min-h-0 flex-1">
         {activeTab === 'overview' && (
           <div className="space-y-6">
+            <CleanMaterialSummaryCard view={cleanMaterialView} />
+
             {/* 状态概览卡片 */}
             <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-5">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
