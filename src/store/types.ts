@@ -125,6 +125,7 @@ export interface CleanMaterialSummary {
   sourceInput?: CleanObjectRef | null;
   stats?: Record<string, any>;
   warnings?: string[];
+  operatorDecision?: Record<string, any>;
   updatedAt?: string | null;
   [key: string]: any;
 }

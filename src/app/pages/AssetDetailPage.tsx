@@ -541,7 +541,7 @@ export function AssetDetailPage() {
             onAiAnalyze={handleAiAnalyze}
             aiDisabledReason={(!material?.metadata?.markdownObjectName && !material?.metadata?.markdownUrl && !material?.mineruZipUrl && !mineruMarkdown) ? '请先完成 MinerU 解析' : ''}
           />
-          <CleanMaterialSummaryCard view={cleanMaterialView} />
+          <CleanMaterialSummaryCard material={material} view={cleanMaterialView} />
 
           {/* [P0] 当前任务卡片 */}
           <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">

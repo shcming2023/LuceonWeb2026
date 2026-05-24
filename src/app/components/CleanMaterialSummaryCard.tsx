@@ -1,6 +1,8 @@
 import { Boxes, ChevronDown, FileJson, Hash, Link2 } from 'lucide-react';
 import type { CleanMaterialView } from '../utils/cleanMaterialView';
+import type { Material } from '../../store/types';
 import { CleanMaterialArtifactInspector } from './CleanMaterialArtifactInspector';
+import { CleanMaterialOperatorDecisionControl } from './CleanMaterialOperatorDecisionControl';
 
 function mono(value: string | number | null | undefined) {
   return value === null || value === undefined || value === '' ? '—' : String(value);
@@ -17,7 +19,7 @@ function Field({ label, value, title }: { label: string; value: string | number 
   );
 }
 
-export function CleanMaterialSummaryCard({ view }: { view: CleanMaterialView }) {
+export function CleanMaterialSummaryCard({ material, view }: { material?: Pick<Material, 'metadata'> | null; view: CleanMaterialView }) {
   if (!view.present) {
     return (
       <section className="rounded-lg border border-dashed border-slate-200 bg-white p-5">
@@ -100,6 +102,7 @@ export function CleanMaterialSummaryCard({ view }: { view: CleanMaterialView }) 
       )}
 
       <CleanMaterialArtifactInspector artifacts={view.artifacts} />
+      <CleanMaterialOperatorDecisionControl material={material} view={view} />
     </section>
   );
 }

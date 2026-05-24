@@ -726,7 +726,7 @@ export function TaskDetailPage() {
       <div className="min-h-0 flex-1">
         {activeTab === 'overview' && (
           <div className="space-y-6">
-            <CleanMaterialSummaryCard view={cleanMaterialView} />
+            <CleanMaterialSummaryCard material={material} view={cleanMaterialView} />
 
             {/* 状态概览卡片 */}
             <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-5">

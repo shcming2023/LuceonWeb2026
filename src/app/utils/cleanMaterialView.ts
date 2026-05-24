@@ -14,6 +14,9 @@ export interface CleanMaterialView {
   artifacts: Array<{ role: string; object: string; bucket: string | null; sha256: string | null; sizeBytes: number | null }>;
   artifactCount: number;
   warnings: string[];
+  operatorDecision: Record<string, any> | null;
+  operatorDecisionState: string | null;
+  operatorDecisionReadOnly: boolean;
   updatedAt: string | null;
   hasPrefixGap: boolean;
 }
@@ -120,6 +123,8 @@ export function buildCleanMaterialView({
   );
   const prefix = cleanString(materialSummary?.prefix);
   const present = Boolean(materialSummary || taskSummary || latestVersion || provenanceObjectName || artifacts.length > 0);
+  const operatorDecision = asRecord(materialSummary?.operatorDecision);
+  const operatorDecisionState = cleanString(operatorDecision.state) || (present ? 'pending-review' : null);
 
   return {
     serviceName,
@@ -138,6 +143,9 @@ export function buildCleanMaterialView({
       ...((Array.isArray(materialSummary?.warnings) ? materialSummary?.warnings : []) || []),
       ...((Array.isArray(taskSummary?.warnings) ? taskSummary?.warnings : []) || []),
     ],
+    operatorDecision: Object.keys(operatorDecision).length > 0 ? operatorDecision : null,
+    operatorDecisionState,
+    operatorDecisionReadOnly: Boolean(operatorDecisionState && operatorDecisionState !== 'pending-review'),
     updatedAt: cleanString(materialSummary?.updatedAt) || cleanString(taskSummary?.updatedAt),
     hasPrefixGap: !prefix && Boolean(latestVersion || provenanceObjectName || artifacts.length > 0),
   };
