@@ -22,8 +22,13 @@ Return-reviewed branch HEAD:
 b4f4e3a24c9d1f5bceb1f74c2bf7f99810bb7186
 ```
 
-Correction branch final remote HEAD is reported in the Lucode handoff after
-push; the report cannot embed its own commit hash without changing that hash.
+Correction branch final remote HEAD reviewed by Luceon:
+
+```text
+507906bd517a37f563038a02ba9b0abe6f70bfaf
+```
+
+Luceon corrected this final remote HEAD evidence during acceptance review.
 
 ## 2. Changed Files
 
