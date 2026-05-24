@@ -20,12 +20,15 @@ When `origin/main` has no open `Next Actor=Luceon` row, Luceon must inspect the 
 
 If that remote branch's task row says `Lucode 已回报待 Luceon 审查` or `Next Actor=Luceon`, Luceon treats the branch as a pending review even though main still says Lucode.
 
+Branch review should inspect the branch's own changes with merge-base / three-dot diff syntax, such as `git diff --name-status origin/main...origin/<branch>`. Two-dot `origin/main..origin/<branch>` is unsafe after main advances beyond the Lucode branch.
+
 ## Lucode Requirements
 
 Lucode must:
 
 - push the remote `lucode/<task-id-or-short-slug>` branch;
 - record the exact pushed branch and full HEAD in the report and final reply;
+- use merge-base / three-dot diff evidence unless the branch is confirmed current with `origin/main`;
 - update the branch-local ledger row to `Status=Lucode 已回报待 Luceon 审查`, `Next Actor=Luceon`;
 - not expect branch-local ledger updates to appear on `origin/main` before Luceon review.
 

@@ -122,6 +122,8 @@ Required Lucode handoff signals:
 
 When Luceon `check task` finds no open `Next Actor=Luceon` row on `origin/main`, it must inspect the earliest open `Next Actor=Lucode` row for a matching remote Lucode branch. If that branch's task row has been handed off to Luceon, Luceon treats the branch as a pending review even though main still shows Lucode.
 
+For pending branch review, Luceon should use merge-base / three-dot diffs, for example `git diff --name-status origin/main...origin/<branch>`, to inspect the branch's own changes. Two-dot `origin/main..origin/<branch>` is only appropriate when the branch is known to be based on the current `origin/main`.
+
 ## Luceon `check task`
 
 When the user says `check task` in the Luceon thread, Luceon must:

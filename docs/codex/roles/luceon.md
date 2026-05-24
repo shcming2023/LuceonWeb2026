@@ -76,10 +76,12 @@ When `origin/main` has no open `Next Actor=Luceon` row, Luceon must perform one 
 2. look for a matching remote `origin/lucode/*<task-id>*` branch;
 3. if no matching branch exists, stop with the normal no-task reply and mention the earliest Lucode row;
 4. if a matching branch exists, inspect that branch's `TaskAndReport/TASK_TRACKING_LIST.md`;
-5. if the branch-local row is `Lucode 已回报待 Luceon 审查` or `Next Actor=Luceon`, treat it as a pending Luceon review, then read the branch report and diff against `origin/main`;
+5. if the branch-local row is `Lucode 已回报待 Luceon 审查` or `Next Actor=Luceon`, treat it as a pending Luceon review, then read the branch report and inspect the branch diff;
 6. if the branch-local row is still Lucode-owned, stop without review.
 
 This keeps `main` as the shared control plane while allowing Lucode's branch to carry the handoff signal before Luceon acceptance.
+
+For branch review, prefer merge-base / three-dot diffs such as `git diff --name-status origin/main...origin/<branch>` to inspect the branch's own changes. Use two-dot `origin/main..origin/<branch>` only after confirming the branch is based on current `origin/main`, because main may have advanced after Lucode pushed.
 
 ## Subagent Assistance
 

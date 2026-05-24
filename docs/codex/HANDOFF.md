@@ -88,6 +88,8 @@ For `check task`, read `TaskAndReport/TASK_TRACKING_LIST.md` first. If there is 
 
 Before that no-task reply, Luceon must check the earliest open `Next Actor=Lucode` row for a matching remote `lucode/<task-id-or-short-slug>` branch. If the branch-local ledger row says `Lucode 已回报待 Luceon 审查` or `Next Actor=Luceon`, Luceon should review that branch even though `origin/main` still shows Lucode.
 
+When reviewing a Lucode branch, use merge-base / three-dot diff syntax such as `git diff --name-status origin/main...origin/<branch>` unless the branch is confirmed current with `origin/main`.
+
 For `Lucode, check task`, run the same GitHub sync from `/Users/concm/Dev_workspace/Luceon2026`, then read `TaskAndReport/TASK_TRACKING_LIST.md` and execute only the earliest open `Next Actor=Lucode` row.
 
 Install and validation commands are task-dependent, not part of every wakeup:

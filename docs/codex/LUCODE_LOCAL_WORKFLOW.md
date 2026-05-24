@@ -183,6 +183,8 @@ The report must be written under `TaskAndReport/` and include:
 
 The branch and HEAD must include the exact pushed remote branch and full commit SHA. Do not write placeholders such as "as pushed".
 
+For changed-file evidence, prefer `git diff --name-status origin/main...HEAD` and `git diff --check origin/main...HEAD`, which compare the branch against its merge-base with current main. Use two-dot `origin/main..HEAD` only when the branch is confirmed to be based on current `origin/main`.
+
 ## 9. Ledger Update Rule
 
 After completing the task, update the branch-local task row:
