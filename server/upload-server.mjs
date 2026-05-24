@@ -1048,11 +1048,13 @@ function buildContentDisposition(disposition, fileName) {
 function resolveBucketForObject(objectName, bucketParam) {
   const rawBucket = getMinioBucket();
   const parsedBucket = getParsedBucket();
+  const cleanBucket = process.env.MINIO_CLEAN_BUCKET || 'eduassets-clean';
 
   if (bucketParam && typeof bucketParam === 'string') {
     if (bucketParam === 'raw') return rawBucket;
     if (bucketParam === 'parsed') return parsedBucket;
-    if (bucketParam === rawBucket || bucketParam === parsedBucket) return bucketParam;
+    if (bucketParam === 'clean') return cleanBucket;
+    if (bucketParam === rawBucket || bucketParam === parsedBucket || bucketParam === cleanBucket) return bucketParam;
   }
 
   if (String(objectName || '').startsWith('parsed/')) return parsedBucket;

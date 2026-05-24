@@ -1,5 +1,6 @@
 import { Boxes, ChevronDown, FileJson, Hash, Link2 } from 'lucide-react';
 import type { CleanMaterialView } from '../utils/cleanMaterialView';
+import { CleanMaterialArtifactInspector } from './CleanMaterialArtifactInspector';
 
 function mono(value: string | number | null | undefined) {
   return value === null || value === undefined || value === '' ? '—' : String(value);
@@ -97,6 +98,8 @@ export function CleanMaterialSummaryCard({ view }: { view: CleanMaterialView }) 
           </div>
         </details>
       )}
+
+      <CleanMaterialArtifactInspector artifacts={view.artifacts} />
     </section>
   );
 }
