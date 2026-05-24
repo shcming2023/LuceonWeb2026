@@ -89,7 +89,7 @@ When the user says `Lucode, check task`:
 
 1. Sync GitHub `main` using the commands above.
 2. Read only `TaskAndReport/TASK_TRACKING_LIST.md` first.
-3. Find the earliest open row where `Next Actor=Lucode`.
+3. Find the earliest active row where `Next Actor=Lucode`. For Lucode, active means `Status=下达待 Lucode 执行`, `Lucode 执行中`, or `退回待 Lucode 修正`; legacy returned or closed rows such as `未接受已退回`, `失败关闭`, `取消`, `挂起`, and `完成关闭` are not executable merely because an old `Next Actor` value remains.
 4. If there is no Lucode task, reply briefly: `当前无 Lucode 待执行任务。` Stop. Do not write reports, run broad checks, or push.
 5. If a Lucode task exists, read the referenced `*_TASK.md`.
 6. Read only the directly relevant docs and source files named or implied by that task brief.

@@ -54,8 +54,8 @@ If the worktree is dirty, do not overwrite unrelated changes. Report the dirty s
 Then:
 
 1. read only `TaskAndReport/TASK_TRACKING_LIST.md` first;
-2. process the earliest open row where `Next Actor=Luceon`;
-3. if there is no Luceon row, check the earliest open `Next Actor=Lucode` row for a remote Lucode branch handoff before stopping;
+2. process the earliest active row where `Next Actor=Luceon`;
+3. if there is no Luceon row, check the earliest active `Next Actor=Lucode` row for a remote Lucode branch handoff before stopping;
 4. if there is a User decision row, identify the decision and recommended path, then stop unless the user asks to continue;
 5. only when a Luceon row exists, read the task brief, report, changed files, checks, evidence, and directly relevant docs;
 6. if the row references a Lucode branch, fetch and inspect that branch;
@@ -66,11 +66,13 @@ Then:
 
 No-task wakeups are intentionally cheap: no broad doc reading, no validation commands, no production probing, no report writing, no commits, and no pushes.
 
+For `check task`, active rows are limited to current workflow statuses. Luceon-active statuses are `Lucode 已回报待 Luceon 审查`, `Luceon 规划中`, and `Luceon 验收中`; Lucode-active statuses are `下达待 Lucode 执行`, `Lucode 执行中`, and `退回待 Lucode 修正`; User-active status is `挂起待 User`. Legacy returned, withdrawn, failed, canceled, paused, or closed rows are historical unless a later decision explicitly reactivates them.
+
 ### Lucode Branch Handoff Detection
 
 Lucode normally commits its report and ledger handoff on a `lucode/<task-id-or-short-slug>` branch. That branch-local ledger may say `Next Actor=Luceon` before `origin/main` does.
 
-When `origin/main` has no open `Next Actor=Luceon` row, Luceon must perform one cheap handoff check against the earliest open `Next Actor=Lucode` row:
+When `origin/main` has no active `Next Actor=Luceon` row, Luceon must perform one cheap handoff check against the earliest active `Next Actor=Lucode` row:
 
 1. identify the row's Task ID;
 2. look for a matching remote `origin/lucode/*<task-id>*` branch;

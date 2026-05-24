@@ -70,6 +70,35 @@ Use these values for new active rows:
 
 Legacy statuses remain valid history.
 
+## Active Row Definition For `check task`
+
+For `check task`, an "open row" means both:
+
+- `Next Actor` is `Luceon`, `Lucode`, or `User`; and
+- `Status` is one of the current active statuses that require that actor to act.
+
+Active Lucode statuses:
+
+- `下达待 Lucode 执行`
+- `Lucode 执行中`
+- `退回待 Lucode 修正`
+
+Active Luceon statuses:
+
+- `Lucode 已回报待 Luceon 审查`
+- `Luceon 规划中`
+- `Luceon 验收中`
+
+Active User status:
+
+- `挂起待 User`
+
+`Next Actor` alone is not enough to make a row executable. Legacy returned,
+withdrawn, failed, canceled, paused, or closed rows such as `未接受已退回`,
+`已撤回合并`, `已撤回待根因诊断`, `失败关闭`, `取消`, `挂起`, and `完成关闭`
+are historical/non-executable for `check task` unless a later decision or task
+row explicitly reactivates them.
+
 ## Tracking Columns
 
 `TASK_TRACKING_LIST.md` must keep these control columns:
@@ -120,7 +149,7 @@ Required Lucode handoff signals:
 - update the branch-local task row to `Status=Lucode 已回报待 Luceon 审查`, `Next Actor=Luceon`;
 - keep `origin/main` unchanged until Luceon reviews and integrates the branch.
 
-When Luceon `check task` finds no open `Next Actor=Luceon` row on `origin/main`, it must inspect the earliest open `Next Actor=Lucode` row for a matching remote Lucode branch. If that branch's task row has been handed off to Luceon, Luceon treats the branch as a pending review even though main still shows Lucode.
+When Luceon `check task` finds no active `Next Actor=Luceon` row on `origin/main`, it must inspect the earliest active `Next Actor=Lucode` row for a matching remote Lucode branch. If that branch's task row has been handed off to Luceon, Luceon treats the branch as a pending review even though main still shows Lucode.
 
 For pending branch review, Luceon should use merge-base / three-dot diffs, for example `git diff --name-status origin/main...origin/<branch>`, to inspect the branch's own changes. Two-dot `origin/main..origin/<branch>` is only appropriate when the branch is known to be based on the current `origin/main`.
 
@@ -130,7 +159,7 @@ When the user says `check task` in the Luceon thread, Luceon must:
 
 1. synchronize with GitHub (`git fetch origin --prune --tags`, then fast-forward `main` when safe);
 2. read only `TaskAndReport/TASK_TRACKING_LIST.md` first;
-3. find the earliest open row with `Next Actor=Luceon`;
+3. find the earliest active row with `Next Actor=Luceon`;
 4. if no such row exists, run the Lucode branch handoff check above before reporting "当前无 Luceon 待处理任务";
 5. if `Next Actor=User` rows exist, mention the decision id and the decision needed, then stop unless the user asks to continue;
 6. only after finding a Luceon row, read the related task brief, Lucode report, branch, evidence, and task-relevant docs;
