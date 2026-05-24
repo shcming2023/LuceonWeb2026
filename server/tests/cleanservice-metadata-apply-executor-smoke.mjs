@@ -505,6 +505,8 @@ async function runTests() {
       triggerReason: 'operator-requested-rerun',
       previousAssetVersion: targetVersion,
       previousJobId,
+      defaultAllocatedAssetVersion: nextVersion,
+      targetAssetVersion: null,
       newAssetVersion: nextVersion,
     };
 
@@ -573,6 +575,27 @@ async function runTests() {
     });
     assert.equal(mismatchedIntentResult.ok, false);
     assert.equal(mismatchedIntentResult.classification, 'BLOCKED_EXISTING_TOC_REBUILD_METADATA');
+    assert.equal(mockDb.calls.length, 0);
+
+    const targetMismatchPlan = {
+      ...plan,
+      newVersionIntent: {
+        ...plan.newVersionIntent,
+        targetAssetVersion: 'v4',
+        newAssetVersion: nextVersion,
+      },
+    };
+    const targetMismatchResult = await applyCleanMetadataPersistencePlan({
+      plan: targetMismatchPlan,
+      taskId: targetTaskId,
+      materialId: targetMaterialId,
+      dbClient: mockDb,
+      existingTask: existingTaskV2,
+      existingMaterial: existingMaterialV2,
+      allowRealApply: false,
+    });
+    assert.equal(targetMismatchResult.ok, false);
+    assert.equal(targetMismatchResult.classification, 'BLOCKED_EXISTING_TOC_REBUILD_METADATA');
     assert.equal(mockDb.calls.length, 0);
   }
 

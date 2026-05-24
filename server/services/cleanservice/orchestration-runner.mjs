@@ -7,7 +7,7 @@
  */
 
 import { isCleanServiceTaskEligible, buildCleanServiceJobRequest } from './cleanservice-worker.mjs';
-import { allocateAssetVersion } from './asset-version.mjs';
+import { allocateAssetVersion, resolveAssetVersion } from './asset-version.mjs';
 import { verifyCleanServiceOutputArtifacts } from './output-verifier.mjs';
 import { buildVerifiedCleanOutputMetadataCandidate } from './metadata-summary.mjs';
 import { buildCleanMetadataPersistencePlan } from './metadata-persistence.mjs';
@@ -90,6 +90,16 @@ export async function runCleanServiceTocRebuildOnce({
     }
   }
 
+  if (config?.targetAssetVersion && config.intent !== 'create-new-version') {
+    return {
+      ok: false,
+      status: 'BLOCKED_TARGET_ASSET_VERSION_REQUIRES_NEW_VERSION_INTENT',
+      classification: 'BLOCKED_TARGET_ASSET_VERSION_REQUIRES_NEW_VERSION_INTENT',
+      reason: 'targetAssetVersion is valid only with explicit create-new-version intent',
+      observedAt: getNow(),
+    };
+  }
+
   // 3. Preflight - Current State Noop Check & Explicit New-Version Precondition Check (MUST run before allocateAssetVersion)
   const existingTaskJob = task.metadata?.cleanServiceJobs?.[serviceName];
   const existingMaterialJob = material.metadata?.cleanMaterials?.[serviceName];
@@ -151,7 +161,26 @@ export async function runCleanServiceTocRebuildOnce({
     }
   }
 
-  const { assetVersion } = allocateAssetVersion(task, serviceName);
+  let versionPlan;
+  try {
+    versionPlan = resolveAssetVersion({
+      ...task,
+      materialMetadata: material.metadata,
+    }, serviceName, {
+      targetAssetVersion: config.targetAssetVersion,
+      previousAssetVersion: existingTaskJob?.assetVersion || null,
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      status: err.code || 'BLOCKED_TARGET_ASSET_VERSION_POLICY',
+      classification: err.code || 'BLOCKED_TARGET_ASSET_VERSION_POLICY',
+      reason: err.message || 'targetAssetVersion policy check failed',
+      observedAt: getNow(),
+    };
+  }
+
+  const { assetVersion } = versionPlan;
   const jobId = `luceon-${task.id}-${serviceName}-${assetVersion}`;
 
   // 3. Preflight - Already Applied Noop Check
@@ -199,7 +228,13 @@ export async function runCleanServiceTocRebuildOnce({
   }
 
   // 6. Request Planning
-  const request = buildCleanServiceJobRequest(task, config, { submittedAt: getNow() });
+  const request = buildCleanServiceJobRequest({
+    ...task,
+    materialMetadata: material.metadata,
+  }, {
+    ...config,
+    previousAssetVersion: existingTaskJob?.assetVersion || null,
+  }, { submittedAt: getNow() });
 
   let queryResult;
   if (config.reconcileExistingJob === true) {
@@ -412,6 +447,8 @@ export async function runCleanServiceTocRebuildOnce({
       triggerReason: config.newVersionReason,
       previousAssetVersion: existingTaskJob?.assetVersion || null,
       previousJobId: existingTaskJob?.jobId || null,
+      defaultAllocatedAssetVersion: versionPlan.defaultAllocatedAssetVersion || null,
+      targetAssetVersion: versionPlan.targetAssetVersion || null,
       newAssetVersion: request.asset_version,
     };
   }
@@ -478,6 +515,8 @@ export async function runCleanServiceTocRebuildOnce({
         triggerReason: config.newVersionReason,
         previousAssetVersion: existingTaskJob?.assetVersion || null,
         previousJobId: existingTaskJob?.jobId || null,
+        defaultAllocatedAssetVersion: versionPlan.defaultAllocatedAssetVersion || null,
+        targetAssetVersion: versionPlan.targetAssetVersion || null,
         newAssetVersion: request.asset_version,
       } : null,
     } : null,

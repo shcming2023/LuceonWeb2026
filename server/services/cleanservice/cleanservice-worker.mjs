@@ -1,7 +1,7 @@
 import { loadCleanServiceConfig } from './config.mjs';
 import { createCleanServiceClient } from './protocol.mjs';
 import { buildCanonicalRawMaterialRef, hasUsableRawMaterialSourceInput } from './raw-material-adapter.mjs';
-import { allocateAssetVersion } from './asset-version.mjs';
+import { allocateAssetVersion, resolveAssetVersion } from './asset-version.mjs';
 
 const ELIGIBLE_TASK_STATES = new Set([
   'review-pending',
@@ -53,7 +53,16 @@ export function isCleanServiceTaskEligible(task = {}, { serviceName = 'toc-rebui
 
 export function buildCleanServiceJobRequest(task = {}, config = loadCleanServiceConfig(), { submittedAt = new Date().toISOString() } = {}) {
   const serviceName = config.serviceName || 'toc-rebuild';
-  const { assetVersion } = allocateAssetVersion(task, serviceName);
+  if (config.targetAssetVersion && config.intent !== 'create-new-version') {
+    const error = new Error('target-asset-version-requires-new-version-intent');
+    error.code = 'BLOCKED_TARGET_ASSET_VERSION_REQUIRES_NEW_VERSION_INTENT';
+    throw error;
+  }
+
+  const { assetVersion } = resolveAssetVersion(task, serviceName, {
+    targetAssetVersion: config.targetAssetVersion,
+    previousAssetVersion: config.previousAssetVersion || task.metadata?.cleanServiceJobs?.[serviceName]?.assetVersion || null,
+  });
 
   const inputRef = buildCanonicalRawMaterialRef(task, { serviceName });
   inputRef.source.endpoint = config.storageEndpoint;

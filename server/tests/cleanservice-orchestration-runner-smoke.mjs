@@ -1290,7 +1290,139 @@ async function runTests() {
     assert.equal(applyCalled, false);
   }
 
-  console.log('ALL cleanservice orchestration runner smoke tests PASSED! (26/26)');
+  // Test 27: explicit targetAssetVersion v4 plans request/job/sink/verifier/audit consistently
+  {
+    console.log('  [27] Testing targetAssetVersion v4 mock-safe request planning...');
+    const prevJobId = 'luceon-task-clean-123-toc-rebuild-v2';
+    const task = makeBaseTask({
+      metadata: {
+        ...makeBaseTask().metadata,
+        cleanServiceJobs: {
+          'toc-rebuild': { jobId: prevJobId, assetVersion: 'v2', status: 'completed' },
+        },
+      },
+    });
+    const material = makeBaseMaterial({
+      metadata: {
+        cleanMaterials: {
+          'toc-rebuild': { latestVersion: 'v2', status: 'completed' },
+        },
+      },
+    });
+    const config = makeBaseConfig({
+      intent: 'create-new-version',
+      newVersionReason: 'director-authorized-v4-after-diagnostic-v3',
+      targetAssetVersion: 'v4',
+    });
+    const files = generateFixtures({ assetVersion: 'v4' });
+    const reader = new FakeArtifactReader(files);
+    let capturedRequest = null;
+    let capturedExpected = null;
+    let capturedPlan = null;
+
+    const result = await runCleanServiceTocRebuildOnce({
+      task,
+      material,
+      config,
+      deps: {
+        submitJob: async (req) => {
+          capturedRequest = req;
+          return { ok: true, job: { job_id: req.job_id, status: 'submitted' } };
+        },
+        queryJob: async (jobId) => {
+          return { ok: true, job: mockCompletedJob({ jobId, assetVersion: 'v4' }) };
+        },
+        verifyCleanServiceOutputArtifacts: async (job, opts) => {
+          capturedExpected = opts.expected;
+          const { verifyCleanServiceOutputArtifacts } = await import('../services/cleanservice/output-verifier.mjs');
+          return verifyCleanServiceOutputArtifacts(job, opts);
+        },
+        artifactReader: reader,
+        buildCleanMetadataPersistencePlan: (opts) => {
+          const plan = buildCleanMetadataPersistencePlan(opts);
+          capturedPlan = plan;
+          return plan;
+        },
+        dbClient: {
+          updateTask: async () => { throw new Error('DB writes forbidden during dry-run'); },
+          updateMaterial: async () => { throw new Error('DB writes forbidden during dry-run'); },
+        },
+      },
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.classification, 'DRY_RUN_SUCCESS');
+    assert.equal(result.assetVersion, 'v4');
+    assert.equal(result.jobId, 'luceon-task-clean-123-toc-rebuild-v4');
+    assert.equal(capturedRequest.asset_version, 'v4');
+    assert.equal(capturedRequest.job_id, 'luceon-task-clean-123-toc-rebuild-v4');
+    assert.equal(capturedRequest.sink.prefix, 'toc-rebuild/1842780526581841/v4/');
+    assert.equal(capturedExpected.assetVersion, 'v4');
+    assert.equal(capturedPlan.newVersionIntent.defaultAllocatedAssetVersion, 'v3');
+    assert.equal(capturedPlan.newVersionIntent.targetAssetVersion, 'v4');
+    assert.equal(capturedPlan.newVersionIntent.newAssetVersion, 'v4');
+    assert.equal(result.audit.newVersionIntent.defaultAllocatedAssetVersion, 'v3');
+    assert.equal(result.audit.newVersionIntent.targetAssetVersion, 'v4');
+    assert.equal(result.audit.newVersionIntent.newAssetVersion, 'v4');
+  }
+
+  // Test 28: targetAssetVersion requires explicit new-version intent and valid version order
+  {
+    console.log('  [28] Testing targetAssetVersion policy blocking...');
+    const task = makeBaseTask({
+      metadata: {
+        ...makeBaseTask().metadata,
+        cleanServiceJobs: {
+          'toc-rebuild': { jobId: 'luceon-task-clean-123-toc-rebuild-v2', assetVersion: 'v2', status: 'completed' },
+        },
+      },
+    });
+    const material = makeBaseMaterial({
+      metadata: {
+        cleanMaterials: {
+          'toc-rebuild': { latestVersion: 'v2', status: 'completed' },
+        },
+      },
+    });
+    const failFn = () => { throw new Error('Dependency should not be called during targetAssetVersion preflight failure'); };
+
+    const withoutIntent = await runCleanServiceTocRebuildOnce({
+      task,
+      material,
+      config: makeBaseConfig({ targetAssetVersion: 'v4' }),
+      deps: { submitJob: failFn, queryJob: failFn, artifactReader: { readArtifact: failFn } },
+    });
+    assert.equal(withoutIntent.ok, false);
+    assert.equal(withoutIntent.classification, 'BLOCKED_TARGET_ASSET_VERSION_REQUIRES_NEW_VERSION_INTENT');
+
+    const invalidVersion = await runCleanServiceTocRebuildOnce({
+      task,
+      material,
+      config: makeBaseConfig({
+        intent: 'create-new-version',
+        newVersionReason: 'director-authorized-v4-after-diagnostic-v3',
+        targetAssetVersion: 'vABC',
+      }),
+      deps: { submitJob: failFn, queryJob: failFn, artifactReader: { readArtifact: failFn } },
+    });
+    assert.equal(invalidVersion.ok, false);
+    assert.equal(invalidVersion.classification, 'BLOCKED_INVALID_TARGET_ASSET_VERSION');
+
+    const belowDefault = await runCleanServiceTocRebuildOnce({
+      task,
+      material,
+      config: makeBaseConfig({
+        intent: 'create-new-version',
+        newVersionReason: 'director-authorized-v4-after-diagnostic-v3',
+        targetAssetVersion: 'v2',
+      }),
+      deps: { submitJob: failFn, queryJob: failFn, artifactReader: { readArtifact: failFn } },
+    });
+    assert.equal(belowDefault.ok, false);
+    assert.equal(belowDefault.classification, 'BLOCKED_TARGET_ASSET_VERSION_BELOW_DEFAULT');
+  }
+
+  console.log('ALL cleanservice orchestration runner smoke tests PASSED! (28/28)');
 }
 
 runTests().catch(err => {

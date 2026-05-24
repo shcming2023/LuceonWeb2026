@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { allocateAssetVersion } from '../services/cleanservice/asset-version.mjs';
+import { allocateAssetVersion, resolveAssetVersion } from '../services/cleanservice/asset-version.mjs';
 
 function run() {
   console.log('=== Asset Version Allocator Smoke ===');
@@ -57,6 +57,33 @@ function run() {
     }
   };
   assert.equal(allocateAssetVersion(invalidTask).assetVersion, 'v3');
+
+  // targetAssetVersion is explicit and preserves default allocation evidence
+  const targetTask = {
+    metadata: {
+      cleanServiceJobs: {
+        'toc-rebuild': { cleanState: 'completed', assetVersion: 'v2' }
+      }
+    }
+  };
+  const targetResult = resolveAssetVersion(targetTask, 'toc-rebuild', {
+    targetAssetVersion: 'v4',
+    previousAssetVersion: 'v2',
+  });
+  assert.equal(targetResult.assetVersion, 'v4');
+  assert.equal(targetResult.defaultAllocatedAssetVersion, 'v3');
+  assert.equal(targetResult.targetAssetVersion, 'v4');
+  assert.equal(targetResult.resolvedBy, 'targetAssetVersion');
+
+  assert.throws(() => resolveAssetVersion(targetTask, 'toc-rebuild', {
+    targetAssetVersion: 'vABC',
+    previousAssetVersion: 'v2',
+  }), /invalid-target-asset-version/);
+
+  assert.throws(() => resolveAssetVersion(targetTask, 'toc-rebuild', {
+    targetAssetVersion: 'v2',
+    previousAssetVersion: 'v2',
+  }), /target-asset-version-below-default|target-asset-version-not-greater-than-previous/);
 
   console.log('PASS asset version allocator smoke');
 }
