@@ -66,6 +66,33 @@ export function hasFullContentInMetadata(obj) {
   return false;
 }
 
+function isCompletedCleanJob(job = {}) {
+  return job.status === 'completed' || job.cleanState === 'completed';
+}
+
+function canDryRunExplicitNewVersionOverExistingMetadata({
+  plan,
+  existingTaskJob,
+  existingMaterialJob,
+  targetJobId,
+  targetVersion,
+}) {
+  if (plan?.newVersionIntent?.intent !== 'create-new-version') return false;
+  if (!existingTaskJob || !existingMaterialJob) return false;
+  if (!targetJobId || !targetVersion) return false;
+
+  const previousVersion = plan.newVersionIntent.previousAssetVersion;
+  const previousJobId = plan.newVersionIntent.previousJobId;
+  if (!previousVersion || !previousJobId) return false;
+  if (targetVersion === previousVersion) return false;
+
+  return existingTaskJob.jobId === previousJobId &&
+    existingTaskJob.assetVersion === previousVersion &&
+    existingMaterialJob.latestVersion === previousVersion &&
+    isCompletedCleanJob(existingTaskJob) &&
+    existingMaterialJob.status === 'completed';
+}
+
 /**
  * Applies the CleanService verified metadata persistence plan to the database.
  *
@@ -149,6 +176,14 @@ export async function applyCleanMetadataPersistencePlan({
     const materialMatches = existingMaterialJob &&
       existingMaterialJob.latestVersion === targetVersion;
 
+    const dryRunExplicitNewVersionAllowed = !allowRealApply && canDryRunExplicitNewVersionOverExistingMetadata({
+      plan,
+      existingTaskJob,
+      existingMaterialJob,
+      targetJobId,
+      targetVersion,
+    });
+
     if (taskMatches && materialMatches) {
       return {
         ok: true,
@@ -157,6 +192,8 @@ export async function applyCleanMetadataPersistencePlan({
         classification: 'ALREADY_APPLIED_NOOP',
         reason: 'Target metadata jobId and assetVersion are already exactly persisted in both task and material records',
       };
+    } else if (dryRunExplicitNewVersionAllowed) {
+      // Continue through patch-scope/full-content checks before the dry-run success boundary.
     } else {
       return {
         ok: false,

@@ -323,7 +323,50 @@ async function runTests() {
     assert.equal(result.errors.includes('missing-object:metrics'), true);
   }
 
-  console.log('PASS cleanservice seven-artifact output verifier smoke tests (8/8)');
+  // Case 9: bounded provenance job_id -probe compatibility
+  {
+    console.log('  [9] bounded provenance job_id -probe suffix policy...');
+    const probeProvenance = JSON.stringify({
+      schema: 'luceon-provenance/v1',
+      service: { name: 'toc-rebuild', version: '1.0.0', protocol_version: 'v1' },
+      asset: { material_id: '1842780526581841', asset_version: 'v2' },
+      job: { job_id: 'luceon-task-248-rebuild-v2-probe', parse_task_id: 'task-clean-248' },
+      inputs: [
+        {
+          bucket: 'eduassets-raw',
+          object: 'mineru/1842780526581841/v1/content_list_v2.json',
+          sha256: 'f05394af3ad6107cdb7324fcffeb13fb43dcbcbaff46f838f291828867e182db',
+          size_bytes: 31543,
+        }
+      ],
+    });
+
+    const files = generateFixtures({ provenance: probeProvenance });
+    const reader = new FakeArtifactReader(files);
+    const result = await verifyCleanServiceOutputArtifacts(mockCompletedJob(), {
+      artifactReader: reader,
+      expected: expectedOpts,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.canonicalJobId, 'luceon-task-248-rebuild-v2');
+    assert.equal(result.provenanceJobId, 'luceon-task-248-rebuild-v2-probe');
+    assert.equal(result.provenanceJobIdPolicy, 'accepted-probe-suffix');
+    assert.equal(result.warnings.includes('provenance-job-id-probe-suffix-accepted'), true);
+
+    const unrelatedProvenance = JSON.stringify({
+      ...JSON.parse(probeProvenance),
+      job: { job_id: 'different-job-id-probe', parse_task_id: 'task-clean-248' },
+    });
+    const badResult = await verifyCleanServiceOutputArtifacts(mockCompletedJob(), {
+      artifactReader: new FakeArtifactReader(generateFixtures({ provenance: unrelatedProvenance })),
+      expected: expectedOpts,
+    });
+    assert.equal(badResult.ok, false);
+    assert.equal(badResult.errors.includes('job-id-mismatch'), true);
+  }
+
+  console.log('PASS cleanservice seven-artifact output verifier smoke tests (9/9)');
 }
 
 runTests().catch(err => {

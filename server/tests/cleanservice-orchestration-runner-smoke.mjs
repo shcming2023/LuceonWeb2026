@@ -1029,7 +1029,82 @@ async function runTests() {
     assert.equal(result.classification, 'BLOCKED_EXISTING_TOC_REBUILD_METADATA');
   }
 
-  console.log('ALL cleanservice orchestration runner smoke tests PASSED! (23/23)');
+  // Test 24: Task 256-shaped live response needs no harness provenance mutation or apply conversion
+  {
+    console.log('  [24] Testing Task 256-shaped provenance/artifact response through product chain...');
+    const prevJobId = 'luceon-task-clean-123-toc-rebuild-v2';
+    const task = makeBaseTask({
+      metadata: {
+        ...makeBaseTask().metadata,
+        cleanServiceJobs: {
+          'toc-rebuild': { jobId: prevJobId, assetVersion: 'v2', status: 'completed' },
+        },
+      },
+    });
+    const material = makeBaseMaterial({
+      metadata: {
+        cleanMaterials: {
+          'toc-rebuild': { latestVersion: 'v2', status: 'completed' },
+        },
+      },
+    });
+    const config = makeBaseConfig({
+      intent: 'create-new-version',
+      newVersionReason: 'operator-requested-rerun',
+    });
+
+    const expectedJobId = 'luceon-task-clean-123-toc-rebuild-v3';
+    const probeProvenance = JSON.stringify({
+      schema: 'luceon-provenance/v1',
+      service: { name: 'toc-rebuild', version: '1.0.0', protocol_version: 'v1' },
+      asset: { material_id: '1842780526581841', asset_version: 'v3' },
+      job: { job_id: `${expectedJobId}-probe`, parse_task_id: 'task-clean-123' },
+      inputs: [
+        {
+          bucket: 'eduassets-raw',
+          object: 'mineru/1842780526581841/v1/content_list_v2.json',
+          sha256: 'f05394af3ad6107cdb7324fcffeb13fb43dcbcbaff46f838f291828867e182db',
+          size_bytes: 31543,
+        }
+      ],
+    });
+    const reader = new FakeArtifactReader(generateFixtures({
+      assetVersion: 'v3',
+      jobId: expectedJobId,
+      provenance: probeProvenance,
+    }));
+    const dbClient = {
+      updateTask: async () => { throw new Error('DB writes forbidden during dry-run'); },
+      updateMaterial: async () => { throw new Error('DB writes forbidden during dry-run'); },
+    };
+
+    const result = await runCleanServiceTocRebuildOnce({
+      task,
+      material,
+      config,
+      deps: {
+        submitJob: async (req) => ({ ok: true, job: { job_id: req.job_id, status: 'submitted' } }),
+        queryJob: async (jobId) => ({
+          ok: true,
+          job: mockCompletedJob({ jobId, assetVersion: 'v3' }),
+        }),
+        artifactReader: reader,
+        dbClient,
+      },
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.classification, 'DRY_RUN_SUCCESS');
+    assert.equal(result.jobId, expectedJobId);
+    assert.equal(result.verificationSummary.canonicalJobId, expectedJobId);
+    assert.equal(result.verificationSummary.provenanceJobId, `${expectedJobId}-probe`);
+    assert.equal(result.verificationSummary.provenanceJobIdPolicy, 'accepted-probe-suffix');
+    assert.equal(result.verificationSummary.warnings.includes('provenance-job-id-probe-suffix-accepted'), true);
+    assert.equal(result.audit.newVersionIntent.previousJobId, prevJobId);
+    assert.equal(result.audit.newVersionIntent.newAssetVersion, 'v3');
+  }
+
+  console.log('ALL cleanservice orchestration runner smoke tests PASSED! (24/24)');
 }
 
 runTests().catch(err => {

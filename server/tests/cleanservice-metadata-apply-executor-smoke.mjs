@@ -482,6 +482,80 @@ async function runTests() {
     assert.equal(mockDb.calls[1].method, 'updateMaterial');
   }
 
+  // Case 11: explicit create-new-version dry-run may pass over aligned completed previous version
+  {
+    console.log('  [11] explicit new-version dry-run accepts aligned completed v2 -> v3 conflict without DB calls...');
+    const nextJobId = 'luceon-task-251-rebuild-v3';
+    const nextVersion = 'v3';
+    const previousJobId = targetJobId;
+
+    const nextCandidate = buildVerifiedCleanOutputMetadataCandidate({
+      job: mockJob({ jobId: nextJobId, assetVersion: nextVersion }),
+      verification: validVerification,
+      now: customNow,
+    });
+    const plan = buildCleanMetadataPersistencePlan({
+      candidate: nextCandidate,
+      existingTask: defaultExistingTask,
+      existingMaterial: defaultExistingMaterial,
+      now: customNow,
+    });
+    plan.newVersionIntent = {
+      intent: 'create-new-version',
+      triggerReason: 'operator-requested-rerun',
+      previousAssetVersion: targetVersion,
+      previousJobId,
+      newAssetVersion: nextVersion,
+    };
+
+    const existingTaskV2 = {
+      id: targetTaskId,
+      metadata: {
+        cleanServiceJobs: {
+          'toc-rebuild': { jobId: previousJobId, assetVersion: targetVersion, status: 'completed' },
+        },
+      },
+    };
+    const existingMaterialV2 = {
+      id: targetMaterialId,
+      metadata: {
+        cleanMaterials: {
+          'toc-rebuild': { latestVersion: targetVersion, status: 'completed' },
+        },
+      },
+    };
+
+    const mockDb = createMockDbClient();
+    const res = await applyCleanMetadataPersistencePlan({
+      plan,
+      taskId: targetTaskId,
+      materialId: targetMaterialId,
+      dbClient: mockDb,
+      existingTask: existingTaskV2,
+      existingMaterial: existingMaterialV2,
+      allowRealApply: false,
+    });
+
+    assert.equal(res.ok, true);
+    assert.equal(res.applied, false);
+    assert.equal(res.operationCount, 0);
+    assert.equal(res.classification, 'DRY_RUN_SUCCESS');
+    assert.equal(mockDb.calls.length, 0);
+
+    const realApplyAttempt = await applyCleanMetadataPersistencePlan({
+      plan,
+      taskId: targetTaskId,
+      materialId: targetMaterialId,
+      dbClient: mockDb,
+      existingTask: existingTaskV2,
+      existingMaterial: existingMaterialV2,
+      allowRealApply: true,
+    });
+    assert.equal(realApplyAttempt.ok, false);
+    assert.equal(realApplyAttempt.classification, 'BLOCKED_EXISTING_TOC_REBUILD_METADATA');
+    assert.equal(mockDb.calls.length, 0);
+  }
+
   console.log('All apply-executor smoke cases passed successfully!');
 }
 

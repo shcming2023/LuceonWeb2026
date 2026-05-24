@@ -168,6 +168,9 @@ export function buildVerifiedCleanOutputMetadataCandidate({ job = {}, verificati
     unresolvedAnchorCount: verification.unresolvedAnchorCount || 0,
     inputSizeBytes,
     sourceInput,
+    canonicalJobId: verification.canonicalJobId || verification.sourceInput?.canonicalJobId || jobId,
+    provenanceJobId: verification.provenanceJobId || verification.sourceInput?.provenanceJobId || null,
+    provenanceJobIdPolicy: verification.provenanceJobIdPolicy || verification.sourceInput?.provenanceJobIdPolicy || null,
     costSource,
   };
 

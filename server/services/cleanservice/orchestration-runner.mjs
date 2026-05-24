@@ -345,6 +345,7 @@ export async function runCleanServiceTocRebuildOnce({
       materialId: task.materialId,
       assetVersion: request.asset_version,
       jobId: request.job_id,
+      allowProbeJobIdSuffix: true,
       rawInput,
     },
     artifactReader: reader,
@@ -396,6 +397,16 @@ export async function runCleanServiceTocRebuildOnce({
     now: getNow,
   });
 
+  if (plan && config.intent === 'create-new-version') {
+    plan.newVersionIntent = {
+      intent: config.intent,
+      triggerReason: config.newVersionReason,
+      previousAssetVersion: existingTaskJob?.assetVersion || null,
+      previousJobId: existingTaskJob?.jobId || null,
+      newAssetVersion: request.asset_version,
+    };
+  }
+
   if (!plan || !plan.ok || !plan.shouldApply) {
     return {
       ok: false,
@@ -433,6 +444,9 @@ export async function runCleanServiceTocRebuildOnce({
       sha256: candidate.verificationSummary.sourceInput.sha256,
       sizeBytes: candidate.verificationSummary.sourceInput.sizeBytes,
     } : null,
+    canonicalJobId: candidate.verificationSummary.canonicalJobId || null,
+    provenanceJobId: candidate.verificationSummary.provenanceJobId || null,
+    provenanceJobIdPolicy: candidate.verificationSummary.provenanceJobIdPolicy || null,
     costSource: candidate.verificationSummary.costSource || 'unavailable',
   } : null;
 

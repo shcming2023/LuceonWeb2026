@@ -21,17 +21,39 @@ function isObjectRef(value) {
 
 function verifyProvenanceShape(provenance, expected = {}) {
   if (!provenance || typeof provenance !== 'object') {
-    return ['missing-provenance-shape'];
+    return {
+      errors: ['missing-provenance-shape'],
+      warnings: [],
+      provenanceJobId: null,
+      canonicalJobId: expected.jobId || null,
+      provenanceJobIdPolicy: null,
+    };
   }
 
   const errors = [];
+  const warnings = [];
+  let provenanceJobIdPolicy = null;
   if (provenance.schema !== 'luceon-provenance/v1') errors.push('invalid-provenance-schema');
   if (expected.serviceName && provenance.service?.name !== expected.serviceName) errors.push('service-name-mismatch');
   if (expected.protocolVersion && provenance.service?.protocol_version !== expected.protocolVersion) errors.push('protocol-version-mismatch');
   if (expected.materialId && provenance.asset?.material_id !== expected.materialId) errors.push('material-id-mismatch');
   if (expected.assetVersion && provenance.asset?.asset_version !== expected.assetVersion) errors.push('asset-version-mismatch');
-  if (expected.jobId && provenance.job?.job_id !== expected.jobId) errors.push('job-id-mismatch');
-  return errors;
+  const provenanceJobId = provenance.job?.job_id || null;
+  if (expected.jobId && provenanceJobId !== expected.jobId) {
+    if (provenanceJobId === `${expected.jobId}-probe` && expected.allowProbeJobIdSuffix !== false) {
+      warnings.push('provenance-job-id-probe-suffix-accepted');
+      provenanceJobIdPolicy = 'accepted-probe-suffix';
+    } else {
+      errors.push('job-id-mismatch');
+    }
+  }
+  return {
+    errors,
+    warnings,
+    provenanceJobId,
+    canonicalJobId: expected.jobId || null,
+    provenanceJobIdPolicy,
+  };
 }
 
 export function verifyCleanServiceOutput(job = {}, options = {}) {
@@ -55,13 +77,15 @@ export function verifyCleanServiceOutput(job = {}, options = {}) {
     errors.push('placeholder-or-skeleton-output-not-clean-success');
   }
 
-  errors.push(...verifyProvenanceShape(job.provenance, {
+  const provenanceCheck = verifyProvenanceShape(job.provenance, {
     serviceName: options.serviceName || job.service_name,
     protocolVersion: options.protocolVersion || job.protocol_version,
     materialId: job.material_id,
     assetVersion: job.asset_version,
     jobId: job.job_id,
-  }));
+    allowProbeJobIdSuffix: options.allowProbeJobIdSuffix,
+  });
+  errors.push(...provenanceCheck.errors);
 
   const unresolvedAnchorCount = Number(job.stats?.unresolved_anchor_count || 0);
   if (errors.length > 0) {
@@ -260,14 +284,24 @@ export async function verifyCleanServiceOutputArtifacts(job = {}, options = {}) 
       ? JSON.parse(contents.provenance)
       : contents.provenance;
 
-    const provErrors = verifyProvenanceShape(provenanceObj, {
+    const provCheck = verifyProvenanceShape(provenanceObj, {
       serviceName: expected.serviceName || job.service_name,
       protocolVersion: expected.protocolVersion || job.protocol_version,
       materialId: expected.materialId || job.material_id,
       assetVersion: expected.assetVersion || job.asset_version,
       jobId: expected.jobId || job.job_id,
+      allowProbeJobIdSuffix: expected.allowProbeJobIdSuffix,
     });
-    errors.push(...provErrors);
+    errors.push(...provCheck.errors);
+    warnings.push(...provCheck.warnings);
+
+    if (provCheck.canonicalJobId) {
+      sourceInput = {
+        canonicalJobId: provCheck.canonicalJobId,
+        provenanceJobId: provCheck.provenanceJobId,
+        provenanceJobIdPolicy: provCheck.provenanceJobIdPolicy,
+      };
+    }
 
     // 优先从 inputs[0] 提取，否则回退到 input
     const provInput = (provenanceObj.inputs && Array.isArray(provenanceObj.inputs) && provenanceObj.inputs[0])
@@ -297,6 +331,7 @@ export async function verifyCleanServiceOutputArtifacts(job = {}, options = {}) 
     }
 
     sourceInput = {
+      ...(sourceInput || {}),
       bucket: provInput.bucket || null,
       object: provInput.object || null,
       sha256: provInput.sha256 || provInput.sha256_hex || null,
@@ -351,6 +386,9 @@ export async function verifyCleanServiceOutputArtifacts(job = {}, options = {}) 
       tokensPrompt,
       tokensCompletion,
       tokensTotal,
+      canonicalJobId: sourceInput?.canonicalJobId || null,
+      provenanceJobId: sourceInput?.provenanceJobId || null,
+      provenanceJobIdPolicy: sourceInput?.provenanceJobIdPolicy || null,
     };
   }
 
@@ -365,5 +403,8 @@ export async function verifyCleanServiceOutputArtifacts(job = {}, options = {}) 
     tokensPrompt,
     tokensCompletion,
     tokensTotal,
+    canonicalJobId: sourceInput?.canonicalJobId || null,
+    provenanceJobId: sourceInput?.provenanceJobId || null,
+    provenanceJobIdPolicy: sourceInput?.provenanceJobIdPolicy || null,
   };
 }
