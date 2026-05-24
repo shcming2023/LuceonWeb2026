@@ -1,6 +1,6 @@
 # Repository Structure Policy
 
-Last updated: 2026-05-16
+Last updated: 2026-05-24
 
 ## Root Directory Rule
 
@@ -51,5 +51,5 @@ Directories allowed at root:
 5. Keep Compose files at the root unless the related scripts and documentation are changed together; current scripts depend on root-level compose paths.
 6. Keep `start-uat.sh` at the root because package scripts and UAT docs invoke it directly.
 7. Keep `TaskAndReport/` at the root because it is the active GitHub-mediated control plane and historical execution record.
-8. Current active role docs may live under `docs/codex/roles/`; as of 2026-05-16 the active file is `docs/codex/roles/luceon.md`.
+8. Current active role docs may live under `docs/codex/roles/`; as of 2026-05-24 the active file is `docs/codex/roles/luceon.md`, with Lucode's shared workflow in `docs/codex/LUCODE_LOCAL_WORKFLOW.md`.
 9. Retired role contracts and workflow prompts must stay under `archive/team-model-retired-2026-05-16/`; do not revive archived role files by implication.

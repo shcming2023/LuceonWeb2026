@@ -1,6 +1,6 @@
 # Luceon2026 Task And Report Registry
 
-Last updated: 2026-05-16
+Last updated: 2026-05-24
 
 `TaskAndReport/` is the active GitHub-mediated control plane for post-6.9.1 Luceon/Lucode collaboration and the permanent historical evidence registry for earlier work.
 
@@ -8,8 +8,8 @@ Historical task briefs, reports, reviews, decisions, and ledger rows must remain
 
 ## Active Roles After 6.9.1
 
-- `Luceon`: Codex-side project director, architecture reviewer, test/acceptance engineer, production validation/deployment coordinator, and task-ledger owner.
-- `Lucode`: external IDE-side product/implementation role. Lucode's full local role instructions are user-managed outside this repository, but the shared GitHub interface contract here and the copyable guide `docs/codex/LUCODE_EXTERNAL_WORKFLOW.md` are authoritative for project coordination.
+- `Luceon`: local control-thread project director, architecture reviewer, test/acceptance engineer, production validation/deployment coordinator, and task-ledger owner. Its active workspace is `/Users/concm/prod_workspace/Luceon2026`.
+- `Lucode`: local development-thread product/implementation role. Its active workspace is `/Users/concm/Dev_workspace/Luceon2026`, with private local role instructions ignored by Git. The shared GitHub interface contract here and the copyable guide `docs/codex/LUCODE_LOCAL_WORKFLOW.md` are authoritative for project coordination.
 - `User`: owner decisions, scope choices, destructive-operation approvals, and release/go-live judgment.
 - `None`: no next action.
 
@@ -20,9 +20,15 @@ Retired roles such as ProductManager, Architect, DevelopmentEngineer, TestAccept
 Luceon and Lucode share GitHub, so both roles may see each other's role guides and workflow instructions. These documents are coordination context, not permission transfer.
 
 - `docs/codex/roles/luceon.md` tells Lucode how Luceon will review and validate, but Lucode must not act as Luceon.
-- `docs/codex/LUCODE_EXTERNAL_WORKFLOW.md` tells Luceon how Lucode should implement and report, but Luceon must not act as Lucode.
+- `docs/codex/LUCODE_LOCAL_WORKFLOW.md` tells Luceon how Lucode should implement and report, but Luceon must not act as Lucode.
 - The active assignment source is the task ledger row and task brief.
 - If a role document conflicts with the current task row, stop and escalate instead of guessing.
+
+## Luceon Subagent Boundary
+
+Luceon may explicitly use Codex subagents for bounded exploration, tests, log analysis, evidence extraction, or review assistance when the user authorizes subagent or parallel-agent work for the current task.
+
+Subagents are not project roles. They must not appear as `Next Actor` values, own ledger rows, accept tasks, make readiness/go-live claims, authorize production operations, or replace Lucode's normal implementation thread. Luceon remains responsible for summarizing, verifying, and recording any final decision.
 
 ## Required Files
 
@@ -50,7 +56,7 @@ Task names should use ASCII-safe hyphenated words.
 
 Use these values for new active rows:
 
-- `下达待 Lucode 执行`: Luceon has issued a task to external Lucode.
+- `下达待 Lucode 执行`: Luceon has issued a task to Lucode.
 - `Lucode 执行中`: Lucode has started implementation or product work.
 - `Lucode 已回报待 Luceon 审查`: Lucode has pushed a branch/report and Luceon must review it.
 - `Luceon 规划中`: Luceon owns the next planning, task-brief, architecture, or decision step.
@@ -81,7 +87,7 @@ For new active rows, `Next Actor` must be one of `Luceon`, `Lucode`, `User`, or 
 
 ## GitHub Branch And Report Contract
 
-Lucode should read `docs/codex/LUCODE_EXTERNAL_WORKFLOW.md` before its first task in a new environment.
+Lucode should read `docs/codex/LUCODE_LOCAL_WORKFLOW.md` before its first task in a new environment.
 
 Lucode normally works on a scoped branch, for example:
 

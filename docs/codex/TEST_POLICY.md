@@ -1,15 +1,16 @@
 # Luceon2026 Validation Policy
 
-Last updated: 2026-05-16
+Last updated: 2026-05-24
 
 See `docs/codex/TEST_MATRIX.md` for the command-to-risk matrix used by current governance and validation reports.
 
 ## 6.9.1 Role Boundary
 
-The former Lucia/Lucode and multi-role Director/ProductManager/Architect/DevelopmentEngineer/TestAcceptanceEngineer workflows are retired as of 2026-05-16. The active post-6.9.1 model is Luceon/Lucode:
+The former Lucia/Lucode and multi-role Director/ProductManager/Architect/DevelopmentEngineer/TestAcceptanceEngineer workflows are retired as of 2026-05-16. The active post-6.9.1 model is Luceon/Lucode, updated on 2026-05-24 to use local dual-thread worktree isolation:
 
 - Luceon owns validation planning, production validation/deployment coordination, acceptance review, and readiness wording.
-- Lucode owns implementation/product work and developer checks in the external IDE workspace.
+- Lucode owns implementation/product work and developer checks in `/Users/concm/Dev_workspace/Luceon2026`.
+- Luceon may explicitly use Codex subagents for bounded exploration, tests, log analysis, evidence extraction, or review assistance when the user authorizes subagent or parallel-agent work for the current task. Subagents do not own validation judgments or readiness wording.
 
 Historical validation evidence below keeps original owner wording for traceability, but it is not an active assignment model.
 
