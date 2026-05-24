@@ -1,6 +1,6 @@
 # Task 259 Report: CleanService Mock-Safe Runner Integration Gap Fix
 
-Report time: 2026-05-24T11:39:00+0800
+Report time: 2026-05-24T12:32:00+0800
 
 ## 1. Branch And HEAD
 
@@ -16,7 +16,14 @@ Implementation HEAD:
 f60e8d46efc88b94448715dde45d4153bfbff1bc
 ```
 
-Final report/ledger commit is the branch HEAD reported in the Lucode handoff.
+Return-reviewed branch HEAD:
+
+```text
+b4f4e3a24c9d1f5bceb1f74c2bf7f99810bb7186
+```
+
+Correction branch final remote HEAD is reported in the Lucode handoff after
+push; the report cannot embed its own commit hash without changing that hash.
 
 ## 2. Changed Files
 
@@ -55,7 +62,9 @@ Live provenance response shape:
 Provenance `job_id -probe` policy:
 
 - Exact `provenance.job.job_id === expectedJobId` still passes.
-- `expectedJobId + "-probe"` is accepted only through an explicit compatibility policy.
+- `expectedJobId + "-probe"` is rejected by default.
+- `expectedJobId + "-probe"` is accepted only when the caller explicitly sets
+  `allowProbeJobIdSuffix: true`.
 - The verifier records `canonicalJobId`, `provenanceJobId`, `provenanceJobIdPolicy=accepted-probe-suffix`, and warning `provenance-job-id-probe-suffix-accepted`.
 - Arbitrary job IDs still fail with `job-id-mismatch`.
 - Product code does not mutate parsed provenance to pretend IDs are identical.
@@ -63,13 +72,20 @@ Provenance `job_id -probe` policy:
 Explicit new-version dry-run conflict semantics:
 
 - `applyCleanMetadataPersistencePlan()` now permits `DRY_RUN_SUCCESS` over aligned completed previous-version metadata only when `allowRealApply=false` and `plan.newVersionIntent.intent=create-new-version`.
-- The policy requires previous task jobId, previous assetVersion, completed task/material metadata, and a different target version.
+- The policy requires previous task jobId, previous assetVersion, completed
+  task/material metadata, a different target version, and
+  `plan.newVersionIntent.newAssetVersion` exactly matching the target patch
+  version.
 - `allowRealApply=true` remains blocked by `BLOCKED_EXISTING_TOC_REBUILD_METADATA` for this conflict shape.
 
 ## 4. Focused Tests Added
 
-- `cleanservice-output-verifier-smoke`: added bounded `-probe` acceptance and unrelated-job rejection.
-- `cleanservice-metadata-apply-executor-smoke`: added explicit `v2 -> v3` dry-run conflict success and real-apply blocking.
+- `cleanservice-output-verifier-smoke`: added omitted/false policy `-probe`
+  rejection, explicit opt-in bounded `-probe` acceptance, exact ID success,
+  and unrelated-job rejection.
+- `cleanservice-metadata-apply-executor-smoke`: added explicit `v2 -> v3`
+  dry-run conflict success, real-apply blocking, and intent target-version
+  mismatch blocking.
 - `cleanservice-orchestration-runner-smoke`: added Task 256-shaped product-chain case with no top-level provenance, `-probe` provenance jobId, real verifier/candidate/planner/apply dry-run path, and no DB writes.
 
 ## 5. Checks
@@ -87,6 +103,7 @@ node --check server/tests/cleanservice-metadata-apply-executor-smoke.mjs: exit 0
 node server/tests/cleanservice-orchestration-runner-smoke.mjs: exit 0, 24/24
 node server/tests/cleanservice-output-verifier-smoke.mjs: exit 0, 9/9
 node server/tests/cleanservice-metadata-apply-executor-smoke.mjs: exit 0
+node server/tests/cleanservice-orchestration-runner-smoke.mjs && node server/tests/cleanservice-output-verifier-smoke.mjs && node server/tests/cleanservice-metadata-apply-executor-smoke.mjs: exit 0
 mock-safe cleanservice-*.mjs loop excluding Task 256 runtime harness: exit 0
 npx pnpm@10.4.1 exec tsc --noEmit: exit 0
 git diff --name-status origin/main...HEAD: exit 0

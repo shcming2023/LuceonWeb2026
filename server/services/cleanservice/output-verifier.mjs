@@ -40,7 +40,7 @@ function verifyProvenanceShape(provenance, expected = {}) {
   if (expected.assetVersion && provenance.asset?.asset_version !== expected.assetVersion) errors.push('asset-version-mismatch');
   const provenanceJobId = provenance.job?.job_id || null;
   if (expected.jobId && provenanceJobId !== expected.jobId) {
-    if (provenanceJobId === `${expected.jobId}-probe` && expected.allowProbeJobIdSuffix !== false) {
+    if (provenanceJobId === `${expected.jobId}-probe` && expected.allowProbeJobIdSuffix === true) {
       warnings.push('provenance-job-id-probe-suffix-accepted');
       provenanceJobIdPolicy = 'accepted-probe-suffix';
     } else {

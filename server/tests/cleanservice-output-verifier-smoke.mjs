@@ -341,11 +341,29 @@ async function runTests() {
       ],
     });
 
-    const files = generateFixtures({ provenance: probeProvenance });
-    const reader = new FakeArtifactReader(files);
-    const result = await verifyCleanServiceOutputArtifacts(mockCompletedJob(), {
-      artifactReader: reader,
+    const strictResult = await verifyCleanServiceOutputArtifacts(mockCompletedJob(), {
+      artifactReader: new FakeArtifactReader(generateFixtures({ provenance: probeProvenance })),
       expected: expectedOpts,
+    });
+    assert.equal(strictResult.ok, false);
+    assert.equal(strictResult.errors.includes('job-id-mismatch'), true);
+
+    const falsePolicyResult = await verifyCleanServiceOutputArtifacts(mockCompletedJob(), {
+      artifactReader: new FakeArtifactReader(generateFixtures({ provenance: probeProvenance })),
+      expected: {
+        ...expectedOpts,
+        allowProbeJobIdSuffix: false,
+      },
+    });
+    assert.equal(falsePolicyResult.ok, false);
+    assert.equal(falsePolicyResult.errors.includes('job-id-mismatch'), true);
+
+    const result = await verifyCleanServiceOutputArtifacts(mockCompletedJob(), {
+      artifactReader: new FakeArtifactReader(generateFixtures({ provenance: probeProvenance })),
+      expected: {
+        ...expectedOpts,
+        allowProbeJobIdSuffix: true,
+      },
     });
 
     assert.equal(result.ok, true);
@@ -354,13 +372,22 @@ async function runTests() {
     assert.equal(result.provenanceJobIdPolicy, 'accepted-probe-suffix');
     assert.equal(result.warnings.includes('provenance-job-id-probe-suffix-accepted'), true);
 
+    const exactResult = await verifyCleanServiceOutputArtifacts(mockCompletedJob(), {
+      artifactReader: new FakeArtifactReader(generateFixtures()),
+      expected: expectedOpts,
+    });
+    assert.equal(exactResult.ok, true);
+
     const unrelatedProvenance = JSON.stringify({
       ...JSON.parse(probeProvenance),
       job: { job_id: 'different-job-id-probe', parse_task_id: 'task-clean-248' },
     });
     const badResult = await verifyCleanServiceOutputArtifacts(mockCompletedJob(), {
       artifactReader: new FakeArtifactReader(generateFixtures({ provenance: unrelatedProvenance })),
-      expected: expectedOpts,
+      expected: {
+        ...expectedOpts,
+        allowProbeJobIdSuffix: true,
+      },
     });
     assert.equal(badResult.ok, false);
     assert.equal(badResult.errors.includes('job-id-mismatch'), true);

@@ -83,7 +83,9 @@ function canDryRunExplicitNewVersionOverExistingMetadata({
 
   const previousVersion = plan.newVersionIntent.previousAssetVersion;
   const previousJobId = plan.newVersionIntent.previousJobId;
+  const newVersion = plan.newVersionIntent.newAssetVersion;
   if (!previousVersion || !previousJobId) return false;
+  if (newVersion !== targetVersion) return false;
   if (targetVersion === previousVersion) return false;
 
   return existingTaskJob.jobId === previousJobId &&

@@ -554,6 +554,26 @@ async function runTests() {
     assert.equal(realApplyAttempt.ok, false);
     assert.equal(realApplyAttempt.classification, 'BLOCKED_EXISTING_TOC_REBUILD_METADATA');
     assert.equal(mockDb.calls.length, 0);
+
+    const mismatchedIntentPlan = {
+      ...plan,
+      newVersionIntent: {
+        ...plan.newVersionIntent,
+        newAssetVersion: 'v4',
+      },
+    };
+    const mismatchedIntentResult = await applyCleanMetadataPersistencePlan({
+      plan: mismatchedIntentPlan,
+      taskId: targetTaskId,
+      materialId: targetMaterialId,
+      dbClient: mockDb,
+      existingTask: existingTaskV2,
+      existingMaterial: existingMaterialV2,
+      allowRealApply: false,
+    });
+    assert.equal(mismatchedIntentResult.ok, false);
+    assert.equal(mismatchedIntentResult.classification, 'BLOCKED_EXISTING_TOC_REBUILD_METADATA');
+    assert.equal(mockDb.calls.length, 0);
   }
 
   console.log('All apply-executor smoke cases passed successfully!');
