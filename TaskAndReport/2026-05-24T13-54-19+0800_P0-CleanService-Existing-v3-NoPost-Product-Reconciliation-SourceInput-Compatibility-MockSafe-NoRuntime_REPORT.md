@@ -1,6 +1,6 @@
 # Task 261 Report: CleanService Existing v3 No-POST Reconciliation And SourceInput Compatibility
 
-Report time: 2026-05-24T14:05:45+0800
+Report time: 2026-05-24T14:21:23+0800
 
 ## 1. Branch And HEAD
 
@@ -19,12 +19,21 @@ Base HEAD at task sync:
 `origin/main` at task sync:
 
 ```text
-865499d230c490e4917f73c96c6fe2dc11125fdb
+470ed948775bb9529b94157e8bf8eb09cc501358
 ```
 
 Final pushed branch HEAD is reported in the Lucode handoff message after commit
 and push. This report is part of that final control-plane commit, so it cannot
 embed its own final commit hash without changing it.
+
+Return-review baseline:
+
+```text
+origin/main@470ed948775bb9529b94157e8bf8eb09cc501358
+```
+
+The branch was rebased onto the return-review mainline before the narrow
+correction.
 
 ## 2. Changed Files
 
@@ -51,6 +60,10 @@ Source-input compatibility:
 - The fallback requires `bucket=eduassets-raw`, object path
   `mineru/<materialId>/vN/content_list_v2.json`, and a present SHA256.
 - Fallback size is propagated when available.
+- Source-input object paths are validated by splitting path segments and doing
+  literal segment comparisons, not by interpolating material/version values into
+  a dynamic regex.
+- Version segments are constrained to numeric `vN` shape.
 - Legacy parsed evidence alone still routes through the existing skipped-policy
   behavior and is not promoted into a source input.
 
@@ -84,6 +97,9 @@ Preserved behavior:
 - non-completed fallback is rejected;
 - fallback without SHA256 is rejected;
 - fallback object path for the wrong material is rejected.
+- material IDs containing regex metacharacters are matched literally
+  (`mat.260` accepts only `mineru/mat.260/...`, not `mineru/matX260/...`);
+- non-numeric version segments such as `vABC` are rejected.
 
 `server/tests/cleanservice-orchestration-runner-smoke.mjs`:
 
@@ -108,6 +124,16 @@ node server/tests/cleanservice-raw-material-adapter-smoke.mjs: exit 0
 node server/tests/cleanservice-orchestration-runner-smoke.mjs: exit 0, 26/26
 node server/tests/cleanservice-output-verifier-smoke.mjs: exit 0, 9/9
 node server/tests/cleanservice-metadata-apply-executor-smoke.mjs: exit 0
+mock-safe cleanservice-*.mjs loop excluding Task 256 runtime harness: exit 0
+npx pnpm@10.4.1 exec tsc --noEmit: exit 0
+```
+
+Return-fix focused checks:
+
+```text
+node --check server/services/cleanservice/raw-material-adapter.mjs && node --check server/tests/cleanservice-raw-material-adapter-smoke.mjs: exit 0
+node server/tests/cleanservice-raw-material-adapter-smoke.mjs: exit 0
+node server/tests/cleanservice-orchestration-runner-smoke.mjs: exit 0, 26/26
 mock-safe cleanservice-*.mjs loop excluding Task 256 runtime harness: exit 0
 npx pnpm@10.4.1 exec tsc --noEmit: exit 0
 ```

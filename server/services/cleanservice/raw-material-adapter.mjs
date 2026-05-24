@@ -1,6 +1,7 @@
 const RAW_BUCKET = 'eduassets-raw';
 const DEFAULT_SERVICE_NAME = 'toc-rebuild';
 const COMPLETED_STATES = new Set(['completed']);
+const CONTENT_LIST_OBJECT_RE = /^v\d+$/;
 
 function hasLegacyParsedEvidence(metadata = {}) {
   const parsedFilesCount = Number(metadata.parsedFilesCount || 0);
@@ -24,12 +25,17 @@ function validateContentListV2Source({ task, source, rawMaterialVersion, require
     throw new Error('invalid-raw-material: object must end with /content_list_v2.json');
   }
 
-  const materialId = task.materialId;
-  const expectedPattern = rawMaterialVersion
-    ? new RegExp(`^mineru/${materialId}/${rawMaterialVersion}/content_list_v2\\.json$`)
-    : new RegExp(`^mineru/${materialId}/v[^/]+/content_list_v2\\.json$`);
+  const [prefix, objectMaterialId, objectVersion, filename, ...extraParts] = object.split('/');
+  const materialId = String(task.materialId);
 
-  if (!expectedPattern.test(object)) {
+  if (
+    prefix !== 'mineru' ||
+    objectMaterialId !== materialId ||
+    filename !== 'content_list_v2.json' ||
+    extraParts.length > 0 ||
+    !CONTENT_LIST_OBJECT_RE.test(objectVersion) ||
+    (rawMaterialVersion && objectVersion !== rawMaterialVersion)
+  ) {
     throw new Error('invalid-raw-material: object path mismatch');
   }
 

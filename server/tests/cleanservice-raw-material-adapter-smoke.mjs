@@ -152,6 +152,58 @@ function run() {
     }
   }), /invalid-raw-material: object path mismatch/);
 
+  // Test materialId is matched literally and regex metacharacters cannot broaden the path
+  const dottedMaterialRef = buildCanonicalRawMaterialRef({
+    materialId: 'mat.260',
+    metadata: {
+      cleanServiceJobs: {
+        'toc-rebuild': {
+          status: 'completed',
+          sourceInput: {
+            bucket: 'eduassets-raw',
+            object: 'mineru/mat.260/v1/content_list_v2.json',
+            sha256: 'dotted-sha'
+          }
+        }
+      }
+    }
+  });
+  assert.equal(dottedMaterialRef.source.object, 'mineru/mat.260/v1/content_list_v2.json');
+  assert.equal(dottedMaterialRef.hash, 'dotted-sha');
+
+  assert.throws(() => buildCanonicalRawMaterialRef({
+    materialId: 'mat.260',
+    metadata: {
+      cleanServiceJobs: {
+        'toc-rebuild': {
+          status: 'completed',
+          sourceInput: {
+            bucket: 'eduassets-raw',
+            object: 'mineru/matX260/v1/content_list_v2.json',
+            sha256: 'dotted-sha'
+          }
+        }
+      }
+    }
+  }), /invalid-raw-material: object path mismatch/);
+
+  // Test version segment is constrained to numeric vN shape
+  assert.throws(() => buildCanonicalRawMaterialRef({
+    materialId: 'mat-1',
+    metadata: {
+      cleanServiceJobs: {
+        'toc-rebuild': {
+          status: 'completed',
+          sourceInput: {
+            bucket: 'eduassets-raw',
+            object: 'mineru/mat-1/vABC/content_list_v2.json',
+            sha256: 'fallback-sha'
+          }
+        }
+      }
+    }
+  }), /invalid-raw-material: object path mismatch/);
+
   console.log('PASS raw material adapter smoke');
 }
 
