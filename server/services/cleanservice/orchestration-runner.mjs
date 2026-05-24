@@ -170,6 +170,13 @@ export async function runCleanServiceTocRebuildOnce({
       targetAssetVersion: config.targetAssetVersion,
       previousAssetVersion: existingTaskJob?.assetVersion || null,
     });
+    if (versionPlan.targetAssetVersion) {
+      versionPlan = {
+        ...versionPlan,
+        previousAssetVersion: existingTaskJob?.assetVersion || null,
+        previousJobId: existingTaskJob?.jobId || null,
+      };
+    }
   } catch (err) {
     return {
       ok: false,
@@ -234,6 +241,7 @@ export async function runCleanServiceTocRebuildOnce({
   }, {
     ...config,
     previousAssetVersion: existingTaskJob?.assetVersion || null,
+    resolvedAssetVersion: versionPlan.targetAssetVersion ? versionPlan : null,
   }, { submittedAt: getNow() });
 
   let queryResult;

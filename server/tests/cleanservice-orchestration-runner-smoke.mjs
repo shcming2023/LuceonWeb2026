@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { runCleanServiceTocRebuildOnce } from '../services/cleanservice/orchestration-runner.mjs';
+import { buildCleanServiceJobRequest } from '../services/cleanservice/cleanservice-worker.mjs';
 import { buildCleanMetadataPersistencePlan } from '../services/cleanservice/metadata-persistence.mjs';
 
 // Helper to construct ObjectRef
@@ -1422,7 +1423,66 @@ async function runTests() {
     assert.equal(belowDefault.classification, 'BLOCKED_TARGET_ASSET_VERSION_BELOW_DEFAULT');
   }
 
-  console.log('ALL cleanservice orchestration runner smoke tests PASSED! (28/28)');
+  // Test 29: direct request builder cannot bypass targetAssetVersion gates
+  {
+    console.log('  [29] Testing direct request builder targetAssetVersion bypass blocking...');
+    const prevJobId = 'luceon-task-clean-123-toc-rebuild-v2';
+    const task = makeBaseTask({
+      metadata: {
+        ...makeBaseTask().metadata,
+        cleanServiceJobs: {
+          'toc-rebuild': { jobId: prevJobId, assetVersion: 'v2', status: 'completed' },
+        },
+      },
+    });
+    const baseTargetConfig = makeBaseConfig({
+      intent: 'create-new-version',
+      newVersionReason: 'director-authorized-v4-after-diagnostic-v3',
+      targetAssetVersion: 'v4',
+    });
+
+    assert.throws(() => buildCleanServiceJobRequest(task, baseTargetConfig), /target-asset-version-requires-resolved-version-plan/);
+    assert.throws(() => buildCleanServiceJobRequest(task, {
+      ...baseTargetConfig,
+      newVersionReason: '',
+      resolvedAssetVersion: {
+        assetVersion: 'v4',
+        defaultAllocatedAssetVersion: 'v3',
+        targetAssetVersion: 'v4',
+        previousAssetVersion: 'v2',
+        previousJobId: prevJobId,
+        resolvedBy: 'targetAssetVersion',
+      },
+    }), /new-version-reason-required/);
+    assert.throws(() => buildCleanServiceJobRequest(task, {
+      ...baseTargetConfig,
+      resolvedAssetVersion: {
+        assetVersion: 'v4',
+        defaultAllocatedAssetVersion: 'v3',
+        targetAssetVersion: 'v4',
+        previousAssetVersion: 'v2',
+        previousJobId: null,
+        resolvedBy: 'targetAssetVersion',
+      },
+    }), /target-asset-version-requires-previous-job-id/);
+
+    const request = buildCleanServiceJobRequest(task, {
+      ...baseTargetConfig,
+      resolvedAssetVersion: {
+        assetVersion: 'v4',
+        defaultAllocatedAssetVersion: 'v3',
+        targetAssetVersion: 'v4',
+        previousAssetVersion: 'v2',
+        previousJobId: prevJobId,
+        resolvedBy: 'targetAssetVersion',
+      },
+    });
+    assert.equal(request.asset_version, 'v4');
+    assert.equal(request.job_id, 'luceon-task-clean-123-toc-rebuild-v4');
+    assert.equal(request.sink.prefix, 'toc-rebuild/1842780526581841/v4/');
+  }
+
+  console.log('ALL cleanservice orchestration runner smoke tests PASSED! (29/29)');
 }
 
 runTests().catch(err => {

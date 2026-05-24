@@ -81,9 +81,25 @@ function run() {
   }), /invalid-target-asset-version/);
 
   assert.throws(() => resolveAssetVersion(targetTask, 'toc-rebuild', {
+    targetAssetVersion: 'v4',
+  }), /target-asset-version-requires-previous-version/);
+
+  assert.throws(() => resolveAssetVersion(targetTask, 'toc-rebuild', {
     targetAssetVersion: 'v2',
     previousAssetVersion: 'v2',
   }), /target-asset-version-below-default|target-asset-version-not-greater-than-previous/);
+
+  const activeDuplicateTask = {
+    metadata: {
+      cleanServiceJobs: {
+        'toc-rebuild': { cleanState: 'running', assetVersion: 'v2' }
+      }
+    }
+  };
+  assert.throws(() => resolveAssetVersion(activeDuplicateTask, 'toc-rebuild', {
+    targetAssetVersion: 'v4',
+    previousAssetVersion: 'v2',
+  }), /target-asset-version-blocked-by-active-duplicate/);
 
   console.log('PASS asset version allocator smoke');
 }

@@ -80,6 +80,18 @@ export function resolveAssetVersion(task, serviceName = 'toc-rebuild', {
     throw error;
   }
 
+  if (allocation.isActiveDuplicate) {
+    const error = new Error('target-asset-version-blocked-by-active-duplicate');
+    error.code = 'BLOCKED_ACTIVE_CLEANSERVICE_DUPLICATE';
+    throw error;
+  }
+
+  if (!previousAssetVersion) {
+    const error = new Error('target-asset-version-requires-previous-version');
+    error.code = 'BLOCKED_TARGET_ASSET_VERSION_REQUIRES_PREVIOUS_VERSION';
+    throw error;
+  }
+
   const defaultCompare = compareAssetVersions(targetAssetVersion, defaultAllocatedAssetVersion);
   if (defaultCompare === null || defaultCompare < 0) {
     const error = new Error('target-asset-version-below-default');
@@ -87,13 +99,11 @@ export function resolveAssetVersion(task, serviceName = 'toc-rebuild', {
     throw error;
   }
 
-  if (previousAssetVersion) {
-    const previousCompare = compareAssetVersions(targetAssetVersion, previousAssetVersion);
-    if (previousCompare === null || previousCompare <= 0) {
-      const error = new Error('target-asset-version-not-greater-than-previous');
-      error.code = 'BLOCKED_TARGET_ASSET_VERSION_NOT_GREATER_THAN_PREVIOUS';
-      throw error;
-    }
+  const previousCompare = compareAssetVersions(targetAssetVersion, previousAssetVersion);
+  if (previousCompare === null || previousCompare <= 0) {
+    const error = new Error('target-asset-version-not-greater-than-previous');
+    error.code = 'BLOCKED_TARGET_ASSET_VERSION_NOT_GREATER_THAN_PREVIOUS';
+    throw error;
   }
 
   return {

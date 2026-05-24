@@ -1,6 +1,6 @@
 # Task 265 Report: CleanService targetAssetVersion v4 Mock-Safe Implementation
 
-Report time: 2026-05-24T15:26:22+0800
+Report time: 2026-05-24T15:56:00+0800
 
 ## 1. Task And Branch
 
@@ -22,15 +22,21 @@ Branch:
 lucode/TASK-20260524-151650-P0-CleanService-targetAssetVersion-v4-Override-MockSafe-Planning-to-Code-NoRuntime-NoDBWrite
 ```
 
-Implementation baseline:
+Implementation baseline after Luceon return:
 
 ```text
-HEAD = origin/main = 2116432c5661a2e7186021e8f4f12e4500472c26
+HEAD = origin/main = f5e774724938cab64475a56862a4ce5601e2f22f
 ```
 
-Final pushed branch HEAD is reported in the Lucode handoff after commit and
-push. This report is part of that final commit, so it cannot embed its own final
-hash without changing it.
+Returned branch reviewed by Luceon:
+
+```text
+origin/lucode/TASK-20260524-151650-P0-CleanService-targetAssetVersion-v4-Override-MockSafe-Planning-to-Code-NoRuntime-NoDBWrite@6b35e796a8043d37ab1d983d0062d66071dc7451
+```
+
+Final pushed branch HEAD is reported in the Lucode handoff after commit and push.
+This report is part of that final commit, so it cannot embed its own final hash
+without changing it.
 
 ## 2. Files Changed
 
@@ -57,12 +63,18 @@ No files outside the allowed task surface were edited.
   optionally resolving an explicit `targetAssetVersion`;
 - rejects invalid targets and targets below default allocation or not greater
   than the previous accepted version.
+- return fix: explicit target planning now also rejects missing previous version
+  and active duplicate CleanService state before a target can be resolved.
 
 `cleanservice-worker.mjs`:
 
 - request planning now uses `resolveAssetVersion()`;
 - direct request planning rejects `targetAssetVersion` unless
   `intent=create-new-version`;
+- return fix: direct exported request planning no longer accepts raw
+  `targetAssetVersion`; it requires a pre-resolved `resolvedAssetVersion` plan
+  produced by the gated orchestration path, including non-empty reason,
+  previous asset version, and previous job id;
 - target planning still feeds the same job id, `asset_version`, and sink prefix
   fields used by the existing protocol request.
 
@@ -73,6 +85,9 @@ No files outside the allowed task surface were edited.
 - validates and resolves the target version after completed/aligned history
   preconditions pass;
 - passes the resolved target to request planning without double allocation;
+- return fix: passes the gated version plan, previous asset version, and
+  previous job id into the request builder instead of letting the builder
+  independently resolve a target;
 - records `defaultAllocatedAssetVersion`, `targetAssetVersion`, and final
   `newAssetVersion` in `plan.newVersionIntent` and bounded result audit.
 
@@ -112,6 +127,12 @@ Explicit target behavior:
 | `targetAssetVersion` requires `create-new-version` | New runner negative test |
 | `newVersionReason` remains required | Existing runner negative test |
 | Completed/aligned two-sided history remains required | Existing runner negative tests |
+| Direct exported builder cannot turn fresh/no-history target v4 into a request | New direct builder negative test |
+| Direct builder target path requires pre-resolved plan | New direct builder negative test |
+| Direct builder target path requires non-empty reason | New direct builder negative test |
+| Direct builder target path requires previous job id | New direct builder negative test |
+| Helper target path requires previous version | New asset-version negative test |
+| Helper target path blocks active duplicate | New asset-version negative test |
 | Invalid version such as `vABC` blocks | New asset-version and runner negative tests |
 | Equal/downgrade/below-default target blocks | New asset-version and runner negative tests |
 | Request/job/sink/verifier/plan/audit agree on v4 | New runner positive test |
@@ -128,9 +149,10 @@ Explicit target behavior:
 | `git checkout main` | 0 | already synchronized before branch |
 | `git pull --ff-only origin main` | 0 | fast-forwarded to task dispatch state |
 | `git checkout -b lucode/TASK-20260524-151650-P0-CleanService-targetAssetVersion-v4-Override-MockSafe-Planning-to-Code-NoRuntime-NoDBWrite` | 0 | scoped branch created |
+| `git rebase origin/main` | 0 | rebased onto return review main; ledger conflict resolved preserving returned Task 265 row before fix |
 | `node --check` for changed source/tests | 0 | no syntax errors |
 | `node server/tests/cleanservice-asset-version-smoke.mjs` | 0 | PASS |
-| `node server/tests/cleanservice-orchestration-runner-smoke.mjs` | 0 | PASS 28/28 |
+| `node server/tests/cleanservice-orchestration-runner-smoke.mjs` | 0 | PASS 29/29 |
 | `node server/tests/cleanservice-metadata-apply-executor-smoke.mjs` | 0 | PASS |
 | `npx pnpm@10.4.1 exec tsc --noEmit` | 0 | PASS |
 | mock-safe `cleanservice-*.mjs` loop excluding Task 256 runtime harness | 0 | PASS |

@@ -1,7 +1,7 @@
 import { loadCleanServiceConfig } from './config.mjs';
 import { createCleanServiceClient } from './protocol.mjs';
 import { buildCanonicalRawMaterialRef, hasUsableRawMaterialSourceInput } from './raw-material-adapter.mjs';
-import { allocateAssetVersion, resolveAssetVersion } from './asset-version.mjs';
+import { allocateAssetVersion, parseAssetVersionNumber, resolveAssetVersion } from './asset-version.mjs';
 
 const ELIGIBLE_TASK_STATES = new Set([
   'review-pending',
@@ -53,16 +53,62 @@ export function isCleanServiceTaskEligible(task = {}, { serviceName = 'toc-rebui
 
 export function buildCleanServiceJobRequest(task = {}, config = loadCleanServiceConfig(), { submittedAt = new Date().toISOString() } = {}) {
   const serviceName = config.serviceName || 'toc-rebuild';
-  if (config.targetAssetVersion && config.intent !== 'create-new-version') {
+  const hasTargetAssetVersion = config.targetAssetVersion !== undefined &&
+    config.targetAssetVersion !== null &&
+    config.targetAssetVersion !== '';
+  const resolvedAssetVersion = config.resolvedAssetVersion || null;
+
+  if (hasTargetAssetVersion && config.intent !== 'create-new-version') {
     const error = new Error('target-asset-version-requires-new-version-intent');
     error.code = 'BLOCKED_TARGET_ASSET_VERSION_REQUIRES_NEW_VERSION_INTENT';
     throw error;
   }
 
-  const { assetVersion } = resolveAssetVersion(task, serviceName, {
-    targetAssetVersion: config.targetAssetVersion,
-    previousAssetVersion: config.previousAssetVersion || task.metadata?.cleanServiceJobs?.[serviceName]?.assetVersion || null,
-  });
+  if (hasTargetAssetVersion && !resolvedAssetVersion) {
+    const error = new Error('target-asset-version-requires-resolved-version-plan');
+    error.code = 'BLOCKED_TARGET_ASSET_VERSION_REQUIRES_RESOLVED_VERSION_PLAN';
+    throw error;
+  }
+
+  if (resolvedAssetVersion) {
+    if (config.intent !== 'create-new-version') {
+      const error = new Error('resolved-asset-version-requires-new-version-intent');
+      error.code = 'BLOCKED_TARGET_ASSET_VERSION_REQUIRES_NEW_VERSION_INTENT';
+      throw error;
+    }
+    if (!config.newVersionReason || typeof config.newVersionReason !== 'string' || config.newVersionReason.trim() === '') {
+      const error = new Error('new-version-reason-required');
+      error.code = 'BLOCKED_NEW_VERSION_REASON_REQUIRED';
+      throw error;
+    }
+    if (parseAssetVersionNumber(resolvedAssetVersion.assetVersion) === null) {
+      const error = new Error('invalid-resolved-asset-version');
+      error.code = 'BLOCKED_INVALID_TARGET_ASSET_VERSION';
+      throw error;
+    }
+    if (hasTargetAssetVersion && resolvedAssetVersion.assetVersion !== config.targetAssetVersion) {
+      const error = new Error('target-asset-version-resolved-plan-mismatch');
+      error.code = 'BLOCKED_TARGET_ASSET_VERSION_RESOLVED_PLAN_MISMATCH';
+      throw error;
+    }
+    if (hasTargetAssetVersion && resolvedAssetVersion.targetAssetVersion !== config.targetAssetVersion) {
+      const error = new Error('target-asset-version-resolved-plan-mismatch');
+      error.code = 'BLOCKED_TARGET_ASSET_VERSION_RESOLVED_PLAN_MISMATCH';
+      throw error;
+    }
+    if (hasTargetAssetVersion && !resolvedAssetVersion.previousAssetVersion) {
+      const error = new Error('target-asset-version-requires-previous-version');
+      error.code = 'BLOCKED_TARGET_ASSET_VERSION_REQUIRES_PREVIOUS_VERSION';
+      throw error;
+    }
+    if (hasTargetAssetVersion && !resolvedAssetVersion.previousJobId) {
+      const error = new Error('target-asset-version-requires-previous-job-id');
+      error.code = 'BLOCKED_TARGET_ASSET_VERSION_REQUIRES_PREVIOUS_JOB_ID';
+      throw error;
+    }
+  }
+
+  const { assetVersion } = resolvedAssetVersion || resolveAssetVersion(task, serviceName);
 
   const inputRef = buildCanonicalRawMaterialRef(task, { serviceName });
   inputRef.source.endpoint = config.storageEndpoint;
