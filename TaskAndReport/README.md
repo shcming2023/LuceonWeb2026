@@ -109,6 +109,19 @@ Lucode completion reports should include:
 
 Lucode should not mutate production data, run production deployment, or merge to `main` unless a task brief explicitly authorizes that. Luceon is responsible for acceptance review and final merge/ledger closure unless the user gives different instructions.
 
+## Lucode Branch Handoff Contract
+
+Lucode completion normally updates the report and task-ledger row on the Lucode branch, not on `origin/main`.
+
+Required Lucode handoff signals:
+
+- push a remote `lucode/<task-id-or-short-slug>` branch;
+- record the exact pushed branch and full HEAD in the report and final reply;
+- update the branch-local task row to `Status=Lucode 已回报待 Luceon 审查`, `Next Actor=Luceon`;
+- keep `origin/main` unchanged until Luceon reviews and integrates the branch.
+
+When Luceon `check task` finds no open `Next Actor=Luceon` row on `origin/main`, it must inspect the earliest open `Next Actor=Lucode` row for a matching remote Lucode branch. If that branch's task row has been handed off to Luceon, Luceon treats the branch as a pending review even though main still shows Lucode.
+
 ## Luceon `check task`
 
 When the user says `check task` in the Luceon thread, Luceon must:
@@ -116,7 +129,7 @@ When the user says `check task` in the Luceon thread, Luceon must:
 1. synchronize with GitHub (`git fetch origin --prune --tags`, then fast-forward `main` when safe);
 2. read only `TaskAndReport/TASK_TRACKING_LIST.md` first;
 3. find the earliest open row with `Next Actor=Luceon`;
-4. if no such row exists, report "当前无 Luceon 待处理任务" and stop;
+4. if no such row exists, run the Lucode branch handoff check above before reporting "当前无 Luceon 待处理任务";
 5. if `Next Actor=User` rows exist, mention the decision id and the decision needed, then stop unless the user asks to continue;
 6. only after finding a Luceon row, read the related task brief, Lucode report, branch, evidence, and task-relevant docs;
 7. perform the listed `Next Action`;

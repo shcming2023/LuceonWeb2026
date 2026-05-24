@@ -95,10 +95,12 @@ When the user says `Lucode, check task`:
 6. Read only the directly relevant docs and source files named or implied by that task brief.
 7. Execute only the task scope.
 8. Write the required `*_REPORT.md`.
-9. Update `TaskAndReport/TASK_TRACKING_LIST.md` to `Lucode 已回报待 Luceon 审查`, `Next Actor=Luceon`.
+9. Update the branch-local `TaskAndReport/TASK_TRACKING_LIST.md` row to `Lucode 已回报待 Luceon 审查`, `Next Actor=Luceon`.
 10. Commit and push the branch to GitHub.
 
 Do not rely on stale local-only task state. If the local ledger differs from GitHub after sync, GitHub wins.
+
+Important handoff detail: Lucode's ledger update lives on the Lucode branch until Luceon reviews and integrates it. `origin/main` may still show `Next Actor=Lucode`; that is expected. Luceon detects completion by inspecting the remote `lucode/<task-id-or-short-slug>` branch.
 
 ## 4. Branch Rule
 
@@ -179,9 +181,11 @@ The report must be written under `TaskAndReport/` and include:
 - whether Luceon review is required;
 - whether production validation/deployment is requested, if relevant.
 
+The branch and HEAD must include the exact pushed remote branch and full commit SHA. Do not write placeholders such as "as pushed".
+
 ## 9. Ledger Update Rule
 
-After completing the task, update the task row:
+After completing the task, update the branch-local task row:
 
 - `Status=Lucode 已回报待 Luceon 审查`
 - `Next Actor=Luceon`
@@ -202,7 +206,7 @@ If blocked:
 After pushing, Lucode should reply briefly with:
 
 - task found/executed;
-- branch and HEAD;
+- exact pushed remote branch and full HEAD;
 - report path;
 - checks summary;
 - whether waiting for Luceon review;

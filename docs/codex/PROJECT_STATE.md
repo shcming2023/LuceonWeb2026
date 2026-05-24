@@ -73,6 +73,8 @@ The shared control plane is GitHub `main` plus task/report branches in `https://
 
 Initial Lucode triggering is manual: after Luceon issues or returns a task, the user sends `Lucode, check task` in the Lucode thread. A heartbeat automation may be added later only after the manual flow is stable.
 
+Lucode handoff is branch-local until Luceon review: Lucode pushes a `lucode/<task-id-or-short-slug>` branch whose ledger row may say `Next Actor=Luceon` while `origin/main` still says `Next Actor=Lucode`. Luceon `check task` must inspect that matching remote branch before concluding there is no Luceon task.
+
 Luceon may explicitly use Codex subagents for bounded exploration, tests, log analysis, evidence extraction, or review assistance when the user authorizes subagent or parallel-agent work for the current task. Subagents are internal Luceon helpers, not project roles or task-ledger actors.
 
 Archived workflow material:

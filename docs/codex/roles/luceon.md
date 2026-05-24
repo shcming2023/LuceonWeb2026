@@ -55,7 +55,7 @@ Then:
 
 1. read only `TaskAndReport/TASK_TRACKING_LIST.md` first;
 2. process the earliest open row where `Next Actor=Luceon`;
-3. if there is no Luceon row, give a short no-task reply and stop;
+3. if there is no Luceon row, check the earliest open `Next Actor=Lucode` row for a remote Lucode branch handoff before stopping;
 4. if there is a User decision row, identify the decision and recommended path, then stop unless the user asks to continue;
 5. only when a Luceon row exists, read the task brief, report, changed files, checks, evidence, and directly relevant docs;
 6. if the row references a Lucode branch, fetch and inspect that branch;
@@ -65,6 +65,21 @@ Then:
 10. commit and push Luceon changes.
 
 No-task wakeups are intentionally cheap: no broad doc reading, no validation commands, no production probing, no report writing, no commits, and no pushes.
+
+### Lucode Branch Handoff Detection
+
+Lucode normally commits its report and ledger handoff on a `lucode/<task-id-or-short-slug>` branch. That branch-local ledger may say `Next Actor=Luceon` before `origin/main` does.
+
+When `origin/main` has no open `Next Actor=Luceon` row, Luceon must perform one cheap handoff check against the earliest open `Next Actor=Lucode` row:
+
+1. identify the row's Task ID;
+2. look for a matching remote `origin/lucode/*<task-id>*` branch;
+3. if no matching branch exists, stop with the normal no-task reply and mention the earliest Lucode row;
+4. if a matching branch exists, inspect that branch's `TaskAndReport/TASK_TRACKING_LIST.md`;
+5. if the branch-local row is `Lucode 已回报待 Luceon 审查` or `Next Actor=Luceon`, treat it as a pending Luceon review, then read the branch report and diff against `origin/main`;
+6. if the branch-local row is still Lucode-owned, stop without review.
+
+This keeps `main` as the shared control plane while allowing Lucode's branch to carry the handoff signal before Luceon acceptance.
 
 ## Subagent Assistance
 
