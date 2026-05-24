@@ -1051,6 +1051,7 @@ async function runTests() {
     const config = makeBaseConfig({
       intent: 'create-new-version',
       newVersionReason: 'operator-requested-rerun',
+      allowProbeJobIdSuffix: true,
     });
 
     const expectedJobId = 'luceon-task-clean-123-toc-rebuild-v3';
@@ -1104,7 +1105,192 @@ async function runTests() {
     assert.equal(result.audit.newVersionIntent.newAssetVersion, 'v3');
   }
 
-  console.log('ALL cleanservice orchestration runner smoke tests PASSED! (24/24)');
+  // Test 25: existing v3 product reconciliation uses injected completed job without submit/query and accepts probe suffix only when explicit
+  {
+    console.log('  [25] Testing existing v3 no-POST reconciliation with sourceInput fallback...');
+    const taskId = 'task-1779085089451';
+    const materialId = '1842780526581841';
+    const expectedJobId = `luceon-${taskId}-toc-rebuild-v3`;
+    const prevJobId = `luceon-${taskId}-toc-rebuild-v2`;
+    const sourceInput = {
+      bucket: 'eduassets-raw',
+      object: `mineru/${materialId}/v1/content_list_v2.json`,
+      sha256: 'f05394af3ad6107cdb7324fcffeb13fb43dcbcbaff46f838f291828867e182db',
+      size_bytes: 31543,
+    };
+    const task = makeBaseTask({
+      id: taskId,
+      materialId,
+      metadata: {
+        rawMaterial: undefined,
+        mineruStatus: 'completed',
+        parsedPrefix: `parsed/${materialId}/`,
+        parsedFilesCount: 1,
+        cleanServiceJobs: {
+          'toc-rebuild': {
+            jobId: prevJobId,
+            assetVersion: 'v2',
+            status: 'completed',
+            sourceInput,
+          },
+        },
+      },
+    });
+    const material = makeBaseMaterial({
+      id: materialId,
+      metadata: {
+        cleanMaterials: {
+          'toc-rebuild': { latestVersion: 'v2', status: 'completed' },
+        },
+      },
+    });
+    const config = makeBaseConfig({
+      intent: 'create-new-version',
+      newVersionReason: 'existing-v3-product-reconciliation-no-post',
+      reconcileExistingJob: true,
+      allowProbeJobIdSuffix: true,
+    });
+
+    const probeProvenance = JSON.stringify({
+      schema: 'luceon-provenance/v1',
+      service: { name: 'toc-rebuild', version: '1.0.0', protocol_version: 'v1' },
+      asset: { material_id: materialId, asset_version: 'v3' },
+      job: { job_id: `${expectedJobId}-probe`, parse_task_id: taskId },
+      inputs: [sourceInput],
+    });
+    const reader = new FakeArtifactReader(generateFixtures({
+      materialId,
+      assetVersion: 'v3',
+      jobId: expectedJobId,
+      provenance: probeProvenance,
+    }));
+    let submitCalled = false;
+    let queryCalled = false;
+
+    const result = await runCleanServiceTocRebuildOnce({
+      task,
+      material,
+      config,
+      deps: {
+        submitJob: async () => {
+          submitCalled = true;
+          throw new Error('submitJob must not be called during reconciliation');
+        },
+        queryJob: async () => {
+          queryCalled = true;
+          throw new Error('queryJob must not be called during reconciliation');
+        },
+        existingCompletedJob: mockCompletedJob({
+          materialId,
+          assetVersion: 'v3',
+          jobId: expectedJobId,
+          parse_task_id: taskId,
+        }),
+        artifactReader: reader,
+        dbClient: {
+          updateTask: async () => { throw new Error('DB writes forbidden during dry-run'); },
+          updateMaterial: async () => { throw new Error('DB writes forbidden during dry-run'); },
+        },
+      },
+    });
+
+    assert.equal(submitCalled, false);
+    assert.equal(queryCalled, false);
+    assert.equal(result.ok, true);
+    assert.equal(result.classification, 'DRY_RUN_SUCCESS');
+    assert.equal(result.jobId, expectedJobId);
+    assert.equal(result.assetVersion, 'v3');
+    assert.equal(result.verificationSummary.sourceInput.object, sourceInput.object);
+    assert.equal(result.verificationSummary.sourceInput.sha256, sourceInput.sha256);
+    assert.equal(result.verificationSummary.canonicalJobId, expectedJobId);
+    assert.equal(result.verificationSummary.provenanceJobId, `${expectedJobId}-probe`);
+    assert.equal(result.verificationSummary.provenanceJobIdPolicy, 'accepted-probe-suffix');
+    assert.equal(result.audit.newVersionIntent.previousJobId, prevJobId);
+    assert.equal(result.audit.newVersionIntent.newAssetVersion, 'v3');
+  }
+
+  // Test 26: existing v3 reconciliation remains strict by default and rejects provenance -probe suffix
+  {
+    console.log('  [26] Testing existing v3 no-POST reconciliation rejects implicit probe suffix...');
+    const taskId = 'task-1779085089451';
+    const materialId = '1842780526581841';
+    const expectedJobId = `luceon-${taskId}-toc-rebuild-v3`;
+    const sourceInput = {
+      bucket: 'eduassets-raw',
+      object: `mineru/${materialId}/v1/content_list_v2.json`,
+      sha256: 'f05394af3ad6107cdb7324fcffeb13fb43dcbcbaff46f838f291828867e182db',
+      size_bytes: 31543,
+    };
+    const task = makeBaseTask({
+      id: taskId,
+      materialId,
+      metadata: {
+        rawMaterial: undefined,
+        mineruStatus: 'completed',
+        cleanServiceJobs: {
+          'toc-rebuild': {
+            jobId: `luceon-${taskId}-toc-rebuild-v2`,
+            assetVersion: 'v2',
+            status: 'completed',
+            sourceInput,
+          },
+        },
+      },
+    });
+    const material = makeBaseMaterial({
+      id: materialId,
+      metadata: {
+        cleanMaterials: {
+          'toc-rebuild': { latestVersion: 'v2', status: 'completed' },
+        },
+      },
+    });
+    const probeProvenance = JSON.stringify({
+      schema: 'luceon-provenance/v1',
+      service: { name: 'toc-rebuild', version: '1.0.0', protocol_version: 'v1' },
+      asset: { material_id: materialId, asset_version: 'v3' },
+      job: { job_id: `${expectedJobId}-probe`, parse_task_id: taskId },
+      inputs: [sourceInput],
+    });
+    let applyCalled = false;
+    const result = await runCleanServiceTocRebuildOnce({
+      task,
+      material,
+      config: makeBaseConfig({
+        intent: 'create-new-version',
+        newVersionReason: 'existing-v3-product-reconciliation-no-post',
+        reconcileExistingJob: true,
+      }),
+      deps: {
+        submitJob: async () => { throw new Error('submitJob must not be called during reconciliation'); },
+        queryJob: async () => { throw new Error('queryJob must not be called during reconciliation'); },
+        existingCompletedJob: mockCompletedJob({
+          materialId,
+          assetVersion: 'v3',
+          jobId: expectedJobId,
+          parse_task_id: taskId,
+        }),
+        artifactReader: new FakeArtifactReader(generateFixtures({
+          materialId,
+          assetVersion: 'v3',
+          jobId: expectedJobId,
+          provenance: probeProvenance,
+        })),
+        applyCleanMetadataPersistencePlan: async () => {
+          applyCalled = true;
+          return { ok: true };
+        },
+        dbClient: {},
+      },
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.classification, 'protocol-failure');
+    assert.equal(result.errors.includes('job-id-mismatch'), true);
+    assert.equal(applyCalled, false);
+  }
+
+  console.log('ALL cleanservice orchestration runner smoke tests PASSED! (26/26)');
 }
 
 runTests().catch(err => {

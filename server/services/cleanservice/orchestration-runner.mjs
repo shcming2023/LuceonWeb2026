@@ -201,43 +201,52 @@ export async function runCleanServiceTocRebuildOnce({
   // 6. Request Planning
   const request = buildCleanServiceJobRequest(task, config, { submittedAt: getNow() });
 
-  // 7. Submit Job Mock
-  const submitJobFn = deps.submitJob;
-  if (typeof submitJobFn !== 'function') {
-    return {
-      ok: false,
-      status: 'BLOCKED_RUNTIME_DEPENDENCY_LEAK',
-      classification: 'BLOCKED_RUNTIME_DEPENDENCY_LEAK',
-      reason: 'submitJob dependency is not configured/injected',
-      observedAt: getNow(),
-    };
+  let queryResult;
+  if (config.reconcileExistingJob === true) {
+    const existingJob = typeof deps.getExistingCompletedJob === 'function'
+      ? await deps.getExistingCompletedJob(request)
+      : deps.existingCompletedJob;
+    queryResult = { ok: Boolean(existingJob), job: existingJob };
+  } else {
+    // 7. Submit Job Mock
+    const submitJobFn = deps.submitJob;
+    if (typeof submitJobFn !== 'function') {
+      return {
+        ok: false,
+        status: 'BLOCKED_RUNTIME_DEPENDENCY_LEAK',
+        classification: 'BLOCKED_RUNTIME_DEPENDENCY_LEAK',
+        reason: 'submitJob dependency is not configured/injected',
+        observedAt: getNow(),
+      };
+    }
+
+    const submitResult = await submitJobFn(request);
+    if (!submitResult || !submitResult.ok) {
+      return {
+        ok: false,
+        status: 'DISPATCH_FAILURE',
+        classification: 'DISPATCH_FAILURE',
+        reason: 'Job dispatch failed',
+        error: submitResult?.job?.error || 'Unknown dispatch error',
+        observedAt: getNow(),
+      };
+    }
+
+    // 8. Query Job Mock
+    const queryJobFn = deps.queryJob;
+    if (typeof queryJobFn !== 'function') {
+      return {
+        ok: false,
+        status: 'BLOCKED_RUNTIME_DEPENDENCY_LEAK',
+        classification: 'BLOCKED_RUNTIME_DEPENDENCY_LEAK',
+        reason: 'queryJob dependency is not configured/injected',
+        observedAt: getNow(),
+      };
+    }
+
+    queryResult = await queryJobFn(request.job_id);
   }
 
-  const submitResult = await submitJobFn(request);
-  if (!submitResult || !submitResult.ok) {
-    return {
-      ok: false,
-      status: 'DISPATCH_FAILURE',
-      classification: 'DISPATCH_FAILURE',
-      reason: 'Job dispatch failed',
-      error: submitResult?.job?.error || 'Unknown dispatch error',
-      observedAt: getNow(),
-    };
-  }
-
-  // 8. Query Job Mock
-  const queryJobFn = deps.queryJob;
-  if (typeof queryJobFn !== 'function') {
-    return {
-      ok: false,
-      status: 'BLOCKED_RUNTIME_DEPENDENCY_LEAK',
-      classification: 'BLOCKED_RUNTIME_DEPENDENCY_LEAK',
-      reason: 'queryJob dependency is not configured/injected',
-      observedAt: getNow(),
-    };
-  }
-
-  const queryResult = await queryJobFn(request.job_id);
   if (!queryResult || !queryResult.ok || !queryResult.job) {
     return {
       ok: false,
@@ -345,7 +354,7 @@ export async function runCleanServiceTocRebuildOnce({
       materialId: task.materialId,
       assetVersion: request.asset_version,
       jobId: request.job_id,
-      allowProbeJobIdSuffix: true,
+      allowProbeJobIdSuffix: config.allowProbeJobIdSuffix === true,
       rawInput,
     },
     artifactReader: reader,

@@ -1,28 +1,19 @@
-export function buildCanonicalRawMaterialRef(task) {
-  const metadata = task?.metadata || {};
+const RAW_BUCKET = 'eduassets-raw';
+const DEFAULT_SERVICE_NAME = 'toc-rebuild';
+const COMPLETED_STATES = new Set(['completed']);
+const CONTENT_LIST_OBJECT_RE = /^v\d+$/;
 
+function hasLegacyParsedEvidence(metadata = {}) {
   const parsedFilesCount = Number(metadata.parsedFilesCount || 0);
-  const hasLegacy = Boolean(metadata.artifactManifestObjectName) ||
+  return Boolean(metadata.artifactManifestObjectName) ||
     Boolean(metadata.markdownObjectName) ||
     (Boolean(metadata.parsedPrefix) && parsedFilesCount > 0);
+}
 
-  const rawMaterial = metadata.rawMaterial;
-  const contentListV2 = rawMaterial?.mineru?.contentListV2;
+function validateContentListV2Source({ task, source, rawMaterialVersion, requireSha256 = false }) {
+  const { bucket, object, sha256 } = source || {};
 
-  if (!contentListV2) {
-    if (hasLegacy) {
-      const error = new Error('legacy-parsed-evidence-skipped');
-      error.code = 'skipped-policy';
-      throw error;
-    }
-    const error = new Error('no-raw-material-evidence');
-    error.code = 'not-applicable';
-    throw error;
-  }
-
-  const { bucket, object, sha256 } = contentListV2;
-
-  if (bucket !== 'eduassets-raw') {
+  if (bucket !== RAW_BUCKET) {
     throw new Error('invalid-raw-material: bucket must be eduassets-raw');
   }
 
@@ -34,11 +25,22 @@ export function buildCanonicalRawMaterialRef(task) {
     throw new Error('invalid-raw-material: object must end with /content_list_v2.json');
   }
 
-  const materialId = task.materialId;
-  const assetVersion = rawMaterial.version || 'v1';
+  const [prefix, objectMaterialId, objectVersion, filename, ...extraParts] = object.split('/');
+  const materialId = String(task.materialId);
 
-  if (!object.startsWith(`mineru/${materialId}/${assetVersion}/`)) {
+  if (
+    prefix !== 'mineru' ||
+    objectMaterialId !== materialId ||
+    filename !== 'content_list_v2.json' ||
+    extraParts.length > 0 ||
+    !CONTENT_LIST_OBJECT_RE.test(objectVersion) ||
+    (rawMaterialVersion && objectVersion !== rawMaterialVersion)
+  ) {
     throw new Error('invalid-raw-material: object path mismatch');
+  }
+
+  if (requireSha256 && (!sha256 || typeof sha256 !== 'string')) {
+    throw new Error('invalid-raw-material: missing sha256');
   }
 
   return {
@@ -47,7 +49,53 @@ export function buildCanonicalRawMaterialRef(task) {
       type: 'minio',
       bucket,
       object,
+      ...(source.size_bytes !== undefined ? { size_bytes: source.size_bytes } : {}),
+      ...(source.sizeBytes !== undefined ? { sizeBytes: source.sizeBytes } : {}),
     },
     ...(sha256 ? { hash: sha256 } : {}),
   };
+}
+
+export function buildCanonicalRawMaterialRef(task, { serviceName = DEFAULT_SERVICE_NAME } = {}) {
+  const metadata = task?.metadata || {};
+
+  const rawMaterial = metadata.rawMaterial;
+  const contentListV2 = rawMaterial?.mineru?.contentListV2;
+
+  if (contentListV2) {
+    return validateContentListV2Source({
+      task,
+      source: contentListV2,
+      rawMaterialVersion: rawMaterial.version || 'v1',
+    });
+  }
+
+  const cleanJob = metadata.cleanServiceJobs?.[serviceName];
+  const cleanJobState = cleanJob?.cleanState || cleanJob?.status || cleanJob?.state;
+  if (cleanJob?.sourceInput && COMPLETED_STATES.has(cleanJobState)) {
+    return validateContentListV2Source({
+      task,
+      source: cleanJob.sourceInput,
+      requireSha256: true,
+    });
+  }
+
+  if (hasLegacyParsedEvidence(metadata)) {
+    const error = new Error('legacy-parsed-evidence-skipped');
+    error.code = 'skipped-policy';
+    throw error;
+  }
+
+  const error = new Error('no-raw-material-evidence');
+  error.code = 'not-applicable';
+  throw error;
+}
+
+export function hasUsableRawMaterialSourceInput(task, { serviceName = DEFAULT_SERVICE_NAME } = {}) {
+  try {
+    buildCanonicalRawMaterialRef(task, { serviceName });
+    return true;
+  } catch (err) {
+    return false;
+  }
 }

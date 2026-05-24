@@ -1,6 +1,6 @@
 import { loadCleanServiceConfig } from './config.mjs';
 import { createCleanServiceClient } from './protocol.mjs';
-import { buildCanonicalRawMaterialRef } from './raw-material-adapter.mjs';
+import { buildCanonicalRawMaterialRef, hasUsableRawMaterialSourceInput } from './raw-material-adapter.mjs';
 import { allocateAssetVersion } from './asset-version.mjs';
 
 const ELIGIBLE_TASK_STATES = new Set([
@@ -42,24 +42,20 @@ export function isCleanServiceTaskEligible(task = {}, { serviceName = 'toc-rebui
   const { isActiveDuplicate } = allocateAssetVersion(task, serviceName);
   if (isActiveDuplicate) return false;
 
-  // Check if it has any evidence (legacy or canonical) to process
   const metadata = task.metadata || {};
   const parsedFilesCount = Number(metadata.parsedFilesCount || 0);
   const hasLegacy = Boolean(metadata.artifactManifestObjectName) ||
     Boolean(metadata.markdownObjectName) ||
     (Boolean(metadata.parsedPrefix) && parsedFilesCount > 0);
-  const hasCanonical = Boolean(metadata.rawMaterial?.mineru?.contentListV2);
 
-  if (!hasLegacy && !hasCanonical) return false;
-
-  return true;
+  return hasLegacy || hasUsableRawMaterialSourceInput(task, { serviceName });
 }
 
 export function buildCleanServiceJobRequest(task = {}, config = loadCleanServiceConfig(), { submittedAt = new Date().toISOString() } = {}) {
   const serviceName = config.serviceName || 'toc-rebuild';
   const { assetVersion } = allocateAssetVersion(task, serviceName);
 
-  const inputRef = buildCanonicalRawMaterialRef(task);
+  const inputRef = buildCanonicalRawMaterialRef(task, { serviceName });
   inputRef.source.endpoint = config.storageEndpoint;
   inputRef.source.use_ssl = config.storageUseSsl;
 
