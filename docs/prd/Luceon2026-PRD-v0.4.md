@@ -637,6 +637,12 @@ v0.4 要求把 `AiMetadataJob.state` 的终态命名统一为 `confirmed | revie
 
 ## 16. 变更记录
 
+- **v0.4-luceon-lucode-local-dual-thread-2026-05-24（2026-05-24）**：修订 Luceon/Lucode 协同模型的工作区与触发边界。
+  - 背景：用户确认不再以外部 IDE 作为 Lucode 的活跃工作入口，改为在同一项目机器上用两个本地 worktree 隔离 Luceon 与 Lucode 线程。
+  - 确定需求：Luceon 线程工作区为 `/Users/concm/prod_workspace/Luceon2026`；Lucode 线程工作区为 `/Users/concm/Dev_workspace/Luceon2026`；双方继续以 GitHub `main`、分支和 `TaskAndReport/` 为共享控制面。
+  - 触发策略：初期仍由用户手工在 Lucode 线程发送 `Lucode, check task`；后续 heartbeat 自动化需在手工流稳定后另行授权。
+  - 子智能体边界：Luceon 可在用户显式授权时使用 Codex 子智能体做探索、测试、日志分析、证据提取和审查辅助；子智能体不是项目角色，不拥有任务台账、验收、readiness 表述或生产授权。
+  - 影响范围：`docs/codex/roles/luceon.md`、`docs/codex/LUCODE_LOCAL_WORKFLOW.md`、`TaskAndReport/README.md`、`docs/codex/PROJECT_STATE.md`、`docs/codex/HANDOFF.md`。
 - **v0.4-milestone-6.9.1-team-retirement-2026-05-16（2026-05-16）**：记录 6.9.1 里程碑和协同体系退休。
   - 背景：用户确认当前主流程已基本跑通，Task 205 暴露的一个 AI 残留失败和 MinerU 日志通道归属/新鲜度缺口暂不构成 6.9.1 阻塞。
   - 确定需求：以当前代码和文档状态保存 `v6.9.1` GitHub 里程碑标签，作为后续深入开发前的可回滚锚点。

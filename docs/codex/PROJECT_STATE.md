@@ -1,12 +1,12 @@
 # Luceon2026 Project State
 
-Last updated: 2026-05-16
+Last updated: 2026-05-24
 
 ## 1. Current Milestone
 
 Milestone: `6.9.1`
 
-Purpose: preserve the current working mainline after the fresh 24-PDF validation sequence, then enter a new two-role Luceon/Lucode development stage.
+Purpose: preserve the current working mainline after the fresh 24-PDF validation sequence, then continue the two-role Luceon/Lucode development stage with local dual-thread worktree isolation.
 
 Rollback anchor: Git tag `v6.9.1`.
 
@@ -60,14 +60,20 @@ These are known residuals but do not block the 6.9.1 milestone:
 
 As of 2026-05-16, the previous Director/ProductManager/Architect/DevelopmentEngineer/TestAcceptanceEngineer workflow is dissolved by user decision.
 
+As of 2026-05-24, Lucode is no longer treated as an external IDE workspace. The active collaboration model is two local threads/worktrees with separate ignored private role prompts.
+
 The active next-stage model is:
 
 | Role | Environment | Responsibility |
 | --- | --- | --- |
-| `Luceon` | Codex thread on this machine | Director + Architect + TestAcceptanceEngineer responsibilities: planning, architecture review, task ledger ownership, report review, validation, production deployment coordination, milestone records |
-| `Lucode` | External IDE, usually `/Users/caoming/Documents/Luceon2026` | DevelopmentEngineer + ProductManager responsibilities: product refinement, implementation, local developer checks, branch/report creation |
+| `Luceon` | `/Users/concm/prod_workspace/Luceon2026` | Director + Architect + TestAcceptanceEngineer responsibilities: planning, task briefs, architecture review, task-ledger ownership, report review, validation, production deployment coordination, milestone records |
+| `Lucode` | `/Users/concm/Dev_workspace/Luceon2026` | DevelopmentEngineer + ProductManager responsibilities: product refinement, implementation, local developer checks, branch/report creation |
 
 The shared control plane is GitHub `main` plus task/report branches in `https://github.com/shcming2023/Luceon2026`.
+
+Initial Lucode triggering is manual: after Luceon issues or returns a task, the user sends `Lucode, check task` in the Lucode thread. A heartbeat automation may be added later only after the manual flow is stable.
+
+Luceon may explicitly use Codex subagents for bounded exploration, tests, log analysis, evidence extraction, or review assistance when the user authorizes subagent or parallel-agent work for the current task. Subagents are internal Luceon helpers, not project roles or task-ledger actors.
 
 Archived workflow material:
 
@@ -75,7 +81,7 @@ Archived workflow material:
 - `archive/legacy-roles-2026-05-15/`
 - `archive/phase1-governance-2026-05-11/agents-workflows/`
 
-`TaskAndReport/` is active again for the Luceon/Lucode workflow and remains the historical evidence registry.
+`TaskAndReport/` is active for the Luceon/Lucode workflow and remains the historical evidence registry.
 
 ## 6. Current Repository Hygiene Boundary
 
