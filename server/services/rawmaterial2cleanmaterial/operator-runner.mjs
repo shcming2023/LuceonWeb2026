@@ -240,4 +240,3 @@ export function buildRaw2CleanOperatorRunnerSample({
       : null),
   };
 }
-

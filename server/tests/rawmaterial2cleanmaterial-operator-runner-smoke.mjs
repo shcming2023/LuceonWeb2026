@@ -158,4 +158,3 @@ console.log('=== RawMaterial2CleanMaterial Operator Runner Smoke ===');
 }
 
 console.log('RawMaterial2CleanMaterial operator runner smoke passed.');
-
