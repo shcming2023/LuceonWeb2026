@@ -2,7 +2,7 @@
 
 Issued at: 2026-05-25T12:36:33+0800
 
-Actor: Lucode
+Actor: Luceon
 
 ## Mainline Objective
 
@@ -120,10 +120,17 @@ jobId = luceon-task-1779085089451-toc-rebuild-v4
 
 ## Environment And Write Boundary
 
-Lucode works in:
+Luceon implements code in the development workspace:
 
 ```text
 /Users/concm/Dev_workspace/Luceon2026
+```
+
+Luceon keeps control-plane, acceptance, and explicitly authorized production
+operations in the production/control workspace:
+
+```text
+/Users/concm/prod_workspace/Luceon2026
 ```
 
 Allowed runtime interaction is read-only only:
@@ -242,8 +249,8 @@ Allowed tests:
 
 Allowed control-plane files:
 
-- Lucode report under `TaskAndReport/`
-- branch-local update to `TaskAndReport/TASK_TRACKING_LIST.md`
+- Luceon implementation/validation report under `TaskAndReport/`
+- update to `TaskAndReport/TASK_TRACKING_LIST.md`
 
 ## Forbidden Files And Operations
 
@@ -291,7 +298,8 @@ Positive acceptance:
 8. `npx pnpm@10.4.1 exec tsc --noEmit` passes.
 9. `npx pnpm@10.4.1 run build` passes, allowing only pre-existing chunk-size
    warnings.
-10. `git diff --check origin/main...HEAD` passes on the Lucode branch.
+10. `git diff --check origin/main...HEAD` passes on the Luceon dev branch if a
+    branch is used.
 
 Negative acceptance:
 
@@ -306,7 +314,7 @@ Negative acceptance:
 
 ## Required Report
 
-Lucode must report:
+Luceon must report:
 
 - branch name and exact full HEAD;
 - changed files;
@@ -321,15 +329,9 @@ Lucode must report:
   occurred;
 - residual debt and recommended next mainline step.
 
-Lucode handoff must update the branch-local ledger row to:
+After implementation/validation, update the ledger row to either closed or an
+explicit blocked state. If a dev branch is used, the expected branch pattern is:
 
 ```text
-Status = Lucode 已回报待 Luceon 审查
-Next Actor = Luceon
-```
-
-and push a remote branch matching:
-
-```text
-origin/lucode/*TASK-20260525-123633*
+codex/*TASK-20260525-123633*
 ```

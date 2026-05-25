@@ -1,12 +1,14 @@
 # Luceon2026 Project State
 
-Last updated: 2026-05-24
+Last updated: 2026-05-25
 
 ## 1. Current Milestone
 
 Milestone: `6.9.1`
 
-Purpose: preserve the current working mainline after the fresh 24-PDF validation sequence, then continue the two-role Luceon/Lucode development stage with local dual-thread worktree isolation.
+Purpose: preserve the current working mainline after the fresh 24-PDF
+validation sequence, then continue closeout through the unified Luceon owner
+workflow with strict development/production workspace separation.
 
 Rollback anchor: Git tag `v6.9.1`.
 
@@ -60,20 +62,24 @@ These are known residuals but do not block the 6.9.1 milestone:
 
 As of 2026-05-16, the previous Director/ProductManager/Architect/DevelopmentEngineer/TestAcceptanceEngineer workflow is dissolved by user decision.
 
-As of 2026-05-24, Lucode is no longer treated as an external IDE workspace. The active collaboration model is two local threads/worktrees with separate ignored private role prompts.
+As of 2026-05-25, the separate Lucode implementation role is retired for new
+work. Luceon is the unified accountable owner for planning, requirements,
+architecture, product, implementation, testing, acceptance, and scoped
+production validation/deployment coordination.
 
 The active next-stage model is:
 
-| Role | Environment | Responsibility |
+| Workspace | Path | Responsibility |
 | --- | --- | --- |
-| `Luceon` | `/Users/concm/prod_workspace/Luceon2026` | Director + Architect + TestAcceptanceEngineer responsibilities: planning, task briefs, architecture review, task-ledger ownership, report review, validation, production deployment coordination, milestone records |
-| `Lucode` | `/Users/concm/Dev_workspace/Luceon2026` | DevelopmentEngineer + ProductManager responsibilities: product refinement, implementation, local developer checks, branch/report creation |
+| Development | `/Users/concm/Dev_workspace/Luceon2026` | Business code, product implementation, developer checks, scoped implementation branches |
+| Production/control | `/Users/concm/prod_workspace/Luceon2026` | Current truth, `TaskAndReport/`, acceptance evidence, mainline closure, deployment/runtime operations only when explicitly authorized |
 
-The shared control plane is GitHub `main` plus task/report branches in `https://github.com/shcming2023/Luceon2026`.
+The shared control plane is GitHub `main` plus `TaskAndReport/` in
+`https://github.com/shcming2023/Luceon2026`.
 
-Initial Lucode triggering is manual: after Luceon issues or returns a task, the user sends `Lucode, check task` in the Lucode thread. A heartbeat automation may be added later only after the manual flow is stable.
-
-Lucode handoff is branch-local until Luceon review: Lucode pushes a `lucode/<task-id-or-short-slug>` branch whose ledger row may say `Next Actor=Luceon` while `origin/main` still says `Next Actor=Lucode`. Luceon `check task` must inspect that matching remote branch before concluding there is no Luceon task.
+New active task rows use `Next Actor=Luceon`, `User`, or `None`. Historical
+Lucode rows, reports, reviews, and branches remain evidence records but are not
+used for new dispatch or check-task branch handoff.
 
 Luceon may explicitly use Codex subagents for bounded exploration, tests, log analysis, evidence extraction, or review assistance when the user authorizes subagent or parallel-agent work for the current task. Subagents are internal Luceon helpers, not project roles or task-ledger actors.
 
@@ -83,7 +89,8 @@ Archived workflow material:
 - `archive/legacy-roles-2026-05-15/`
 - `archive/phase1-governance-2026-05-11/agents-workflows/`
 
-`TaskAndReport/` is active for the Luceon/Lucode workflow and remains the historical evidence registry.
+`TaskAndReport/` is active for the unified Luceon workflow and remains the
+historical evidence registry.
 
 ## 6. Current Repository Hygiene Boundary
 
@@ -96,6 +103,16 @@ The 6.9.1 cleanup:
 
 ## 7. Current Next Step
 
-No feature task is active at the time this role model is recorded.
+Current active row:
 
-Future work should begin from a user goal or `check task` against GitHub-synchronized `TaskAndReport/TASK_TRACKING_LIST.md`. Do not infer that archived role files or pre-6.9.1 historical rows are active instructions.
+- Task 280:
+  `TASK-20260525-123633-P0-RawMaterial2CleanMaterial-Real-Artifact-Shape-Compatibility-MockSafe-ReadOnly-NoDBWrite-NoMinIOWrite-NoRuntimePost`
+- `Next Actor=Luceon`
+- Goal: make the artifact-backed RawMaterial2CleanMaterial draft consume real
+  canonical v4 artifact body shapes after Task 279 fixed clean-bucket proxy
+  reads.
+
+Future work should begin from a user goal or `check task` against
+GitHub-synchronized `TaskAndReport/TASK_TRACKING_LIST.md`. Do not infer that
+archived role files, retired Lucode workflow docs, or pre-6.9.1 historical rows
+are active instructions.

@@ -1,43 +1,48 @@
 # Luceon2026 Task And Report Registry
 
-Last updated: 2026-05-24
+Last updated: 2026-05-25
 
-`TaskAndReport/` is the active GitHub-mediated control plane for post-6.9.1 Luceon/Lucode collaboration and the permanent historical evidence registry for earlier work.
+`TaskAndReport/` is the active GitHub-mediated control plane and permanent
+historical evidence registry for Luceon2026.
 
-Historical task briefs, reports, reviews, decisions, and ledger rows must remain queryable. Do not delete or rewrite them merely because the role model changed.
+Historical task briefs, reports, reviews, decisions, and ledger rows must remain
+queryable. Do not delete or rewrite them merely because the role model changed.
 
-## Active Roles After 6.9.1
+## Active Roles After 2026-05-25
 
-- `Luceon`: local control-thread project director, architecture reviewer, test/acceptance engineer, production validation/deployment coordinator, and task-ledger owner. Its active workspace is `/Users/concm/prod_workspace/Luceon2026`.
-- `Lucode`: local development-thread product/implementation role. Its active workspace is `/Users/concm/Dev_workspace/Luceon2026`, with private local role instructions ignored by Git. The shared GitHub interface contract here and the copyable guide `docs/codex/LUCODE_LOCAL_WORKFLOW.md` are authoritative for project coordination.
-- `User`: owner decisions, scope choices, destructive-operation approvals, and release/go-live judgment.
+- `Luceon`: unified project owner for planning, requirements, architecture,
+  product, code implementation, tests, acceptance, control-plane closure, and
+  scoped production validation/deployment coordination.
+- `User`: owner decisions, scope choices, destructive-operation approvals,
+  external/cloud access assistance, and release/go-live judgment.
 - `None`: no next action.
 
-Retired roles such as ProductManager, Architect, DevelopmentEngineer, TestAcceptanceEngineer, Lucia, and legacy Lucode rows remain historical only.
+`Lucode` is retired as an active project role. Existing Lucode rows, reports,
+reviews, and branches remain historical evidence only. New tasks must not use
+`Next Actor=Lucode`.
 
-## Cross-Role Document Boundary
+## Workspace Boundary
 
-Luceon and Lucode share GitHub, so both roles may see each other's role guides and workflow instructions. These documents are coordination context, not permission transfer.
+- Development workspace: `/Users/concm/Dev_workspace/Luceon2026`
+- Production/control/deployment workspace: `/Users/concm/prod_workspace/Luceon2026`
+- GitHub repository: `https://github.com/shcming2023/Luceon2026`
 
-- `docs/codex/roles/luceon.md` tells Lucode how Luceon will review and validate, but Lucode must not act as Luceon.
-- `docs/codex/LUCODE_LOCAL_WORKFLOW.md` tells Luceon how Lucode should implement and report, but Luceon must not act as Lucode.
-- The active assignment source is the task ledger row and task brief.
-- If a role document conflicts with the current task row, stop and escalate instead of guessing.
+Implementation and developer checks should happen in the development workspace,
+usually on a scoped `codex/<task-id-or-short-slug>` branch.
 
-## Luceon Subagent Boundary
-
-Luceon may explicitly use Codex subagents for bounded exploration, tests, log analysis, evidence extraction, or review assistance when the user authorizes subagent or parallel-agent work for the current task.
-
-Subagents are not project roles. They must not appear as `Next Actor` values, own ledger rows, accept tasks, make readiness/go-live claims, authorize production operations, or replace Lucode's normal implementation thread. Luceon remains responsible for summarizing, verifying, and recording any final decision.
+The production/control workspace is for current truth, task/report/decision
+files, acceptance evidence, mainline closure, and explicitly authorized runtime
+or deployment operations.
 
 ## Required Files
 
 - `TASK_TRACKING_LIST.md`: ordered task ledger and status list.
-- `*_TASK.md`: Luceon-authored task briefs.
-- `*_REPORT.md`: Lucode implementation reports, Luceon validation reports, or blocked reports.
-- `*_LUCEON_REVIEW.md`: Luceon review records for new work.
+- `*_TASK.md`: task briefs or scoped work instructions.
+- `*_REPORT.md`: implementation, validation, diagnosis, or blocked reports.
+- `*_LUCEON_REVIEW.md`: review records when a separate review artifact is useful.
 - `*_DIRECTOR_REVIEW.md` and `*_LUCIA_REVIEW.md`: historical review records.
-- `*_DECISION.md`: user decision request, final decision, milestone decision, or workflow decision records.
+- `*_DECISION.md`: user decision request, final decision, milestone decision, or
+  workflow decision records.
 
 ## File Naming Rule
 
@@ -56,37 +61,34 @@ Task names should use ASCII-safe hyphenated words.
 
 Use these values for new active rows:
 
-- `下达待 Lucode 执行`: Luceon has issued a task to Lucode.
-- `Lucode 执行中`: Lucode has started implementation or product work.
-- `Lucode 已回报待 Luceon 审查`: Lucode has pushed a branch/report and Luceon must review it.
-- `Luceon 规划中`: Luceon owns the next planning, task-brief, architecture, or decision step.
-- `Luceon 验收中`: Luceon is reviewing, testing, validating, deploying, or preparing acceptance evidence.
-- `退回待 Lucode 修正`: Luceon returned the task for scoped correction.
-- `挂起待 User`: user judgment is required.
+- `下达待 Luceon 执行`: task is assigned to Luceon for implementation,
+  validation, planning, or control-plane work.
+- `Luceon 规划中`: Luceon owns the next planning, requirement, architecture, or
+  decision step.
+- `Luceon 执行中`: Luceon is implementing, testing, diagnosing, or producing the
+  required artifact.
+- `Luceon 验收中`: Luceon is reviewing, validating, deploying under explicit
+  authorization, or preparing acceptance evidence.
+- `挂起待 User`: user judgment or explicit authorization is required.
 - `完成关闭`: accepted and closed.
 - `失败关闭`: reviewed and closed as failed.
 - `取消`: canceled before completion.
 - `挂起`: intentionally paused.
 
-Legacy statuses remain valid history.
+Legacy statuses remain valid history, including Lucode-era statuses.
 
 ## Active Row Definition For `check task`
 
 For `check task`, an "open row" means both:
 
-- `Next Actor` is `Luceon`, `Lucode`, or `User`; and
+- `Next Actor` is `Luceon` or `User`; and
 - `Status` is one of the current active statuses that require that actor to act.
-
-Active Lucode statuses:
-
-- `下达待 Lucode 执行`
-- `Lucode 执行中`
-- `退回待 Lucode 修正`
 
 Active Luceon statuses:
 
-- `Lucode 已回报待 Luceon 审查`
+- `下达待 Luceon 执行`
 - `Luceon 规划中`
+- `Luceon 执行中`
 - `Luceon 验收中`
 
 Active User status:
@@ -94,10 +96,11 @@ Active User status:
 - `挂起待 User`
 
 `Next Actor` alone is not enough to make a row executable. Legacy returned,
-withdrawn, failed, canceled, paused, or closed rows such as `未接受已退回`,
-`已撤回合并`, `已撤回待根因诊断`, `失败关闭`, `取消`, `挂起`, and `完成关闭`
-are historical/non-executable for `check task` unless a later decision or task
-row explicitly reactivates them.
+withdrawn, failed, canceled, paused, closed, or Lucode-owned rows such as
+`Lucode 已回报待 Luceon 审查`, `下达待 Lucode 执行`, `退回待 Lucode 修正`,
+`未接受已退回`, `已撤回合并`, `失败关闭`, `取消`, `挂起`, and `完成关闭` are
+historical/non-executable for new `check task` cycles unless a later decision or
+task row explicitly reactivates them under Luceon ownership.
 
 ## Tracking Columns
 
@@ -112,76 +115,98 @@ row explicitly reactivates them.
 - `Branch / HEAD`
 - `Notes`
 
-For new active rows, `Next Actor` must be one of `Luceon`, `Lucode`, `User`, or `None`.
+For new active rows, `Next Actor` must be one of `Luceon`, `User`, or `None`.
 
-## GitHub Branch And Report Contract
+## Branch And Report Contract
 
-Lucode should read `docs/codex/LUCODE_LOCAL_WORKFLOW.md` before its first task in a new environment.
-
-Lucode normally works on a scoped branch, for example:
+For implementation work, Luceon normally works from:
 
 ```text
-lucode/<task-id-or-short-slug>
+/Users/concm/Dev_workspace/Luceon2026
 ```
 
-Lucode completion reports should include:
+Default branch pattern:
+
+```text
+codex/<task-id-or-short-slug>
+```
+
+Implementation reports should include:
 
 - task id and task brief path;
-- branch and HEAD;
+- branch and HEAD when a branch is used;
 - files changed;
 - implementation/product summary;
 - commands run with exit codes;
 - skipped checks and exact reasons;
 - evidence;
 - risks, blockers, and residual debt;
-- whether Luceon review/production validation is required.
+- production/runtime/data operations performed or explicitly not performed.
 
-Lucode should not mutate production data, run production deployment, or merge to `main` unless a task brief explicitly authorizes that. Luceon is responsible for acceptance review and final merge/ledger closure unless the user gives different instructions.
+For changed-file evidence, prefer merge-base / three-dot diffs such as
+`git diff --name-status origin/main...HEAD` and
+`git diff --check origin/main...HEAD` when working on an implementation branch.
 
-## Lucode Branch Handoff Contract
-
-Lucode completion normally updates the report and task-ledger row on the Lucode branch, not on `origin/main`.
-
-Required Lucode handoff signals:
-
-- push a remote `lucode/<task-id-or-short-slug>` branch;
-- record the exact pushed branch and full HEAD in the report and final reply;
-- update the branch-local task row to `Status=Lucode 已回报待 Luceon 审查`, `Next Actor=Luceon`;
-- keep `origin/main` unchanged until Luceon reviews and integrates the branch.
-
-When Luceon `check task` finds no active `Next Actor=Luceon` row on `origin/main`, it must inspect the earliest active `Next Actor=Lucode` row for a matching remote Lucode branch. If that branch's task row has been handed off to Luceon, Luceon treats the branch as a pending review even though main still shows Lucode.
-
-For pending branch review, Luceon should use merge-base / three-dot diffs, for example `git diff --name-status origin/main...origin/<branch>`, to inspect the branch's own changes. Two-dot `origin/main..origin/<branch>` is only appropriate when the branch is known to be based on the current `origin/main`.
+Low-risk docs-only or control-plane-only updates may be committed directly from
+the production/control workspace when that is simpler and no business code is
+changed.
 
 ## Luceon `check task`
 
-When the user says `check task` in the Luceon thread, Luceon must:
+When the user says `check task`, Luceon must:
 
-1. synchronize with GitHub (`git fetch origin --prune --tags`, then fast-forward `main` when safe);
+1. synchronize the production/control workspace with GitHub:
+
+   ```bash
+   git status --short --branch
+   git fetch origin --prune --tags
+   git pull --ff-only origin main
+   ```
+
 2. read only `TaskAndReport/TASK_TRACKING_LIST.md` first;
 3. find the earliest active row with `Next Actor=Luceon`;
-4. if no such row exists, run the Lucode branch handoff check above before reporting "当前无 Luceon 待处理任务";
-5. if `Next Actor=User` rows exist, mention the decision id and the decision needed, then stop unless the user asks to continue;
-6. only after finding a Luceon row, read the related task brief, Lucode report, branch, evidence, and task-relevant docs;
-7. perform the listed `Next Action`;
-8. write a `*_LUCEON_REVIEW.md`, `*_REPORT.md`, or `*_DECISION.md` when the action requires durable evidence;
-9. update the task ledger;
-10. commit and push changes to GitHub.
+4. if no Luceon row exists but a `Next Actor=User` row exists, mention the
+   decision id and the decision needed, then stop unless the user asks to
+   continue;
+5. if no active Luceon/User row exists, reply:
 
-No-task wakeups must not read the whole repo, run validation, write reports, update docs, or push.
+   ```text
+   当前无 Luceon 待处理任务
+   ```
+
+6. do not run Lucode branch-handoff checks for new work;
+7. after finding a Luceon row, read the related task brief, report, evidence,
+   changed files, and task-relevant docs;
+8. perform the listed `Next Action`, switching to the development workspace for
+   code implementation;
+9. write a `*_REPORT.md`, `*_LUCEON_REVIEW.md`, or `*_DECISION.md` when the
+   action requires durable evidence;
+10. update the task ledger;
+11. commit and push changes to GitHub.
+
+No-task wakeups must not read the whole repo, run validation, write reports,
+update docs, or push.
 
 ## Context Hygiene
 
 To keep future runs efficient:
 
-- task briefs should be standalone and include only the context needed for the assigned work;
-- reports should summarize evidence and link detailed artifacts instead of pasting excessive raw logs;
-- `PROJECT_STATE.md` and `HANDOFF.md` should stay short and point to detailed TaskAndReport evidence;
-- stale active instructions should be archived or replaced, not left beside newer rules;
-- broad documentation cleanup should be done only when it directly improves current comprehension or task routing.
+- task briefs should be standalone and include only the context needed for the
+  assigned work;
+- reports should summarize evidence and link detailed artifacts instead of
+  pasting excessive raw logs;
+- `PROJECT_STATE.md` and `HANDOFF.md` should stay short and point to detailed
+  TaskAndReport evidence;
+- stale active instructions should be archived, retired, or replaced, not left
+  beside newer rules as active workflow;
+- broad documentation cleanup should be done only when it directly improves
+  current comprehension or task routing.
 
 ## Safety
 
-Do not store secrets, API tokens, raw credentials, generated build outputs, UAT screenshots, large artifacts, or machine-only files in this folder.
+Do not store secrets, API tokens, raw credentials, generated build outputs, UAT
+screenshots, large artifacts, or machine-only files in this folder.
 
-Destructive DB, MinIO, Docker volume, production data, model, secret, or sample-file operations require explicit user approval recorded in a task or decision file.
+Destructive DB, MinIO, Docker volume, production data, model, secret,
+sample-file, production deployment, cloud-server, or external-service operations
+require explicit user approval recorded in a task or decision file.
