@@ -21,6 +21,7 @@ import {
   Archive,
   Trash2,
   MoreVertical,
+  Boxes,
 } from 'lucide-react';
 import { DropdownMenu } from '../components/DropdownMenu';
 import { useAppStore } from '../../store/appContext';
@@ -69,6 +70,13 @@ const AI_STATUS_OPTIONS = [
   { key: 'failed',    label: '分析失败' },
 ] as const;
 
+const CLEAN_STATUS_OPTIONS = [
+  { key: 'all', label: '全部目录重建状态' },
+  { key: 'available', label: '已有目录重建' },
+  { key: 'raw2clean-accepted', label: 'Raw2Clean 已接受' },
+  { key: 'missing', label: '未重建' },
+] as const;
+
 // ── 工具函数 ──────────────────────────────────────────────
 
 function formatBytes(bytes: number) {
@@ -83,6 +91,72 @@ function typeColor(type: string) {
   if (type === 'PDF') return { bg: 'bg-red-100', text: 'text-red-600', badge: 'bg-red-600' };
   if (type === 'DOCX' || type === 'DOC') return { bg: 'bg-blue-100', text: 'text-blue-600', badge: 'bg-blue-600' };
   return { bg: 'bg-orange-100', text: 'text-orange-600', badge: 'bg-orange-600' };
+}
+
+function cleanString(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function deriveCleanMaterialStatus(m: any, latestTask: any) {
+  const cleanMaterial = m.metadata?.cleanMaterials?.['toc-rebuild'] || {};
+  const cleanTask = latestTask?.metadata?.cleanServiceJobs?.['toc-rebuild'] || {};
+  const raw2cleanMaterial = m.metadata?.rawMaterial2CleanMaterial || {};
+  const raw2cleanTask = latestTask?.metadata?.rawMaterial2CleanMaterialJobs?.['raw-material-2-clean-material'] || {};
+  const cleanVersion = cleanString(cleanMaterial.latestVersion)
+    || cleanString(cleanMaterial.assetVersion)
+    || cleanString(cleanTask.assetVersion);
+  const cleanStatus = cleanString(cleanMaterial.status)
+    || cleanString(cleanMaterial.cleanState)
+    || cleanString(cleanTask.status)
+    || cleanString(cleanTask.cleanState);
+  const cleanJobId = cleanString(cleanTask.jobId) || cleanString(cleanMaterial.jobId);
+  const raw2cleanDecision = cleanString(raw2cleanMaterial.currentDecision?.state)
+    || cleanString(raw2cleanTask.decision?.state)
+    || cleanString(raw2cleanTask.status);
+  const raw2cleanVersion = cleanString(raw2cleanMaterial.currentCandidate?.assetVersion)
+    || cleanString(raw2cleanTask.assetVersion);
+  const hasClean = Boolean(cleanVersion || cleanStatus || cleanJobId || cleanMaterial.provenanceObjectName);
+  const hasRaw2Clean = Boolean(raw2cleanDecision || raw2cleanMaterial.currentCandidate || raw2cleanTask.artifact);
+
+  if (raw2cleanDecision === 'accepted') {
+    return {
+      key: 'raw2clean-accepted',
+      label: 'Raw2Clean 已接受',
+      shortLabel: 'Raw2Clean',
+      version: raw2cleanVersion || cleanVersion,
+      detail: cleanVersion ? `toc-rebuild ${cleanVersion}` : cleanJobId,
+      className: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      textClass: 'text-emerald-700',
+      hasClean,
+      hasRaw2Clean,
+    };
+  }
+
+  if (hasClean) {
+    return {
+      key: 'available',
+      label: cleanStatus === 'completed' ? '目录重建完成' : '目录重建可用',
+      shortLabel: '目录重建',
+      version: cleanVersion,
+      detail: cleanJobId,
+      className: 'bg-cyan-50 text-cyan-700 border-cyan-200',
+      textClass: 'text-cyan-700',
+      hasClean,
+      hasRaw2Clean,
+    };
+  }
+
+  return {
+    key: 'missing',
+    label: '未重建',
+    shortLabel: '未重建',
+    version: null,
+    detail: null,
+    className: 'bg-slate-50 text-slate-500 border-slate-200',
+    textClass: 'text-slate-400',
+    hasClean: false,
+    hasRaw2Clean: false,
+  };
 }
 
 // ── Markdown 加载状态类型 ─────────────────────────────────
@@ -112,6 +186,8 @@ export function ProductsPage() {
     useState<(typeof MINERU_STATUS_OPTIONS)[number]['key']>('all');
   const [aiStatusFilter, setAiStatusFilter] =
     useState<(typeof AI_STATUS_OPTIONS)[number]['key']>('all');
+  const [cleanStatusFilter, setCleanStatusFilter] =
+    useState<(typeof CLEAN_STATUS_OPTIONS)[number]['key']>('all');
 
   // 每个资料的 Markdown 展开状态（Map 不触发 re-render，用 state 存）
   const [mdStates, setMdStates] = useState<Map<number, MdState>>(new Map());
@@ -148,6 +224,7 @@ export function ProductsPage() {
       const parsedCountDisplay = rawCount !== undefined && rawCount !== null ? String(rawCount) : '—';
 
       const hasProductEvidence = parsedFilesCount > 0;
+      const cleanMaterialStatus = deriveCleanMaterialStatus(m, latestTask);
 
       let derivedMineruStatus = 'processing';
       let derivedAiStatus = m.aiStatus || 'pending';
@@ -187,7 +264,7 @@ export function ProductsPage() {
         ...m,
         _enriched: {
           title, sizeDisplay, timeDisplay, parsedCountDisplay, statusDisplay, statusColor,
-          derivedMineruStatus, derivedAiStatus, isUsable
+          derivedMineruStatus, derivedAiStatus, isUsable, cleanMaterialStatus
         }
       };
     });
@@ -199,6 +276,9 @@ export function ProductsPage() {
 
     if (mineruStatusFilter !== 'all') list = list.filter((m: any) => m._enriched.derivedMineruStatus === mineruStatusFilter);
     if (aiStatusFilter !== 'all')     list = list.filter((m: any) => m._enriched.derivedAiStatus === aiStatusFilter);
+    if (cleanStatusFilter === 'available') list = list.filter((m: any) => m._enriched.cleanMaterialStatus.hasClean);
+    if (cleanStatusFilter === 'raw2clean-accepted') list = list.filter((m: any) => m._enriched.cleanMaterialStatus.key === 'raw2clean-accepted');
+    if (cleanStatusFilter === 'missing') list = list.filter((m: any) => !m._enriched.cleanMaterialStatus.hasClean);
     if (subjectFilter !== 'all')      list = list.filter((m: any) => m.metadata?.subject === subjectFilter);
     if (gradeFilter !== 'all')        list = list.filter((m: any) => m.metadata?.grade === gradeFilter);
     if (languageFilter !== 'all')     list = list.filter((m: any) => m.metadata?.language === languageFilter);
@@ -211,11 +291,15 @@ export function ProductsPage() {
           m._enriched.title.toLowerCase().includes(q) ||
           getMaterialTags(m).some((t: string) => t.toLowerCase().includes(q)) ||
           (m.metadata?.subject || '').toLowerCase().includes(q) ||
-          (m.metadata?.grade || '').toLowerCase().includes(q)
+          (m.metadata?.grade || '').toLowerCase().includes(q) ||
+          (m._enriched.cleanMaterialStatus.label || '').toLowerCase().includes(q) ||
+          (m._enriched.cleanMaterialStatus.version || '').toLowerCase().includes(q) ||
+          (m._enriched.cleanMaterialStatus.detail || '').toLowerCase().includes(q) ||
+          (m._enriched.cleanMaterialStatus.hasClean && 'toc-rebuild raw2clean clean material 目录重建'.includes(q))
       );
     }
     return sortMaterials(list, sort);
-  }, [enrichedMaterials, mineruStatusFilter, aiStatusFilter, subjectFilter, gradeFilter, languageFilter, typeFilter, search, sort]);
+  }, [enrichedMaterials, mineruStatusFilter, aiStatusFilter, cleanStatusFilter, subjectFilter, gradeFilter, languageFilter, typeFilter, search, sort]);
 
   const { currentItems, currentPage, totalPages, goToPage, hasPrev, hasNext, prevPage, nextPage } =
     usePagination(filtered);
@@ -244,6 +328,14 @@ export function ProductsPage() {
   const processedCount = useMemo(
     () => state.materials.filter((m) => m.mineruStatus === 'completed' && m.aiStatus === 'analyzed').length,
     [state.materials],
+  );
+  const cleanMaterialCount = useMemo(
+    () => enrichedMaterials.filter((m: any) => m._enriched.cleanMaterialStatus.hasClean).length,
+    [enrichedMaterials],
+  );
+  const raw2cleanAcceptedCount = useMemo(
+    () => enrichedMaterials.filter((m: any) => m._enriched.cleanMaterialStatus.key === 'raw2clean-accepted').length,
+    [enrichedMaterials],
   );
 
   // ── Markdown 拉取 ─────────────────────────────────────────
@@ -354,6 +446,7 @@ export function ProductsPage() {
     setTypeFilter('all');
     setMineruStatusFilter('completed');
     setAiStatusFilter('analyzed');
+    setCleanStatusFilter('all');
   };
 
       const isFiltered =
@@ -363,7 +456,8 @@ export function ProductsPage() {
     languageFilter !== 'all' ||
     typeFilter !== 'all' ||
     mineruStatusFilter !== 'completed' ||
-    aiStatusFilter !== 'analyzed';
+    aiStatusFilter !== 'analyzed' ||
+    cleanStatusFilter !== 'all';
 
   // ── 级联删除 ─────────────────────────────────────────────
   const executeDelete = useCallback(async (materialIds: (string | number)[], promptTitle = '删除成果') => {
@@ -474,6 +568,8 @@ export function ProductsPage() {
               {totalCount !== processedCount && (
                 <span className="ml-1 text-slate-400">（全库 {totalCount} 条）</span>
               )}
+              <span className="ml-2 text-emerald-600">目录重建 {cleanMaterialCount} 条</span>
+              <span className="ml-1 text-emerald-600">Raw2Clean accepted {raw2cleanAcceptedCount} 条</span>
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -588,6 +684,15 @@ export function ProductsPage() {
                   <option key={o.key} value={o.key}>{o.label}</option>
                 ))}
               </select>
+              <select
+                value={cleanStatusFilter}
+                onChange={(e) => setCleanStatusFilter(e.target.value as typeof cleanStatusFilter)}
+                className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+              >
+                {CLEAN_STATUS_OPTIONS.map((o) => (
+                  <option key={o.key} value={o.key}>{o.label}</option>
+                ))}
+              </select>
               {search && (
                 <span className="text-sm text-slate-500">
                   找到 <span className="font-semibold text-slate-800">{filtered.length}</span> 条结果
@@ -663,6 +768,7 @@ export function ProductsPage() {
                   <th className="px-4 py-3 text-left font-semibold text-slate-600 text-xs uppercase tracking-wide">资料名称</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-600 text-xs uppercase tracking-wide">类型</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-600 text-xs uppercase tracking-wide">解析状态</th>
+                  <th className="px-4 py-3 text-left font-semibold text-slate-600 text-xs uppercase tracking-wide">目录重建</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-600 text-xs uppercase tracking-wide">产物数</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-600 text-xs uppercase tracking-wide">大小</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-600 text-xs uppercase tracking-wide">学科 / 年级</th>
@@ -673,7 +779,7 @@ export function ProductsPage() {
               <tbody className="divide-y divide-slate-100">
                 {currentItems.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="text-center py-16 text-slate-400">
+                    <td colSpan={10} className="text-center py-16 text-slate-400">
                       暂无符合条件的资料
                       {isFiltered && (
                         <button
@@ -694,6 +800,7 @@ export function ProductsPage() {
                   const parsedCountDisplay = en.parsedCountDisplay;
                   const statusDisplay = en.statusDisplay;
                   const statusColor = en.statusColor;
+                  const cleanStatus = en.cleanMaterialStatus;
 
                   const mType = getMaterialType(m);
                   const mTags = getMaterialTags(m);
@@ -746,6 +853,19 @@ export function ProductsPage() {
                         </td>
                         <td className={`px-4 py-3.5 font-medium ${statusColor}`}>
                           {statusDisplay}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <div className="flex flex-col gap-1">
+                            <span className={`inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${cleanStatus.className}`}>
+                              <Boxes size={11} />
+                              {cleanStatus.label}
+                            </span>
+                            {(cleanStatus.version || cleanStatus.detail) && (
+                              <span className="max-w-[180px] truncate font-mono text-[10px] text-slate-400" title={cleanStatus.detail || cleanStatus.version || ''}>
+                                {cleanStatus.version || cleanStatus.detail}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3.5 text-slate-600 font-mono">
                           {parsedCountDisplay}
@@ -852,7 +972,7 @@ export function ProductsPage() {
                       {/* Markdown 行内展开 */}
                       {(mdSt?.loading || mdSt?.error || mdSt?.content) && (
                         <tr key={`md-${m.id}`}>
-                          <td colSpan={6} className="px-4 pb-4 pt-0">
+                          <td colSpan={10} className="px-4 pb-4 pt-0">
                             {mdSt?.loading && (
                               <div className="flex items-center gap-2 text-sm text-slate-400 bg-slate-50 rounded-xl px-4 py-3">
                                 <div className="w-4 h-4 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
@@ -918,6 +1038,7 @@ export function ProductsPage() {
               const parsedCountDisplay = en.parsedCountDisplay;
               const statusDisplay = en.statusDisplay;
               const statusColor = en.statusColor;
+              const cleanStatus = en.cleanMaterialStatus;
 
               const mType = getMaterialType(m);
               const mTags = getMaterialTags(m);
@@ -946,9 +1067,15 @@ export function ProductsPage() {
                     </div>
                     <FileText className={`w-14 h-14 ${tc.text} opacity-30`} />
                     <div className="absolute top-3 left-3">
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold text-white ${tc.badge}`}>
-                        {mType}
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        <span className={`w-fit px-2.5 py-1 rounded-full text-[10px] font-bold text-white ${tc.badge}`}>
+                          {mType}
+                        </span>
+                        <span className={`inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${cleanStatus.className}`}>
+                          <Boxes size={10} />
+                          {cleanStatus.shortLabel}
+                        </span>
+                      </div>
                     </div>
                     {m.metadata?.subject && (
                       <div className="absolute bottom-3 left-3">
@@ -970,6 +1097,10 @@ export function ProductsPage() {
                     <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
                       <span className={`font-medium ${statusColor}`}>{statusDisplay}</span>
                       <span className="font-mono">产物: {parsedCountDisplay}</span>
+                    </div>
+                    <div className="mb-2 flex items-center justify-between gap-2 text-xs">
+                      <span className={`font-medium ${cleanStatus.textClass}`}>{cleanStatus.label}</span>
+                      {cleanStatus.version && <span className="font-mono text-slate-400">{cleanStatus.version}</span>}
                     </div>
                     <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
                       <span>{sizeDisplay}</span>
