@@ -8,6 +8,8 @@ Status: `SUCCESS_BOUNDED_MINI_BATCH_PILOT_3_OF_3`
 
 Implementation branch: `codex/TASK-20260525-144319-mini-batch-pilot`
 
+Implementation commit: `2066b64b6ffb6aad8506cb3418e13fbd1586ce96`
+
 ## Summary
 
 The bounded mini-batch pilot processed exactly three samples sequentially and
@@ -173,4 +175,3 @@ The next mainline step should be a narrow bounded-batch product/control decision
 either authorize a slightly larger cap with the same stop-on-first-failure gates,
 or start converting the proven harness into a minimal operator-triggered batch
 runner with hard caps and explicit no-readiness wording.
-
