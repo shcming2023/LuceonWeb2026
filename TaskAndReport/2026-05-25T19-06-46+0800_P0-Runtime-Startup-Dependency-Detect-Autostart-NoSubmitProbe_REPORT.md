@@ -39,9 +39,9 @@ The Director observed that the app could open while a core dependency was not ru
 
 No upload, submit-probe, MinerU `/tasks` probe, CleanService POST, DB write, MinIO write/delete/copy/move/cleanup, Docker volume mutation, pressure run, UAT/L3/readiness/go-live claim was performed by this code/test step.
 
-## Next Validation
+## Production Workspace Validation
 
-After this patch is pulled into the production workspace, run:
+After the patch was pushed and pulled into `/Users/concm/prod_workspace/Luceon2026`, Luceon ran:
 
 ```bash
 bash ops/start-luceon-runtime.sh
@@ -49,4 +49,13 @@ curl -fsS http://127.0.0.1:8083/health
 curl -fsS http://127.0.0.1:8081/__proxy/upload/ops/dependency-health
 ```
 
-Expected outcome: MinerU becomes reachable before startup completes, and dependency health is non-blocking.
+Observed outcome:
+
+- `bash ops/start-luceon-runtime.sh` detected MinerU down, started managed tmux session `luceon-mineru`, waited until `/health` was reachable, started `luceon-sidecar` and `luceon-supervisor`, then completed final dependency health verification.
+- `tmux list-sessions -F '#S'` showed `luceon-mineru`, `luceon-sidecar`, and `luceon-supervisor`.
+- `curl -fsS http://127.0.0.1:8083/health` returned `status=healthy`, `version=3.1.0`.
+- `curl -fsS http://127.0.0.1:8081/__proxy/upload/ops/dependency-health` returned `ok=true`, `blocking=false`, `minio=true`, `mineru=true`, `ollama=true`, with MinerU submit probe disabled.
+- `docker compose ps` showed `cms-db-server`, `cms-frontend`, `cms-minio`, and `cms-upload-server` healthy/running.
+- Browser read-only validation on `/cms/asset/548758763373874` found no `核心依赖未启动` warning and preserved the `资产处理主线` surface.
+
+This is startup/runtime-health validation only. It is not UAT, L3, production readiness, release readiness, pressure PASS, or go-live acceptance.
