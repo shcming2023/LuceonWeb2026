@@ -33,7 +33,7 @@ export function CleanMaterialSummaryCard({ material, view }: { material?: Pick<M
   }
 
   return (
-    <section className="rounded-lg border border-emerald-100 bg-white p-5 shadow-sm">
+    <section id="clean-material-toc-rebuild" className="scroll-mt-24 rounded-lg border border-emerald-100 bg-white p-5 shadow-sm">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-slate-800">

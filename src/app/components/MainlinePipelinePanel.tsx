@@ -24,7 +24,15 @@ const DOT_STYLE = {
   blocked: 'bg-amber-500 text-white',
 };
 
-export function MainlinePipelinePanel({ view, compact = false }: { view: MainlinePipelineView; compact?: boolean }) {
+export function MainlinePipelinePanel({
+  view,
+  compact = false,
+  stepLinks = {},
+}: {
+  view: MainlinePipelineView;
+  compact?: boolean;
+  stepLinks?: Partial<Record<string, string>>;
+}) {
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="mb-4 flex items-start justify-between gap-3">
@@ -43,8 +51,9 @@ export function MainlinePipelinePanel({ view, compact = false }: { view: Mainlin
       <div className={compact ? 'grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3' : 'grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-6'}>
         {view.steps.map((item, index) => {
           const Icon = ICONS[item.key as keyof typeof ICONS] || Boxes;
-          return (
-            <div key={item.key} className={`min-w-0 rounded-lg border p-3 ${STATE_STYLE[item.state]}`}>
+          const href = stepLinks[item.key];
+          const content = (
+            <>
               <div className="flex items-start gap-2">
                 <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${DOT_STYLE[item.state]}`}>
                   {item.state === 'done' ? <CheckCircle2 size={13} /> : index + 1}
@@ -62,6 +71,30 @@ export function MainlinePipelinePanel({ view, compact = false }: { view: Mainlin
                   )}
                 </div>
               </div>
+              {href && (
+                <span className="mt-2 inline-flex text-[10px] font-semibold opacity-80">
+                  查看产物
+                </span>
+              )}
+            </>
+          );
+
+          if (href) {
+            return (
+              <a
+                key={item.key}
+                href={href}
+                className={`block min-w-0 rounded-lg border p-3 transition hover:-translate-y-0.5 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300 ${STATE_STYLE[item.state]}`}
+                aria-label={`查看${item.label}产物`}
+              >
+                {content}
+              </a>
+            );
+          }
+
+          return (
+            <div key={item.key} className={`min-w-0 rounded-lg border p-3 ${STATE_STYLE[item.state]}`}>
+              {content}
             </div>
           );
         })}
