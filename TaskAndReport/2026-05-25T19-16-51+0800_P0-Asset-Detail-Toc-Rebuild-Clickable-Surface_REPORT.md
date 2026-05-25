@@ -16,8 +16,9 @@ The `资产处理主线` panel was implemented as a pure status surface. The act
 
 - `MainlinePipelinePanel` now accepts a narrow `stepLinks` map.
 - Linked steps render as accessible anchors with focus/hover affordance and `查看产物` cue.
-- Asset detail links the `toc` step to `#clean-material-toc-rebuild`.
+- Asset detail links the `toc` step to `#clean-material-toc-rebuild` only when Clean Material/toc-rebuild metadata is present.
 - `CleanMaterialSummaryCard` now exposes `id="clean-material-toc-rebuild"` with `scroll-mt-24`.
+- Pending toc-rebuild state now says `待执行目录重建` instead of implying that a product already exists.
 
 ## Checks
 
@@ -31,4 +32,7 @@ UI-only navigation fix. No DB write, MinIO write/delete/copy/move/cleanup, uploa
 
 ## Next Validation
 
-After production redeploy, click `目录重建` in the asset detail mainline panel. The page should jump to the Clean Material/toc-rebuild artifact inspection area.
+After production redeploy:
+
+- Assets with existing Clean Material/toc-rebuild artifacts should show a clickable `目录重建` step that jumps to the artifact inspection area.
+- Assets without Clean Material/toc-rebuild artifacts should show `待执行目录重建` and no fake product link.

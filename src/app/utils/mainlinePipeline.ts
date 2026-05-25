@@ -99,7 +99,7 @@ export function buildMainlinePipelineView({
       'toc',
       '目录重建',
       cleanDone ? 'done' : aiDone ? 'current' : 'blocked',
-      cleanDone ? 'toc-rebuild 已生成' : aiDone ? '可进入目录重建' : '需要 AI/解析基础',
+      cleanDone ? 'toc-rebuild 已生成' : aiDone ? '待执行目录重建' : '需要 AI/解析基础',
       cleanVersion || cleanJobId,
     ),
     step(

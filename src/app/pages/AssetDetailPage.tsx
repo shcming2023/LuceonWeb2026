@@ -527,7 +527,10 @@ export function AssetDetailPage() {
         </div>
       </div>
 
-      <MainlinePipelinePanel view={mainlinePipelineView} stepLinks={{ toc: '#clean-material-toc-rebuild' }} />
+      <MainlinePipelinePanel
+        view={mainlinePipelineView}
+        stepLinks={cleanMaterialView.present ? { toc: '#clean-material-toc-rebuild' } : {}}
+      />
 
       <div className="flex-1 min-h-0 grid grid-cols-1 gap-5 lg:grid-cols-5 overflow-hidden">
         <div className="lg:col-span-2 space-y-5 min-h-0 overflow-y-auto pr-1">
