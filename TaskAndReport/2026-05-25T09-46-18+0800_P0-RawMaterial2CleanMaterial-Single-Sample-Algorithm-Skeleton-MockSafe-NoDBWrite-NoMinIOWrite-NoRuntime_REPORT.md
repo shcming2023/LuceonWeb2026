@@ -1,12 +1,33 @@
 # TASK-20260525-094618 Lucode Report
 
 Report time: 2026-05-25T09:58:16+0800
+Revision time: 2026-05-25T10:09:42+0800
 
 ## Branch And HEAD
 
 - Branch: `lucode/TASK-20260525-094618-P0-RawMaterial2CleanMaterial-Single-Sample-Algorithm-Skeleton-MockSafe-NoDBWrite-NoMinIOWrite-NoRuntime`
 - Base HEAD: `origin/main@5a2022004b9d0b563db1d4587cd5ccaa92bf183e`
+- Return-reviewed remote HEAD: `fd014b851962e8155932a175197a2231eac7a1d4`
+- Revision baseline: `origin/main@5efcf73134df9ea82b47b81973cff9e0ed8bf36c`
 - Final pushed branch HEAD: see Lucode final thread reply for the exact pushed commit SHA. A tracked report cannot self-embed the SHA of the commit that contains that same SHA without changing it again.
+
+## Revision Summary
+
+Luceon returned the first submission for
+`RETURNED_FOR_NUMERIC_SOURCE_REFERENCE_GAP`.
+
+The fix keeps the same algorithm/test/control-plane scope and changes source
+reference normalization so stable numeric source id fields are preserved as
+string refs:
+
+- numeric `id`
+- numeric `blockId`
+- numeric `block_id`
+- numeric `nodeId`
+- numeric `node_id`
+
+The existing block behavior remains for source-derived text/title items with no
+source reference at all.
 
 ## Changed Files
 
@@ -33,7 +54,8 @@ It returns a plain JSON draft:
 - source clean service name, asset version, job id, provenance object, source
   input ObjectRef, and artifact ObjectRefs
 - extracted readable-tree summary, section summaries, and block summaries
-- source-derived items preserve block ids, node ids, or source refs when present
+- source-derived items preserve block ids, node ids, numeric ids, or source refs
+  when present
 - quality warnings only for skeleton-level constraints
 - `persistencePlan.mode = none` and `writesPlanned = false`
 - boundary flags for no DB, MinIO, runtime POST, Docker, or final artifact generation.
@@ -50,8 +72,10 @@ Focused smoke uses the canonical-shaped sample:
 Injected mock bodies produce:
 
 - readable-tree heading summary;
-- section refs from `logic_tree` and `skeleton`;
-- block refs `blk-001` and `blk-002` from `flooded_content`;
+- section refs from `logic_tree` and `skeleton`, including numeric `id=101`
+  and numeric `node_id=201` as string refs in the revision smoke;
+- block refs `blk-001` and `blk-002` from `flooded_content`, plus numeric
+  block ids `301` and `302` as string refs in the revision smoke;
 - preserved request ObjectRef hashes, including `flooded_content.sha256` and
   `skeleton.sha256`;
 - no persistence/write plan.
@@ -74,7 +98,7 @@ The skeleton returns structured blocked results for:
 | --- | ---: | --- |
 | `node server/tests/rawmaterial2cleanmaterial-input-bundle-smoke.mjs` | 0 | Existing Task 273 helper smoke passed |
 | `node server/tests/rawmaterial2cleanmaterial-protocol-runner-smoke.mjs` | 0 | Existing Task 275 protocol runner smoke passed |
-| `node server/tests/rawmaterial2cleanmaterial-algorithm-skeleton-smoke.mjs` | 0 | Accepted request + injected bodies produced `MOCK_ALGORITHM_DRAFT_READY`; missing request, wrong kind/mode, missing/invalid body, missing source ref, and live dependency marker blocking passed |
+| `node server/tests/rawmaterial2cleanmaterial-algorithm-skeleton-smoke.mjs` | 0 | Accepted request + injected bodies produced `MOCK_ALGORITHM_DRAFT_READY`; numeric `id`, `node_id`, and numeric block ids are preserved as string source refs; missing request, wrong kind/mode, missing/invalid body, missing source ref, and live dependency marker blocking passed |
 | `npx pnpm@10.4.1 exec tsc --noEmit` | 0 | TypeScript check completed with no diagnostics |
 | `npx pnpm@10.4.1 run build` | 0 | Vite production build completed; existing chunk-size warning only |
 | `git diff --check origin/main...HEAD` | 0 | No whitespace errors |

@@ -139,6 +139,13 @@ function compactString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
+function compactSourceRef(value: unknown): string | null {
+  const stringValue = compactString(value);
+  if (stringValue) return stringValue;
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return null;
+}
+
 function cloneObjectRef(ref: RawMaterial2CleanMaterialInputBundleObjectRef): RawMaterial2CleanMaterialInputBundleObjectRef {
   return {
     ...(ref.bucket ? { bucket: ref.bucket } : {}),
@@ -182,13 +189,13 @@ function arrayFromStructuredBody(value: unknown, keys: string[]): unknown[] | nu
 }
 
 function sourceRefFromRecord(record: Record<string, unknown>): string | null {
-  return compactString(record.sourceRef)
-    || compactString(record.source_ref)
-    || compactString(record.blockId)
-    || compactString(record.block_id)
-    || compactString(record.nodeId)
-    || compactString(record.node_id)
-    || compactString(record.id);
+  return compactSourceRef(record.sourceRef)
+    || compactSourceRef(record.source_ref)
+    || compactSourceRef(record.blockId)
+    || compactSourceRef(record.block_id)
+    || compactSourceRef(record.nodeId)
+    || compactSourceRef(record.node_id)
+    || compactSourceRef(record.id);
 }
 
 function textFromRecord(record: Record<string, unknown>): string | undefined {

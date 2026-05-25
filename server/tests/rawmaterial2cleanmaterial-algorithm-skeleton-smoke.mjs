@@ -171,7 +171,39 @@ console.log('=== RawMaterial2CleanMaterial Algorithm Skeleton Smoke ===');
 }
 
 {
-  console.log('  [2] missing request and wrong kind/mode block...');
+  console.log('  [2] numeric stable ids are preserved as source refs...');
+  const bodies = makeArtifactBodies();
+  bodies.logic_tree = JSON.stringify({
+    sections: [
+      { id: 101, title: 'Numeric section id' },
+    ],
+  });
+  bodies.skeleton = JSON.stringify({
+    nodes: [
+      { node_id: 201, title: 'Numeric node id' },
+    ],
+  });
+  bodies.flooded_content = JSON.stringify({
+    blocks: [
+      { id: 301, text: 'Numeric block id' },
+      { block_id: 302, text: 'Numeric snake block id' },
+    ],
+  });
+
+  const result = buildRawMaterial2CleanMaterialDraftSkeleton({
+    request: makeRequest(),
+    artifactBodies: bodies,
+    options: { now: '2026-05-25T02:04:53.000Z' },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.draft.extracted.sections.map((item) => item.sourceRef).includes('101'), true);
+  assert.equal(result.draft.extracted.sections.map((item) => item.sourceRef).includes('201'), true);
+  assert.deepEqual(result.draft.extracted.blocks.map((item) => item.sourceRef), ['301', '302']);
+}
+
+{
+  console.log('  [3] missing request and wrong kind/mode block...');
   assertBlocked(buildRawMaterial2CleanMaterialDraftSkeleton({
     request: null,
     artifactBodies: makeArtifactBodies(),
@@ -191,7 +223,7 @@ console.log('=== RawMaterial2CleanMaterial Algorithm Skeleton Smoke ===');
 }
 
 {
-  console.log('  [3] missing or invalid artifact body blocks...');
+  console.log('  [4] missing or invalid artifact body blocks...');
   const bodies = makeArtifactBodies();
   delete bodies.flooded_content;
   assertBlocked(buildRawMaterial2CleanMaterialDraftSkeleton({
@@ -208,7 +240,7 @@ console.log('=== RawMaterial2CleanMaterial Algorithm Skeleton Smoke ===');
 }
 
 {
-  console.log('  [4] source-derived items without references block...');
+  console.log('  [5] source-derived items without references block...');
   const bodies = makeArtifactBodies();
   bodies.flooded_content = JSON.stringify({
     blocks: [
@@ -222,7 +254,7 @@ console.log('=== RawMaterial2CleanMaterial Algorithm Skeleton Smoke ===');
 }
 
 {
-  console.log('  [5] live dependency markers block...');
+  console.log('  [6] live dependency markers block...');
   const bodies = makeArtifactBodies();
   bodies.liveDependencies = { minioClient: {}, dbClient: {} };
   assertBlocked(buildRawMaterial2CleanMaterialDraftSkeleton({
