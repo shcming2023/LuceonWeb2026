@@ -137,4 +137,3 @@ Move one notch from visibility to operator decision: implement a minimal
 mock-safe raw2clean candidate decision preview, scoped to `accept candidate` /
 `needs repair` / `reject`, without DB writes first. Only after that should a
 separate task authorize any durable decision apply.
-
