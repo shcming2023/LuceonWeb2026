@@ -203,7 +203,100 @@ console.log('=== RawMaterial2CleanMaterial Algorithm Skeleton Smoke ===');
 }
 
 {
-  console.log('  [3] missing request and wrong kind/mode block...');
+  console.log('  [3] real-shaped canonical artifact bodies are traversed safely...');
+  const bodies = makeArtifactBodies();
+  bodies.logic_tree = JSON.stringify({
+    node_id: 'root',
+    title: '文档根节点',
+    level: 0,
+    status: 'pending_anchor',
+    evidence: [],
+    children: [
+      {
+        node_id: 'p0_80_77_359_96_title',
+        title: '向树叶学习：人工光合作用',
+        level: 1,
+        status: 'anchored',
+        start_block_uid: 'p0_80_77_359_96_title',
+        children: [],
+      },
+    ],
+  });
+  bodies.skeleton = JSON.stringify({
+    blocks: [
+      {
+        block_uid: 'p0_80_77_359_96_title',
+        block_seq_id: 0,
+        page_idx: 0,
+        type: 'title',
+        text: '向树叶学习：人工光合作用',
+      },
+      {
+        block_uid: 'p0_78_120_443_135_paragraph',
+        block_seq_id: 1,
+        page_idx: 0,
+        type: 'paragraph',
+        text: 'What if we could take carbon dioxide,',
+      },
+    ],
+  });
+  bodies.flooded_content = JSON.stringify([
+    [
+      {
+        type: 'title',
+        content: {
+          title_content: [{ type: 'text', content: '向树叶学习：人工光合作用' }],
+          level: 1,
+        },
+        __meta_flooding__: {
+          L1_id: 'p0_80_77_359_96_title',
+          L1_title: '向树叶学习：人工光合作用',
+        },
+      },
+      {
+        type: 'paragraph',
+        content: {
+          paragraph_content: [{ type: 'text', content: 'What if we could take carbon dioxide,' }],
+        },
+        __meta_flooding__: {
+          L1_id: 'p0_80_77_359_96_title',
+          L1_title: '向树叶学习：人工光合作用',
+        },
+      },
+    ],
+    [
+      {
+        type: 'paragraph',
+        content: {
+          paragraph_content: [{ type: 'text', content: 'Unreferenced fragment must not become source truth.' }],
+        },
+      },
+    ],
+  ]);
+
+  const result = buildRawMaterial2CleanMaterialDraftSkeleton({
+    request: makeRequest(),
+    artifactBodies: bodies,
+    options: { now: '2026-05-25T04:36:33.000Z' },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.draft.status, 'MOCK_ALGORITHM_DRAFT_READY');
+  assert.equal(result.draft.extracted.sections.map((item) => item.sourceRef).includes('root'), true);
+  assert.equal(result.draft.extracted.sections.map((item) => item.sourceRef).includes('p0_80_77_359_96_title'), true);
+  assert.equal(result.draft.extracted.sections.map((item) => item.sourceRef).includes('p0_78_120_443_135_paragraph'), true);
+  assert.deepEqual(result.draft.extracted.blocks.map((item) => item.sourceRef), [
+    'p0_80_77_359_96_title',
+    'p0_80_77_359_96_title',
+  ]);
+  assert.equal(result.draft.extracted.blocks[0].title, '向树叶学习：人工光合作用');
+  assert.equal(result.draft.extracted.blocks[1].text, 'What if we could take carbon dioxide,');
+  assert.equal(result.draft.extracted.blocks.some((item) => item.text === 'Unreferenced fragment must not become source truth.'), false);
+  assert.equal(result.draft.quality.warnings.includes('flooded_content:skipped-unreferenced-text-fragments=1'), true);
+}
+
+{
+  console.log('  [4] missing request and wrong kind/mode block...');
   assertBlocked(buildRawMaterial2CleanMaterialDraftSkeleton({
     request: null,
     artifactBodies: makeArtifactBodies(),
@@ -223,7 +316,7 @@ console.log('=== RawMaterial2CleanMaterial Algorithm Skeleton Smoke ===');
 }
 
 {
-  console.log('  [4] missing or invalid artifact body blocks...');
+  console.log('  [5] missing or invalid artifact body blocks...');
   const bodies = makeArtifactBodies();
   delete bodies.flooded_content;
   assertBlocked(buildRawMaterial2CleanMaterialDraftSkeleton({
@@ -240,7 +333,7 @@ console.log('=== RawMaterial2CleanMaterial Algorithm Skeleton Smoke ===');
 }
 
 {
-  console.log('  [5] source-derived items without references block...');
+  console.log('  [6] source-derived items without references block...');
   const bodies = makeArtifactBodies();
   bodies.flooded_content = JSON.stringify({
     blocks: [
@@ -254,7 +347,7 @@ console.log('=== RawMaterial2CleanMaterial Algorithm Skeleton Smoke ===');
 }
 
 {
-  console.log('  [6] live dependency markers block...');
+  console.log('  [7] live dependency markers block...');
   const bodies = makeArtifactBodies();
   bodies.liveDependencies = { minioClient: {}, dbClient: {} };
   assertBlocked(buildRawMaterial2CleanMaterialDraftSkeleton({

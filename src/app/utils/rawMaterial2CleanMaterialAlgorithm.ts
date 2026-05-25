@@ -175,81 +175,167 @@ function invalidJson(value: unknown): boolean {
   return Boolean(asRecord(value)?.__invalidJsonRole);
 }
 
-function arrayFromStructuredBody(value: unknown, keys: string[]): unknown[] | null {
-  if (Array.isArray(value)) return value;
-  const record = asRecord(value);
-  if (!record) return null;
-
-  for (const key of keys) {
-    const child = record[key];
-    if (Array.isArray(child)) return child;
-  }
-
-  return null;
-}
-
 function sourceRefFromRecord(record: Record<string, unknown>): string | null {
+  const meta = asRecord(record.__meta_flooding__);
   return compactSourceRef(record.sourceRef)
     || compactSourceRef(record.source_ref)
+    || compactSourceRef(record.blockUid)
+    || compactSourceRef(record.block_uid)
     || compactSourceRef(record.blockId)
     || compactSourceRef(record.block_id)
     || compactSourceRef(record.nodeId)
     || compactSourceRef(record.node_id)
-    || compactSourceRef(record.id);
+    || compactSourceRef(record.uid)
+    || compactSourceRef(record.id)
+    || (meta
+      ? compactSourceRef(meta.sourceRef)
+        || compactSourceRef(meta.source_ref)
+        || compactSourceRef(meta.block_uid)
+        || compactSourceRef(meta.L1_id)
+        || compactSourceRef(meta.l1_id)
+      : null);
+}
+
+function compactNestedText(value: unknown, depth = 0): string | null {
+  if (depth > 3) return null;
+  const direct = compactString(value);
+  if (direct) return direct;
+
+  const record = asRecord(value);
+  if (!record) return null;
+
+  return compactString(record.text)
+    || compactString(record.content)
+    || compactString(record.value)
+    || compactNestedText(record.content, depth + 1);
+}
+
+function firstTextFromArray(value: unknown): string | null {
+  if (!Array.isArray(value)) return null;
+  for (const item of value) {
+    const text = compactNestedText(item);
+    if (text) return text;
+  }
+  return null;
 }
 
 function textFromRecord(record: Record<string, unknown>): string | undefined {
+  const content = asRecord(record.content);
   return compactString(record.text)
     || compactString(record.content)
+    || (content
+      ? firstTextFromArray(content.paragraph_content)
+        || firstTextFromArray(content.title_content)
+        || firstTextFromArray(content.text)
+      : null)
     || compactString(record.markdown)
     || undefined;
 }
 
 function titleFromRecord(record: Record<string, unknown>): string | undefined {
+  const content = asRecord(record.content);
   return compactString(record.title)
     || compactString(record.heading)
     || compactString(record.label)
+    || (content ? firstTextFromArray(content.title_content) : null)
     || undefined;
+}
+
+const STRUCTURED_CHILD_KEYS = [
+  'children',
+  'nodes',
+  'sections',
+  'items',
+  'blocks',
+  'content',
+  'paragraphs',
+  'paragraph_content',
+  'title_content',
+];
+
+const TEXT_CONTENT_CHILD_KEYS = new Set([
+  'content',
+  'paragraph_content',
+  'title_content',
+]);
+
+interface ExtractedItems {
+  items: RawMaterial2CleanMaterialDraftItem[];
+  warnings: string[];
+}
+
+function collectStructuredItems(
+  value: unknown,
+  role: RawMaterial2CleanMaterialArtifactRole,
+  keys: string[],
+): ExtractedItems {
+  const items: RawMaterial2CleanMaterialDraftItem[] = [];
+  let skippedUnreferenced = 0;
+  let visited = 0;
+
+  function visit(node: unknown, depth: number): void {
+    if (depth > 8 || visited > 1000) return;
+    visited += 1;
+
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child, depth + 1);
+      return;
+    }
+
+    const record = asRecord(node);
+    if (!record) return;
+
+    const sourceRef = sourceRefFromRecord(record);
+    const text = textFromRecord(record);
+    const title = titleFromRecord(record);
+    if (sourceRef) {
+      items.push({
+        role,
+        sourceRef,
+        ...(title ? { title } : {}),
+        ...(text ? { text } : {}),
+      });
+    } else if (text || title) {
+      skippedUnreferenced += 1;
+    }
+
+    for (const key of new Set([...keys, ...STRUCTURED_CHILD_KEYS])) {
+      if ((sourceRef || text || title) && TEXT_CONTENT_CHILD_KEYS.has(key)) continue;
+      if (key in record) visit(record[key], depth + 1);
+    }
+  }
+
+  visit(value, 0);
+
+  return {
+    items,
+    warnings: [
+      ...(skippedUnreferenced > 0 ? [`${role}:skipped-unreferenced-text-fragments=${skippedUnreferenced}`] : []),
+      ...(visited > 1000 ? [`${role}:traversal-visit-limit-reached`] : []),
+    ],
+  };
 }
 
 function extractItemsFromBody(
   role: RawMaterial2CleanMaterialArtifactRole,
   body: unknown,
   keys: string[],
-): RawMaterial2CleanMaterialDraftItem[] | RawMaterial2CleanMaterialAlgorithmResult {
+): ExtractedItems | RawMaterial2CleanMaterialAlgorithmResult {
   const parsed = bodyToJson(body, role);
   if (invalidJson(parsed)) {
     return blocked('INVALID_ARTIFACT_BODY', `artifact body is not valid JSON: ${role}`, { role });
   }
 
-  const items = arrayFromStructuredBody(parsed, keys);
-  if (!items) {
-    return blocked('INVALID_ARTIFACT_BODY', `artifact body has no supported item array: ${role}`, { role });
-  }
-
-  const extracted: RawMaterial2CleanMaterialDraftItem[] = [];
-  for (const item of items) {
-    const record = asRecord(item);
-    if (!record) continue;
-
-    const sourceRef = sourceRefFromRecord(record);
-    const text = textFromRecord(record);
-    const title = titleFromRecord(record);
-    if (!sourceRef && (text || title)) {
-      return blocked('MISSING_SOURCE_REFERENCE', `source-derived item is missing a source reference: ${role}`, {
+  const extracted = collectStructuredItems(parsed, role, keys);
+  if (extracted.items.length === 0) {
+    const warningOnly = extracted.warnings.some((warning) => warning.includes('skipped-unreferenced-text-fragments'));
+    if (warningOnly) {
+      return blocked('MISSING_SOURCE_REFERENCE', `artifact body has source text but no stable source references: ${role}`, {
         role,
-        item,
+        warnings: extracted.warnings,
       });
     }
-
-    if (sourceRef) {
-      extracted.push({
-        role,
-        sourceRef,
-        ...(title ? { title } : {}),
-        ...(text ? { text } : {}),
-      });
-    }
+    return blocked('INVALID_ARTIFACT_BODY', `artifact body has no supported source-referenced items: ${role}`, { role });
   }
 
   return extracted;
@@ -313,14 +399,14 @@ export function buildRawMaterial2CleanMaterialDraftSkeleton({
   const readableTree = summarizeReadableTree(artifactBodies.readable_tree);
   if ('ok' in readableTree) return readableTree;
 
-  const logicItems = extractItemsFromBody('logic_tree', artifactBodies.logic_tree, ['sections', 'nodes', 'items']);
-  if (!Array.isArray(logicItems)) return logicItems;
+  const logicItems = extractItemsFromBody('logic_tree', artifactBodies.logic_tree, ['sections', 'nodes', 'items', 'children']);
+  if ('ok' in logicItems) return logicItems;
 
-  const skeletonItems = extractItemsFromBody('skeleton', artifactBodies.skeleton, ['nodes', 'sections', 'items']);
-  if (!Array.isArray(skeletonItems)) return skeletonItems;
+  const skeletonItems = extractItemsFromBody('skeleton', artifactBodies.skeleton, ['nodes', 'sections', 'items', 'blocks']);
+  if ('ok' in skeletonItems) return skeletonItems;
 
   const floodedItems = extractItemsFromBody('flooded_content', artifactBodies.flooded_content, ['blocks', 'items', 'content']);
-  if (!Array.isArray(floodedItems)) return floodedItems;
+  if ('ok' in floodedItems) return floodedItems;
 
   const artifactRefs = {} as Record<RawMaterial2CleanMaterialArtifactRole, RawMaterial2CleanMaterialInputBundleObjectRef>;
   for (const [role, ref] of Object.entries(request.source.artifactRefs)) {
@@ -346,13 +432,16 @@ export function buildRawMaterial2CleanMaterialDraftSkeleton({
       },
       extracted: {
         readableTree,
-        sections: [...logicItems, ...skeletonItems],
-        blocks: floodedItems,
+        sections: [...logicItems.items, ...skeletonItems.items],
+        blocks: floodedItems.items,
       },
       quality: {
         warnings: [
           'mock-algorithm-skeleton-only',
-          ...(floodedItems.length === 0 ? ['no-flooded-content-blocks'] : []),
+          ...logicItems.warnings,
+          ...skeletonItems.warnings,
+          ...floodedItems.warnings,
+          ...(floodedItems.items.length === 0 ? ['no-flooded-content-blocks'] : []),
         ],
       },
       persistencePlan: {
