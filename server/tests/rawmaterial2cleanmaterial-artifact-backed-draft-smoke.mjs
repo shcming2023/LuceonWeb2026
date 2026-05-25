@@ -220,7 +220,7 @@ console.log('=== RawMaterial2CleanMaterial Artifact-Backed Draft Smoke ===');
   assertBlocked(await buildRawMaterial2CleanMaterialArtifactBackedDraftDryRun({
     bundle: makeBundle(),
     artifactBodyReader: (_ref, role) => {
-      if (role === 'flooded_content') return JSON.stringify({ blocks: [{ text: 'missing source ref' }] });
+      if (role === 'logic_tree') return JSON.stringify({ sections: [{ text: 'missing source ref' }] });
       return bodyForRole(role);
     },
   }), 'DRAFT_BUILD_BLOCKED');

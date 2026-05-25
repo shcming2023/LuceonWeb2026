@@ -329,6 +329,7 @@ function extractItemsFromBody(
   const extracted = collectStructuredItems(parsed, role, keys);
   if (extracted.items.length === 0) {
     const warningOnly = extracted.warnings.some((warning) => warning.includes('skipped-unreferenced-text-fragments'));
+    if (role === 'flooded_content' && warningOnly) return extracted;
     if (warningOnly) {
       return blocked('MISSING_SOURCE_REFERENCE', `artifact body has source text but no stable source references: ${role}`, {
         role,

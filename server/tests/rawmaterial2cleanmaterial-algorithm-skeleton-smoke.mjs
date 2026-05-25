@@ -333,16 +333,27 @@ console.log('=== RawMaterial2CleanMaterial Algorithm Skeleton Smoke ===');
 }
 
 {
-  console.log('  [6] source-derived items without references block...');
+  console.log('  [6] unreferenced flooded content is skipped with warning...');
   const bodies = makeArtifactBodies();
   bodies.flooded_content = JSON.stringify({
     blocks: [
       { text: 'This text has no block id.' },
     ],
   });
-  assertBlocked(buildRawMaterial2CleanMaterialDraftSkeleton({
+  const result = buildRawMaterial2CleanMaterialDraftSkeleton({
     request: makeRequest(),
     artifactBodies: bodies,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.draft.extracted.blocks.length, 0);
+  assert.ok(result.draft.quality.warnings.includes('flooded_content:skipped-unreferenced-text-fragments=1'));
+  assert.ok(result.draft.quality.warnings.includes('no-flooded-content-blocks'));
+
+  const logicBodies = makeArtifactBodies();
+  logicBodies.logic_tree = JSON.stringify({ sections: [{ text: 'Still needs a stable section id.' }] });
+  assertBlocked(buildRawMaterial2CleanMaterialDraftSkeleton({
+    request: makeRequest(),
+    artifactBodies: logicBodies,
   }), 'MISSING_SOURCE_REFERENCE');
 }
 
