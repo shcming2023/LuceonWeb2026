@@ -48,7 +48,40 @@ pipeline execution changes.
   RawMaterial2CleanMaterial execution.
 - No readiness, UAT, L3, pressure PASS, production-readiness, or go-live claim.
 
-## Deployment And Browser Validation
+## Deployment
 
-Pending in this report until the committed UI is deployed and browser-checked.
+Deployed to the local production runtime for manual evaluation:
 
+```bash
+git pull --ff-only origin main
+docker compose up -d --build --no-deps cms-frontend
+```
+
+Deployed source:
+
+```text
+ab45d97
+```
+
+Only `cms-frontend` was rebuilt/recreated. DB, upload-server, and MinIO were not
+recreated for this UI-only change.
+
+## Browser Validation
+
+Playwright browser checks passed against the deployed runtime:
+
+| Page | Result | Screenshot |
+| --- | --- | --- |
+| `/cms/asset/548758763373874` | mainline panel and all six steps visible | `/tmp/luceon-mainline-asset.png` |
+| `/cms/library` | mainline panel, counts, directory-rebuild filter/column, and Raw2Clean labels visible | `/tmp/luceon-mainline-library.png` |
+
+Validated visible text includes:
+
+- `资产处理主线`;
+- `提交 PDF`;
+- `MinerU 解析`;
+- `AI 元数据识别`;
+- `目录重建`;
+- `Raw Material`;
+- `Clean Material`;
+- `Raw2Clean`.
