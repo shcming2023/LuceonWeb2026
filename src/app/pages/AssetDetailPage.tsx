@@ -9,11 +9,13 @@ import { PreviewTabPanel } from '../components/PreviewTabPanel';
 import { ProcessPipelineCard } from '../components/ProcessPipelineCard';
 import { CleanMaterialSummaryCard } from '../components/CleanMaterialSummaryCard';
 import { RawMaterial2CleanMaterialCandidateCard } from '../components/RawMaterial2CleanMaterialCandidateCard';
+import { MainlinePipelinePanel } from '../components/MainlinePipelinePanel';
 import { deriveMaterialTaskView, ParseTask, deriveTaskBucket } from '../utils/taskView';
 import { AlertTriangle, ExternalLink, RotateCw, RefreshCw, Sparkles, XCircle, ShieldCheck } from 'lucide-react';
 import { appendMineruTaskOptions } from '../utils/mineruTaskOptions';
 import { buildCleanMaterialView } from '../utils/cleanMaterialView';
 import { buildRawMaterial2CleanMaterialCandidateView } from '../utils/rawMaterial2CleanMaterialCandidateView';
+import { buildMainlinePipelineView } from '../utils/mainlinePipeline';
 
 // ── 工具函数 ──────────────────────────────────────────────
 const getMaterialTags = (m: any) =>
@@ -80,6 +82,7 @@ export function AssetDetailPage() {
   const currentTask = taskView.currentTask;
   const cleanMaterialView = buildCleanMaterialView({ material, task: currentTask });
   const raw2CleanCandidateView = buildRawMaterial2CleanMaterialCandidateView({ material, task: currentTask });
+  const mainlinePipelineView = buildMainlinePipelineView({ material, task: currentTask });
   
   const mineruRunning = currentTask ? deriveTaskBucket(currentTask.state) === 'processing' : false;
   const mineruProgress = currentTask?.progress || 0;
@@ -523,6 +526,8 @@ export function AssetDetailPage() {
           </div>
         </div>
       </div>
+
+      <MainlinePipelinePanel view={mainlinePipelineView} />
 
       <div className="flex-1 min-h-0 grid grid-cols-1 gap-5 lg:grid-cols-5 overflow-hidden">
         <div className="lg:col-span-2 space-y-5 min-h-0 overflow-y-auto pr-1">

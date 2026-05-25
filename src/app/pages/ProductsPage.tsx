@@ -24,12 +24,14 @@ import {
   Boxes,
 } from 'lucide-react';
 import { DropdownMenu } from '../components/DropdownMenu';
+import { MainlinePipelinePanel } from '../components/MainlinePipelinePanel';
 import { useAppStore } from '../../store/appContext';
 import { toast } from 'sonner';
 import { sortMaterials } from '../../utils/sort';
 import { usePagination, getPageNumbers } from '../../utils/pagination';
 import { fetchMinerUMarkdown } from '../../utils/mineruApi';
 import type { SortOption, ViewMode } from '../../store/types';
+import { buildMainlinePipelineView } from '../utils/mainlinePipeline';
 
 // ── 工具函数 ──────────────────────────────────────────────
 const getMaterialTags = (m: any) =>
@@ -337,6 +339,21 @@ export function ProductsPage() {
     () => enrichedMaterials.filter((m: any) => m._enriched.cleanMaterialStatus.key === 'raw2clean-accepted').length,
     [enrichedMaterials],
   );
+  const libraryMainlineView = useMemo(() => buildMainlinePipelineView({
+    material: cleanMaterialCount > 0 ? {
+      title: '成果库主线',
+      metadata: {
+        objectName: 'library-sample.pdf',
+        parsedFilesCount: processedCount,
+        aiAnalyzedAt: processedCount > 0 ? 'library' : undefined,
+        cleanMaterials: cleanMaterialCount > 0 ? { 'toc-rebuild': { latestVersion: `${cleanMaterialCount} assets`, status: 'completed' } } : undefined,
+        rawMaterial: processedCount > 0 ? { version: 'library' } : undefined,
+        rawMaterial2CleanMaterial: raw2cleanAcceptedCount > 0 ? { currentDecision: { state: 'accepted' } } : undefined,
+      },
+      mineruStatus: 'completed',
+      aiStatus: 'analyzed',
+    } : null,
+  }), [cleanMaterialCount, processedCount, raw2cleanAcceptedCount]);
 
   // ── Markdown 拉取 ─────────────────────────────────────────
   const handleToggleMarkdown = useCallback(
@@ -580,6 +597,10 @@ export function ProductsPage() {
               <Trash2 size={16} /> 清理全部素材 (测试环境)
             </button>
           </div>
+        </div>
+
+        <div className="mb-6">
+          <MainlinePipelinePanel view={libraryMainlineView} compact />
         </div>
 
         {/* ── 筛选工具栏 ─────────────────────────────── */}
