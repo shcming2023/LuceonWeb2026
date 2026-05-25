@@ -8,10 +8,12 @@ import { PDFPreviewPanel } from '../components/PDFPreviewPanel';
 import { PreviewTabPanel } from '../components/PreviewTabPanel';
 import { ProcessPipelineCard } from '../components/ProcessPipelineCard';
 import { CleanMaterialSummaryCard } from '../components/CleanMaterialSummaryCard';
+import { RawMaterial2CleanMaterialCandidateCard } from '../components/RawMaterial2CleanMaterialCandidateCard';
 import { deriveMaterialTaskView, ParseTask, deriveTaskBucket } from '../utils/taskView';
 import { AlertTriangle, ExternalLink, RotateCw, RefreshCw, Sparkles, XCircle, ShieldCheck } from 'lucide-react';
 import { appendMineruTaskOptions } from '../utils/mineruTaskOptions';
 import { buildCleanMaterialView } from '../utils/cleanMaterialView';
+import { buildRawMaterial2CleanMaterialCandidateView } from '../utils/rawMaterial2CleanMaterialCandidateView';
 
 // ── 工具函数 ──────────────────────────────────────────────
 const getMaterialTags = (m: any) =>
@@ -77,6 +79,7 @@ export function AssetDetailPage() {
   const taskView = deriveMaterialTaskView(material, relatedTasks);
   const currentTask = taskView.currentTask;
   const cleanMaterialView = buildCleanMaterialView({ material, task: currentTask });
+  const raw2CleanCandidateView = buildRawMaterial2CleanMaterialCandidateView({ material, task: currentTask });
   
   const mineruRunning = currentTask ? deriveTaskBucket(currentTask.state) === 'processing' : false;
   const mineruProgress = currentTask?.progress || 0;
@@ -542,6 +545,7 @@ export function AssetDetailPage() {
             aiDisabledReason={(!material?.metadata?.markdownObjectName && !material?.metadata?.markdownUrl && !material?.mineruZipUrl && !mineruMarkdown) ? '请先完成 MinerU 解析' : ''}
           />
           <CleanMaterialSummaryCard material={material} view={cleanMaterialView} />
+          <RawMaterial2CleanMaterialCandidateCard view={raw2CleanCandidateView} />
 
           {/* [P0] 当前任务卡片 */}
           <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
