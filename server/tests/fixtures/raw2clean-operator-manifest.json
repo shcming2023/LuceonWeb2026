@@ -1,0 +1,38 @@
+{
+  "operatorId": "fixture-operator",
+  "samples": [
+    {
+      "materialId": "mat-1",
+      "taskId": "task-1",
+      "title": "Fixture Sample 1",
+      "rawSeed": {
+        "bucket": "eduassets-raw",
+        "object": "mineru/mat-1/v1/content_list_v2.json",
+        "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "size_bytes": 101
+      }
+    },
+    {
+      "materialId": "mat-2",
+      "taskId": "task-2",
+      "title": "Fixture Sample 2",
+      "rawSeed": {
+        "bucket": "eduassets-raw",
+        "object": "mineru/mat-2/v1/content_list_v2.json",
+        "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "size_bytes": 202
+      }
+    },
+    {
+      "materialId": "mat-3",
+      "taskId": "task-3",
+      "title": "Fixture Sample 3",
+      "rawSeed": {
+        "bucket": "eduassets-raw",
+        "object": "mineru/mat-3/v1/content_list_v2.json",
+        "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+        "size_bytes": 303
+      }
+    }
+  ]
+}

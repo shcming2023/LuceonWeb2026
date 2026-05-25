@@ -9,7 +9,7 @@ import { buildCleanServiceJobRequest } from '../services/cleanservice/cleanservi
 import { createCleanServiceClientWithTransport } from '../services/cleanservice/worker-factory.mjs';
 import { runCleanServiceTocRebuildOnce } from '../services/cleanservice/orchestration-runner.mjs';
 
-const SAMPLES = Object.freeze([
+export const RAW2CLEAN_BOUNDED_MINI_BATCH_SAMPLES = Object.freeze([
   {
     materialId: '3884430250123676',
     taskId: 'task-1779085090064',
@@ -60,12 +60,12 @@ const SAMPLES = Object.freeze([
   },
 ]);
 
-let SAMPLE = SAMPLES[0];
+let SAMPLE = RAW2CLEAN_BOUNDED_MINI_BATCH_SAMPLES[0];
 
 const dbBaseUrl = process.env.DB_BASE_URL || 'http://localhost:8081/__proxy/db';
 const uploadProxyBaseUrl = process.env.UPLOAD_PROXY_BASE_URL || 'http://localhost:8081/__proxy/upload';
 const cleanServiceEndpoint = process.env.CLEANSERVICE_ENDPOINT || 'http://localhost:8000';
-const realApply = process.env.RAW2CLEAN_MINI_BATCH_REAL_APPLY === '1';
+const defaultRealApply = process.env.RAW2CLEAN_MINI_BATCH_REAL_APPLY === '1';
 const nowValue = process.env.RAW2CLEAN_MINI_BATCH_NOW || '2026-05-25T06:43:19.000Z';
 const outDir = '/tmp/luceon-task288-raw2clean-mini-batch';
 const zipPath = join(outDir, 'mineru-result.zip');
@@ -202,7 +202,7 @@ process.stdin.on('end', async () => {
   });
 }
 
-async function putIfMissingExact(bucket, object, content, contentType) {
+async function putIfMissingExact(bucket, object, content, contentType, realApply) {
   const buffer = Buffer.isBuffer(content) ? content : Buffer.from(content, 'utf8');
   const expected = { size_bytes: buffer.length, sha256: sha256Hex(buffer) };
   const existing = bucket === 'eduassets-raw' ? readObjectViaUploadContainer(bucket, object) : await readObjectViaProxy(bucket, object);
@@ -406,13 +406,73 @@ function hasFullCandidateContent(value) {
   return serialized.includes('"sections"') || serialized.includes('"blocks"') || serialized.includes('"canonicalJson"') || serialized.length > 250000;
 }
 
-async function processSample(sample, index) {
+export async function processMiniBatchPilotSample(sample, index, { realApply = defaultRealApply } = {}) {
   SAMPLE = sample;
   const preMaterial = await getDb(`/materials/${encodeURIComponent(SAMPLE.materialId)}`);
   const preTask = await getDb(`/tasks/${encodeURIComponent(SAMPLE.taskId)}`);
   assert.equal(String(preMaterial.id), SAMPLE.materialId);
   assert.equal(String(preTask.id), SAMPLE.taskId);
   assert.equal(String(preTask.materialId), SAMPLE.materialId);
+
+  const existingRaw2Clean = preMaterial.metadata?.rawMaterial2CleanMaterial || null;
+  const existingCandidate = existingRaw2Clean?.currentCandidate?.artifact?.candidate || null;
+  const existingDecision = existingRaw2Clean?.currentDecision?.state || null;
+  if (realApply && existingDecision === 'accepted' && existingCandidate?.bucket && existingCandidate?.object) {
+    const candidateObject = await readObjectViaProxy(existingCandidate.bucket, existingCandidate.object);
+    assert.equal(candidateObject.exists, true, `${existingCandidate.bucket}/${existingCandidate.object} existing candidate proxy GET`);
+    assert.equal(candidateObject.sha256, existingCandidate.sha256);
+    assert.equal(candidateObject.size_bytes, existingCandidate.size_bytes);
+    return {
+      ok: true,
+      mode: 'real-idempotent-existing-accepted',
+      order: index + 1,
+      sample: SAMPLE,
+      rawSeed: {
+        action: 'already-present-or-not-needed',
+        sha256: SAMPLE.expectedRawSeed?.sha256 || null,
+        size_bytes: SAMPLE.expectedRawSeed?.size_bytes || null,
+      },
+      cleanService: {
+        endpoint: cleanServiceEndpoint,
+        submitCalls: 0,
+        reconciledExistingJob: true,
+        jobId: preTask.metadata?.cleanServiceJobs?.['toc-rebuild']?.jobId || preMaterial.metadata?.cleanMaterials?.['toc-rebuild']?.jobId || null,
+        assetVersion: preTask.metadata?.cleanServiceJobs?.['toc-rebuild']?.assetVersion || preMaterial.metadata?.cleanMaterials?.['toc-rebuild']?.latestVersion || null,
+        status: preTask.metadata?.cleanServiceJobs?.['toc-rebuild']?.status || preMaterial.metadata?.cleanMaterials?.['toc-rebuild']?.status || null,
+        classification: 'EXISTING_ACCEPTED_NOOP',
+        sectionCount: preTask.metadata?.rawMaterial2CleanMaterialJobs?.['raw-material-2-clean-material']?.stats?.sectionCount
+          || existingRaw2Clean?.currentCandidate?.stats?.sectionCount
+          || null,
+        blockCount: preTask.metadata?.rawMaterial2CleanMaterialJobs?.['raw-material-2-clean-material']?.stats?.blockCount
+          || existingRaw2Clean?.currentCandidate?.stats?.blockCount
+          || null,
+        artifacts: preTask.metadata?.cleanServiceJobs?.['toc-rebuild']?.artifacts || null,
+      },
+      candidate: {
+        ref: existingCandidate,
+        write: { action: 'already-present', sha256: candidateObject.sha256, size_bytes: candidateObject.size_bytes },
+        outputContractPreview: preTask.metadata?.rawMaterial2CleanMaterialJobs?.['raw-material-2-clean-material']?.preview?.outputContract || null,
+        decisionState: existingDecision,
+      },
+      patchResult: { action: 'noop-existing-accepted', operationCount: 0 },
+      post: {
+        cleanJobId: preTask.metadata?.cleanServiceJobs?.['toc-rebuild']?.jobId || null,
+        cleanDecision: preMaterial.metadata?.cleanMaterials?.['toc-rebuild']?.operatorDecision?.state || null,
+        raw2cleanTaskStatus: preTask.metadata?.rawMaterial2CleanMaterialJobs?.['raw-material-2-clean-material']?.status || null,
+        raw2cleanDecision: existingDecision,
+      },
+      boundaries: {
+        rawSeedPutObject: 0,
+        cleanServicePost: 0,
+        raw2cleanCandidatePutObject: 0,
+        dbPatch: 0,
+        minioDelete: 0,
+        runtimePostOtherThanCleanService: 0,
+        dockerOperation: 0,
+        batch: 0,
+      },
+    };
+  }
 
   const health = await fetch(`${cleanServiceEndpoint.replace(/\/+$/, '')}/health`);
   assert.equal(health.status, 200, 'CleanService health');
@@ -429,6 +489,7 @@ async function processSample(sample, index) {
     SAMPLE.rawObject,
     extracted.buffer,
     'application/json; charset=utf-8',
+    realApply,
   );
 
   if (!realApply) {
@@ -598,6 +659,7 @@ async function processSample(sample, index) {
     candidateRef.object,
     candidateJson,
     'application/json; charset=utf-8',
+    realApply,
   );
 
   const candidatePreview = {
@@ -724,21 +786,23 @@ function summarizeBoundaries(results) {
 
 async function main() {
   const results = [];
-  for (let index = 0; index < SAMPLES.length; index += 1) {
-    results.push(await processSample(SAMPLES[index], index));
+  for (let index = 0; index < RAW2CLEAN_BOUNDED_MINI_BATCH_SAMPLES.length; index += 1) {
+    results.push(await processMiniBatchPilotSample(RAW2CLEAN_BOUNDED_MINI_BATCH_SAMPLES[index], index));
   }
 
   console.log(JSON.stringify({
     ok: true,
-    mode: realApply ? 'real-apply' : 'dry-run-preflight',
-    sampleCount: SAMPLES.length,
+    mode: defaultRealApply ? 'real-apply' : 'dry-run-preflight',
+    sampleCount: RAW2CLEAN_BOUNDED_MINI_BATCH_SAMPLES.length,
     stopOnFirstFailure: true,
     results,
     totals: summarizeBoundaries(results),
   }, null, 2));
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

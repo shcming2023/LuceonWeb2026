@@ -1,0 +1,53 @@
+{
+  "operatorId": "Luceon",
+  "samples": [
+    {
+      "materialId": "3884430250123676",
+      "taskId": "task-1779085090064",
+      "title": "期末质量分析及建议（曹云童 ）",
+      "parsedZip": {
+        "bucket": "eduassets-parsed",
+        "object": "parsed/3884430250123676/mineru-result.zip"
+      },
+      "rawObject": "mineru/3884430250123676/v1/content_list_v2.json",
+      "cleanAssetVersion": "v1",
+      "raw2cleanAssetVersion": "v1",
+      "expectedRawSeed": {
+        "sha256": "c5604562bf9e27383e922b42e8a547dbb7d8f6ac24a30a7354d9a27a428b737f",
+        "size_bytes": 29392
+      }
+    },
+    {
+      "materialId": "696446087521346",
+      "taskId": "task-1779010154264",
+      "title": "曹云童八年级咬文嚼字",
+      "parsedZip": {
+        "bucket": "eduassets-parsed",
+        "object": "parsed/696446087521346/mineru-result.zip"
+      },
+      "rawObject": "mineru/696446087521346/v1/content_list_v2.json",
+      "cleanAssetVersion": "v1",
+      "raw2cleanAssetVersion": "v1",
+      "expectedRawSeed": {
+        "sha256": "14e1ac847c487c9960a1d5be07c89e73f87ba3354722a427b8c7579a7c6132a9",
+        "size_bytes": 65276
+      }
+    },
+    {
+      "materialId": "3228822025029647",
+      "taskId": "task-1779085087347",
+      "title": "PDF document-4F18-A8A3-62-0",
+      "parsedZip": {
+        "bucket": "eduassets-parsed",
+        "object": "parsed/3228822025029647/mineru-result.zip"
+      },
+      "rawObject": "mineru/3228822025029647/v1/content_list_v2.json",
+      "cleanAssetVersion": "v1",
+      "raw2cleanAssetVersion": "v1",
+      "expectedRawSeed": {
+        "sha256": "6516df5be0a7d3bbfa8593a73075491800cb40f897e62b980c0354e5c6f1c8ad",
+        "size_bytes": 39538
+      }
+    }
+  ]
+}
