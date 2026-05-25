@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Boxes, ExternalLink, FileJson, Hash, Loader2, TriangleAlert } from 'lucide-react';
+import { Boxes, CheckCircle2, ExternalLink, FileJson, Hash, Loader2, TriangleAlert } from 'lucide-react';
 import type { RawMaterial2CleanMaterialCandidateView } from '../utils/rawMaterial2CleanMaterialCandidateView';
 
 function mono(value: string | number | null | undefined) {
@@ -90,6 +90,21 @@ export function RawMaterial2CleanMaterialCandidateCard({ view }: { view: RawMate
         <div className="mb-4 flex items-start gap-2 rounded-md border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">
           <TriangleAlert size={14} className="mt-0.5 shrink-0" />
           <span>{view.conflict}</span>
+        </div>
+      )}
+
+      {view.decision && (
+        <div className="mb-4 rounded-md border border-emerald-100 bg-emerald-50 px-3 py-2">
+          <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700">
+            <CheckCircle2 size={14} />
+            <span>Decision: {view.decision.state || 'recorded'}</span>
+          </div>
+          <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+            <Field label="Decided At" value={view.decision.decidedAt} />
+            <Field label="Decided By" value={view.decision.decidedBy} />
+            <Field label="Final Quality Accepted" value={view.decision.finalQualityAccepted === null ? '-' : String(view.decision.finalQualityAccepted)} />
+            <Field label="Decision Reason" value={view.decision.reason} />
+          </div>
         </div>
       )}
 

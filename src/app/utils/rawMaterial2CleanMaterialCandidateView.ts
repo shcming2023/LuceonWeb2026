@@ -32,6 +32,13 @@ export interface RawMaterial2CleanMaterialCandidateView {
     candidateArtifactSha256: string | null;
     outputContractSha256: string | null;
   };
+  decision: {
+    state: string | null;
+    decidedAt: string | null;
+    decidedBy: string | null;
+    reason: string | null;
+    finalQualityAccepted: boolean | null;
+  } | null;
   warnings: string[];
   boundaries: Record<string, unknown>;
   updatedAt: string | null;
@@ -131,6 +138,8 @@ export function buildRawMaterial2CleanMaterialCandidateView({
   const sourceCleanMaterial = asRecord(summary.sourceCleanMaterial);
   const stats = asRecord(summary.stats);
   const preview = asRecord(summary.preview);
+  const decisionRecord = asRecord(summary.decision || summary.acceptedDecision);
+  const decisionBoundaries = asRecord(decisionRecord.boundaries);
   const candidatePreview = asRecord(preview.candidateArtifact);
   const outputPreview = asRecord(preview.outputContract);
   const present = Boolean(Object.keys(summary).length > 0 || artifact);
@@ -164,6 +173,15 @@ export function buildRawMaterial2CleanMaterialCandidateView({
       candidateArtifactSha256: cleanString(candidatePreview.sha256) || artifact?.sha256 || null,
       outputContractSha256: cleanString(outputPreview.sha256),
     },
+    decision: Object.keys(decisionRecord).length > 0 ? {
+      state: cleanString(decisionRecord.state) || cleanString(decisionRecord.decision),
+      decidedAt: cleanString(decisionRecord.decidedAt),
+      decidedBy: cleanString(decisionRecord.decidedBy),
+      reason: cleanString(decisionRecord.reason),
+      finalQualityAccepted: typeof decisionBoundaries.finalQualityAccepted === 'boolean'
+        ? decisionBoundaries.finalQualityAccepted
+        : null,
+    } : null,
     warnings: Array.isArray(summary.warnings) ? summary.warnings.map(String) : [],
     boundaries: asRecord(summary.boundaries),
     updatedAt: cleanString(summary.updatedAt) || cleanString(materialSummary.updatedAt),

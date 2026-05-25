@@ -63,6 +63,24 @@ function summary(extra = {}) {
   };
 }
 
+function acceptedDecision() {
+  return {
+    state: 'accepted',
+    decision: 'accepted',
+    decidedAt: '2026-05-25T05:54:05.000Z',
+    decidedBy: 'Luceon',
+    reason: 'Director-approved single-sample durable accepted decision apply',
+    boundaries: {
+      finalQualityAccepted: false,
+      runtimePost: false,
+      serviceExecution: false,
+      minioMutation: false,
+      batch: false,
+      readinessClaimed: false,
+    },
+  };
+}
+
 function compileHelper() {
   rmSync(outDir, { recursive: true, force: true });
   execFileSync('npx', [
@@ -122,6 +140,7 @@ console.log('=== RawMaterial2CleanMaterial Candidate View Smoke ===');
   assert.equal(view.stats.blockCount, 71);
   assert.equal(view.preview.candidateArtifactSha256, '49a6189e12fe1c65ffdfbdf2e5b73d204c432002dff55812dc8c3be17ac2ce27');
   assert.equal(view.preview.outputContractSha256, 'c87cbf75bf91b43700239ea890f9c6fda7ef2e3c61db18a4533397235e872c16');
+  assert.equal(view.decision, null);
   assert.deepEqual(view.warnings, ['mock-algorithm-skeleton-only']);
   assert.equal(view.conflict, null);
 }
@@ -163,6 +182,32 @@ console.log('=== RawMaterial2CleanMaterial Candidate View Smoke ===');
   });
   assert.equal(conflict.present, true);
   assert.equal(conflict.conflict, 'task/material candidate ObjectRef mismatch');
+}
+
+{
+  console.log('  [4] surfaces accepted decision metadata...');
+  const view = buildRawMaterial2CleanMaterialCandidateView({
+    material: {
+      metadata: {
+        rawMaterial2CleanMaterial: {
+          currentCandidate: summary({ status: 'accepted', cleanState: 'accepted-candidate', decision: acceptedDecision() }),
+          candidates: { v1: summary({ status: 'accepted', cleanState: 'accepted-candidate', decision: acceptedDecision() }) },
+        },
+      },
+    },
+    task: {
+      metadata: {
+        rawMaterial2CleanMaterialJobs: {
+          'raw-material-2-clean-material': summary({ status: 'accepted', cleanState: 'accepted-candidate', decision: acceptedDecision() }),
+        },
+      },
+    },
+  });
+  assert.equal(view.present, true);
+  assert.equal(view.status, 'accepted');
+  assert.equal(view.decision.state, 'accepted');
+  assert.equal(view.decision.decidedBy, 'Luceon');
+  assert.equal(view.decision.finalQualityAccepted, false);
 }
 
 console.log('RawMaterial2CleanMaterial candidate view smoke passed.');
