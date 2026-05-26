@@ -117,21 +117,21 @@ print_banner
 
 prepare_samples() {
   echo -e "${CYAN}【预检】智能样本环境整备与对齐${RESET}"
-  
+
   # 1. 检查并创建 pdf 样本目录
   if [[ ! -d "$PDF_DIR" ]]; then
     echo -e "${YELLOW}  - 未发现 testpdf 目录，正在自动创建：${PDF_DIR}${RESET}"
     mkdir -p "$PDF_DIR"
   fi
-  
+
   # 统计 PDF 数量
   local pdf_count
   pdf_count=$(find "$PDF_DIR" -maxdepth 1 -name '*.pdf' -not -name '._*' 2>/dev/null | wc -l | tr -d ' ')
-  
+
   if [[ $pdf_count -lt 5 ]] && [[ "$MODE" == "full-gate" ]]; then
     echo -e "${YELLOW}  - 并发压力测试需要至少 5 个 PDF 样本（当前仅 ${pdf_count} 个）${RESET}"
     local fixture_pdf="${PROJECT_ROOT}/server/tests/fixtures/sample.pdf"
-    
+
     if [[ -f "$fixture_pdf" ]]; then
       echo -e "${CYAN}  - 正在从 ${fixture_pdf} 自动复制并整备 5 个带随机数隔离的临时 PDF 并发测试夹具...${RESET}"
       for i in {1..5}; do
@@ -147,16 +147,16 @@ prepare_samples() {
   else
     echo -e "${GREEN}  ✓ PDF 样本数量充足 (共 ${pdf_count} 个)${RESET}"
   fi
-  
+
   # 2. 检查并创建 markdown 样本目录
   if [[ ! -d "$MD_DIR" ]]; then
     echo -e "${YELLOW}  - 未发现 testmd 目录，正在自动创建：${MD_DIR}${RESET}"
     mkdir -p "$MD_DIR"
   fi
-  
+
   local md_count
   md_count=$(find "$MD_DIR" -maxdepth 1 -name '*.md' -not -name '._*' 2>/dev/null | wc -l | tr -d ' ')
-  
+
   if [[ $md_count -lt 5 ]] && [[ "$MODE" == "full-gate" ]]; then
     echo -e "${YELLOW}  - 并发压力测试需要至少 5 个 Markdown 样本（当前仅 ${md_count} 个）${RESET}"
     echo -e "${CYAN}  - 正在自动生成 5 个带随机数隔离的临时 Markdown 并发测试夹具...${RESET}"
@@ -180,7 +180,7 @@ cleanup_samples() {
     # 【Blocker-3】安全精准移除属于本次进程的临时隔离文件，决不误删用户文件
     rm -f "${PDF_DIR}"/concurrency_temp_"${RAND_SUFX}"_sample_*.pdf
   fi
-  
+
   if [[ "$TEMP_MD_CREATED" == "true" ]]; then
     echo -e "${YELLOW}【清理】正在自动移除临时 Markdown 样本...${RESET}"
     # 【Blocker-3】安全精准移除属于本次进程的临时隔离文件，决不误删用户文件
@@ -198,7 +198,7 @@ run_smoke_tests() {
   echo -e "${CYAN} 阶段 1: 执行常规冒烟测试 (smoke-test.sh)${RESET}"
   echo -e "${CYAN}============================================================${RESET}"
   echo ""
-  
+
   # 【Blocker-2】对子脚本的执行进行显式的 if-then-else 逻辑控制，失败时熔断退出
   if BASE_URL="$BASE_URL" bash "${PROJECT_ROOT}/uat/smoke-test.sh"; then
     SMOKE_PASS=true
@@ -219,11 +219,11 @@ run_fault_injection() {
   echo -e "${CYAN} 阶段 2: 执行系统故障注入与自愈验证 (fault-injection)${RESET}"
   echo -e "${CYAN}============================================================${RESET}"
   echo ""
-  
+
   # 1. 验证 Worker 崩溃自愈能力
   echo -e "${CYAN}[1/2] 正在拉起 Worker 异常终止自愈验证...${RESET}"
   local crash_ok=false
-  
+
   # 【Blocker-2】显式捕获自愈子脚本的执行结果
   if [[ "$INTERACTIVE" == "false" ]]; then
     echo "  非交互模式启动：自动通过 stdin 注入 yes 以通过安全强制提示。"
@@ -248,7 +248,7 @@ run_fault_injection() {
   # 2. 验证准入熔断隔离行为
   echo -e "${CYAN}[2/2] 正在验证下游系统不可用时的熔断隔离功能...${RESET}"
   local admission_ok=false
-  
+
   if [[ "$INTERACTIVE" == "false" ]]; then
     echo -e "${YELLOW}  - 在非交互模式下，跳过物理手动暂停容器步骤。${RESET}"
     echo -e "${CYAN}  - 自动通过读取系统准入电路状态来验证熔断探针功能。${RESET}"
@@ -268,7 +268,7 @@ run_fault_injection() {
       admission_ok=true
     fi
   fi
-  
+
   if [[ "$admission_ok" == "true" ]]; then
     echo -e "${GREEN}  ✓ 准入熔断隔离与恢复验证完全通过${RESET}"
     echo ""
@@ -277,7 +277,7 @@ run_fault_injection() {
     generate_validation_report
     exit 1
   fi
-  
+
   FAULT_PASS=true
   echo -e "${GREEN}  ✓ 阶段 2: 系统故障注入与自愈测试完全通过${RESET}"
   echo ""
@@ -290,7 +290,7 @@ run_stress_concurrency() {
   echo -e "${CYAN} 阶段 3: 执行重并发压力与阶段排队限流测试 (concurrency)${RESET}"
   echo -e "${CYAN}============================================================${RESET}"
   echo ""
-  
+
   # 【Blocker-2】显式捕获并发压力子脚本的执行结果并进行熔断判定
   if BASE_URL="$BASE_URL" TEST_PDF_DIR="$PDF_DIR" TEST_MD_DIR="$MD_DIR" bash "${PROJECT_ROOT}/uat/stress-test-concurrency.sh"; then
     STRESS_PASS=true
@@ -309,7 +309,7 @@ run_stress_concurrency() {
 generate_validation_report() {
   # 【Blocker-2】使 STATUS 字段能精确反映具体失败在了哪一个测试阶段
   local final_status="SUCCESS"
-  local conclusion_msg="ALL CHECKED GATES PASSED. Target environment is accepted as READY."
+  local conclusion_msg="ALL CHECKED GATES PASSED for the selected mode. This is gate evidence only, not production readiness or go-live approval."
 
   if [[ "$SMOKE_PASS" == "false" ]]; then
     final_status="FAILED at [Smoke Test]"
@@ -324,7 +324,7 @@ generate_validation_report() {
 
   echo -e "${CYAN}============================================================${RESET}"
   if [[ "$final_status" == "SUCCESS" ]]; then
-    echo -e "${GREEN}            Luceon2026 发布门禁通过！(GATED PASS)${RESET}"
+    echo -e "${GREEN}            Luceon2026 发布门禁通过！(GATED PASS, NOT READINESS)${RESET}"
   else
     echo -e "${RED}            Luceon2026 发布门禁拦截！(GATED BLOCKED)${RESET}"
   fi
@@ -354,11 +354,11 @@ EOF
   # 终端输出摘要
   cat "$SUMMARY_FILE"
   echo ""
-  
+
   # 【M5】在终端打印出 RELEASE_GATE_SUMMARY.log 生成的绝对路径
   local abs_summary_path
   abs_summary_path="$(cd "$(dirname "$SUMMARY_FILE")" && pwd)/${SUMMARY_FILE}"
-  
+
   echo -e "${CYAN}验收摘要已自动归档至绝对路径下的：${abs_summary_path}${RESET}"
   echo -e "${CYAN}该文件可直接作为证据附件回填至 TaskAndReport/ 对应 EVIDENCE.md 中。${RESET}"
   echo -e "${CYAN}============================================================${RESET}"
@@ -370,20 +370,20 @@ EOF
 main() {
   # 0. 环境样本智能整备
   prepare_samples
-  
+
   # 1. 运行常规冒烟
   run_smoke_tests
-  
+
   # 2. 如果包含故障注入
   if [[ "$MODE" == "with-fault" || "$MODE" == "full-gate" ]]; then
     run_fault_injection
   fi
-  
+
   # 3. 如果包含并发压力排队
   if [[ "$MODE" == "full-gate" ]]; then
     run_stress_concurrency
   fi
-  
+
   # 4. 生成归零验收报告
   generate_validation_report
 }

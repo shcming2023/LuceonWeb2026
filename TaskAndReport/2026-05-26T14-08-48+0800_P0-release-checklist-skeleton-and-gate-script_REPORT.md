@@ -170,3 +170,16 @@ $ echo $?
 *   **状态**: `Lucode 已回报待 Luceon 审查`，`Next Actor = Luceon`。
 *   **后续动作**: 由测试部门在 PR 合并后预演验证，正式依据 Issue #9 展开 8 阶段收口验收。
 *   **安全红线**: 在 PR 合入 `main` 前，任何改动绝对不直接推送至 `release/6.9.x`。
+
+---
+
+## 四、Luceon 审查修正记录
+
+Luceon 在 `main` 审查时发现并修正两类控制面问题：
+
+1. `git diff --check` 在原交付中发现 `uat/release-gate.sh` 和本报告存在尾随空白。
+2. `release-gate.sh` 的成功摘要使用了 `Target environment is accepted as READY` 口径，容易被误读为生产 readiness / go-live 结论。
+
+修正后，门禁脚本成功态改为 `GATED PASS, NOT READINESS`，并明确说明该输出只是所选门禁模式的证据，不代表 production readiness 或 go-live approval。
+
+Luceon acceptance 仅限 release checklist skeleton 与 gate script 的代码/文档层级；不接受生产发布、UAT/L3、压力 PASS、release readiness 或 go-live 结论。
