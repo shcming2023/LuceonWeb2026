@@ -32,8 +32,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # 样本目录配置
-PDF_DIR="${PROJECT_ROOT}/testpdf"
-MD_DIR="${PROJECT_ROOT}/testmd"
+PDF_DIR="${TEST_PDF_DIR:-${PROJECT_ROOT}/testpdf}"
+MD_DIR="${TEST_MD_DIR:-${PROJECT_ROOT}/testmd}"
 
 # 临时创建标记（用于自动恢复）
 TEMP_PDF_CREATED=false

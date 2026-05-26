@@ -226,10 +226,16 @@ while [[ $ELAPSED -lt $MAX_SECONDS ]]; do
   ACTIVE=0
   TERMINAL=0
   RUNNING=0
+  MINERU_ACTIVE=0
+  AI_ACTIVE=0
   for tid in "${ALL_TASK_IDS[@]}"; do
     STATE=$(echo "$ALL_TASKS" | jq -r ".[] | select(.id == \"${tid}\") | .state // \"unknown\"" 2>/dev/null)
+    STAGE=$(echo "$ALL_TASKS" | jq -r ".[] | select(.id == \"${tid}\") | .stage // \"unknown\"" 2>/dev/null)
     if [[ -z "$STATE" || "$STATE" == "null" ]]; then
       STATE="unknown"
+    fi
+    if [[ -z "$STAGE" || "$STAGE" == "null" ]]; then
+      STAGE="unknown"
     fi
 
     case "$STATE" in
@@ -237,16 +243,21 @@ while [[ $ELAPSED -lt $MAX_SECONDS ]]; do
       running) RUNNING=$((RUNNING + 1)); ACTIVE=$((ACTIVE + 1)) ;;
       *) ACTIVE=$((ACTIVE + 1)) ;;
     esac
+
+    if ! echo "$STATE" | grep -qE '^(completed|review-pending|failed|canceled|skipped-canceled)$'; then
+      if [[ "$STAGE" == "mineru-processing" || "$STAGE" == "mineru-queued" || "$STAGE" == "result-fetching" ]]; then
+        MINERU_ACTIVE=$((MINERU_ACTIVE + 1))
+      fi
+      if [[ "$STATE" == "ai-running" || "$STAGE" == "ai" ]]; then
+        AI_ACTIVE=$((AI_ACTIVE + 1))
+      fi
+    fi
   done
 
-  # 检查 MinerU heavy-stage active count
-  MINERU_ACTIVE=$(echo "$ALL_TASKS" | jq '[.[] | select(.stage == "mineru-processing" or .stage == "mineru-queued" or .stage == "result-fetching")] | length' 2>/dev/null || echo 0)
   if [[ $MINERU_ACTIVE -gt 1 ]]; then
     MINERU_VIOLATION=$((MINERU_VIOLATION + 1))
   fi
 
-  # 检查 AI Worker active count
-  AI_ACTIVE=$(echo "$ALL_TASKS" | jq '[.[] | select(.state == "ai-running" or .stage == "ai")] | length' 2>/dev/null || echo 0)
   if [[ $AI_ACTIVE -gt 1 ]]; then
     AI_VIOLATION=$((AI_VIOLATION + 1))
   fi

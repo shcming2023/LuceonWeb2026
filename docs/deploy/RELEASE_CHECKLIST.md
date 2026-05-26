@@ -31,14 +31,14 @@
     -   *Tag*: `[Stage 2 回填：本地构建或私有仓库 tag]`
     -   *Digest*: `[Stage 2 回填完整 sha256 digest]`
 -   **私有对象存储 (`minio`)**
-    -   *Tag*: `minio/minio:RELEASE.2024-04-18T19-09-00Z`
-    -   *Digest*: `[Stage 2 从本机镜像或私有镜像仓库回填完整 sha256 digest]`
+    -   *Tag*: `minio/minio:RELEASE.2025-09-07T16-13-09Z`
+    -   *Digest*: `sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e`
 
 ### 当前部署契约锁定项
 
 -   CMS 对外端口统一为 `CMS_PORT=8081`，本机访问入口为 `http://localhost:8081/cms/`。
 -   Docker Compose 内部服务端口保持：`upload-server:8788`、`db-server:8789`、`minio:9000`。
--   MinIO 镜像禁止 `latest`，当前锁定 tag 为 `minio/minio:RELEASE.2024-04-18T19-09-00Z`；Stage 2 必须回填 digest。
+-   MinIO 镜像禁止 `latest`，当前锁定 tag 为 `minio/minio:RELEASE.2025-09-07T16-13-09Z`，当前本机 digest 为 `sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e`。
 -   `.env` 必须显式设置非空、非 `minioadmin` 的 `MINIO_ACCESS_KEY` 与 `MINIO_SECRET_KEY`；默认凭据应 fail-fast。
 -   `DEPENDENCY_HEALTH_MINERU_SUBMIT_PROBE=false` 是默认无副作用健康检查契约；Stage 6 带 submit-probe 需要显式授权。
 

@@ -4,6 +4,10 @@ Collected at: `2026-05-26T15:32:27+0800`
 
 Scope: dry-run/no-mutation evidence collection for release closeout. This file is evidence only and is not a readiness, release-readiness, go-live, or production authorization statement.
 
+Full-UAT supplement collected at: `2026-05-26T16:22:05+0800`
+
+Supplement scope: user explicitly authorized full real UAT, including rebuild/recreate/restart, submit-probe, fault injection, and pressure uploads. This supplement records evidence and fixes from that run only; it is still not a readiness, release-readiness, go-live, or production authorization statement.
+
 ## Current Code Pointer
 
 - Development workspace: `/Users/concm/Dev_workspace/Luceon2026`
@@ -20,9 +24,11 @@ Scope: dry-run/no-mutation evidence collection for release closeout. This file i
 
 - Code pointer evidence: `PASS`
 - Branch protection proof: `PENDING_EXTERNAL_GITHUB_EVIDENCE`
-- Final release HEAD lock: `PENDING_AFTER_THIS_COMMIT`
+- Final release HEAD lock: `RECORDED_BY_COMMIT_CONTAINING_THIS_FILE`
+- Full real UAT execution: `PASS_STAGE3_TO_STAGE6_WITH_FIXES`
 
 ## Remaining Authorization / Manual Evidence
 
 - GitHub branch protection screenshot or protected-branch push rejection evidence is still required.
-- Stage 0 final HEAD must be updated after the release evidence commit lands on `main`.
+- Final pushed HEAD should be read from Git after this evidence commit lands on `main`.
+- Stage 7 remains unsigned / not created.

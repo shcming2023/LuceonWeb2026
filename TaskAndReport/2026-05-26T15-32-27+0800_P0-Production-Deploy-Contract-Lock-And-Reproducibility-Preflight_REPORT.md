@@ -10,7 +10,7 @@ Locked the deployment source contract around the actual local production port an
 
 - `docker-compose.yml`
   - Default CMS port is now `8081`.
-  - MinIO image is locked to `minio/minio:RELEASE.2024-04-18T19-09-00Z`.
+  - MinIO image is locked to `minio/minio:RELEASE.2025-09-07T16-13-09Z`.
   - Upload server and MinIO require explicit `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY`; no `minioadmin` fallback remains.
 - `.env.example`
   - `CMS_PORT=8081`.
@@ -31,8 +31,18 @@ Locked the deployment source contract around the actual local production port an
 
 ## Runtime Observation
 
-Current production/control `docker compose ps` still showed running MinIO image `minio/minio:latest`. This task did not rebuild or recreate runtime services. Runtime convergence to the locked MinIO tag remains pending an explicitly authorized deployment.
+Initial collection observed production/control `docker compose ps` still running MinIO image `minio/minio:latest`. The later full-UAT authorization allowed runtime convergence work, recorded in `Stage2-EVIDENCE.md`, `Stage6-EVIDENCE.md`, and the full-UAT report.
+
+Runtime convergence result under explicit UAT authorization:
+
+- Production `.env` MinIO credentials were rotated locally away from forbidden defaults; secret values were not printed or committed.
+- The first selected fixed 2024 tag was not valid/compatible for this existing MinIO volume.
+- Source contract was corrected to `minio/minio:RELEASE.2025-09-07T16-13-09Z`.
+- Local digest evidence: `sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e`.
+- `docker compose build --no-cache`: `PASS`.
+- `docker compose up -d`: `PASS`; app services recreated and healthy.
+- Running MinIO image after convergence: `minio/minio:RELEASE.2025-09-07T16-13-09Z`.
 
 ## Boundary
 
-No Docker rebuild/recreate/restart, secret printout, DB write, MinIO write, submit-probe, pressure run, readiness, release-readiness, or go-live claim was performed.
+The initial preflight performed no Docker rebuild/recreate/restart, secret printout, DB write, MinIO write, submit-probe, pressure run, readiness, release-readiness, or go-live claim. Later Docker rebuild/recreate/restart and submit-probe were performed only after explicit full-UAT authorization. No readiness, release-readiness, or go-live claim is made.

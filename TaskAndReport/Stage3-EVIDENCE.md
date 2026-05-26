@@ -4,6 +4,8 @@ Collected at: `2026-05-26T15:32:27+0800`
 
 Scope: read-only smoke evidence against local `http://127.0.0.1:8081`. No upload, submit-probe, DB write, MinIO write, Docker mutation, pressure run, readiness, or go-live claim was performed.
 
+Full-UAT supplement collected at: `2026-05-26T16:22:05+0800` after authorized rebuild/recreate/restart.
+
 ## Runtime Observations
 
 Production/control workspace `docker compose ps` showed:
@@ -12,6 +14,8 @@ Production/control workspace `docker compose ps` showed:
 - `cms-upload-server`: healthy
 - `cms-db-server`: healthy
 - `cms-minio`: healthy, console bound to `127.0.0.1:19001->9001/tcp`
+- After no-cache rebuild and `docker compose up -d`, the same services remained healthy.
+- MinIO image was `minio/minio:RELEASE.2025-09-07T16-13-09Z`.
 
 ## Smoke Command
 
@@ -41,4 +45,4 @@ Covered:
 ## Status
 
 - Read-only local smoke: `PASS`
-- Formal Stage 3 after locked-image rebuild: `PENDING_AUTHORIZED_DEPLOYMENT_AND_RERUN`
+- Formal Stage 3 after locked-image rebuild: `PASS`

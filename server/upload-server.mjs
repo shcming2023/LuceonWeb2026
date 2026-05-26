@@ -3243,13 +3243,16 @@ app.post('/tasks', upload.single('file'), async (req, res) => {
     });
     const admissionCircuit = health.dependencies?.mineru?.admissionCircuit || await buildMineruAdmissionCircuitEvidence().catch(() => null);
     const admissionOpen = requiresMineruSubmitAdmission && isMineruAdmissionCircuitOpen(admissionCircuit);
-    if (health.blocking || admissionOpen) {
+    const blockingDep = Object.keys(health.dependencies).find(k =>
+      health.dependencies[k].ok === false &&
+      health.dependencies[k].requiredFor?.includes('parse') &&
+      !health.dependencies[k].skipped
+    );
+    const blockingCurrentUpload =
+      blockingDep === 'minio' ||
+      (requiresMineruSubmitAdmission && blockingDep === 'mineru');
+    if (blockingCurrentUpload || admissionOpen) {
       if (req.file) cleanupTempFile(req.file);
-      const blockingDep = Object.keys(health.dependencies).find(k =>
-        health.dependencies[k].ok === false &&
-        health.dependencies[k].requiredFor?.includes('parse') &&
-        !health.dependencies[k].skipped
-      );
 
       let message = '核心依赖不健康，无法执行解析';
       if (admissionOpen || blockingDep === 'mineru') message = MINERU_ADMISSION_MESSAGE;

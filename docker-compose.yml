@@ -167,7 +167,7 @@ services:
   # 如需外部访问控制台，使用 Nginx 反向代理而非直接暴露端口
   # 控制台访问（开发/UAT override）：通常映射到 http://localhost:19001
   minio:
-    image: minio/minio:RELEASE.2024-04-18T19-09-00Z
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: cms-minio
     restart: unless-stopped
     deploy:
