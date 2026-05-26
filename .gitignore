@@ -66,3 +66,4 @@ uat/playwright-report/
 .lucia-e2e/
 .agents/
 AGENTS.md
+RELEASE_GATE_SUMMARY.log
