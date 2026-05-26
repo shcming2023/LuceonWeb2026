@@ -143,10 +143,10 @@ while [[ $WAIT_SEC -lt $MAX_WAIT ]]; do
     break
   fi
 
-  # 如果任务已进入终态（说明太快了，但没关系）
+  # 如果任务已进入终态，说明没有真实执行 crash 注入；Stage 4 不能伪通过。
   if echo "$TASK_STATE" | grep -qE '^(completed|review-pending|failed|canceled)$'; then
-    color_warn "任务已到达终态 ${TASK_STATE}（太快了），跳过 crash 验证"
-    exit 0
+    color_fail "任务已到达终态 ${TASK_STATE}，Worker crash 验证未执行"
+    exit 1
   fi
 done
 
@@ -241,13 +241,14 @@ elif [[ $MINERU_EVENT -gt 0 ]]; then
   color_pass "parse-restart-mineru-resumed 事件已记录 (${MINERU_EVENT} 条)（MinerU 接管场景）"
   PASS=$((PASS + 1))
 else
-  # 可能是在 mineru-processing 等阶段被接管了
+  # 没有恢复事件就不能作为 Stage 4 通过证据。
   CURRENT_STAGE=$(echo "$TASK_INFO" | jq -r '.stage // ""' 2>/dev/null)
   if [[ "$CURRENT_STAGE" == "mineru-processing" || "$CURRENT_STAGE" == "mineru-queued" ]]; then
-    color_warn "任务被 MinerU 接管但未检测到恢复事件（可能事件写入延迟）"
+    color_fail "任务被 MinerU 接管但未检测到恢复事件"
   else
-    color_warn "未检测到恢复事件（任务可能正在处理中）"
+    color_fail "未检测到恢复事件"
   fi
+  FAIL=$((FAIL + 1))
 fi
 
 echo ""

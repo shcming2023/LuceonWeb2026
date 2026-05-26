@@ -2,7 +2,8 @@
 # ============================================================
 # Luceon2026 v6.9.x — 一键发布门禁控制中心 (Release Gate)
 #
-# 用途：串联冒烟测试、故障注入测试与并发压力测试，为发布上线提供一键式门禁验证
+# 用途：串联冒烟测试、故障注入测试与并发压力测试，提供发布门禁证据。
+#       本脚本只输出 gate pass/fail/blocked，不表达 readiness 或 go-live 结论。
 # 用法：
 #   bash uat/release-gate.sh --smoke-only
 #   bash uat/release-gate.sh --with-fault
@@ -45,6 +46,9 @@ RAND_SUFX="${RANDOM}_$(date +%s)"
 SMOKE_PASS=false
 FAULT_PASS=false
 STRESS_PASS=false
+SMOKE_RESULT="FAILED/SKIPPED"
+FAULT_RESULT="FAILED/SKIPPED"
+STRESS_RESULT="FAILED/SKIPPED"
 
 # ── 帮助信息 ─────────────────────────────────────────────────
 
@@ -54,7 +58,7 @@ show_help() {
   echo "  --smoke-only        仅执行常规冒烟测试 (Stage 3)"
   echo "  --with-fault        执行冒烟测试 + 故障注入与自愈测试 (Stage 4)"
   echo "  --full-gate         执行完整门禁 (常规冒烟 + 故障注入 + 5+并发压力) (Stage 5)"
-  echo "  --non-interactive   非交互运行，自动注入 yes 管道并跳过人工手动停机操作"
+  echo "  --non-interactive   仅适用于无破坏性检查；故障/压力不会因此自动伪通过"
   echo "  --target-url <url>  覆盖默认的目标端点 URL (当前: ${BASE_URL})"
   echo "  --help              显示本帮助"
   exit 0
@@ -199,13 +203,26 @@ run_smoke_tests() {
   echo -e "${CYAN}============================================================${RESET}"
   echo ""
 
+  local smoke_log
+  smoke_log="$(mktemp /tmp/luceon-smoke.XXXXXX.log)"
+
   # 【Blocker-2】对子脚本的执行进行显式的 if-then-else 逻辑控制，失败时熔断退出
-  if BASE_URL="$BASE_URL" bash "${PROJECT_ROOT}/uat/smoke-test.sh"; then
+  if BASE_URL="$BASE_URL" bash "${PROJECT_ROOT}/uat/smoke-test.sh" | tee "$smoke_log"; then
     SMOKE_PASS=true
+    local result_line
+    result_line="$(grep 'SMOKE_RESULT ' "$smoke_log" | tail -1 || true)"
+    if [[ "$result_line" =~ PASS=([0-9]+)[[:space:]]+FAIL=([0-9]+)[[:space:]]+SKIP=([0-9]+)[[:space:]]+TOTAL=([0-9]+) ]]; then
+      SMOKE_RESULT="PASS (${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/${BASH_REMATCH[3]} pass/fail/skip; total ${BASH_REMATCH[4]})"
+    else
+      SMOKE_RESULT="PASS (machine-readable counts missing; inspect smoke log)"
+    fi
+    rm -f "$smoke_log"
     echo -e "${GREEN}  ✓ 阶段 1: 常规冒烟测试完全通过${RESET}"
     echo ""
   else
     SMOKE_PASS=false
+    SMOKE_RESULT="FAILED (see smoke-test output)"
+    rm -f "$smoke_log"
     echo -e "${RED}  ✗ 阶段 1: 常规冒烟测试失败，熔断发布门禁！${RESET}"
     generate_validation_report
     exit 1
@@ -220,20 +237,21 @@ run_fault_injection() {
   echo -e "${CYAN}============================================================${RESET}"
   echo ""
 
+  if [[ "$INTERACTIVE" == "false" ]]; then
+    FAULT_PASS=false
+    FAULT_RESULT="BLOCKED (fault injection requires explicit interactive destructive authorization; non-interactive mode cannot prove Stage 4)"
+    echo -e "${RED}  ✗ 非交互模式不能验证 Stage 4 故障注入；拒绝用端点可达性伪通过。${RESET}"
+    generate_validation_report
+    exit 1
+  fi
+
   # 1. 验证 Worker 崩溃自愈能力
   echo -e "${CYAN}[1/2] 正在拉起 Worker 异常终止自愈验证...${RESET}"
   local crash_ok=false
 
   # 【Blocker-2】显式捕获自愈子脚本的执行结果
-  if [[ "$INTERACTIVE" == "false" ]]; then
-    echo "  非交互模式启动：自动通过 stdin 注入 yes 以通过安全强制提示。"
-    if echo "yes" | BASE_URL="$BASE_URL" bash "${PROJECT_ROOT}/uat/fault-injection-worker-crash.sh"; then
-      crash_ok=true
-    fi
-  else
-    if BASE_URL="$BASE_URL" bash "${PROJECT_ROOT}/uat/fault-injection-worker-crash.sh"; then
-      crash_ok=true
-    fi
+  if BASE_URL="$BASE_URL" bash "${PROJECT_ROOT}/uat/fault-injection-worker-crash.sh"; then
+    crash_ok=true
   fi
 
   if [[ "$crash_ok" == "true" ]]; then
@@ -264,7 +282,7 @@ run_fault_injection() {
     fi
   else
     echo -e "${YELLOW}  - 正在进入交互式熔断测试，请按照下方脚本指令配合动作。${RESET}"
-    if BASE_URL="$BASE_URL" bash "${PROJECT_ROOT}/uat/fault-injection-admission.sh" --mode recovery; then
+    if BASE_URL="$BASE_URL" bash "${PROJECT_ROOT}/uat/fault-injection-admission.sh" --mode mineru-down; then
       admission_ok=true
     fi
   fi
@@ -279,6 +297,7 @@ run_fault_injection() {
   fi
 
   FAULT_PASS=true
+  FAULT_RESULT="PASS (worker crash recovery and mineru-down admission isolation verified)"
   echo -e "${GREEN}  ✓ 阶段 2: 系统故障注入与自愈测试完全通过${RESET}"
   echo ""
 }
@@ -291,13 +310,26 @@ run_stress_concurrency() {
   echo -e "${CYAN}============================================================${RESET}"
   echo ""
 
+  local stress_log
+  stress_log="$(mktemp /tmp/luceon-stress.XXXXXX.log)"
+
   # 【Blocker-2】显式捕获并发压力子脚本的执行结果并进行熔断判定
-  if BASE_URL="$BASE_URL" TEST_PDF_DIR="$PDF_DIR" TEST_MD_DIR="$MD_DIR" bash "${PROJECT_ROOT}/uat/stress-test-concurrency.sh"; then
+  if BASE_URL="$BASE_URL" TEST_PDF_DIR="$PDF_DIR" TEST_MD_DIR="$MD_DIR" bash "${PROJECT_ROOT}/uat/stress-test-concurrency.sh" | tee "$stress_log"; then
     STRESS_PASS=true
+    local result_line
+    result_line="$(grep 'STRESS_RESULT ' "$stress_log" | tail -1 || true)"
+    if [[ -n "$result_line" ]]; then
+      STRESS_RESULT="PASS (${result_line#STRESS_RESULT })"
+    else
+      STRESS_RESULT="PASS (machine-readable counts missing; inspect stress log)"
+    fi
+    rm -f "$stress_log"
     echo -e "${GREEN}  ✓ 阶段 3: 并发压力与重阶段限流机制通过${RESET}"
     echo ""
   else
     STRESS_PASS=false
+    STRESS_RESULT="FAILED (see stress-test output)"
+    rm -f "$stress_log"
     echo -e "${RED}  ✗ 阶段 3: 并发压力限流测试失败，熔断发布门禁！${RESET}"
     generate_validation_report
     exit 1
@@ -342,9 +374,9 @@ generate_validation_report() {
 * VERIFIED TIME:   $(date '+%Y-%m-%d %H:%M:%S')
 ------------------------------------------------------------
 * VERIFIED ITEMS:
-  [Smoke Test]     $([[ "$SMOKE_PASS" == "true" ]] && echo "PASS (12/12 Green)" || echo "FAILED/SKIPPED")
-  [Fault Self-Heal]$([[ "$FAULT_PASS" == "true" ]] && echo "PASS (Durable Admission Circuit & Recover Scan Checked)" || echo "FAILED/SKIPPED")
-  [Queue Concur]   $([[ "$STRESS_PASS" == "true" ]] && echo "PASS (Heavy-stage Limit <= 1 Maintained)" || echo "FAILED/SKIPPED")
+  [Smoke Test]     ${SMOKE_RESULT}
+  [Fault Self-Heal]${FAULT_RESULT}
+  [Queue Concur]   ${STRESS_RESULT}
 ------------------------------------------------------------
 * CONCLUSION:
   ${conclusion_msg}

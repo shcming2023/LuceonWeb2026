@@ -2,7 +2,7 @@
 # EduAsset CMS — Docker Compose 编排文件
 #
 # 服务架构：
-#   cms-frontend    ── Nginx 静态文件服务 + 反向代理（端口 8080）
+#   cms-frontend    ── Nginx 静态文件服务 + 反向代理（端口 8081）
 #   upload-server   ── 文件上传代理服务（内部端口 8788）
 #   db-server       ── JSON 文件 REST API 持久化服务（内部端口 8789）
 #
@@ -17,7 +17,7 @@
 # 快速启动（仅前端 + 上传服务）：
 #   1. cp .env.example .env  并填写必要配置
 #   2. docker compose up -d --build
-#   3. 访问 http://localhost:8080/cms/
+#   3. 访问 http://localhost:8081/cms/
 #
 # 完整启动（含 Overleaf 备份后端）：
 #   参见 docs/deploy/DEPLOY.md 第四节
@@ -35,7 +35,7 @@ services:
     ports:
       # 宿主机端口:容器端口
       # 修改左侧端口号以适配 Mac Mini 的实际监听端口
-      - "0.0.0.0:${CMS_PORT:-8080}:80"
+      - "0.0.0.0:${CMS_PORT:-8081}:80"
     depends_on:
       upload-server:
         condition: service_healthy
@@ -86,8 +86,8 @@ services:
       - MINIO_ENDPOINT=minio
       - MINIO_PORT=9000
       - MINIO_USE_SSL=false
-      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
-      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY must be set and must not be minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:?MINIO_SECRET_KEY must be set and must not be minioadmin}
       - MINIO_BUCKET=${MINIO_BUCKET:-eduassets}
       # Presigned URL 有效期（秒）
       - MINIO_PRESIGNED_EXPIRY=${MINIO_PRESIGNED_EXPIRY:-3600}
@@ -167,7 +167,7 @@ services:
   # 如需外部访问控制台，使用 Nginx 反向代理而非直接暴露端口
   # 控制台访问（开发/UAT override）：通常映射到 http://localhost:19001
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2024-04-18T19-09-00Z
     container_name: cms-minio
     restart: unless-stopped
     deploy:
@@ -186,8 +186,8 @@ services:
       - cms-network
     environment:
       # ❗ 生产环境必须在 .env 中设置强密码，切勿使用默认值 minioadmin
-      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY:-minioadmin}
-      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY:-minioadmin}
+      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY must be set and must not be minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY:?MINIO_SECRET_KEY must be set and must not be minioadmin}
       - TZ=Asia/Shanghai
     command: server /data --console-address ":9001"
     volumes:

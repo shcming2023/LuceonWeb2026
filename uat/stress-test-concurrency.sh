@@ -192,6 +192,19 @@ else
 fi
 
 echo "  总计：${SUBMIT_OK}/${SUBMIT_COUNT} 任务创建成功"
+if [[ ${#PDF_TASK_IDS[@]} -lt 5 ]]; then
+  color_fail "PDF 任务创建数不足 5（实际 ${#PDF_TASK_IDS[@]}），Stage 5 不允许用少量任务伪通过"
+  FAIL=$((FAIL + 1))
+fi
+if [[ $SUBMIT_FAIL -gt 0 ]]; then
+  color_fail "存在 ${SUBMIT_FAIL} 个任务创建失败，Stage 5 不允许忽略提交失败"
+  FAIL=$((FAIL + 1))
+fi
+if [[ ${#ALL_TASK_IDS[@]} -eq 0 ]]; then
+  color_fail "没有任何任务创建成功，无法验证并发排队"
+  echo "STRESS_RESULT PASS=${PASS} FAIL=${FAIL} PDF_TASKS=${#PDF_TASK_IDS[@]} TOTAL_TASKS=${#ALL_TASK_IDS[@]} MINERU_VIOLATION=NA AI_VIOLATION=NA TERMINAL=0"
+  exit 1
+fi
 echo ""
 
 # ── 4. 阶段排队验证 ─────────────────────────────────────────
@@ -319,12 +332,14 @@ echo ""
 print_separator
 
 if [[ $FAIL -eq 0 ]]; then
+  echo "STRESS_RESULT PASS=${PASS} FAIL=${FAIL} PDF_TASKS=${#PDF_TASK_IDS[@]} TOTAL_TASKS=${#ALL_TASK_IDS[@]} MINERU_VIOLATION=${MINERU_VIOLATION} AI_VIOLATION=${AI_VIOLATION} TERMINAL=${TERMINAL}"
   echo -e "  结果：${GREEN}✓ PASS${RESET}（并发阶段排队验证通过）"
   echo -e "  所有检查项通过：MinerU 排队、AI Worker 排队、终态收敛"
   print_separator
   echo ""
   exit 0
 else
+  echo "STRESS_RESULT PASS=${PASS} FAIL=${FAIL} PDF_TASKS=${#PDF_TASK_IDS[@]} TOTAL_TASKS=${#ALL_TASK_IDS[@]} MINERU_VIOLATION=${MINERU_VIOLATION:-NA} AI_VIOLATION=${AI_VIOLATION:-NA} TERMINAL=${TERMINAL:-0}"
   echo -e "  结果：${RED}✗ FAIL${RESET}（${FAIL} 项检查未通过）"
   print_separator
   echo ""

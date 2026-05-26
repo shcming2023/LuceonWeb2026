@@ -142,7 +142,8 @@ run_mineru_down() {
       FAIL=$((FAIL + 1))
     fi
   else
-    color_warn "无 PDF 样本，跳过上传验证"
+    color_fail "无 PDF 样本，无法验证 503 熔断隔离"
+    FAIL=$((FAIL + 1))
   fi
 
   echo ""
@@ -162,7 +163,8 @@ run_mineru_down() {
       FAIL=$((FAIL + 1))
     fi
   else
-    color_warn "无 Markdown 样本，跳过验证"
+    color_fail "无 Markdown 样本，无法验证 Markdown 旁路不受影响"
+    FAIL=$((FAIL + 1))
   fi
 
   echo ""

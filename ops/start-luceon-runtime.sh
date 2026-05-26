@@ -22,6 +22,47 @@ require_cmd() {
   fi
 }
 
+read_env_value() {
+  local key="$1"
+  local env_file="$REPO_ROOT/.env"
+
+  if [ -f "$env_file" ]; then
+    awk -F= -v key="$key" '
+      $0 !~ /^[[:space:]]*#/ && $1 == key {
+        value = substr($0, index($0, "=") + 1)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+        gsub(/^"|"$/, "", value)
+        gsub(/^'\''|'\''$/, "", value)
+        print value
+        exit
+      }
+    ' "$env_file"
+  fi
+}
+
+assert_minio_credentials() {
+  local access_key="${MINIO_ACCESS_KEY:-}"
+  local secret_key="${MINIO_SECRET_KEY:-}"
+
+  if [ -z "$access_key" ]; then
+    access_key="$(read_env_value MINIO_ACCESS_KEY || true)"
+  fi
+  if [ -z "$secret_key" ]; then
+    secret_key="$(read_env_value MINIO_SECRET_KEY || true)"
+  fi
+
+  if [ -z "$access_key" ] || [ -z "$secret_key" ]; then
+    echo "Error: MINIO_ACCESS_KEY and MINIO_SECRET_KEY must be set before Docker startup." >&2
+    echo "       Copy .env.example to .env and provide non-default credentials." >&2
+    exit 1
+  fi
+
+  if [ "$access_key" = "minioadmin" ] || [ "$secret_key" = "minioadmin" ]; then
+    echo "Error: default MinIO credential minioadmin is forbidden for this deploy contract." >&2
+    exit 1
+  fi
+}
+
 http_ok() {
   curl -fsS --max-time 5 "$1" >/dev/null 2>&1
 }
@@ -143,6 +184,7 @@ require_cmd curl
 require_cmd docker
 require_cmd tmux
 require_cmd node
+assert_minio_credentials
 
 echo "[1/5] Starting Docker services (MinIO, DB, Upload Server, Frontend)..."
 cd "$REPO_ROOT"
