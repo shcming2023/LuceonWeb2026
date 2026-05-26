@@ -17,7 +17,7 @@
     *   **阶段规划**: 将上线发布划分为 **Stage 0** 至 **Stage 7** 八个严密的生命周期。
     *   **工程契约**: 每一阶段都集成了“准入门槛”、“测试动作”、“通过判据”与“证据产物”。
     *   **路径与命令对齐**: 移除了绝对路径硬编码（替换为 `生产工作区根目录` 占位符），静态类型检查命令与项目统一对齐为 `npx pnpm@10.4.1 exec tsc --noEmit && npx pnpm@10.4.1 run build`。
-    *   **复审修订完善**: 
+    *   **复审修订完善**:
         *   **Stage 0**: 通过判据补充 PR 必须至少 1 个 Approver 的强制审核规则。
         *   **Stage 1**: 依赖安全性扫描命令固化为项目统一的 `npx pnpm@10.4.1 audit --audit-level high` 并引入 `waivers` 豁免设计；预检通过判据对齐只读 `submit-probe-not-run` 输出。
         *   **Stage 2**: 编译命令锁定生产基线 `-f docker-compose.yml -f docker-compose.prod.yml`，服务占位 tag 完全对齐为 compose 真实服务名，增加 registry 推送和 imagetools 验证。
