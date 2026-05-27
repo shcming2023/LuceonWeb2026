@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   ArrowLeft, RefreshCw, FileText, Clock, AlertTriangle, CheckCircle2, Loader2, XCircle,
   ChevronDown, ChevronRight, Brain, RotateCw, Sparkles, ShieldCheck,
-  LayoutDashboard, File, Download, Database, Eye, MoreVertical
+  LayoutDashboard, File, Download, Database, Eye, MoreVertical, Boxes
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { MarkdownTab } from '../components/PreviewTabPanel';
@@ -229,6 +229,7 @@ export function TaskDetailPage() {
   const [optionsExpanded, setOptionsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'markdown' | 'pdf' | 'metadata' | 'events'>('overview');
   const [eventFilter, setEventFilter] = useState<'all' | 'key' | 'error' | 'system'>('all');
+  const [tocRebuildRunning, setTocRebuildRunning] = useState(false);
   const hasLoadedOnceRef = useRef(false);
 
   // ── Markdown 预览相关状态 ──────────────────────────────────
@@ -525,6 +526,26 @@ export function TaskDetailPage() {
     }
   };
 
+  const handleTocRebuild = async () => {
+    if (!id) return;
+    setTocRebuildRunning(true);
+    try {
+      const res = await fetch(`/__proxy/upload/tasks/${encodeURIComponent(id)}/toc-rebuild`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trigger: 'operator-manual' }),
+      });
+      const payload = await res.json().catch(() => ({} as any));
+      if (!res.ok) throw new Error(payload?.error || `HTTP ${res.status}`);
+      toast.success('目录重建已完成', { description: payload?.prefix || payload?.jobId });
+      await fetchData({ background: true });
+    } catch (err) {
+      toast.error('目录重建失败', { description: String(err) });
+    } finally {
+      setTocRebuildRunning(false);
+    }
+  };
+
   // ── ZIP 下载（W2-3） ────────────────────────────────────────
   const handleDownloadZip = async () => {
     const materialId = task?.materialId;
@@ -598,6 +619,10 @@ export function TaskDetailPage() {
   const taskDisplayStatus = deriveTaskDisplayStatus(task as any);
   const mineruProgressLine = deriveMineruProgressLine(task as any);
   const cleanMaterialView = buildCleanMaterialView({ material, task });
+  const canTocRebuild = ['review-pending', 'completed'].includes(String(task.state))
+    && resourceStatus.materialExists
+    && resourceStatus.markdownExists
+    && !cleanMaterialView.present;
 
   // 资源缺失提示文案
   const resourceWarning = (() => {
@@ -657,6 +682,16 @@ export function TaskDetailPage() {
                 <ShieldCheck className="w-4 h-4" /> 审核通过
               </button>
             )}
+
+            <button
+              onClick={handleTocRebuild}
+              disabled={!canTocRebuild || tocRebuildRunning}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-emerald-200 text-emerald-700 rounded-lg text-sm font-medium hover:bg-emerald-50 disabled:opacity-40 transition-colors shadow-sm"
+              title={cleanMaterialView.present ? '当前任务已存在目录重建结果' : (canTocRebuild ? '基于 MinerU Markdown 手动生成目录重建 Clean Material' : '需要任务进入待复核/完成并具备 Markdown 产物')}
+            >
+              {tocRebuildRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Boxes className="w-4 h-4" />}
+              目录重建
+            </button>
 
             {/* W2-3: ZIP 下载按钮 */}
             <button

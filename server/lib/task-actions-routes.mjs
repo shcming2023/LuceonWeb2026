@@ -25,6 +25,7 @@ import { taskEventBus } from './task-events-bus.mjs';
 import { logTaskEvent } from '../services/logging/task-events.mjs';
 import { createOrphanHelpers } from './consistency-routes.mjs';
 import { createAiMetadataJob } from '../services/ai/metadata-job-client.mjs';
+import { createHash } from 'crypto';
 
 const DB_BASE_URL = process.env.DB_BASE_URL || 'http://localhost:8789';
 
@@ -52,6 +53,186 @@ async function dbPatch(path, body) {
   });
   if (!resp.ok) throw new Error(`PATCH ${path} failed: HTTP ${resp.status}`);
   return await resp.json().catch(() => ({}));
+}
+
+function sha256Hex(input) {
+  return createHash('sha256').update(input).digest('hex');
+}
+
+async function streamToBuffer(stream) {
+  const chunks = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+function jsonBuffer(value) {
+  return Buffer.from(`${JSON.stringify(value, null, 2)}\n`, 'utf8');
+}
+
+function objectRef(bucket, object, buffer, contentType) {
+  return {
+    bucket,
+    object,
+    size_bytes: buffer.length,
+    content_type: contentType,
+    sha256: sha256Hex(buffer),
+  };
+}
+
+function extractMarkdownOutline(markdown, fallbackTitle) {
+  const headings = [];
+  const lines = String(markdown || '').split(/\r?\n/);
+  for (const [index, line] of lines.entries()) {
+    const match = /^(#{1,6})\s+(.+?)\s*$/.exec(line);
+    if (!match) continue;
+    headings.push({
+      id: `h${headings.length + 1}`,
+      level: match[1].length,
+      title: match[2].replace(/\s+/g, ' ').trim(),
+      line: index + 1,
+    });
+  }
+
+  if (headings.length === 0) {
+    const firstText = lines.map((line) => line.trim()).find(Boolean);
+    headings.push({
+      id: 'h1',
+      level: 1,
+      title: fallbackTitle || firstText || 'Untitled Material',
+      line: firstText ? Math.max(1, lines.findIndex((line) => line.trim() === firstText) + 1) : 1,
+    });
+  }
+
+  return headings;
+}
+
+function buildLogicTree(headings) {
+  const root = { id: 'root', title: 'root', level: 0, children: [] };
+  const stack = [root];
+  for (const heading of headings) {
+    const node = { id: heading.id, title: heading.title, level: heading.level, line: heading.line, children: [] };
+    while (stack.length > 1 && stack[stack.length - 1].level >= node.level) stack.pop();
+    stack[stack.length - 1].children.push(node);
+    stack.push(node);
+  }
+  return root;
+}
+
+function flattenTree(node, depth = 0) {
+  const rows = [];
+  for (const child of node.children || []) {
+    rows.push(`${'  '.repeat(depth)}- ${child.title}`);
+    rows.push(...flattenTree(child, depth + 1));
+  }
+  return rows;
+}
+
+function buildManualTocArtifacts({ task, material, markdown, sourceRef, sourceSha256, sourceSizeBytes, cleanBucket }) {
+  const serviceName = 'toc-rebuild';
+  const assetVersion = 'v1';
+  const jobId = `luceon-${task.id}-${serviceName}-${assetVersion}`;
+  const prefix = `${serviceName}/${task.materialId}/${assetVersion}/`;
+  const now = new Date().toISOString();
+  const title = material?.title || material?.metadata?.title || task?.metadata?.title || material?.metadata?.fileName || `Material ${task.materialId}`;
+  const headings = extractMarkdownOutline(markdown, title);
+  const logicTree = buildLogicTree(headings);
+  const readableTree = `# ${title}\n\n${flattenTree(logicTree).join('\n') || `- ${title}`}\n`;
+  const floodedContent = headings.map((heading, index) => ({
+    id: heading.id,
+    order: index + 1,
+    type: 'heading',
+    level: heading.level,
+    title: heading.title,
+    source: {
+      bucket: sourceRef.bucket,
+      object: sourceRef.object,
+      line: heading.line,
+    },
+  }));
+  const skeleton = {
+    schema: 'luceon-toc-skeleton/v1',
+    materialId: String(task.materialId),
+    assetVersion,
+    nodes: headings.map((heading, index) => ({
+      id: heading.id,
+      parentId: null,
+      order: index + 1,
+      level: heading.level,
+      title: heading.title,
+      sourceLine: heading.line,
+    })),
+  };
+  const unresolvedAnchors = [];
+  const approxTokens = Math.max(1, Math.ceil(String(markdown || '').length / 4));
+  const metrics = {
+    schema: 'luceon-toc-metrics/v1',
+    stats: {
+      tokens: {
+        prompt: approxTokens,
+        completion: Math.max(1, headings.length * 8),
+        total: approxTokens + Math.max(1, headings.length * 8),
+      },
+      heading_count: headings.length,
+      unresolved_anchor_count: 0,
+    },
+  };
+  const provenance = {
+    schema: 'luceon-provenance/v1',
+    service: {
+      name: serviceName,
+      protocol_version: 'v1',
+      runner: 'luceon-manual-local-toc-rebuild',
+    },
+    job: {
+      job_id: jobId,
+      submitted_at: now,
+      finished_at: now,
+      trigger: 'operator-manual',
+    },
+    asset: {
+      material_id: String(task.materialId),
+      parse_task_id: task.id,
+      asset_version: assetVersion,
+    },
+    inputs: [{
+      bucket: sourceRef.bucket,
+      object: sourceRef.object,
+      sha256: sourceSha256,
+      size_bytes: sourceSizeBytes,
+    }],
+  };
+
+  const payloads = {
+    flooded_content: { object: `${prefix}flooded_content.json`, buffer: jsonBuffer(floodedContent), contentType: 'application/json; charset=utf-8' },
+    logic_tree: { object: `${prefix}logic_tree.json`, buffer: jsonBuffer(logicTree), contentType: 'application/json; charset=utf-8' },
+    readable_tree: { object: `${prefix}readable_tree.md`, buffer: Buffer.from(readableTree, 'utf8'), contentType: 'text/markdown; charset=utf-8' },
+    skeleton: { object: `${prefix}skeleton.json`, buffer: jsonBuffer(skeleton), contentType: 'application/json; charset=utf-8' },
+    unresolved_anchors: { object: `${prefix}unresolved_anchors.json`, buffer: jsonBuffer(unresolvedAnchors), contentType: 'application/json; charset=utf-8' },
+    metrics: { object: `${prefix}metrics.json`, buffer: jsonBuffer(metrics), contentType: 'application/json; charset=utf-8' },
+    provenance: { object: `${prefix}provenance.json`, buffer: jsonBuffer(provenance), contentType: 'application/json; charset=utf-8' },
+  };
+  const artifacts = Object.fromEntries(
+    Object.entries(payloads).map(([role, item]) => [role, objectRef(cleanBucket, item.object, item.buffer, item.contentType)]),
+  );
+
+  return {
+    serviceName,
+    assetVersion,
+    jobId,
+    prefix,
+    now,
+    payloads,
+    artifacts,
+    stats: metrics.stats,
+    sourceInput: {
+      bucket: sourceRef.bucket,
+      object: sourceRef.object,
+      sha256: sourceSha256,
+      size_bytes: sourceSizeBytes,
+    },
+  };
 }
 
 /**
@@ -519,6 +700,167 @@ async function reviewTask(task, body) {
     payload: { reviewer: body?.reviewer || 'operator' },
   });
   return { ...task, ...update };
+}
+
+async function runManualTocRebuild(task, deps) {
+  const allowed = new Set(['review-pending', 'completed']);
+  if (!allowed.has(String(task.state))) {
+    const err = new Error(`Only review-pending/completed tasks can run toc-rebuild manually (current: ${task.state})`);
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const validation = await validateResources(task, deps, { needOriginal: false, needMarkdown: true });
+  if (!validation.ok) {
+    const err = new Error(validation.reason);
+    err.statusCode = 409;
+    err.resourceCheck = validation;
+    throw err;
+  }
+
+  const material = await dbGet(`/materials/${encodeURIComponent(task.materialId)}`);
+  if (!material) {
+    const err = new Error(`关联的 Material (${task.materialId}) 已被删除，无法执行目录重建`);
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const existingTaskJob = task.metadata?.cleanServiceJobs?.['toc-rebuild'];
+  const existingMaterialJob = material.metadata?.cleanMaterials?.['toc-rebuild'];
+  if (existingTaskJob || existingMaterialJob) {
+    const err = new Error('当前任务或素材已存在 toc-rebuild Clean Material 元数据；为避免覆盖，请先审计现有版本');
+    err.statusCode = 409;
+    throw err;
+  }
+
+  if (deps.getStorageBackend() !== 'minio') {
+    const err = new Error('目录重建当前仅支持 MinIO 存储后端');
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const markdownObject = material.metadata?.markdownObjectName || task.metadata?.markdownObjectName;
+  const parsedBucket = deps.getParsedBucket();
+  const cleanBucket = process.env.MINIO_CLEAN_BUCKET || 'eduassets-clean';
+  const minio = deps.getMinioClient();
+  if (!minio) {
+    const err = new Error('MinIO client is not available');
+    err.statusCode = 503;
+    throw err;
+  }
+
+  await emitAndLog({
+    taskId: task.id,
+    event: 'toc-rebuild-manual-started',
+    message: '操作者手动触发目录重建',
+    payload: { materialId: task.materialId, markdownObject, parsedBucket, cleanBucket },
+  });
+
+  const stream = await minio.getObject(parsedBucket, markdownObject);
+  const markdownBuffer = await streamToBuffer(stream);
+  const artifactPlan = buildManualTocArtifacts({
+    task,
+    material,
+    markdown: markdownBuffer.toString('utf8'),
+    sourceRef: { bucket: parsedBucket, object: markdownObject },
+    sourceSha256: sha256Hex(markdownBuffer),
+    sourceSizeBytes: markdownBuffer.length,
+    cleanBucket,
+  });
+
+  for (const item of Object.values(artifactPlan.payloads)) {
+    await minio.putObject(cleanBucket, item.object, item.buffer, item.buffer.length, { 'Content-Type': item.contentType });
+  }
+
+  const taskSummary = {
+    serviceName: artifactPlan.serviceName,
+    protocolVersion: 'v1',
+    jobId: artifactPlan.jobId,
+    status: 'completed',
+    productLabel: '目录结构已完成',
+    taskIntent: 'completed',
+    cleanReview: null,
+    materialId: String(task.materialId),
+    parseTaskId: task.id,
+    assetVersion: artifactPlan.assetVersion,
+    submittedAt: artifactPlan.now,
+    startedAt: artifactPlan.now,
+    finishedAt: artifactPlan.now,
+    artifacts: artifactPlan.artifacts,
+    stats: {
+      tokensPrompt: artifactPlan.stats.tokens.prompt,
+      tokensCompletion: artifactPlan.stats.tokens.completion,
+      tokensTotal: artifactPlan.stats.tokens.total,
+      costCnyEstimated: 0,
+      costCnyActual: 0,
+      unresolvedAnchorCount: 0,
+    },
+    sourceInput: artifactPlan.sourceInput,
+    error: null,
+    warnings: ['manual-local-toc-rebuild-from-mineru-markdown'],
+    updatedAt: artifactPlan.now,
+  };
+
+  const materialSummary = {
+    serviceName: artifactPlan.serviceName,
+    latestVersion: artifactPlan.assetVersion,
+    status: 'completed',
+    productLabel: '目录结构已完成',
+    prefix: artifactPlan.prefix,
+    provenanceObjectName: artifactPlan.artifacts.provenance.object,
+    stats: {
+      tokensPrompt: taskSummary.stats.tokensPrompt,
+      tokensCompletion: taskSummary.stats.tokensCompletion,
+      tokensTotal: taskSummary.stats.tokensTotal,
+      costCnyActual: 0,
+      unresolvedAnchorCount: 0,
+    },
+    sourceInput: artifactPlan.sourceInput,
+    updatedAt: artifactPlan.now,
+  };
+
+  await dbPatch(`/tasks/${encodeURIComponent(task.id)}`, {
+    metadata: {
+      ...(task.metadata || {}),
+      cleanServiceJobs: {
+        ...(task.metadata?.cleanServiceJobs || {}),
+        'toc-rebuild': taskSummary,
+      },
+    },
+  });
+  await dbPatch(`/materials/${encodeURIComponent(task.materialId)}`, {
+    metadata: {
+      ...(material.metadata || {}),
+      cleanMaterials: {
+        ...(material.metadata?.cleanMaterials || {}),
+        'toc-rebuild': materialSummary,
+      },
+    },
+  });
+
+  await emitAndLog({
+    taskId: task.id,
+    event: 'toc-rebuild-manual-completed',
+    message: `目录重建已完成: ${artifactPlan.prefix}`,
+    update: { cleanServiceJobs: { 'toc-rebuild': taskSummary } },
+    payload: {
+      materialId: task.materialId,
+      jobId: artifactPlan.jobId,
+      assetVersion: artifactPlan.assetVersion,
+      prefix: artifactPlan.prefix,
+      artifactCount: Object.keys(artifactPlan.artifacts).length,
+    },
+  });
+
+  return {
+    ok: true,
+    taskId: task.id,
+    materialId: String(task.materialId),
+    jobId: artifactPlan.jobId,
+    assetVersion: artifactPlan.assetVersion,
+    prefix: artifactPlan.prefix,
+    artifacts: artifactPlan.artifacts,
+  };
 }
 
 // ─── 路由注册 ────────────────────────────────────────────────
@@ -1003,6 +1345,17 @@ export function registerTaskActionRoutes(app, deps = {}) {
       if (!task) return;
       const updated = await reviewTask(task, req.body || {});
       res.json({ ok: true, taskId: updated.id, state: updated.state });
+    } catch (err) {
+      handleActionError(res, err);
+    }
+  });
+
+  app.post('/tasks/:id/toc-rebuild', async (req, res) => {
+    try {
+      const task = await loadTask(req, res);
+      if (!task) return;
+      const result = await runManualTocRebuild(task, safeDeps);
+      res.json(result);
     } catch (err) {
       handleActionError(res, err);
     }
