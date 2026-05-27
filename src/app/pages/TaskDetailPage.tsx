@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   ArrowLeft, RefreshCw, FileText, Clock, AlertTriangle, CheckCircle2, Loader2, XCircle,
   ChevronDown, ChevronRight, Brain, RotateCw, Sparkles, ShieldCheck,
@@ -218,6 +218,7 @@ function getEventStyle(level: string | undefined) {
 export function TaskDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const [task, setTask] = useState<ParseTask | null>(null);
   const [material, setMaterial] = useState<any | null>(null);
   const [events, setEvents] = useState<TaskEvent[]>([]);
@@ -247,6 +248,21 @@ export function TaskDetailPage() {
 
   const updateMeta = (key: keyof typeof metaForm, val: string) =>
     setMetaForm((prev) => ({ ...prev, [key]: val }));
+
+  useEffect(() => {
+    const hash = location.hash.replace(/^#/, '');
+    const hashToTab: Record<string, typeof activeTab> = {
+      review: 'metadata',
+      metadata: 'metadata',
+      markdown: 'markdown',
+      pdf: 'pdf',
+      events: 'events',
+      overview: 'overview',
+    };
+    if (hash && hashToTab[hash]) {
+      setActiveTab(hashToTab[hash]);
+    }
+  }, [location.hash]);
 
   const isMetaDirty = !!material && (
     metaForm.language !== (material.metadata?.language || '')
@@ -482,6 +498,30 @@ export function TaskDetailPage() {
       fetchData({ background: true });
     } catch (err) {
       toast.error('审核提交失败', { description: String(err) });
+    }
+  };
+
+  const handleSaveMetadata = async () => {
+    const materialId = task?.materialId;
+    if (!materialId) {
+      toast.error('保存元数据失败', { description: '当前任务没有关联 materialId' });
+      return;
+    }
+    try {
+      const res = await fetch(`/__proxy/db/materials/${encodeURIComponent(String(materialId))}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          metadata: { ...metaForm },
+          updateTime: Date.now(),
+        }),
+      });
+      const payload = await res.json().catch(() => ({} as any));
+      if (!res.ok) throw new Error(payload?.error || `HTTP ${res.status}`);
+      toast.success('元数据已保存');
+      fetchData({ background: true });
+    } catch (err) {
+      toast.error('保存元数据失败', { description: String(err) });
     }
   };
 
@@ -1261,11 +1301,11 @@ export function TaskDetailPage() {
                 metaForm={metaForm}
                 updateMeta={updateMeta}
                 isDirty={isMetaDirty}
-                onSaveMeta={handleReview} // 使用 handleReview 作为元数据页面的保存/审核逻辑
+                onSaveMeta={handleSaveMetadata}
               />
 
-              {/* W2-2: 元数据页内的额外提交审核按钮 */}
-              {task.state === 'review-pending' && isMetaDirty && (
+              {/* W2-2: 元数据页内的提交审核按钮，与保存元数据分离 */}
+              {task.state === 'review-pending' && (
                 <div className="mt-6 flex justify-end pt-4 border-t border-slate-100">
                   <button
                     onClick={handleReview}

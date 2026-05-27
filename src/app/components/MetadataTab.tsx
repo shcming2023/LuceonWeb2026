@@ -76,7 +76,7 @@ export function MetadataTab({
   metaForm: MetaForm;
   updateMeta: (key: keyof MetaForm, val: string) => void;
   isDirty: boolean;
-  onSaveMeta: () => void;
+  onSaveMeta: () => void | Promise<void>;
 }) {
   const { dispatch } = useAppStore();
   const [tagInput, setTagInput] = useState('');

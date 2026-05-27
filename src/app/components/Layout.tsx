@@ -53,7 +53,11 @@ export function Layout({ children }: LayoutProps) {
 
           {/* 右侧：操作按钮 + 通知 + 头像 */}
           <div className="flex items-center gap-3">
-            <button className="relative p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-full transition-colors">
+            <button
+              onClick={() => navigate('/ops/health')}
+              className="relative p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-full transition-colors"
+              title="查看系统健康"
+            >
               <Bell className="w-5 h-5" />
             </button>
             <button

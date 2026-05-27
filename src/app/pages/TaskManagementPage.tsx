@@ -221,7 +221,9 @@ export function TaskManagementPage() {
         next[idx] = { ...prev[idx], ...latest };
         return next;
       });
-    } catch { /* ignore */ }
+    } catch (err) {
+      toast.error('任务状态刷新失败', { description: String(err) });
+    }
   };
 
   const batchDelete = async () => {
@@ -316,6 +318,7 @@ export function TaskManagementPage() {
     if (!window.confirm(msg)) return;
 
     let successCount = 0;
+    let failCount = 0;
     for (const id of ids) {
       try {
         const res = await fetch(`/__proxy/upload/tasks/${encodeURIComponent(id)}/cancel`, {
@@ -323,9 +326,16 @@ export function TaskManagementPage() {
           headers: { 'Content-Type': 'application/json' }
         });
         if (res.ok) successCount++;
-      } catch (e) { /* ignore */ }
+        else failCount++;
+      } catch (e) {
+        failCount++;
+      }
     }
-    toast.success(`批量取消完成：成功 ${successCount}/${ids.length}`);
+    if (failCount > 0) {
+      toast.warning(`批量取消完成：成功 ${successCount}/${ids.length}，失败 ${failCount}`);
+    } else {
+      toast.success(`批量取消完成：成功 ${successCount}/${ids.length}`);
+    }
     setSelectedIds(new Set());
     fetchTasks();
   };

@@ -356,6 +356,24 @@ export function ProductsPage() {
   }), [cleanMaterialCount, processedCount, raw2cleanAcceptedCount]);
 
   // ── Markdown 拉取 ─────────────────────────────────────────
+  const fetchMarkdownText = useCallback(
+    async (material: any) => {
+      let text = '';
+      const { markdownObjectName, markdownUrl } = material.metadata || {};
+      if (markdownObjectName) {
+        const bucket = String(state.minioConfig.parsedBucket || state.minioConfig.bucket || '');
+        const url = `/__proxy/upload/proxy-file?objectName=${encodeURIComponent(markdownObjectName)}${bucket ? `&bucket=${encodeURIComponent(bucket)}` : ''}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`读取失败: HTTP ${res.status}`);
+        text = await res.text();
+      } else {
+        text = await fetchMinerUMarkdown(markdownUrl, material.mineruZipUrl);
+      }
+      return text;
+    },
+    [state.minioConfig],
+  );
+
   const handleToggleMarkdown = useCallback(
     async (id: number) => {
       const cur = mdStates.get(id);
@@ -383,17 +401,7 @@ export function ProductsPage() {
       });
 
       try {
-        let text = '';
-        const { markdownObjectName, markdownUrl } = material.metadata || {};
-        if (markdownObjectName) {
-          const bucket = String(state.minioConfig.parsedBucket || state.minioConfig.bucket || '');
-          const url = `/__proxy/upload/proxy-file?objectName=${encodeURIComponent(markdownObjectName)}${bucket ? `&bucket=${encodeURIComponent(bucket)}` : ''}`;
-          const res = await fetch(url);
-          if (!res.ok) throw new Error(`读取失败: HTTP ${res.status}`);
-          text = await res.text();
-        } else {
-          text = await fetchMinerUMarkdown(markdownUrl, material.mineruZipUrl);
-        }
+        const text = await fetchMarkdownText(material);
         if (!text.trim()) {
           setMdStates((prev) => {
             const next = new Map(prev);
@@ -416,24 +424,30 @@ export function ProductsPage() {
         });
       }
     },
-    [mdStates, state.materials, state.minioConfig],
+    [fetchMarkdownText, mdStates, state.materials],
   );
 
   const handleDownloadMarkdown = useCallback(
-    (id: number, title: string) => {
-      const content = mdStates.get(id)?.content;
-      if (!content) return;
-      const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${title.replace(/[\\/:*?"<>|]+/g, '_')}.md`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+    async (id: number, title: string) => {
+      const material = state.materials.find((m) => m.id === id);
+      if (!material) return;
+      try {
+        const content = await fetchMarkdownText(material);
+        if (!content.trim()) throw new Error('暂无可用的 Markdown 内容');
+        const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${title.replace(/[\\/:*?"<>|]+/g, '_')}.md`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        toast.error('Markdown 下载失败', { description: String(err) });
+      }
     },
-    [mdStates],
+    [fetchMarkdownText, state.materials],
   );
 
   // ── PDF 预览 URL 构造 ─────────────────────────────────────
@@ -461,8 +475,8 @@ export function ProductsPage() {
     setGradeFilter('all');
     setLanguageFilter('all');
     setTypeFilter('all');
-    setMineruStatusFilter('completed');
-    setAiStatusFilter('analyzed');
+    setMineruStatusFilter('all');
+    setAiStatusFilter('all');
     setCleanStatusFilter('all');
   };
 
@@ -472,8 +486,8 @@ export function ProductsPage() {
     gradeFilter !== 'all' ||
     languageFilter !== 'all' ||
     typeFilter !== 'all' ||
-    mineruStatusFilter !== 'completed' ||
-    aiStatusFilter !== 'analyzed' ||
+    mineruStatusFilter !== 'all' ||
+    aiStatusFilter !== 'all' ||
     cleanStatusFilter !== 'all';
 
   // ── 级联删除 ─────────────────────────────────────────────
