@@ -623,6 +623,9 @@ export function TaskDetailPage() {
     && resourceStatus.materialExists
     && resourceStatus.markdownExists
     && !cleanMaterialView.present;
+  const tocRebuildDisabledReason = cleanMaterialView.present
+    ? '当前任务已存在目录重建结果'
+    : (canTocRebuild ? '基于 MinerU Markdown 手动生成目录重建 Clean Material' : '需要任务进入待复核/完成并具备 Markdown 产物');
 
   // 资源缺失提示文案
   const resourceWarning = (() => {
@@ -687,7 +690,7 @@ export function TaskDetailPage() {
               onClick={handleTocRebuild}
               disabled={!canTocRebuild || tocRebuildRunning}
               className="flex items-center gap-2 px-4 py-2 bg-white border border-emerald-200 text-emerald-700 rounded-lg text-sm font-medium hover:bg-emerald-50 disabled:opacity-40 transition-colors shadow-sm"
-              title={cleanMaterialView.present ? '当前任务已存在目录重建结果' : (canTocRebuild ? '基于 MinerU Markdown 手动生成目录重建 Clean Material' : '需要任务进入待复核/完成并具备 Markdown 产物')}
+              title={tocRebuildDisabledReason}
             >
               {tocRebuildRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Boxes className="w-4 h-4" />}
               目录重建
@@ -801,7 +804,14 @@ export function TaskDetailPage() {
       <div className="min-h-0 flex-1">
         {activeTab === 'overview' && (
           <div className="space-y-6">
-            <CleanMaterialSummaryCard material={material} view={cleanMaterialView} />
+            <CleanMaterialSummaryCard
+              material={material}
+              view={cleanMaterialView}
+              canRebuild={canTocRebuild}
+              rebuildRunning={tocRebuildRunning}
+              rebuildDisabledReason={tocRebuildDisabledReason}
+              onRebuild={handleTocRebuild}
+            />
 
             {/* 状态概览卡片 */}
             <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-5">
