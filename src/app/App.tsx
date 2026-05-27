@@ -40,7 +40,7 @@ export default function App() {
                 <Route path="/library" element={<ProductsPage />} />
                 <Route path="/products" element={<Navigate to="/library" replace />} />
                 {/* 元数据管理：灵活标签/AI规则/成品分类管理 */}
-                <Route path="/metadata" element={<Navigate to="/settings?tab=dictionary" replace />} />
+                <Route path="/metadata" element={<MetadataManagementPage />} />
                 <Route path="/legacy/metadata" element={<MetadataManagementPage />} />
                 {/* 系统设置：API Key 配置、存储设置 */}
                 <Route path="/settings" element={<SettingsPage />} />

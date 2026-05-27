@@ -55,6 +55,11 @@ export function CleanMaterialOperatorDecisionControl({
             <ClipboardCheck size={13} className="text-slate-400" />
             Operator decision
           </p>
+          {!view.operatorDecisionReadOnly && (
+            <p className="mt-1 text-[11px] text-amber-700">
+              实验预览：此处只生成 metadata PATCH 预览，不会写入数据库。
+            </p>
+          )}
           <p className="mt-1 font-mono text-[11px] text-slate-500">
             {stateLabel(view.operatorDecisionState)}
           </p>
@@ -94,7 +99,7 @@ export function CleanMaterialOperatorDecisionControl({
                   className={`flex items-center justify-center gap-1.5 rounded border px-2.5 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40 ${action.className} ${active ? 'bg-white ring-1 ring-slate-200' : 'bg-white/70'}`}
                 >
                   <Icon size={13} />
-                  {action.label}
+                  Preview {action.label}
                 </button>
               );
             })}
@@ -118,7 +123,7 @@ export function CleanMaterialOperatorDecisionControl({
 
           {!canBuild && (
             <p className="rounded border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-              Decision patch preview is disabled until current artifact refs are available.
+              预览操作已禁用：需要当前 artifact refs 后才能生成 patch 预览。
             </p>
           )}
 
@@ -131,7 +136,7 @@ export function CleanMaterialOperatorDecisionControl({
           {result?.ok && result.patch && (
             <details className="rounded border border-slate-100 bg-white">
               <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-slate-600">
-                Mock-safe metadata PATCH preview
+                实验用 mock-safe metadata PATCH preview
               </summary>
               <pre className="max-h-64 overflow-auto border-t border-slate-100 p-3 text-[10px] leading-4 text-slate-600">
                 {JSON.stringify(result.patch, null, 2)}
