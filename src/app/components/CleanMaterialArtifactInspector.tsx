@@ -64,21 +64,26 @@ export function CleanMaterialArtifactInspector({ artifacts, sourceInput }: { art
     () => primaryArtifacts.find((item) => item.role === 'readable_tree')?.artifact || null,
     [primaryArtifacts],
   );
+  const rebuiltMarkdownArtifact = useMemo(
+    () => artifacts.find((artifact) => artifact.role === 'rebuilt_markdown' || artifact.object.endsWith('/rebuilt_markdown.md')) || null,
+    [artifacts],
+  );
   const [loadedByObject, setLoadedByObject] = useState<Record<string, LoadedArtifact>>({});
   const [sourceMarkdown, setSourceMarkdown] = useState<LoadedText>({ loading: false, content: '', error: '' });
 
   useEffect(() => {
     const controller = new AbortController();
-    const loadable = primaryArtifacts
-      .map((item) => item.artifact)
+    const loadable = [...primaryArtifacts.map((item) => item.artifact), rebuiltMarkdownArtifact]
+      .filter((artifact): artifact is Artifact => Boolean(artifact))
       .filter((artifact) => getKind(artifact) !== 'unsupported');
+    const uniqueLoadable = Array.from(new Map(loadable.map((artifact) => [artifact.object, artifact])).values());
 
     setLoadedByObject(Object.fromEntries(
-      loadable.map((artifact) => [artifact.object, { artifact, loading: true, content: '', error: '' }]),
+      uniqueLoadable.map((artifact) => [artifact.object, { artifact, loading: true, content: '', error: '' }]),
     ));
 
     (async () => {
-      await Promise.all(loadable.map(async (artifact) => {
+      await Promise.all(uniqueLoadable.map(async (artifact) => {
         try {
           const response = await fetch(getArtifactUrl(artifact), {
             cache: 'no-store',
@@ -111,7 +116,7 @@ export function CleanMaterialArtifactInspector({ artifacts, sourceInput }: { art
     })();
 
     return () => controller.abort();
-  }, [primaryArtifacts]);
+  }, [primaryArtifacts, rebuiltMarkdownArtifact]);
 
   useEffect(() => {
     if (!sourceInput?.object) {
@@ -148,6 +153,35 @@ export function CleanMaterialArtifactInspector({ artifacts, sourceInput }: { art
   const sourceMarkdownRef = sourceInput?.object
     ? { object: sourceInput.object, bucket: sourceInput.bucket }
     : null;
+  const readableTreeContent = readableTreeArtifact ? loadedByObject[readableTreeArtifact.object]?.content || '' : '';
+  const rebuiltMarkdownLoaded = rebuiltMarkdownArtifact ? loadedByObject[rebuiltMarkdownArtifact.object] : null;
+  const virtualRebuiltMarkdown = useMemo(() => {
+    if (!sourceMarkdown.content) return '';
+    const outline = readableTreeContent
+      ? readableTreeContent.replace(/^# .+?(\r?\n)+/, '').trim()
+      : '';
+    return [
+      '# 目录重建完整 Markdown',
+      '## 重建目录',
+      outline || '- 未生成可读目录',
+      '---',
+      '## 正文',
+      sourceMarkdown.content.trim(),
+      '',
+    ].join('\n\n');
+  }, [readableTreeContent, sourceMarkdown.content]);
+  const rebuiltMarkdownContent = rebuiltMarkdownArtifact
+    ? rebuiltMarkdownLoaded?.content || ''
+    : virtualRebuiltMarkdown;
+  const rebuiltMarkdownLoading = rebuiltMarkdownArtifact
+    ? Boolean(rebuiltMarkdownLoaded?.loading)
+    : sourceMarkdown.loading || (readableTreeArtifact ? Boolean(loadedByObject[readableTreeArtifact.object]?.loading) : false);
+  const rebuiltMarkdownError = rebuiltMarkdownArtifact
+    ? rebuiltMarkdownLoaded?.error || ''
+    : sourceMarkdown.error;
+  const rebuiltMarkdownObjectLabel = rebuiltMarkdownArtifact
+    ? rebuiltMarkdownArtifact.object
+    : '兼容旧结果：readable_tree + 原 Markdown 生成的只读预览';
 
   if (artifacts.length === 0) {
     return (
@@ -179,7 +213,7 @@ export function CleanMaterialArtifactInspector({ artifacts, sourceInput }: { art
                 Markdown 对照
               </div>
               <div className="mt-1 text-[11px] text-emerald-700">
-                左侧为 MinerU 原 Markdown，右侧为目录重建后的 readable_tree.md；两侧均为完整原文预览。
+                左侧为 MinerU 原 Markdown，右侧为目录重建后的完整 Markdown。可读目录仍在下方单独展示。
               </div>
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">
@@ -194,15 +228,17 @@ export function CleanMaterialArtifactInspector({ artifacts, sourceInput }: { art
                   原 Markdown
                 </a>
               )}
-              <a
-                href={getArtifactUrl(readableTreeArtifact)}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center justify-center gap-1.5 rounded border border-emerald-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
-              >
-                <ExternalLink size={12} />
-                重建 Markdown
-              </a>
+              {rebuiltMarkdownArtifact && (
+                <a
+                  href={getArtifactUrl(rebuiltMarkdownArtifact)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-1.5 rounded border border-emerald-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                >
+                  <ExternalLink size={12} />
+                  重建 Markdown
+                </a>
+              )}
             </div>
           </div>
 
@@ -216,11 +252,11 @@ export function CleanMaterialArtifactInspector({ artifacts, sourceInput }: { art
               emptyLabel={sourceInput?.object ? '原 Markdown 暂无内容' : '未找到原 Markdown sourceInput'}
             />
             <MarkdownPane
-              title="重建 Markdown"
-              objectLabel={readableTreeArtifact.object}
-              loading={loadedByObject[readableTreeArtifact.object]?.loading}
-              error={loadedByObject[readableTreeArtifact.object]?.error}
-              content={loadedByObject[readableTreeArtifact.object]?.content || ''}
+              title="完整重建 Markdown"
+              objectLabel={rebuiltMarkdownObjectLabel}
+              loading={rebuiltMarkdownLoading}
+              error={rebuiltMarkdownError}
+              content={rebuiltMarkdownContent}
               emptyLabel="重建 Markdown 暂无内容"
             />
           </div>

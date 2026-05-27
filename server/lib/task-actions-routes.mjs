@@ -129,6 +129,20 @@ function flattenTree(node, depth = 0) {
   return rows;
 }
 
+function buildRebuiltMarkdown({ title, readableTree, markdown }) {
+  const sourceMarkdown = String(markdown || '').trim();
+  const outline = String(readableTree || '').trim();
+  return [
+    `# ${title}`,
+    '## 重建目录',
+    outline.replace(/^# .+?(\r?\n)+/, '').trim() || `- ${title}`,
+    '---',
+    '## 正文',
+    sourceMarkdown || '_原 Markdown 为空_',
+    '',
+  ].join('\n\n');
+}
+
 function buildManualTocArtifacts({ task, material, markdown, sourceRef, sourceSha256, sourceSizeBytes, cleanBucket }) {
   const serviceName = 'toc-rebuild';
   const assetVersion = 'v1';
@@ -139,6 +153,7 @@ function buildManualTocArtifacts({ task, material, markdown, sourceRef, sourceSh
   const headings = extractMarkdownOutline(markdown, title);
   const logicTree = buildLogicTree(headings);
   const readableTree = `# ${title}\n\n${flattenTree(logicTree).join('\n') || `- ${title}`}\n`;
+  const rebuiltMarkdown = buildRebuiltMarkdown({ title, readableTree, markdown });
   const floodedContent = headings.map((heading, index) => ({
     id: heading.id,
     order: index + 1,
@@ -208,6 +223,7 @@ function buildManualTocArtifacts({ task, material, markdown, sourceRef, sourceSh
     flooded_content: { object: `${prefix}flooded_content.json`, buffer: jsonBuffer(floodedContent), contentType: 'application/json; charset=utf-8' },
     logic_tree: { object: `${prefix}logic_tree.json`, buffer: jsonBuffer(logicTree), contentType: 'application/json; charset=utf-8' },
     readable_tree: { object: `${prefix}readable_tree.md`, buffer: Buffer.from(readableTree, 'utf8'), contentType: 'text/markdown; charset=utf-8' },
+    rebuilt_markdown: { object: `${prefix}rebuilt_markdown.md`, buffer: Buffer.from(rebuiltMarkdown, 'utf8'), contentType: 'text/markdown; charset=utf-8' },
     skeleton: { object: `${prefix}skeleton.json`, buffer: jsonBuffer(skeleton), contentType: 'application/json; charset=utf-8' },
     unresolved_anchors: { object: `${prefix}unresolved_anchors.json`, buffer: jsonBuffer(unresolvedAnchors), contentType: 'application/json; charset=utf-8' },
     metrics: { object: `${prefix}metrics.json`, buffer: jsonBuffer(metrics), contentType: 'application/json; charset=utf-8' },
