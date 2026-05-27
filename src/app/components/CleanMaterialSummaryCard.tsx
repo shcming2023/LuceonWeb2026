@@ -1,4 +1,4 @@
-import { Boxes, ChevronDown, FileJson, Hash, Link2 } from 'lucide-react';
+import { Boxes, ChevronDown, FileJson, Hash, Link2, Loader2 } from 'lucide-react';
 import type { CleanMaterialView } from '../utils/cleanMaterialView';
 import type { Material } from '../../store/types';
 import { CleanMaterialArtifactInspector } from './CleanMaterialArtifactInspector';
@@ -19,15 +19,51 @@ function Field({ label, value, title }: { label: string; value: string | number 
   );
 }
 
-export function CleanMaterialSummaryCard({ material, view }: { material?: Pick<Material, 'metadata'> | null; view: CleanMaterialView }) {
+export function CleanMaterialSummaryCard({
+  material,
+  view,
+  canRebuild = false,
+  rebuildRunning = false,
+  rebuildDisabledReason = '需要任务进入待复核/完成并具备 Markdown 产物',
+  onRebuild,
+}: {
+  material?: Pick<Material, 'metadata'> | null;
+  view: CleanMaterialView;
+  canRebuild?: boolean;
+  rebuildRunning?: boolean;
+  rebuildDisabledReason?: string;
+  onRebuild?: () => void;
+}) {
   if (!view.present) {
     return (
       <section className="rounded-lg border border-dashed border-slate-200 bg-white p-5">
-        <div className="flex items-center gap-2 text-slate-600">
-          <Boxes size={16} className="text-slate-400" />
-          <h2 className="text-sm font-semibold">Clean Material</h2>
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-slate-600">
+              <Boxes size={16} className="text-slate-400" />
+              <h2 className="text-sm font-semibold">Clean Material</h2>
+            </div>
+            <p className="mt-3 text-sm text-slate-400">暂无 Clean Material 元数据</p>
+            <p className="mt-1 text-xs text-slate-400">
+              解析和 AI 元数据完成后，可在这里手动执行目录重建，生成可读目录、结构化目录树和完整重建 Markdown。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onRebuild}
+            disabled={!canRebuild || rebuildRunning || !onRebuild}
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 shadow-sm transition-colors hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-40"
+            title={canRebuild ? '基于 MinerU Markdown 手动生成目录重建 Clean Material' : rebuildDisabledReason}
+          >
+            {rebuildRunning ? <Loader2 size={15} className="animate-spin" /> : <Boxes size={15} />}
+            目录重建
+          </button>
         </div>
-        <p className="mt-3 text-sm text-slate-400">暂无 Clean Material 元数据</p>
+        {!canRebuild && (
+          <div className="mt-3 rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+            {rebuildDisabledReason}
+          </div>
+        )}
       </section>
     );
   }
