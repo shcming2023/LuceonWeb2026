@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Code, ExternalLink, FileText, Loader2, TriangleAlert } from 'lucide-react';
+import { Code, ExternalLink, FileJson, Fingerprint, ListTree, Loader2, TriangleAlert } from 'lucide-react';
 import type { CleanMaterialView } from '../utils/cleanMaterialView';
 import { renderMarkdown } from '../utils/markdown';
 
@@ -17,73 +17,85 @@ function getKind(artifact: Artifact) {
   return 'unsupported';
 }
 
-function pickInitialArtifact(artifacts: Artifact[]) {
-  return artifacts.find((artifact) => artifact.object.endsWith('/readable_tree.md') || artifact.role === 'readable_tree') ||
-    artifacts.find((artifact) => artifact.object.endsWith('.json')) ||
-    artifacts[0] ||
-    null;
+const PRIMARY_ARTIFACTS = [
+  { role: 'readable_tree', label: '可读目录', icon: ListTree },
+  { role: 'logic_tree', label: '结构化目录树', icon: FileJson },
+  { role: 'skeleton', label: '目录骨架', icon: Code },
+  { role: 'provenance', label: '溯源', icon: Fingerprint },
+] as const;
+
+interface LoadedArtifact {
+  artifact: Artifact;
+  loading: boolean;
+  content: string;
+  error: string;
+}
+
+function formatArtifactContent(artifact: Artifact, text: string) {
+  if (getKind(artifact) !== 'json') return text;
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2);
+  } catch {
+    return text;
+  }
 }
 
 export function CleanMaterialArtifactInspector({ artifacts }: { artifacts: Artifact[] }) {
-  const initialArtifact = useMemo(() => pickInitialArtifact(artifacts), [artifacts]);
-  const [selectedObject, setSelectedObject] = useState(initialArtifact?.object || '');
-  const selectedArtifact = artifacts.find((artifact) => artifact.object === selectedObject) || initialArtifact;
-  const [loading, setLoading] = useState(false);
-  const [content, setContent] = useState('');
-  const [error, setError] = useState('');
+  const primaryArtifacts = useMemo(() => (
+    PRIMARY_ARTIFACTS
+      .map((item) => ({
+        ...item,
+        artifact: artifacts.find((artifact) => artifact.role === item.role || artifact.object.endsWith(`/${item.role}.${item.role === 'readable_tree' ? 'md' : 'json'}`)) || null,
+      }))
+      .filter((item): item is typeof item & { artifact: Artifact } => Boolean(item.artifact))
+  ), [artifacts]);
+  const [loadedByObject, setLoadedByObject] = useState<Record<string, LoadedArtifact>>({});
 
   useEffect(() => {
-    setSelectedObject(initialArtifact?.object || '');
-  }, [initialArtifact?.object]);
-
-  useEffect(() => {
-    if (!selectedArtifact) {
-      setContent('');
-      setError('');
-      setLoading(false);
-      return;
-    }
-
-    const kind = getKind(selectedArtifact);
-    if (kind === 'unsupported') {
-      setContent('');
-      setError('');
-      setLoading(false);
-      return;
-    }
-
     const controller = new AbortController();
-    setLoading(true);
-    setError('');
-    setContent('');
+    const loadable = primaryArtifacts
+      .map((item) => item.artifact)
+      .filter((artifact) => getKind(artifact) !== 'unsupported');
+
+    setLoadedByObject(Object.fromEntries(
+      loadable.map((artifact) => [artifact.object, { artifact, loading: true, content: '', error: '' }]),
+    ));
 
     (async () => {
-      try {
-        const response = await fetch(getArtifactUrl(selectedArtifact), {
-          cache: 'no-store',
-          signal: controller.signal,
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const text = await response.text();
-        if (kind === 'json') {
-          try {
-            setContent(JSON.stringify(JSON.parse(text), null, 2));
-          } catch {
-            setContent(text);
-          }
-        } else {
-          setContent(text);
+      await Promise.all(loadable.map(async (artifact) => {
+        try {
+          const response = await fetch(getArtifactUrl(artifact), {
+            cache: 'no-store',
+            signal: controller.signal,
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const text = await response.text();
+          setLoadedByObject((prev) => ({
+            ...prev,
+            [artifact.object]: {
+              artifact,
+              loading: false,
+              content: formatArtifactContent(artifact, text),
+              error: '',
+            },
+          }));
+        } catch (err) {
+          if (err instanceof DOMException && err.name === 'AbortError') return;
+          setLoadedByObject((prev) => ({
+            ...prev,
+            [artifact.object]: {
+              artifact,
+              loading: false,
+              content: '',
+              error: err instanceof Error ? err.message : String(err),
+            },
+          }));
         }
-      } catch (err) {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        setLoading(false);
-      }
+      }));
     })();
 
     return () => controller.abort();
-  }, [selectedArtifact?.object, selectedArtifact?.bucket]);
+  }, [primaryArtifacts]);
 
   if (artifacts.length === 0) {
     return (
@@ -93,75 +105,85 @@ export function CleanMaterialArtifactInspector({ artifacts }: { artifacts: Artif
     );
   }
 
-  const kind = selectedArtifact ? getKind(selectedArtifact) : 'unsupported';
-  const artifactUrl = selectedArtifact ? getArtifactUrl(selectedArtifact) : '';
-
   return (
-    <div className="mt-4 rounded-md border border-slate-100 bg-slate-50">
-      <div className="border-b border-slate-100 p-3">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <label className="flex min-w-0 flex-1 items-center gap-2 text-xs font-semibold text-slate-600">
-            <FileText size={13} className="shrink-0 text-slate-400" />
-            <select
-              value={selectedArtifact?.object || ''}
-              onChange={(event) => setSelectedObject(event.target.value)}
-              className="min-w-0 flex-1 rounded border border-slate-200 bg-white px-2 py-1.5 font-mono text-[11px] text-slate-700 outline-none focus:border-emerald-300"
-            >
-              {artifacts.map((artifact) => (
-                <option key={artifact.object} value={artifact.object}>
-                  {artifact.role} · {artifact.object.split('/').pop()}
-                </option>
-              ))}
-            </select>
-          </label>
-          {selectedArtifact && (
-            <a
-              href={artifactUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center justify-center gap-1.5 rounded border border-emerald-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
-            >
-              <ExternalLink size={12} />
-              打开
-            </a>
-          )}
-        </div>
+    <div className="mt-4 space-y-3">
+      <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
+        <ListTree size={16} className="text-emerald-600" />
+        目录重建结果
       </div>
 
-      <div className="min-h-40 max-h-96 overflow-auto bg-white">
-        {loading && (
-          <div className="flex h-40 items-center justify-center gap-2 text-xs text-slate-400">
-            <Loader2 size={14} className="animate-spin" />
-            加载 artifact...
-          </div>
-        )}
-        {!loading && error && (
-          <div className="flex items-start gap-2 p-4 text-xs text-red-600">
-            <TriangleAlert size={14} className="mt-0.5 shrink-0" />
-            <span className="break-words">读取失败：{error}</span>
-          </div>
-        )}
-        {!loading && !error && kind === 'unsupported' && (
-          <div className="flex h-40 items-center justify-center text-xs text-slate-400">
-            当前 artifact 类型暂不支持内嵌预览，请使用“打开”链接查看。
-          </div>
-        )}
-        {!loading && !error && kind === 'markdown' && (
-          <div className="p-4 text-sm leading-6 text-slate-700" dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }} />
-        )}
-        {!loading && !error && (kind === 'json' || kind === 'text') && (
-          <pre className="whitespace-pre-wrap p-4 font-mono text-[11px] leading-5 text-slate-700">
-            {content || '暂无内容'}
-          </pre>
-        )}
-      </div>
-
-      {selectedArtifact && (
-        <div className="flex items-start gap-1.5 border-t border-slate-100 px-3 py-2 text-[10px] text-slate-400">
-          <Code size={11} className="mt-0.5 shrink-0" />
-          <span className="break-all">{selectedArtifact.bucket || 'eduassets-clean'} / {selectedArtifact.object}</span>
+      {primaryArtifacts.length === 0 && (
+        <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-3 text-xs text-slate-400">
+          未找到 readable_tree / logic_tree / skeleton / provenance artifact。
         </div>
       )}
+
+      {primaryArtifacts.map(({ role, label, icon: Icon, artifact }) => {
+        const loaded = loadedByObject[artifact.object];
+        const kind = getKind(artifact);
+        return (
+          <section key={role} className="overflow-hidden rounded-md border border-slate-100 bg-white">
+            <div className="flex flex-col gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2 md:flex-row md:items-center md:justify-between">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+                  <Icon size={13} className={role === 'readable_tree' ? 'text-emerald-600' : 'text-slate-400'} />
+                  {label}
+                </div>
+                <div className="mt-1 break-all font-mono text-[10px] text-slate-400">
+                  {artifact.bucket || 'eduassets-clean'} / {artifact.object}
+                </div>
+              </div>
+              <a
+                href={getArtifactUrl(artifact)}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center gap-1.5 rounded border border-emerald-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+              >
+                <ExternalLink size={12} />
+                打开
+              </a>
+            </div>
+
+            <div className="max-h-96 min-h-20 overflow-auto">
+              {loaded?.loading && (
+                <div className="flex h-24 items-center justify-center gap-2 text-xs text-slate-400">
+                  <Loader2 size={14} className="animate-spin" />
+                  加载 {label}...
+                </div>
+              )}
+              {loaded?.error && (
+                <div className="flex items-start gap-2 p-4 text-xs text-red-600">
+                  <TriangleAlert size={14} className="mt-0.5 shrink-0" />
+                  <span className="break-words">读取失败：{loaded.error}</span>
+                </div>
+              )}
+              {!loaded?.loading && !loaded?.error && kind === 'markdown' && (
+                <div className="p-4 text-sm leading-6 text-slate-700">
+                  <div className="mb-3 rounded border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                    由目录重建生成的可读目录
+                  </div>
+                  <div dangerouslySetInnerHTML={{ __html: renderMarkdown(loaded?.content || '') }} />
+                </div>
+              )}
+              {!loaded?.loading && !loaded?.error && (kind === 'json' || kind === 'text') && (
+                <pre className="whitespace-pre-wrap p-4 font-mono text-[11px] leading-5 text-slate-700">
+                  {loaded?.content || '暂无内容'}
+                </pre>
+              )}
+              {!loaded?.loading && !loaded?.error && kind === 'unsupported' && (
+                <div className="flex h-24 items-center justify-center text-xs text-slate-400">
+                  当前 artifact 类型暂不支持内嵌预览，请使用“打开”链接查看。
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-start gap-1.5 border-t border-slate-100 px-3 py-2 text-[10px] text-slate-400">
+              <Code size={11} className="mt-0.5 shrink-0" />
+              <span className="break-all">{artifact.sha256 || 'sha256 unavailable'}</span>
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
 }
