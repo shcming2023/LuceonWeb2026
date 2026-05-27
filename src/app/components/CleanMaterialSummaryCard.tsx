@@ -101,7 +101,7 @@ export function CleanMaterialSummaryCard({ material, view }: { material?: Pick<M
         </details>
       )}
 
-      <CleanMaterialArtifactInspector artifacts={view.artifacts} />
+      <CleanMaterialArtifactInspector artifacts={view.artifacts} sourceInput={view.sourceInput} />
       <CleanMaterialOperatorDecisionControl material={material} view={view} />
     </section>
   );
