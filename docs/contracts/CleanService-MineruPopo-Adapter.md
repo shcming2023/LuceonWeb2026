@@ -33,7 +33,18 @@ POST /api/v1/jobs
 GET  /api/v1/jobs/{job_id}
 ```
 
-Luceon request shape remains CleanService Protocol v1:
+Luceon request shape remains CleanService Protocol v1.
+
+For the current Luceon production-line output shape, the manual task-detail
+`toc-rebuild` action submits the MinerU result zip:
+
+- primary input: `inputs[]` role `mineru-result-zip`, pointing to
+  `eduassets-parsed:parsed/{materialId}/mineru-result.zip`.
+
+The adapter extracts `*_content_list_v2.json` and `*_origin.pdf` from that zip
+before invoking MinerU-Popo.
+
+The adapter also keeps compatibility with canonical raw-material input:
 
 - primary input: `inputs[]` role `mineru-content`, pointing to
   `eduassets-raw:mineru/{materialId}/vN/content_list_v2.json`;
@@ -79,7 +90,8 @@ Optional compose overlay:
 docker compose -f docker-compose.yml -f docker-compose.popo.yml up -d --build mineru-popo
 ```
 
-Luceon CleanService settings:
+Luceon CleanService settings for activating the task-detail button through
+MinerU-Popo:
 
 ```text
 CLEANSERVICE_ENABLED=true
@@ -102,4 +114,3 @@ curl http://127.0.0.1:18080/health
 - The adapter does not mutate Luceon DB records. Luceon still owns metadata
   apply after output verification.
 - This document is not a readiness or go-live claim.
-

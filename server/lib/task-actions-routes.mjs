@@ -25,6 +25,12 @@ import { taskEventBus } from './task-events-bus.mjs';
 import { logTaskEvent } from '../services/logging/task-events.mjs';
 import { createOrphanHelpers } from './consistency-routes.mjs';
 import { createAiMetadataJob } from '../services/ai/metadata-job-client.mjs';
+import { loadCleanServiceConfig } from '../services/cleanservice/config.mjs';
+import { createCleanServiceClientWithTransport } from '../services/cleanservice/worker-factory.mjs';
+import { verifyCleanServiceOutputArtifacts } from '../services/cleanservice/output-verifier.mjs';
+import { buildVerifiedCleanOutputMetadataCandidate } from '../services/cleanservice/metadata-summary.mjs';
+import { buildCleanMetadataPersistencePlan } from '../services/cleanservice/metadata-persistence.mjs';
+import { applyCleanMetadataPersistencePlan } from '../services/cleanservice/metadata-apply-executor.mjs';
 import { createHash } from 'crypto';
 
 const DB_BASE_URL = process.env.DB_BASE_URL || 'http://localhost:8789';
@@ -879,6 +885,204 @@ async function runManualTocRebuild(task, deps) {
   };
 }
 
+async function runExternalCleanServiceTocRebuild(task, deps) {
+  const allowed = new Set(['review-pending', 'completed']);
+  if (!allowed.has(String(task.state))) {
+    const err = new Error(`Only review-pending/completed tasks can run toc-rebuild manually (current: ${task.state})`);
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const validation = await validateResources(task, deps, { needOriginal: false, needMarkdown: true });
+  if (!validation.ok) {
+    const err = new Error(validation.reason);
+    err.statusCode = 409;
+    err.resourceCheck = validation;
+    throw err;
+  }
+
+  const material = await dbGet(`/materials/${encodeURIComponent(task.materialId)}`);
+  if (!material) {
+    const err = new Error(`关联的 Material (${task.materialId}) 已被删除，无法执行目录重建`);
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const serviceName = 'toc-rebuild';
+  const existingTaskJob = task.metadata?.cleanServiceJobs?.[serviceName];
+  const existingMaterialJob = material.metadata?.cleanMaterials?.[serviceName];
+  if (existingTaskJob || existingMaterialJob) {
+    const err = new Error('当前任务或素材已存在 toc-rebuild Clean Material 元数据；为避免覆盖，请先审计现有版本');
+    err.statusCode = 409;
+    throw err;
+  }
+
+  if (deps.getStorageBackend() !== 'minio') {
+    const err = new Error('目录重建当前仅支持 MinIO 存储后端');
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const minio = deps.getMinioClient();
+  if (!minio) {
+    const err = new Error('MinIO client is not available');
+    err.statusCode = 503;
+    throw err;
+  }
+
+  const config = loadCleanServiceConfig();
+  if (!config.enabled || !config.endpoint) {
+    const err = new Error('CleanService is not enabled or endpoint is missing');
+    err.statusCode = 503;
+    throw err;
+  }
+
+  const zipObjectName = material.metadata?.zipObjectName || task.metadata?.zipObjectName;
+  if (!zipObjectName) {
+    const err = new Error('MinerU result zip is required for MinerU-Popo toc-rebuild');
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const parsedBucket = deps.getParsedBucket();
+  const cleanBucket = process.env.MINIO_CLEAN_BUCKET || 'eduassets-clean';
+  const assetVersion = 'v1';
+  const jobId = `luceon-${task.id}-${serviceName}-${assetVersion}`;
+  const submittedAt = new Date().toISOString();
+  const request = {
+    job_id: jobId,
+    service_name: serviceName,
+    material_id: String(task.materialId),
+    parse_task_id: task.id,
+    asset_version: assetVersion,
+    submitted_at: submittedAt,
+    submitted_by: config.submittedBy,
+    inputs: [{
+      role: 'mineru-result-zip',
+      source: {
+        type: 'minio',
+        bucket: parsedBucket,
+        object: zipObjectName,
+        endpoint: config.storageEndpoint,
+        use_ssl: config.storageUseSsl,
+      },
+    }],
+    sink: {
+      type: 'minio',
+      bucket: cleanBucket,
+      prefix: `${serviceName}/${task.materialId}/${assetVersion}/`,
+      endpoint: config.storageEndpoint,
+      use_ssl: config.storageUseSsl,
+    },
+    options: {
+      max_cost_cny: config.costPolicy?.hardLimitCny ?? 8,
+    },
+  };
+
+  await emitAndLog({
+    taskId: task.id,
+    event: 'toc-rebuild-cleanservice-started',
+    message: '操作者手动触发 MinerU-Popo CleanService 目录重建',
+    payload: { materialId: task.materialId, jobId, endpoint: config.endpoint, zipObjectName, parsedBucket, cleanBucket },
+  });
+
+  const cleanClient = createCleanServiceClientWithTransport({ config });
+  const submitResult = await cleanClient.submitJob(request);
+  if (!submitResult?.ok || !submitResult.job) {
+    const err = new Error(submitResult?.job?.error?.message || 'CleanService job failed');
+    err.statusCode = 502;
+    throw err;
+  }
+
+  const artifactReader = {
+    async readArtifact(_role, ref) {
+      const stream = await minio.getObject(ref.bucket, ref.object);
+      const buffer = await streamToBuffer(stream);
+      return buffer.toString('utf8');
+    },
+  };
+
+  const verification = await verifyCleanServiceOutputArtifacts(submitResult.job, {
+    expected: {
+      serviceName,
+      protocolVersion: 'v1',
+      materialId: String(task.materialId),
+      assetVersion,
+      jobId,
+    },
+    artifactReader,
+  });
+
+  if (!verification.ok) {
+    const err = new Error(`CleanService output verification failed: ${(verification.errors || []).join(', ')}`);
+    err.statusCode = 502;
+    throw err;
+  }
+
+  const candidate = buildVerifiedCleanOutputMetadataCandidate({
+    job: submitResult.job,
+    verification,
+    now: () => new Date().toISOString(),
+  });
+  const plan = buildCleanMetadataPersistencePlan({
+    candidate,
+    existingTask: task,
+    existingMaterial: material,
+    now: () => new Date().toISOString(),
+  });
+
+  const applyResult = await applyCleanMetadataPersistencePlan({
+    plan,
+    taskId: task.id,
+    materialId: String(task.materialId),
+    existingTask: task,
+    existingMaterial: material,
+    allowRealApply: true,
+    dbClient: {
+      async updateTask(taskId, patch) {
+        await dbPatch(`/tasks/${encodeURIComponent(taskId)}`, patch);
+        return true;
+      },
+      async updateMaterial(materialId, patch) {
+        await dbPatch(`/materials/${encodeURIComponent(materialId)}`, patch);
+        return true;
+      },
+    },
+  });
+
+  if (!applyResult.ok || !applyResult.applied) {
+    const err = new Error(applyResult.reason || applyResult.classification || 'CleanService metadata apply failed');
+    err.statusCode = 502;
+    throw err;
+  }
+
+  await emitAndLog({
+    taskId: task.id,
+    event: 'toc-rebuild-cleanservice-completed',
+    message: `MinerU-Popo 目录重建已完成: ${request.sink.prefix}`,
+    update: { cleanServiceJobs: { [serviceName]: plan.taskPatch.metadata.cleanServiceJobs[serviceName] } },
+    payload: {
+      materialId: task.materialId,
+      jobId,
+      assetVersion,
+      prefix: request.sink.prefix,
+      engine: submitResult.job.stats?.engine || 'mineru-popo',
+      artifactCount: Object.keys(submitResult.job.artifacts || {}).length,
+    },
+  });
+
+  return {
+    ok: true,
+    taskId: task.id,
+    materialId: String(task.materialId),
+    jobId,
+    assetVersion,
+    prefix: request.sink.prefix,
+    engine: submitResult.job.stats?.engine || 'mineru-popo',
+    artifacts: plan.taskPatch.metadata.cleanServiceJobs[serviceName].artifacts,
+  };
+}
+
 // ─── 路由注册 ────────────────────────────────────────────────
 
 /**
@@ -1370,7 +1574,10 @@ export function registerTaskActionRoutes(app, deps = {}) {
     try {
       const task = await loadTask(req, res);
       if (!task) return;
-      const result = await runManualTocRebuild(task, safeDeps);
+      const config = loadCleanServiceConfig();
+      const result = config.enabled
+        ? await runExternalCleanServiceTocRebuild(task, safeDeps)
+        : await runManualTocRebuild(task, safeDeps);
       res.json(result);
     } catch (err) {
       handleActionError(res, err);

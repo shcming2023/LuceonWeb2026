@@ -130,18 +130,63 @@ Container status:
 mineru-popo   Up (healthy)   127.0.0.1:18082->8000/tcp
 ```
 
+Additional integration wiring completed:
+
+```text
+server/lib/task-actions-routes.mjs
+```
+
+The task-detail `POST /tasks/:id/toc-rebuild` route now switches behavior by
+`CLEANSERVICE_ENABLED`:
+
+- `false`: preserve the previous local/manual Markdown-based toc-rebuild path;
+- `true`: submit a CleanService Protocol v1 job to `CLEANSERVICE_ENDPOINT`.
+
+For the current Luceon MinerU output shape, the enabled route sends
+`inputs[]` role `mineru-result-zip` pointing at the existing
+`eduassets-parsed:parsed/{materialId}/mineru-result.zip`. The MinerU-Popo
+adapter extracts `*_content_list_v2.json` and `*_origin.pdf` from that zip,
+runs Popo, verifies the returned seven required artifacts through MinIO, and
+applies only the CleanService metadata summary to the task/material records.
+
+Runtime deployment completed:
+
+```text
+cms-upload-server:
+  CLEANSERVICE_ENABLED=true
+  CLEANSERVICE_ENDPOINT=http://mineru-popo:8000
+
+mineru-popo:
+  model_configured=true
+  127.0.0.1:18082->8000/tcp
+```
+
+Verified from inside `cms-upload-server`:
+
+```text
+wget -qO- http://mineru-popo:8000/health
+```
+
+Observed:
+
+```json
+{"ok":true,"service":"toc-rebuild","engine":"mineru-popo","version":"mineru-popo-adapter.v0.1","protocol_version":"v1","model_configured":true}
+```
+
 ## Boundary
 
-No Luceon DB write, MinIO object mutation, CleanService real sample job,
-pressure/UAT/readiness/go-live claim, or metadata apply was performed.
+No CleanService real sample job, pressure/UAT/readiness/go-live claim, or
+manual sample metadata apply was performed during validation.
 
-The Popo adapter container was built and started as an optional sidecar on
-`127.0.0.1:18082`. The main Luceon upload worker was not reconfigured to use it
-as the active CleanService endpoint.
+The Popo adapter container was built and started on `127.0.0.1:18082`, and the
+main Luceon upload worker was reconfigured to use it as the active CleanService
+endpoint. A future operator click on an eligible task's `目录重建` action will
+perform the real CleanService job and metadata apply.
 
 ## Next Required Step
 
-Run one explicitly authorized single-sample CleanService job through the adapter:
+Run one explicitly authorized single-sample CleanService job through the
+task-detail `目录重建` button:
 
 ```text
 CLEANSERVICE_ENABLED=true
