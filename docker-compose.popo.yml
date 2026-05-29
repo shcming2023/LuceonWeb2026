@@ -1,0 +1,46 @@
+# Optional local MinerU-Popo CleanService adapter.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.popo.yml up -d --build mineru-popo
+#
+# Then set:
+#   CLEANSERVICE_ENABLED=true
+#   CLEANSERVICE_ENDPOINT=http://mineru-popo:8000
+#
+# The adapter is not enabled by default. It requires POPO_MODEL_PATH to point to
+# downloaded MinerU-Popo model weights before real jobs can complete.
+
+services:
+  mineru-popo:
+    build:
+      context: /Users/concm/prod_workspace/MineruPopo
+      dockerfile: Dockerfile.luceon
+    container_name: mineru-popo
+    restart: unless-stopped
+    expose:
+      - "8000"
+    ports:
+      - "127.0.0.1:${POPO_PORT:-18080}:8000"
+    networks:
+      - cms-network
+    environment:
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY must be set}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:?MINIO_SECRET_KEY must be set}
+      - POPO_MODEL_PATH=${POPO_MODEL_PATH:-}
+      - POPO_SOURCE_BUCKET=${POPO_SOURCE_BUCKET:-eduassets}
+      - POPO_CLEAN_BUCKET=${POPO_CLEAN_BUCKET:-eduassets-clean}
+      - POPO_JOB_DIR=/app/runtime/jobs
+      - POPO_WORK_ROOT=/app/runtime/work
+      - TZ=Asia/Shanghai
+    volumes:
+      - /Users/concm/prod_workspace/MineruPopo/runtime:/app/runtime
+      # Optional: place downloaded model weights under /Users/concm/prod_workspace/MineruPopo/models
+      - /Users/concm/prod_workspace/MineruPopo/models:/app/models:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
