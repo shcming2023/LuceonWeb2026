@@ -15,6 +15,8 @@ import { deriveMineruProgressLine, deriveTaskDisplayStatus } from '../utils/task
 import { DropdownMenu } from '../components/DropdownMenu';
 import { CleanMaterialSummaryCard } from '../components/CleanMaterialSummaryCard';
 import { buildCleanMaterialView } from '../utils/cleanMaterialView';
+import { MainlinePipelinePanel } from '../components/MainlinePipelinePanel';
+import { buildMainlinePipelineView } from '../utils/mainlinePipeline';
 
 /**
  * ParseTask 详情数据结构
@@ -237,6 +239,10 @@ export function TaskDetailPage() {
   const [mdLoading, setMdLoading] = useState(false);
   const [mdError, setMdError] = useState('');
 
+  const [rebuiltMdContent, setRebuiltMdContent] = useState('');
+  const [rebuiltMdLoading, setRebuiltMdLoading] = useState(false);
+  const [rebuiltMdError, setRebuiltMdError] = useState('');
+
   // ── 元数据编辑相关状态 ────────────────────────────────────
   const [metaForm, setMetaForm] = useState({
     language: '',
@@ -279,6 +285,8 @@ export function TaskDetailPage() {
     markdownExists: true,
     loaded: false,
   });
+
+  const cleanMaterialView = buildCleanMaterialView({ material, task });
 
   /**
    * 从后端加载任务详情、事件日志、关联 AI Jobs 和 Material 资源状态
@@ -429,6 +437,29 @@ export function TaskDetailPage() {
       }
     })();
   }, [id, material?.metadata?.markdownObjectName, material?.metadata?.markdownUrl, task?.metadata?.markdownObjectName]);
+
+  // ── Rebuilt Markdown 内容获取 ──────────────────────────────────
+  useEffect(() => {
+    const rebuiltArtifact = cleanMaterialView.artifacts.find(a => a.role === 'rebuilt_markdown');
+    if (!id || !rebuiltArtifact?.object) return;
+
+    setRebuiltMdLoading(true);
+    setRebuiltMdError('');
+
+    (async () => {
+      try {
+        const bucket = rebuiltArtifact.bucket || '';
+        const url = `/__proxy/upload/proxy-file?objectName=${encodeURIComponent(rebuiltArtifact.object)}${bucket ? `&bucket=${encodeURIComponent(bucket)}` : ''}`;
+        let res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`读取失败: HTTP ${res.status}`);
+        setRebuiltMdContent(await res.text());
+      } catch (e) {
+        setRebuiltMdError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setRebuiltMdLoading(false);
+      }
+    })();
+  }, [id, cleanMaterialView.artifacts]);
 
   // ── SSE 增量刷新（PRD v0.4 §10.2.2）──────────────────────
   const sseRef = useRef<EventSource | null>(null);
@@ -618,7 +649,7 @@ export function TaskDetailPage() {
                     ['mineru-queued', 'mineru-processing', 'submit-failed-retryable', 'result-fetching'].includes(String(task.stage));
   const taskDisplayStatus = deriveTaskDisplayStatus(task as any);
   const mineruProgressLine = deriveMineruProgressLine(task as any);
-  const cleanMaterialView = buildCleanMaterialView({ material, task });
+  const mainlineView = buildMainlinePipelineView({ material, task });
   const canTocRebuild = ['review-pending', 'completed'].includes(String(task.state))
     && resourceStatus.materialExists
     && resourceStatus.markdownExists
@@ -804,77 +835,158 @@ export function TaskDetailPage() {
       <div className="min-h-0 flex-1">
         {activeTab === 'overview' && (
           <div className="space-y-6">
-            <CleanMaterialSummaryCard
-              material={material}
-              view={cleanMaterialView}
-              canRebuild={canTocRebuild}
-              rebuildRunning={tocRebuildRunning}
-              rebuildDisabledReason={tocRebuildDisabledReason}
-              onRebuild={handleTocRebuild}
-            />
-
-            {/* 状态概览卡片 */}
-            <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-5">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
-                {/* 状态 */}
-                <div>
-                  <p className="text-xs text-slate-400 mb-1.5 uppercase font-semibold tracking-wider">当前状态</p>
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full ${stateStyle.badgeClass}`}>
+            {/* Asset Identity & Next Action */}
+            <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-blue-600" />
+                  {material?.title || material?.metadata?.fileName || material?.metadata?.objectName || task?.metadata?.fileName || task.id}
+                </h2>
+                <div className="flex items-center gap-3 mt-2 text-sm">
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs font-medium rounded-full ${stateStyle.badgeClass}`}>
                     <stateStyle.Icon className={`w-3.5 h-3.5 ${stateStyle.animate ? 'animate-spin' : ''}`} />
                     {getTaskStatusLabel(task.state)}
                   </span>
-                </div>
-                {/* 阶段 */}
-                <div>
-                  <p className="text-xs text-slate-400 mb-1.5 uppercase font-semibold tracking-wider">当前阶段</p>
-                  <p className="text-sm font-medium text-slate-800">{task.stage || '—'}</p>
-                </div>
-                {/* 已产物 */}
-                <div>
-                  <p className="text-xs text-slate-400 mb-1.5 uppercase font-semibold tracking-wider">已产物</p>
-                  <span className="inline-flex items-center px-2 py-1 rounded bg-slate-100 text-slate-600 text-xs font-medium">
-                    {resourceStatus.markdownExists ? '已生成 (Markdown)' : (resourceStatus.originalExists ? '原始文件就绪' : '无')}
-                  </span>
-                </div>
-                {/* 下一步动作 */}
-                <div>
-                  <p className="text-xs text-slate-400 mb-1.5 uppercase font-semibold tracking-wider">下一步动作</p>
-                  <p className="text-sm font-medium text-slate-800">
-                    {task.state === 'review-pending' ? '需人工审核' :
-                     task.state === 'completed' ? '无需动作' :
-                     ['failed', 'canceled'].includes(task.state || '') ? '需排查或重试' : '等待系统处理'}
-                  </p>
-                </div>
-              </div>
-
-              {/* 当前进展 */}
-              {(mineruProgressLine || taskDisplayStatus || task.message) && (
-                <div className="mt-4 pt-4 border-t border-slate-100">
-                  <p className="text-xs text-slate-400 mb-1 uppercase font-semibold tracking-wider">当前进展</p>
-                  <p className="text-sm text-slate-700 break-words leading-relaxed">
-                    {mineruProgressLine || taskDisplayStatus || task.message}
-                  </p>
-                  {mineruProgressLine && task.message && task.message !== mineruProgressLine && (
-                    <p className="text-xs text-slate-500 mt-2 break-words leading-relaxed">{task.message}</p>
+                  {task.stage && (
+                    <span className="text-slate-500 font-medium">阶段: <span className="text-slate-700">{task.stage}</span></span>
                   )}
                 </div>
-              )}
-
-              {/* 错误信息 */}
-              {task.errorMessage && (
-                <div className="mt-3 p-3 bg-red-50 border border-red-100 rounded-md">
-                  <p className="text-xs font-semibold text-red-600 mb-1">错误详情</p>
-                  <p className="text-sm text-red-700 break-words">{task.errorMessage}</p>
-                </div>
-              )}
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-slate-400 mb-1 uppercase font-semibold tracking-wider">Next Operator Action</p>
+                <p className="text-sm font-bold text-blue-700 bg-blue-50 px-3 py-1.5 rounded border border-blue-100 inline-block">
+                  {task.state === 'review-pending' ? '需人工审核并补全元数据' :
+                   task.state === 'completed' ? '检查最终产物质量' :
+                   ['failed', 'canceled'].includes(task.state || '') ? '排查错误日志或重试' : '等待流水线系统处理'}
+                </p>
+              </div>
             </div>
+
+            {/* Pipeline Stage Strip */}
+            <MainlinePipelinePanel view={mainlineView} compact />
+
+            {/* Output Packets */}
+            <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-5">
+              <h2 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
+                <Boxes className="w-5 h-5 text-indigo-500" />
+                Asset Processing Packets (产物包)
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* PDF 原件 */}
+                <div className="border border-slate-200 rounded-lg p-4 bg-slate-50 flex flex-col justify-between">
+                  <div>
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm mb-1">
+                      <FileText className="w-4 h-4 text-red-500" /> PDF 原件
+                    </h3>
+                    <p className="text-xs text-slate-500 truncate" title={material?.metadata?.objectName || '未上传'}>
+                      {material?.metadata?.objectName || '未上传'}
+                    </p>
+                  </div>
+                  {resourceStatus.originalExists && (
+                    <button onClick={() => setActiveTab('pdf')} className="mt-3 text-xs font-semibold text-blue-600 hover:text-blue-800 self-start">查看预览 &rarr;</button>
+                  )}
+                </div>
+
+                {/* MinerU Markdown */}
+                <div className="border border-slate-200 rounded-lg p-4 bg-slate-50 flex flex-col justify-between">
+                  <div>
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm mb-1">
+                      <FileText className="w-4 h-4 text-blue-500" /> MinerU Markdown
+                    </h3>
+                    <p className="text-xs text-slate-500">full.md / 完整排版文本</p>
+                  </div>
+                  {resourceStatus.markdownExists && (
+                    <button onClick={() => setActiveTab('markdown')} className="mt-3 text-xs font-semibold text-blue-600 hover:text-blue-800 self-start">查看 / 比对 &rarr;</button>
+                  )}
+                </div>
+
+                {/* MinerU JSON / Artifacts */}
+                <div className="border border-slate-200 rounded-lg p-4 bg-slate-50 flex flex-col justify-between">
+                  <div>
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm mb-1">
+                      <Database className="w-4 h-4 text-amber-500" /> MinerU JSON / Artifacts
+                    </h3>
+                    <p className="text-xs text-slate-500">content_list, middle, images, zip</p>
+                  </div>
+                  {(material?.metadata?.parsedFilesCount || resourceStatus.markdownExists) && (
+                    <button onClick={handleDownloadZip} className="mt-3 text-xs font-semibold text-blue-600 hover:text-blue-800 self-start">下载 ZIP &rarr;</button>
+                  )}
+                </div>
+
+                {/* AI Metadata */}
+                <div className="border border-slate-200 rounded-lg p-4 bg-slate-50 flex flex-col justify-between">
+                  <div>
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm mb-1">
+                      <Brain className="w-4 h-4 text-purple-500" /> AI Metadata
+                    </h3>
+                    <p className="text-xs text-slate-500 truncate">
+                      {material?.metadata?.subject ? `${material.metadata.subject} / ${material.metadata.grade || ''}` : '暂无 AI 识别结果'}
+                    </p>
+                  </div>
+                  {aiJobs.length > 0 && (
+                    <button onClick={() => setActiveTab('metadata')} className="mt-3 text-xs font-semibold text-blue-600 hover:text-blue-800 self-start">查看详情 &rarr;</button>
+                  )}
+                </div>
+
+                {/* 目录重建 Outputs */}
+                <div className="border border-slate-200 rounded-lg p-4 bg-slate-50 flex flex-col justify-between md:col-span-2 lg:col-span-2">
+                  <div>
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm mb-2">
+                      <Boxes className="w-4 h-4 text-emerald-500" /> 目录重建与 Raw/Clean Material
+                    </h3>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="flex items-center gap-1"><CheckCircle2 className={`w-3 h-3 ${cleanMaterialView.artifacts.some(a => a.role === 'readable_tree') ? 'text-emerald-500' : 'text-slate-300'}`} /> readable_tree</div>
+                      <div className="flex items-center gap-1"><CheckCircle2 className={`w-3 h-3 ${cleanMaterialView.artifacts.some(a => a.role === 'rebuilt_markdown') ? 'text-emerald-500' : 'text-slate-300'}`} /> rebuilt_markdown</div>
+                      <div className="flex items-center gap-1"><CheckCircle2 className={`w-3 h-3 ${cleanMaterialView.artifacts.some(a => a.role === 'logic_tree') ? 'text-emerald-500' : 'text-slate-300'}`} /> logic_tree</div>
+                      <div className="flex items-center gap-1"><CheckCircle2 className={`w-3 h-3 ${cleanMaterialView.artifacts.some(a => a.role === 'skeleton') ? 'text-emerald-500' : 'text-slate-300'}`} /> skeleton</div>
+                      <div className="flex items-center gap-1"><CheckCircle2 className={`w-3 h-3 ${cleanMaterialView.artifacts.some(a => a.role === 'provenance') || cleanMaterialView.provenanceObjectName ? 'text-emerald-500' : 'text-slate-300'}`} /> provenance</div>
+                      <div className="flex items-center gap-1"><CheckCircle2 className={`w-3 h-3 ${material?.metadata?.rawMaterial ? 'text-emerald-500' : 'text-slate-300'}`} /> Raw Material</div>
+                      <div className="flex items-center gap-1"><CheckCircle2 className={`w-3 h-3 ${(material?.metadata?.rawMaterial2CleanMaterial as any)?.currentDecision?.state === 'accepted' ? 'text-emerald-500' : 'text-slate-300'}`} /> Clean Material</div>
+                    </div>
+                  </div>
+                  {cleanMaterialView.present && (
+                    <div className="mt-3">
+                      <CleanMaterialSummaryCard
+                        material={material}
+                        view={cleanMaterialView}
+                        canRebuild={canTocRebuild}
+                        rebuildRunning={tocRebuildRunning}
+                        rebuildDisabledReason={tocRebuildDisabledReason}
+                        onRebuild={handleTocRebuild}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* 当前进展 */}
+            {(mineruProgressLine || taskDisplayStatus || task.message) && (
+              <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-4">
+                <p className="text-xs text-slate-400 mb-1 uppercase font-semibold tracking-wider">实时进展</p>
+                <p className="text-sm text-slate-700 break-words leading-relaxed">
+                  {mineruProgressLine || taskDisplayStatus || task.message}
+                </p>
+                {mineruProgressLine && task.message && task.message !== mineruProgressLine && (
+                  <p className="text-xs text-slate-500 mt-1 break-words leading-relaxed">{task.message}</p>
+                )}
+              </div>
+            )}
+
+            {/* 错误信息 */}
+            {task.errorMessage && (
+              <div className="p-4 bg-red-50 border border-red-100 rounded-lg">
+                <p className="text-xs font-semibold text-red-600 mb-1">错误详情</p>
+                <p className="text-sm text-red-700 break-words">{task.errorMessage}</p>
+              </div>
+            )}
 
             {/* 诊断信息折叠区 */}
             <details className="group bg-slate-50 border border-slate-200 rounded-lg shadow-sm">
               <summary className="px-5 py-4 cursor-pointer font-semibold text-slate-700 hover:text-slate-900 list-none flex items-center justify-between select-none">
                 <div className="flex items-center gap-2">
                   <Eye className="w-4 h-4 text-slate-400" />
-                  内部诊断信息 (状态一致性、MinerU 画像、AI 任务、日志观测)
+                  Technical Evidence & Diagnostics (技术诊断证据)
                 </div>
                 <div className="w-5 h-5 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 group-open:rotate-180 transition-transform">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
@@ -1323,8 +1435,28 @@ export function TaskDetailPage() {
 
         {activeTab === 'markdown' && (
           <div className="bg-white border border-slate-200 rounded-lg shadow-sm h-full overflow-hidden flex flex-col">
-            <div className="flex-1 min-h-0">
-              <MarkdownTab content={mdContent} loading={mdLoading} error={mdError} />
+            <div className="flex-1 min-h-0 flex">
+              <div className={`flex-1 flex flex-col ${rebuiltMdContent ? 'border-r border-slate-200' : ''}`}>
+                <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 text-sm font-bold text-slate-700 flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-blue-500" />
+                  MinerU Markdown (full.md)
+                </div>
+                <div className="flex-1 min-h-0 overflow-y-auto">
+                  <MarkdownTab content={mdContent} loading={mdLoading} error={mdError} />
+                </div>
+              </div>
+
+              {cleanMaterialView.artifacts.some(a => a.role === 'rebuilt_markdown') && (
+                <div className="flex-1 flex flex-col">
+                  <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 text-sm font-bold text-slate-700 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-emerald-500" />
+                    Rebuilt Markdown (rebuilt_markdown.md)
+                  </div>
+                  <div className="flex-1 min-h-0 overflow-y-auto">
+                    <MarkdownTab content={rebuiltMdContent} loading={rebuiltMdLoading} error={rebuiltMdError} />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

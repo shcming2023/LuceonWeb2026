@@ -14,6 +14,8 @@ import {
   FolderPlus,
   MoreVertical,
   Settings2,
+  Database,
+  Boxes,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { deriveMineruProgressLine, deriveTaskBucket, deriveTaskDisplayStatus, ParseTask, TaskBucket } from '../utils/taskView';
@@ -663,7 +665,7 @@ export function TaskManagementPage() {
                 </th>
                 <th className="w-[34%] px-4 py-4 font-semibold text-slate-500 text-xs uppercase">任务信息</th>
                 <th className="w-[14%] px-4 py-4 font-semibold text-slate-500 text-xs uppercase">处理引擎</th>
-                <th className="w-[28%] px-4 py-4 font-semibold text-slate-500 text-xs uppercase xl:w-[24%]">当前状态</th>
+                <th className="w-[28%] px-4 py-4 font-semibold text-slate-500 text-xs uppercase xl:w-[24%]">当前状态 (Pipeline)</th>
                 <th className="hidden w-[14%] px-4 py-4 font-semibold text-slate-500 text-xs uppercase xl:table-cell">创建时间</th>
                 <th className="w-[24%] px-4 py-4 font-semibold text-slate-500 text-xs uppercase text-right xl:w-[14%]">操作</th>
               </tr>
@@ -754,6 +756,28 @@ export function TaskManagementPage() {
                               <span className="text-[11px] font-mono font-medium text-blue-600">{t.progress || 0}%</span>
                             )}
                           </div>
+                          {(() => {
+                            const mat = materials.find(m => String(m.id) === String(t.materialId));
+                            if (!mat) return null;
+                            const hasPdf = !!(mat.metadata?.objectName || mat.previewUrl);
+                            const hasMd = !!(mat.metadata?.markdownObjectName || mat.metadata?.markdownUrl || mat.mineruZipUrl);
+                            return (
+                              <div className="flex flex-wrap gap-1.5 text-[10px] mt-1.5">
+                                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${hasPdf ? 'text-slate-700 bg-slate-100 border border-slate-200' : 'text-slate-300'}`} title="PDF 原件">
+                                  <FileText className="w-2.5 h-2.5" /> PDF
+                                </span>
+                                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${hasMd ? 'text-blue-700 bg-blue-50 border border-blue-100' : 'text-slate-300'}`} title="MinerU Markdown">
+                                  <FileText className="w-2.5 h-2.5" /> MD
+                                </span>
+                                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${(mat.metadata?.subject || mat.metadata?.grade) ? 'text-purple-700 bg-purple-50 border border-purple-100' : 'text-slate-300'}`} title="AI Metadata">
+                                  <Database className="w-2.5 h-2.5" /> AI Meta
+                                </span>
+                                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${mat.metadata?.cleanMaterials ? 'text-emerald-700 bg-emerald-50 border border-emerald-100' : 'text-slate-300'}`} title="Clean Material">
+                                  <Boxes className="w-2.5 h-2.5" /> Clean Mat
+                                </span>
+                              </div>
+                            );
+                          })()}
                           {(() => {
                             const line = deriveMineruProgressLine(t);
                             if (!line) return null;

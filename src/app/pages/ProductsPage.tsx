@@ -22,6 +22,7 @@ import {
   Trash2,
   MoreVertical,
   Boxes,
+  Database,
 } from 'lucide-react';
 import { DropdownMenu } from '../components/DropdownMenu';
 import { MainlinePipelinePanel } from '../components/MainlinePipelinePanel';
@@ -700,46 +701,46 @@ export function ProductsPage() {
             )}
 
             {/* 快捷状态筛选行 */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <select
-                value={mineruStatusFilter}
-                onChange={(e) => setMineruStatusFilter(e.target.value as typeof mineruStatusFilter)}
-                className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
-              >
-                {MINERU_STATUS_OPTIONS.map((o) => (
-                  <option key={o.key} value={o.key}>{o.label}</option>
-                ))}
-              </select>
-              <select
-                value={aiStatusFilter}
-                onChange={(e) => setAiStatusFilter(e.target.value as typeof aiStatusFilter)}
-                className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
-              >
-                {AI_STATUS_OPTIONS.map((o) => (
-                  <option key={o.key} value={o.key}>{o.label}</option>
-                ))}
-              </select>
-              <select
-                value={cleanStatusFilter}
-                onChange={(e) => setCleanStatusFilter(e.target.value as typeof cleanStatusFilter)}
-                className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
-              >
-                {CLEAN_STATUS_OPTIONS.map((o) => (
-                  <option key={o.key} value={o.key}>{o.label}</option>
-                ))}
-              </select>
-              {search && (
+            {search && (
+              <div className="flex items-center gap-2 mt-2">
                 <span className="text-sm text-slate-500">
                   找到 <span className="font-semibold text-slate-800">{filtered.length}</span> 条结果
                 </span>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* 高级筛选面板 */}
           {advancedExpanded && (
             <div className="px-5 pb-5 pt-0">
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4 p-4 bg-slate-50 rounded-xl">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7 p-4 bg-slate-50 rounded-xl">
+                <select
+                  value={mineruStatusFilter}
+                  onChange={(e) => setMineruStatusFilter(e.target.value as typeof mineruStatusFilter)}
+                  className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+                >
+                  {MINERU_STATUS_OPTIONS.map((o) => (
+                    <option key={o.key} value={o.key}>{o.label}</option>
+                  ))}
+                </select>
+                <select
+                  value={aiStatusFilter}
+                  onChange={(e) => setAiStatusFilter(e.target.value as typeof aiStatusFilter)}
+                  className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+                >
+                  {AI_STATUS_OPTIONS.map((o) => (
+                    <option key={o.key} value={o.key}>{o.label}</option>
+                  ))}
+                </select>
+                <select
+                  value={cleanStatusFilter}
+                  onChange={(e) => setCleanStatusFilter(e.target.value as typeof cleanStatusFilter)}
+                  className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+                >
+                  {CLEAN_STATUS_OPTIONS.map((o) => (
+                    <option key={o.key} value={o.key}>{o.label}</option>
+                  ))}
+                </select>
                 <select
                   value={subjectFilter}
                   onChange={(e) => setSubjectFilter(e.target.value)}
@@ -800,21 +801,17 @@ export function ProductsPage() {
                       className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
                     />
                   </th>
-                  <th className="px-4 py-3 text-left font-semibold text-slate-600 text-xs uppercase tracking-wide">资料名称</th>
-                  <th className="px-4 py-3 text-left font-semibold text-slate-600 text-xs uppercase tracking-wide">类型</th>
-                  <th className="px-4 py-3 text-left font-semibold text-slate-600 text-xs uppercase tracking-wide">解析状态</th>
-                  <th className="px-4 py-3 text-left font-semibold text-slate-600 text-xs uppercase tracking-wide">目录重建</th>
-                  <th className="px-4 py-3 text-left font-semibold text-slate-600 text-xs uppercase tracking-wide">产物数</th>
-                  <th className="px-4 py-3 text-left font-semibold text-slate-600 text-xs uppercase tracking-wide">大小</th>
-                  <th className="px-4 py-3 text-left font-semibold text-slate-600 text-xs uppercase tracking-wide">学科 / 年级</th>
-                  <th className="px-4 py-3 text-left font-semibold text-slate-600 text-xs uppercase tracking-wide">上传时间</th>
+                  <th className="px-4 py-3 text-left font-semibold text-slate-600 text-xs uppercase tracking-wide">资料名称 (Asset Identity)</th>
+                  <th className="px-4 py-3 text-left font-semibold text-slate-600 text-xs uppercase tracking-wide">处</th>
+                  <th className="px-4 py-3 text-left font-semibold text-slate-600 text-xs uppercase tracking-wide">产物包 (Output Packets)</th>
+                  <th className="px-4 py-3 text-left font-semibold text-slate-600 text-xs uppercase tracking-wide">大小/时间</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-600 text-xs uppercase tracking-wide">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {currentItems.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="text-center py-16 text-slate-400">
+                    <td colSpan={6} className="text-center py-16 text-slate-400">
                       暂无符合条件的资料
                       {isFiltered && (
                         <button
@@ -883,46 +880,30 @@ export function ProductsPage() {
                             </div>
                           </div>
                         </td>
-                        <td className="px-4 py-3.5">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold text-white ${tc.badge}`}>{mType}</span>
+                        <td className="px-4 py-3.5 align-top pt-5">
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium ${statusColor} bg-slate-50 border border-slate-200`}>
+                            {statusDisplay}
+                          </span>
                         </td>
-                        <td className={`px-4 py-3.5 font-medium ${statusColor}`}>
-                          {statusDisplay}
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <div className="flex flex-col gap-1">
-                            <span className={`inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${cleanStatus.className}`}>
-                              <Boxes size={11} />
-                              {cleanStatus.label}
+                        <td className="px-4 py-3.5 align-top pt-4">
+                          <div className="flex flex-wrap gap-2 text-[11px]">
+                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${hasPdf ? 'text-slate-700 bg-slate-100 border border-slate-200' : 'text-slate-300'}`} title="PDF 原件">
+                              <FileText className="w-3 h-3" /> PDF
                             </span>
-                            {(cleanStatus.version || cleanStatus.detail) && (
-                              <span className="max-w-[180px] truncate font-mono text-[10px] text-slate-400" title={cleanStatus.detail || cleanStatus.version || ''}>
-                                {cleanStatus.version || cleanStatus.detail}
-                              </span>
-                            )}
+                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${hasMd ? 'text-blue-700 bg-blue-50 border border-blue-100' : 'text-slate-300'}`} title="MinerU Markdown">
+                              <FileText className="w-3 h-3" /> MinerU MD
+                            </span>
+                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${(m.metadata?.subject || m.metadata?.grade) ? 'text-purple-700 bg-purple-50 border border-purple-100' : 'text-slate-300'}`} title="AI Metadata">
+                              <Database className="w-3 h-3" /> AI Meta
+                            </span>
+                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${m.metadata?.cleanMaterials ? 'text-emerald-700 bg-emerald-50 border border-emerald-100' : 'text-slate-300'}`} title="Clean Material">
+                              <Boxes className="w-3 h-3" /> Clean Mat
+                            </span>
                           </div>
                         </td>
-                        <td className="px-4 py-3.5 text-slate-600 font-mono">
-                          {parsedCountDisplay}
-                        </td>
-                        <td className="px-4 py-3.5 text-slate-500">
-                          {sizeDisplay}
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <div className="flex flex-col gap-0.5">
-                            {m.metadata?.subject && (
-                              <span className="text-xs text-slate-700 font-medium">{m.metadata.subject}</span>
-                            )}
-                            {m.metadata?.grade && (
-                              <span className="text-xs text-slate-400">{m.metadata.grade}</span>
-                            )}
-                            {!m.metadata?.subject && !m.metadata?.grade && (
-                              <span className="text-xs text-slate-300">—</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3.5 text-slate-400 text-xs">
-                          {timeDisplay}
+                        <td className="px-4 py-3.5 align-top text-slate-500 text-[11px] pt-4 font-mono">
+                          <div>{sizeDisplay}</div>
+                          <div className="mt-1">{timeDisplay}</div>
                         </td>
                         <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-1">
@@ -1007,7 +988,7 @@ export function ProductsPage() {
                       {/* Markdown 行内展开 */}
                       {(mdSt?.loading || mdSt?.error || mdSt?.content) && (
                         <tr key={`md-${m.id}`}>
-                          <td colSpan={10} className="px-4 pb-4 pt-0">
+                          <td colSpan={6} className="px-4 pb-4 pt-0">
                             {mdSt?.loading && (
                               <div className="flex items-center gap-2 text-sm text-slate-400 bg-slate-50 rounded-xl px-4 py-3">
                                 <div className="w-4 h-4 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
@@ -1129,21 +1110,24 @@ export function ProductsPage() {
                     >
                       {title}
                     </h3>
-                    <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-                      <span className={`font-medium ${statusColor}`}>{statusDisplay}</span>
-                      <span className="font-mono">产物: {parsedCountDisplay}</span>
+                    <div className="flex flex-wrap gap-2 text-[10px] mt-2 mb-3">
+                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${hasPdf ? 'text-slate-700 bg-slate-100 border border-slate-200' : 'text-slate-300'}`}>
+                        <FileText className="w-3 h-3" /> PDF
+                      </span>
+                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${hasMd ? 'text-blue-700 bg-blue-50 border border-blue-100' : 'text-slate-300'}`}>
+                        <FileText className="w-3 h-3" /> MinerU MD
+                      </span>
+                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${(m.metadata?.subject || m.metadata?.grade) ? 'text-purple-700 bg-purple-50 border border-purple-100' : 'text-slate-300'}`}>
+                        <Database className="w-3 h-3" /> AI Meta
+                      </span>
+                      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${m.metadata?.cleanMaterials ? 'text-emerald-700 bg-emerald-50 border border-emerald-100' : 'text-slate-300'}`}>
+                        <Boxes className="w-3 h-3" /> Clean Mat
+                      </span>
                     </div>
-                    <div className="mb-2 flex items-center justify-between gap-2 text-xs">
-                      <span className={`font-medium ${cleanStatus.textClass}`}>{cleanStatus.label}</span>
-                      {cleanStatus.version && <span className="font-mono text-slate-400">{cleanStatus.version}</span>}
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+                    <div className="flex items-center justify-between text-[10px] text-slate-400 mb-2 font-mono">
                       <span>{sizeDisplay}</span>
                       <span>{timeDisplay}</span>
                     </div>
-                    {m.metadata?.grade && (
-                      <span className="text-[10px] text-slate-400 mb-2">{m.metadata.grade}</span>
-                    )}
                     {mTags.length > 0 && (
                       <div className="flex gap-1 flex-wrap mb-3">
 
