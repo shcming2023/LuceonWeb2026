@@ -717,7 +717,7 @@ export function TaskDetailPage() {
             resourceStatus.markdownExists && 'MinerU',
             aiJobs.some(j => ['completed', 'succeeded', 'confirmed', 'review-pending'].includes(j.state)) && 'AI Metadata',
             cleanMaterialView.present && '目录重建',
-            material?.metadata?.rawMaterial && 'Raw Material',
+            mainlineView.steps.find(s => s.key === 'raw')?.state === 'done' && 'Raw Material',
             (material?.metadata?.rawMaterial2CleanMaterial as any)?.currentDecision?.state === 'accepted' && 'Clean Material',
           ].filter(Boolean);
 
@@ -725,6 +725,7 @@ export function TaskDetailPage() {
             !resourceStatus.markdownExists && 'MinerU',
             aiJobs.length === 0 && 'AI Metadata',
             !cleanMaterialView.present && '目录重建',
+            mainlineView.steps.find(s => s.key === 'raw')?.state !== 'done' && 'Raw Material',
             (!material?.metadata?.rawMaterial2CleanMaterial || (material?.metadata?.rawMaterial2CleanMaterial as any)?.currentDecision?.state !== 'accepted') && 'Clean Material 最终接受',
           ].filter(Boolean);
 
