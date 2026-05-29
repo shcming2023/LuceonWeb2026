@@ -75,6 +75,7 @@ export function AssetDetailPage() {
   const [mineruMarkdown, setMineruMarkdown] = useState<string>('');
   const [aiAnalyzing, setAiAnalyzing] = useState(false);
   const [submittingMineru, setSubmittingMineru] = useState(false);
+  const [tocRebuildRunning, setTocRebuildRunning] = useState(false);
   const [relatedTasks, setRelatedTasks] = useState<ParseTask[]>([]);
   
   // P0 Patch: 资产详情页运行态事实源统一
@@ -88,6 +89,13 @@ export function AssetDetailPage() {
   const mineruProgress = currentTask?.progress || 0;
   const mineruProgressMsg = currentTask?.message || (mineruRunning ? '处理中...' : '');
   const mineruRetryCount = 0;
+  const canTocRebuild = Boolean(currentTask)
+    && ['review-pending', 'completed'].includes(String(currentTask?.state))
+    && Boolean(material?.metadata?.markdownObjectName || currentTask?.metadata?.markdownObjectName)
+    && !cleanMaterialView.present;
+  const tocRebuildDisabledReason = cleanMaterialView.present
+    ? '当前资产已存在目录重建结果'
+    : (canTocRebuild ? '基于 MinerU 产物手动生成目录重建 Clean Material' : '需要任务进入待复核/完成并具备 Markdown 产物');
 
   const [originalUrl, setOriginalUrl] = useState<string | null>(null);
   const originalRefreshTimerRef = useRef<number | null>(null);
@@ -408,6 +416,29 @@ export function AssetDetailPage() {
     }
   };
 
+  const handleTocRebuild = async () => {
+    if (!currentTask?.id) {
+      toast.error('目录重建失败', { description: '当前资产没有可执行的关联任务' });
+      return;
+    }
+    setTocRebuildRunning(true);
+    try {
+      const res = await fetch(`/__proxy/upload/tasks/${encodeURIComponent(currentTask.id)}/toc-rebuild`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trigger: 'asset-detail-manual' }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload?.error || `HTTP ${res.status}`);
+      toast.success('目录重建已完成', { description: payload?.prefix || payload?.jobId });
+      await fetchRelatedTasks();
+    } catch (e) {
+      toast.error('目录重建失败', { description: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setTocRebuildRunning(false);
+    }
+  };
+
   const handleAiAnalyze = async () => {
     const view = deriveMaterialTaskView(material!, relatedTasks);
     if (view.currentTask && deriveTaskBucket(view.currentTask.state) === 'processing') {
@@ -552,7 +583,14 @@ export function AssetDetailPage() {
             onAiAnalyze={handleAiAnalyze}
             aiDisabledReason={(!material?.metadata?.markdownObjectName && !material?.metadata?.markdownUrl && !material?.mineruZipUrl && !mineruMarkdown) ? '请先完成 MinerU 解析' : ''}
           />
-          <CleanMaterialSummaryCard material={material} view={cleanMaterialView} />
+          <CleanMaterialSummaryCard
+            material={material}
+            view={cleanMaterialView}
+            canRebuild={canTocRebuild}
+            rebuildRunning={tocRebuildRunning}
+            rebuildDisabledReason={tocRebuildDisabledReason}
+            onRebuild={handleTocRebuild}
+          />
           <RawMaterial2CleanMaterialCandidateCard view={raw2CleanCandidateView} />
 
           {/* [P0] 当前任务卡片 */}
