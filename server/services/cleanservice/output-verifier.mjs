@@ -157,6 +157,9 @@ export async function verifyCleanServiceOutputArtifacts(job = {}, options = {}) 
         }
       }
     }
+    if (isObjectRef(artifacts.rebuilt_markdown) && !artifacts.rebuilt_markdown.object.startsWith(requiredPrefix)) {
+      errors.push('path-prefix-mismatch:rebuilt_markdown');
+    }
   }
 
   // 如果 ObjectRef 或基本格式校验失败，提前返回 protocol-failure
@@ -172,7 +175,11 @@ export async function verifyCleanServiceOutputArtifacts(job = {}, options = {}) 
 
   // 2. 读取七件套内容并强校验
   const contents = {};
-  for (const role of REQUIRED_CLEAN_ARTIFACTS) {
+  const rolesToRead = [
+    ...REQUIRED_CLEAN_ARTIFACTS,
+    ...(isObjectRef(artifacts.rebuilt_markdown) ? ['rebuilt_markdown'] : []),
+  ];
+  for (const role of rolesToRead) {
     try {
       let content;
       if (typeof artifactReader.readArtifact === 'function') {
@@ -213,6 +220,13 @@ export async function verifyCleanServiceOutputArtifacts(job = {}, options = {}) 
     if (!Array.isArray(flooded) || flooded.length === 0) {
       errors.push('invalid-flooded_content-array');
     }
+    if (Array.isArray(flooded) && flooded.length === 1) {
+      const onlyTitle = String(flooded[0]?.title || '').trim().toLowerCase();
+      const onlyContent = String(flooded[0]?.content || '').trim();
+      if (onlyTitle === 'default title' && !onlyContent) {
+        errors.push('default-title-only-flooded_content');
+      }
+    }
   } catch (e) {
     errors.push('invalid-flooded_content-json');
   }
@@ -226,6 +240,16 @@ export async function verifyCleanServiceOutputArtifacts(job = {}, options = {}) 
     if (!logic || typeof logic !== 'object' || (Array.isArray(logic) && logic.length === 0) || (Object.keys(logic).length === 0)) {
       errors.push('invalid-logic_tree-shape');
     }
+    if (
+      logic &&
+      typeof logic === 'object' &&
+      !Array.isArray(logic) &&
+      String(logic.title || '').trim().toLowerCase() === 'default title' &&
+      (!Array.isArray(logic.children) || logic.children.length === 0) &&
+      !String(logic.content || '').trim()
+    ) {
+      errors.push('default-title-only-logic_tree');
+    }
   } catch (e) {
     errors.push('invalid-logic_tree-json');
   }
@@ -234,6 +258,18 @@ export async function verifyCleanServiceOutputArtifacts(job = {}, options = {}) 
   const readable = contents.readable_tree;
   if (typeof readable !== 'string' || readable.trim().length === 0) {
     errors.push('empty-readable_tree');
+  }
+  if (typeof readable === 'string' && readable.trim().toLowerCase() === '# default title') {
+    errors.push('default-title-only-readable_tree');
+  }
+
+  const rebuiltMarkdown = contents.rebuilt_markdown;
+  if (rebuiltMarkdown !== undefined) {
+    if (typeof rebuiltMarkdown !== 'string' || rebuiltMarkdown.trim().length === 0) {
+      errors.push('empty-rebuilt_markdown');
+    } else if (rebuiltMarkdown.trim().toLowerCase() === '# default title') {
+      errors.push('default-title-only-rebuilt_markdown');
+    }
   }
 
   // 3.4 skeleton.json
