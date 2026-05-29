@@ -672,8 +672,7 @@ export function TaskDetailPage() {
   return (
     <div className="p-6 h-full overflow-y-auto space-y-6">
       {/* ── 顶部导航栏与面包屑 ────────────────────────────────────────── */}
-      <div className="flex flex-col gap-4 mb-2">
-        {/* Breadcrumbs */}
+      <div className="flex flex-col gap-4 mb-4">
         <nav className="flex items-center text-sm text-slate-500 font-medium">
           <button onClick={() => navigate('/tasks')} className="hover:text-blue-600 transition-colors">任务管理</button>
           <ChevronRight className="w-4 h-4 mx-2 text-slate-300" />
@@ -696,7 +695,7 @@ export function TaskDetailPage() {
               <p className="text-xs text-slate-400 mt-1 font-mono tracking-tight">{task.id}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
             <button
               onClick={() => fetchData({ background: true })}
               className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-60 shadow-sm"
@@ -705,95 +704,93 @@ export function TaskDetailPage() {
             >
               <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
             </button>
-
-            {/* W2-2: Review 按钮 */}
-            {String(task.state) === 'review-pending' && (
-              <button
-                onClick={handleReview}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors shadow-sm"
-                title="审核通过：确认元数据并完成任务"
-              >
-                <ShieldCheck className="w-4 h-4" /> 审核通过
-              </button>
-            )}
-
-            <button
-              onClick={handleTocRebuild}
-              disabled={!canTocRebuild || tocRebuildRunning}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-emerald-200 text-emerald-700 rounded-lg text-sm font-medium hover:bg-emerald-50 disabled:opacity-40 transition-colors shadow-sm"
-              title={tocRebuildDisabledReason}
-            >
-              {tocRebuildRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Boxes className="w-4 h-4" />}
-              目录重建
-            </button>
-
-            {/* W2-3: ZIP 下载按钮 */}
-            <button
-              onClick={handleDownloadZip}
-              disabled={!(['completed', 'review-pending', 'failed'].includes(String(task.state)) && resourceStatus.markdownExists)}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 disabled:opacity-40 transition-colors shadow-sm"
-              title="下载解析产物 ZIP"
-            >
-              <Download className="w-4 h-4" /> 下载产物
-            </button>
-
-            {/* Recovery Actions Grouping */}
-            <div className="flex bg-white border border-slate-200 rounded-lg overflow-hidden text-sm shadow-sm">
-              <button
-                onClick={() => callAction('retry')}
-                disabled={!canRetry}
-                className="flex items-center gap-2 px-3 py-2 text-amber-700 hover:bg-amber-50 disabled:opacity-40 transition-colors font-medium border-r border-slate-200 last:border-0"
-                title={canRetry ? `${TASK_ACTION_TERMS.retry}：${TASK_ACTION_TOOLTIPS.retry}` : (resourceStatus.materialExists ? '需要原始文件才能重试' : '原始资料已删除，无法重试')}
-              >
-                <RotateCw className="w-4 h-4" /> {TASK_ACTION_TERMS.retry}
-              </button>
-              <button
-                onClick={() => callAction('reparse')}
-                disabled={!canReparse}
-                className="flex items-center gap-2 px-3 py-2 text-indigo-700 hover:bg-indigo-50 disabled:opacity-40 transition-colors font-medium border-r border-slate-200 last:border-0"
-                title={canReparse ? `${TASK_ACTION_TERMS.reparse}：${TASK_ACTION_TOOLTIPS.reparse}` : (resourceStatus.materialExists ? '需要原始文件才能重新解析' : '原始资料已删除，无法重新解析')}
-              >
-                <RefreshCw className="w-4 h-4" /> {TASK_ACTION_TERMS.reparse}
-              </button>
-              <button
-                onClick={() => callAction('re-ai')}
-                disabled={!canReAi}
-                className="flex items-center gap-2 px-3 py-2 text-violet-700 hover:bg-violet-50 disabled:opacity-40 transition-colors font-medium border-r border-slate-200 last:border-0"
-                title={canReAi ? `${TASK_ACTION_TERMS['re-ai']}：${TASK_ACTION_TOOLTIPS['re-ai']}` : (resourceStatus.materialExists ? '需要 Markdown 产物才能重跑 AI' : '原始资料已删除，无法重跑 AI')}
-              >
-                <Sparkles className="w-4 h-4" /> {TASK_ACTION_TERMS['re-ai']}
-              </button>
-            </div>
-
-            {/* Destructive Actions Dropdown */}
-            <DropdownMenu
-              trigger={({ open, setOpen }) => (
-                <button
-                  onClick={() => setOpen(!open)}
-                  className={`flex items-center gap-2 px-3 py-2 border rounded-lg text-sm font-medium transition-colors shadow-sm ${open ? 'bg-slate-100 border-slate-300 text-slate-900' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}
-                  title="更多操作"
-                >
-                  <MoreVertical className="w-4 h-4" />
-                </button>
-              )}
-              items={[
-                {
-                  kind: 'item',
-                  label: '取消任务',
-                  danger: true,
-                  disabled: !canCancel,
-                  onClick: () => {
-                    const mineruTaskId = task.metadata?.mineruTaskId;
-                    const msg = mineruTaskId
-                      ? '该任务已提交至 MinerU，取消操作【仅停止 Luceon 侧跟踪】，若 MinerU 已在外部环境执行，需通过运维清障确认。\n\n确定要取消吗？'
-                      : '确定要取消该任务吗？';
-                    if (window.confirm(msg)) callAction('cancel');
-                  }
-                }
-              ]}
-            />
           </div>
         </div>
+
+        {/* Layer 1: Current Conclusion */}
+        {(() => {
+          const isReviewPending = task.state === 'review-pending';
+          const isCompleted = task.state === 'completed';
+
+          const completedItems = [
+            'PDF',
+            resourceStatus.markdownExists && 'MinerU',
+            aiJobs.some(j => ['completed', 'succeeded', 'confirmed', 'review-pending'].includes(j.state)) && 'AI Metadata',
+            cleanMaterialView.present && '目录重建',
+            mainlineView.steps.find(s => s.key === 'raw')?.state === 'done' && 'Raw Material',
+            (material?.metadata?.rawMaterial2CleanMaterial as any)?.currentDecision?.state === 'accepted' && 'Clean Material',
+          ].filter(Boolean);
+
+          const pendingItems = [
+            !resourceStatus.markdownExists && 'MinerU',
+            aiJobs.length === 0 && 'AI Metadata',
+            !cleanMaterialView.present && '目录重建',
+            mainlineView.steps.find(s => s.key === 'raw')?.state !== 'done' && 'Raw Material',
+            (!material?.metadata?.rawMaterial2CleanMaterial || (material?.metadata?.rawMaterial2CleanMaterial as any)?.currentDecision?.state !== 'accepted') && 'Clean Material 最终接受',
+          ].filter(Boolean);
+
+          let nextAction = '等待流水线系统处理';
+          if (isReviewPending) nextAction = '检查 Markdown 对比 + 确认元数据';
+          else if (isCompleted) nextAction = '检查最终产物质量';
+          else if (['failed', 'canceled'].includes(task.state || '')) nextAction = '排查错误日志或重试';
+
+          return (
+            <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-md p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+              <div className="flex-1">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-4">
+                  <LayoutDashboard className="w-5 h-5 text-blue-400" />
+                  当前结论 (Current Conclusion)
+                </h2>
+                <div className="space-y-2 text-sm">
+                  <div className="flex gap-3">
+                    <span className="text-slate-400 w-16">当前：</span>
+                    <span className="text-white font-medium">{getTaskStatusLabel(task.state)} ({task.stage || '无'})</span>
+                  </div>
+                  <div className="flex gap-3">
+                    <span className="text-slate-400 w-16">已完成：</span>
+                    <span className="text-emerald-400 font-medium">{completedItems.join(' / ') || '无'}</span>
+                  </div>
+                  <div className="flex gap-3">
+                    <span className="text-slate-400 w-16">未完成：</span>
+                    <span className="text-amber-400 font-medium">{pendingItems.join(' / ') || '无'}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-800 p-5 rounded-lg border border-slate-700 w-full md:w-auto md:min-w-[320px]">
+                <p className="text-xs text-slate-400 mb-2 uppercase font-semibold tracking-wider">下一步行动 (Next Action)</p>
+                <p className="text-lg font-bold text-blue-400 mb-4">{nextAction}</p>
+                <div className="flex flex-wrap gap-2">
+                  {isReviewPending && (
+                    <button onClick={handleReview} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-bold flex items-center justify-center gap-2 transition-colors">
+                      <ShieldCheck className="w-4 h-4" /> 审核通过
+                    </button>
+                  )}
+                  <DropdownMenu
+                    trigger={({ open, setOpen }) => (
+                      <button onClick={() => setOpen(!open)} className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap">
+                        <MoreVertical className="w-4 h-4" /> 更多操作
+                      </button>
+                    )}
+                    items={[
+                      { kind: 'item', label: `重试 (${TASK_ACTION_TERMS.retry})`, disabled: !canRetry, onClick: () => callAction('retry') },
+                      { kind: 'item', label: `重新解析 (${TASK_ACTION_TERMS.reparse})`, disabled: !canReparse, onClick: () => callAction('reparse') },
+                      { kind: 'item', label: `重跑AI (${TASK_ACTION_TERMS['re-ai']})`, disabled: !canReAi, onClick: () => callAction('re-ai') },
+                      { kind: 'item', label: '目录重建 (TocRebuild)', disabled: !canTocRebuild || tocRebuildRunning, onClick: handleTocRebuild },
+                      { kind: 'item', label: '下载产物 ZIP', disabled: !(['completed', 'review-pending', 'failed'].includes(String(task.state)) && resourceStatus.markdownExists), onClick: handleDownloadZip },
+                      { kind: 'item', label: '取消任务', danger: true, disabled: !canCancel, onClick: () => {
+                          const mineruTaskId = task.metadata?.mineruTaskId;
+                          const msg = mineruTaskId ? '确定要取消吗？' : '确定要取消该任务吗？';
+                          if (window.confirm(msg)) callAction('cancel');
+                        }
+                      }
+                    ]}
+                  />
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* ── 资源缺失警告 ────────────────────────────────────── */}
@@ -834,7 +831,73 @@ export function TaskDetailPage() {
       {/* ── Tab 内容面板 ────────────────────────────────────── */}
       <div className="min-h-0 flex-1">
         {activeTab === 'overview' && (
-          <div className="space-y-6">
+          <div className="space-y-6 h-full flex flex-col">
+            {/* Layer 2: Primary Inspection Surface */}
+            <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden flex flex-col h-[700px] shrink-0">
+              <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                  <Eye className="w-4 h-4 text-blue-500" />
+                  主检视区 (Primary Inspection Surface)
+                </h2>
+                <div className="text-xs text-slate-500">PDF 原件 | MinerU Markdown | Rebuilt Markdown</div>
+              </div>
+
+              <div className="flex-1 min-h-0 flex">
+                {/* PDF Pane */}
+                <div className="flex-[0.8] flex flex-col border-r border-slate-200 bg-slate-100">
+                  <div className="px-3 py-1.5 bg-slate-200/50 border-b border-slate-200 text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <File className="w-3.5 h-3.5 text-red-500" />
+                    PDF 原件
+                  </div>
+                  <div className="flex-1 min-h-0 overflow-hidden relative">
+                    <PDFPreviewPanel objectName={material?.metadata?.objectName} />
+                  </div>
+                </div>
+
+                {/* MinerU Markdown Pane */}
+                <div className="flex-1 flex flex-col border-r border-slate-200 bg-white">
+                  <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-blue-500" />
+                    MinerU Markdown (full.md)
+                  </div>
+                  <div className="flex-1 min-h-0 overflow-y-auto">
+                    <MarkdownTab content={mdContent} loading={mdLoading} error={mdError} />
+                  </div>
+                </div>
+
+                {/* Rebuilt Markdown Pane */}
+                <div className="flex-1 flex flex-col bg-white">
+                  <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-emerald-500" />
+                    Rebuilt Markdown (rebuilt_markdown.md)
+                  </div>
+                  <div className="flex-1 min-h-0 overflow-y-auto">
+                    {cleanMaterialView.artifacts.some(a => a.role === 'rebuilt_markdown') ? (
+                      <MarkdownTab content={rebuiltMdContent} loading={rebuiltMdLoading} error={rebuiltMdError} />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-3 p-6 text-center bg-slate-50/30">
+                        <FileText className="w-8 h-8 opacity-20" />
+                        <p className="text-sm font-medium">暂无完整重建 Markdown，仅有目录树产物</p>
+                        <p className="text-xs opacity-70 max-w-[200px]">系统尚未生成 rebuilt_markdown.md。请勿将 readable_tree 当作全文使用。</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Layer 3: Evidence Drawer */}
+            <details className="group bg-slate-50 border border-slate-200 rounded-lg shadow-sm shrink-0 mb-8">
+              <summary className="px-5 py-4 cursor-pointer font-semibold text-slate-700 hover:text-slate-900 list-none flex items-center justify-between select-none">
+                <div className="flex items-center gap-2">
+                  <Database className="w-4 h-4 text-slate-400" />
+                  证据抽屉 (Evidence Drawer) - 包含全部技术与诊断细节
+                </div>
+                <div className="w-5 h-5 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 group-open:rotate-180 transition-transform">
+                  <ChevronDown className="w-4 h-4" />
+                </div>
+              </summary>
+              <div className="p-5 pt-0 border-t border-slate-200 space-y-6 mt-4">
             {/* Asset Identity & Next Action */}
             <div className="bg-white border border-slate-200 rounded-lg shadow-sm p-5 flex items-center justify-between">
               <div>
@@ -1430,9 +1493,10 @@ export function TaskDetailPage() {
                 )}
               </div>
             )}
+              </div>
+            </details>
           </div>
         )}
-
         {activeTab === 'markdown' && (
           <div className="bg-white border border-slate-200 rounded-lg shadow-sm h-full overflow-hidden flex flex-col">
             <div className="flex-1 min-h-0 flex">
