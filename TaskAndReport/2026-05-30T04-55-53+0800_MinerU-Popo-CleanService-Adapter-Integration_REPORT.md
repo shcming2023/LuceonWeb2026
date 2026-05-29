@@ -85,39 +85,69 @@ Observed no-model job response:
 This proves the adapter fails explicitly when the model is absent instead of
 pretending to produce clean output.
 
-## Not Completed Yet
-
-Docker image build was attempted with:
+Additional deployment validation completed after model download:
 
 ```text
-docker compose -f docker-compose.yml -f docker-compose.popo.yml build mineru-popo
+Hugging Face model snapshot downloaded to:
+/Users/concm/prod_workspace/MineruPopo/models/MinerU-Popo
+
+Model directory size:
+17G
+
+Container start:
+POPO_PORT=18082 POPO_MODEL_PATH=/app/models/MinerU-Popo docker compose -f docker-compose.yml -f docker-compose.popo.yml up -d --no-deps --force-recreate mineru-popo
+
+Health:
+curl http://127.0.0.1:18082/health
 ```
 
-It stalled while loading metadata for `python:3.10-slim`, so the build process
-was terminated. No service was deployed, restarted, or connected to the live
-Luceon worker.
-
-Real MinerU-Popo inference is still pending because model weights have not been
-downloaded/configured:
+Observed health response:
 
 ```text
-POPO_MODEL_PATH=/app/models/MinerU-Popo
+{"ok":true,"service":"toc-rebuild","engine":"mineru-popo","version":"mineru-popo-adapter.v0.1","protocol_version":"v1","model_configured":true,"job_dir":"/app/runtime/jobs"}
+```
+
+Runtime dependency import check inside `mineru-popo` passed for:
+
+```text
+fastapi
+boto3
+tqdm
+fitz
+PIL
+bs4
+transformers
+torch
+torchvision
+qwen_vl_utils
+AutoProcessor
+Qwen3VLForConditionalGeneration
+```
+
+Container status:
+
+```text
+mineru-popo   Up (healthy)   127.0.0.1:18082->8000/tcp
 ```
 
 ## Boundary
 
-No Luceon DB write, MinIO mutation, CleanService runtime job, production deploy,
-service restart, pressure/UAT/readiness/go-live claim, or metadata apply was
-performed.
+No Luceon DB write, MinIO object mutation, CleanService real sample job,
+pressure/UAT/readiness/go-live claim, or metadata apply was performed.
+
+The Popo adapter container was built and started as an optional sidecar on
+`127.0.0.1:18082`. The main Luceon upload worker was not reconfigured to use it
+as the active CleanService endpoint.
 
 ## Next Required Step
 
-Download or mount MinerU-Popo model weights under:
+Run one explicitly authorized single-sample CleanService job through the adapter:
 
 ```text
-/Users/concm/prod_workspace/MineruPopo/models/MinerU-Popo
+CLEANSERVICE_ENABLED=true
+CLEANSERVICE_ENDPOINT=http://mineru-popo:8000
 ```
 
-Then run a single controlled CleanService job against one existing sample with
-`CLEANSERVICE_ENABLED=true` and `CLEANSERVICE_ENDPOINT=http://mineru-popo:8000`.
-
+The job should use one existing task/material sample, mutate only the configured
+CleanService output bucket, and then verify that Luceon can surface
+`rebuilt_markdown.md` as the primary operator-facing artifact.
