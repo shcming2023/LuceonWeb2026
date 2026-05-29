@@ -1,14 +1,22 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ExternalLink, FileText, Loader, XCircle } from 'lucide-react';
- 
+
 export function PDFPreviewPanel({ objectName }: { objectName?: string }) {
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
- 
+
   const proxyUrl = objectName
     ? `/__proxy/upload/proxy-file?objectName=${encodeURIComponent(objectName)}`
     : null;
- 
+
+  useEffect(() => {
+    setLoading(Boolean(proxyUrl));
+    setFailed(false);
+    if (!proxyUrl) return;
+    const timer = window.setTimeout(() => setLoading(false), 8000);
+    return () => window.clearTimeout(timer);
+  }, [proxyUrl]);
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5 flex flex-col">
       <div className="flex items-center justify-between mb-3">
@@ -26,9 +34,9 @@ export function PDFPreviewPanel({ objectName }: { objectName?: string }) {
           </a>
         )}
       </div>
-      <div className="w-full aspect-[210/297] rounded-lg overflow-hidden border border-gray-100 bg-gray-50">
+      <div className="w-full aspect-[210/297] rounded-lg overflow-hidden border border-gray-100 bg-gray-50 relative">
         {loading && !failed && (
-          <div className="flex items-center justify-center h-full text-gray-400 text-xs gap-2">
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 text-gray-400 text-xs gap-2">
             <Loader size={14} className="animate-spin" /> 加载中...
           </div>
         )}
@@ -48,7 +56,6 @@ export function PDFPreviewPanel({ objectName }: { objectName?: string }) {
               key={proxyUrl}
               src={`${proxyUrl}#toolbar=1&navpanes=0&scrollbar=1`}
               className="w-full h-full"
-              style={{ display: loading ? 'none' : 'block' }}
               title="PDF Preview"
               onLoad={() => setLoading(false)}
               onError={() => { setLoading(false); setFailed(true); }}
@@ -59,4 +66,3 @@ export function PDFPreviewPanel({ objectName }: { objectName?: string }) {
     </div>
   );
 }
-

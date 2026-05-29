@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   ArrowLeft, RefreshCw, FileText, Clock, AlertTriangle, CheckCircle2, Loader2, XCircle,
@@ -286,7 +286,16 @@ export function TaskDetailPage() {
     loaded: false,
   });
 
-  const cleanMaterialView = buildCleanMaterialView({ material, task });
+  const cleanMaterialView = useMemo(
+    () => buildCleanMaterialView({ material, task }),
+    [material, task],
+  );
+  const rebuiltMarkdownArtifactKey = useMemo(
+    () => cleanMaterialView.artifacts
+      .map((artifact) => `${artifact.role}:${artifact.bucket || ''}:${artifact.object}:${artifact.sha256 || ''}`)
+      .join('|'),
+    [cleanMaterialView.artifacts],
+  );
 
   /**
    * 从后端加载任务详情、事件日志、关联 AI Jobs 和 Material 资源状态
@@ -459,7 +468,7 @@ export function TaskDetailPage() {
         setRebuiltMdLoading(false);
       }
     })();
-  }, [id, cleanMaterialView.artifacts]);
+  }, [id, rebuiltMarkdownArtifactKey]);
 
   // ── SSE 增量刷新（PRD v0.4 §10.2.2）──────────────────────
   const sseRef = useRef<EventSource | null>(null);
