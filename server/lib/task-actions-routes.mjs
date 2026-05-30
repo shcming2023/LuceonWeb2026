@@ -1131,9 +1131,14 @@ async function persistCleanServiceSummaries({ task, material, serviceName, taskS
 }
 
 async function prepareExternalCleanServiceTocRebuild(task, deps, options = {}) {
-  const allowed = new Set(['review-pending', 'completed']);
+  console.log(`[prepareExternalCleanServiceTocRebuild] options:`, JSON.stringify(options), `taskState:`, task.state);
+  const isPopoRerun = options.forceCleanService === true || options.cleanservice === true;
+  const allowed = isPopoRerun
+    ? new Set(['review-pending', 'completed', 'failed', 'canceled'])
+    : new Set(['review-pending', 'completed']);
   if (!allowed.has(String(task.state))) {
-    const err = new Error(`Only review-pending/completed tasks can run toc-rebuild manually (current: ${task.state})`);
+    const allowedMsg = isPopoRerun ? 'review-pending/completed/failed/canceled' : 'review-pending/completed';
+    const err = new Error(`Only ${allowedMsg} tasks can run toc-rebuild manually (current: ${task.state})`);
     err.statusCode = 409;
     throw err;
   }
@@ -1157,6 +1162,15 @@ async function prepareExternalCleanServiceTocRebuild(task, deps, options = {}) {
   const existingTaskJob = task.metadata?.cleanServiceJobs?.[serviceName];
   const existingMaterialJob = material.metadata?.cleanMaterials?.[serviceName];
   const forceNewVersion = options.forceNewVersion === true;
+
+  const isTaskJobRunning = ['running', 'pending'].includes(String(existingTaskJob?.status || existingTaskJob?.cleanState || ''));
+  const isMaterialJobRunning = ['running', 'pending'].includes(String(existingMaterialJob?.status || existingMaterialJob?.cleanState || ''));
+  if (isTaskJobRunning || isMaterialJobRunning || getActiveTocRebuild(task.id)) {
+    const err = new Error('当前已有一个正在运行中或等待中的 toc-rebuild 任务，请勿重复提交');
+    err.statusCode = 409;
+    throw err;
+  }
+
   if ((existingTaskJob || existingMaterialJob) && !forceNewVersion) {
     const err = new Error('当前任务或素材已存在 toc-rebuild Clean Material 元数据；为避免覆盖，请先审计现有版本');
     err.statusCode = 409;
@@ -1191,6 +1205,14 @@ async function prepareExternalCleanServiceTocRebuild(task, deps, options = {}) {
   }
 
   const parsedBucket = deps.getParsedBucket();
+  try {
+    await minio.statObject(parsedBucket, zipObjectName);
+  } catch (e) {
+    const err = new Error(`MinerU result zip (${zipObjectName}) 在 MinIO 中不存在，无法执行重新目录重建`);
+    err.statusCode = 409;
+    throw err;
+  }
+
   const cleanBucket = process.env.MINIO_CLEAN_BUCKET || 'eduassets-clean';
   const submittedAt = new Date().toISOString();
   const assetVersion = forceNewVersion ? nextTocRebuildAssetVersion(existingTaskJob, existingMaterialJob) : 'v1';
@@ -2028,20 +2050,25 @@ export function registerTaskActionRoutes(app, deps = {}) {
 
   app.post('/tasks/:id/toc-rebuild', async (req, res) => {
     try {
+      console.log(`[POST /tasks/:id/toc-rebuild] body:`, JSON.stringify(req.body));
       const task = await loadTask(req, res);
       if (!task) return;
       const config = loadCleanServiceConfig();
       const forceCleanService = req.body?.mode === 'cleanservice-rerun' || req.body?.cleanservice === true;
       const forceNewVersion = req.body?.forceNewVersion === true || forceCleanService;
-      if (forceCleanService && (!config.enabled || !config.endpoint)) {
-        const err = new Error('MinerU-Popo CleanService 未启用，无法执行 Popo 重新目录重建');
+      
+      const useCleanService = config.enabled || forceCleanService;
+      
+      if (forceCleanService && !config.endpoint) {
+        const err = new Error('MinerU-Popo CleanService endpoint 未配置，无法执行 Popo 重新目录重建');
         err.statusCode = 503;
         throw err;
       }
-      const result = config.enabled
-        ? await startExternalCleanServiceTocRebuildAsync(task, safeDeps, { forceNewVersion })
+      
+      const result = useCleanService
+        ? await startExternalCleanServiceTocRebuildAsync(task, safeDeps, { forceNewVersion, forceCleanService })
         : await runManualTocRebuild(task, safeDeps);
-      res.status(config.enabled ? 202 : 200).json(result);
+      res.status(useCleanService ? 202 : 200).json(result);
     } catch (err) {
       handleActionError(res, err);
     }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
  
 export type DropdownMenuItem =
-  | { kind: 'item'; label: string; onClick: () => void; disabled?: boolean; danger?: boolean }
+  | { kind: 'item'; label: string; onClick: () => void; disabled?: boolean; danger?: boolean; title?: string }
   | { kind: 'divider' };
  
 export function DropdownMenu({
@@ -53,6 +53,7 @@ export function DropdownMenu({
                 key={`i-${idx}`}
                 type="button"
                 disabled={disabled}
+                title={it.title}
                 onClick={() => {
                   if (disabled) return;
                   setOpen(false);
