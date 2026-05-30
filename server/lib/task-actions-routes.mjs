@@ -624,6 +624,21 @@ async function cancelTask(task) {
   const runningTocJob = task.metadata?.cleanServiceJobs?.['toc-rebuild'];
   if (['running', 'pending'].includes(String(runningTocJob?.status || runningTocJob?.cleanState || ''))) {
     const now = new Date().toISOString();
+
+    // Try to cancel the external job on Popo adapter
+    if (runningTocJob?.jobId) {
+      try {
+        const localEndpointRaw = task.optionsSnapshot?.localEndpoint || process.env.CLEANSERVICE_ENDPOINT || 'http://mineru-popo:8000';
+        let cancelUrl = `${localEndpointRaw.replace(/\/+$/, '')}/api/v1/jobs/${runningTocJob.jobId}:cancel`;
+        if (cancelUrl.includes('localhost') || cancelUrl.includes('127.0.0.1')) {
+          cancelUrl = cancelUrl.replace(/localhost|127\.0\.0\.1/g, 'host.docker.internal');
+        }
+        await fetch(cancelUrl, { method: 'POST', signal: AbortSignal.timeout(3000) });
+      } catch (e) {
+        console.warn(`[task-actions] cancel external job failed: ${e.message}`);
+      }
+    }
+
     update.metadata.cleanServiceJobs = {
       ...(task.metadata?.cleanServiceJobs || {}),
       'toc-rebuild': {
@@ -1256,8 +1271,10 @@ async function executeExternalCleanServiceTocRebuild(context) {
   });
 
   const cleanClient = createCleanServiceClientWithTransport({ config });
-  const submitResult = await cleanClient.submitJob(request);
-  if (!submitResult?.ok || !submitResult.job) {
+  let submitResult = await cleanClient.submitJob(request);
+  const submitStatus = String(submitResult?.job?.status || '').toLowerCase();
+  const submitAcceptedForPolling = ['queued', 'pending', 'processing', 'running'].includes(submitStatus);
+  if ((!submitResult?.ok && !submitAcceptedForPolling) || !submitResult.job) {
     const err = new Error(submitResult?.job?.error?.message || 'CleanService job failed');
     err.statusCode = 502;
     err.cleanState = submitResult?.job?.cleanState;
@@ -1265,6 +1282,47 @@ async function executeExternalCleanServiceTocRebuild(context) {
     err.retriable = submitResult?.job?.error?.retriable;
     throw err;
   }
+
+  // Polling loop for async running job
+  let currentJob = submitResult.job;
+  const localEndpointRaw = config.endpoint || 'http://mineru-popo:8000';
+  const queryUrl = `${localEndpointRaw.replace(/\/+$/, '')}/api/v1/jobs/${jobId}`;
+
+  while (currentJob.status === 'running') {
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    try {
+      const resp = await fetch(queryUrl);
+      if (resp.ok) {
+        currentJob = await resp.json();
+      }
+    } catch (e) {
+      console.warn(`[task-actions] fetch job status failed: ${e.message}`);
+    }
+
+    const latestTaskBeforeApply = await dbGet(`/tasks/${encodeURIComponent(task.id)}`).catch(() => null);
+    if (latestTaskBeforeApply?.state === 'canceled') {
+      try {
+        await fetch(`${queryUrl}:cancel`, { method: 'POST', signal: AbortSignal.timeout(3000) });
+      } catch(e) {}
+      const err = new Error('Task was canceled before CleanService metadata apply');
+      err.statusCode = 409;
+      err.code = 'canceled';
+      err.cleanState = 'skipped';
+      err.retriable = false;
+      throw err;
+    }
+  }
+
+  if (currentJob.status === 'failed' || currentJob.status === 'timeout' || currentJob.status === 'canceled' || currentJob.error) {
+    const err = new Error(currentJob.error?.message || 'CleanService job failed');
+    err.statusCode = 502;
+    err.cleanState = currentJob.error?.code === 'canceled' ? 'skipped' : 'failed';
+    err.code = currentJob.error?.code || 'failed';
+    err.retriable = currentJob.error?.retriable || false;
+    throw err;
+  }
+
+  submitResult.job = currentJob;
 
   const artifactReader = {
     async readArtifact(_role, ref) {
