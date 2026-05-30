@@ -34,6 +34,7 @@ import { applyCleanMetadataPersistencePlan } from '../services/cleanservice/meta
 import { createHash } from 'crypto';
 
 const DB_BASE_URL = process.env.DB_BASE_URL || 'http://localhost:8789';
+const activeTocRebuildJobs = new Map();
 
 // ─── db-server REST 小封装 ───────────────────────────────────
 async function dbGet(path) {
@@ -620,6 +621,28 @@ async function cancelTask(task) {
     }
   };
 
+  const runningTocJob = task.metadata?.cleanServiceJobs?.['toc-rebuild'];
+  if (['running', 'pending'].includes(String(runningTocJob?.status || runningTocJob?.cleanState || ''))) {
+    const now = new Date().toISOString();
+    update.metadata.cleanServiceJobs = {
+      ...(task.metadata?.cleanServiceJobs || {}),
+      'toc-rebuild': {
+        ...runningTocJob,
+        status: 'canceled',
+        cleanState: 'skipped',
+        productLabel: '目录重建已取消',
+        taskIntent: 'skipped',
+        finishedAt: now,
+        updatedAt: now,
+        error: {
+          code: 'canceled',
+          message: 'Task was canceled by operator before toc-rebuild completed',
+          retriable: false,
+        },
+      },
+    };
+  }
+
   if (mineruTaskId) {
     update.metadata.externalMineruTaskId = mineruTaskId;
     if (externalMineruStateAtCancel !== undefined) {
@@ -639,9 +662,31 @@ async function cancelTask(task) {
       if (material) {
         const parsedFilesCount = material.metadata?.parsedFilesCount || task.metadata?.parsedFilesCount || 0;
         if (parsedFilesCount > 0) {
+          const materialMetadata = { ...(material.metadata || {}) };
+          if (runningTocJob) {
+            materialMetadata.cleanMaterials = {
+              ...(material.metadata?.cleanMaterials || {}),
+              'toc-rebuild': {
+                ...(material.metadata?.cleanMaterials?.['toc-rebuild'] || {}),
+                serviceName: 'toc-rebuild',
+                latestVersion: runningTocJob.assetVersion,
+                status: 'canceled',
+                cleanState: 'skipped',
+                productLabel: '目录重建已取消',
+                jobId: runningTocJob.jobId,
+                prefix: runningTocJob.sink?.prefix,
+                updatedAt: new Date().toISOString(),
+                error: {
+                  code: 'canceled',
+                  message: 'Task was canceled by operator before toc-rebuild completed',
+                  retriable: false,
+                },
+              },
+            };
+          }
           await dbPatch(`/materials/${encodeURIComponent(task.materialId)}`, {
             metadata: {
-              ...(material.metadata || {}),
+              ...materialMetadata,
               canceledTaskAt: new Date().toISOString(),
               canceledTaskId: task.id
             }
@@ -914,7 +959,163 @@ function withoutCleanServiceMetadata(record, serviceName) {
   return { ...(record || {}), metadata };
 }
 
-async function runExternalCleanServiceTocRebuild(task, deps, options = {}) {
+function getActiveTocRebuild(taskId) {
+  const active = activeTocRebuildJobs.get(String(taskId));
+  if (!active) return null;
+  return {
+    taskId: active.taskId,
+    materialId: active.materialId,
+    jobId: active.jobId,
+    assetVersion: active.assetVersion,
+    prefix: active.prefix,
+    status: 'running',
+    submittedAt: active.submittedAt,
+  };
+}
+
+function classifyCleanServiceError(error) {
+  const message = error?.message || String(error || 'CleanService job failed');
+  const cleanState = error?.cleanState
+    || (error?.code === 'canceled' ? 'skipped' : null)
+    || (error?.name === 'AbortError' || /timeout|timed out|aborted/i.test(message) ? 'timeout' : 'protocol-failure');
+  const status = cleanState === 'timeout'
+    ? 'timeout'
+    : (cleanState === 'skipped' ? 'canceled' : 'failed');
+  return {
+    cleanState,
+    status,
+    code: error?.code || (cleanState === 'timeout' ? 'timeout' : (cleanState === 'skipped' ? 'canceled' : 'cleanservice_async_failed')),
+    message,
+    retriable: cleanState === 'timeout' || error?.retriable === true,
+  };
+}
+
+function buildRunningCleanServiceSummaries({ task, request, submittedAt }) {
+  const serviceName = request.service_name || 'toc-rebuild';
+  const source = request.inputs?.[0]?.source || {};
+  const productLabel = failure.status === 'canceled' ? '目录重建已取消' : '目录重建失败';
+  const stats = {
+    tokensPrompt: 0,
+    tokensCompletion: 0,
+    tokensTotal: 0,
+    costCnyEstimated: 0,
+    costCnyActual: 0,
+    unresolvedAnchorCount: 0,
+  };
+  const taskSummary = {
+    serviceName,
+    protocolVersion: 'v1',
+    jobId: request.job_id,
+    status: 'running',
+    cleanState: 'running',
+    productLabel: '目录重建中',
+    taskIntent: 'running',
+    cleanReview: null,
+    materialId: String(task.materialId),
+    parseTaskId: task.id,
+    assetVersion: request.asset_version,
+    submittedAt,
+    startedAt: submittedAt,
+    finishedAt: null,
+    artifacts: null,
+    stats,
+    sourceInput: { bucket: source.bucket, object: source.object },
+    sink: { bucket: request.sink?.bucket, prefix: request.sink?.prefix },
+    error: null,
+    warnings: ['async-cleanservice-job'],
+    updatedAt: submittedAt,
+  };
+  const materialSummary = {
+    serviceName,
+    latestVersion: request.asset_version,
+    status: 'running',
+    cleanState: 'running',
+    productLabel: '目录重建中',
+    jobId: request.job_id,
+    prefix: request.sink?.prefix,
+    provenanceObjectName: null,
+    stats,
+    sourceInput: taskSummary.sourceInput,
+    updatedAt: submittedAt,
+  };
+  return { taskSummary, materialSummary };
+}
+
+function buildFailedCleanServiceSummaries({ task, request, submittedAt, error }) {
+  const failure = classifyCleanServiceError(error);
+  const now = new Date().toISOString();
+  const serviceName = request.service_name || 'toc-rebuild';
+  const source = request.inputs?.[0]?.source || {};
+  const stats = {
+    tokensPrompt: 0,
+    tokensCompletion: 0,
+    tokensTotal: 0,
+    costCnyEstimated: 0,
+    costCnyActual: 0,
+    unresolvedAnchorCount: 0,
+  };
+  const taskSummary = {
+    serviceName,
+    protocolVersion: 'v1',
+    jobId: request.job_id,
+    status: failure.status,
+    cleanState: failure.cleanState,
+    productLabel,
+    taskIntent: 'failed',
+    cleanReview: null,
+    materialId: String(task.materialId),
+    parseTaskId: task.id,
+    assetVersion: request.asset_version,
+    submittedAt,
+    startedAt: submittedAt,
+    finishedAt: now,
+    artifacts: null,
+    stats,
+    sourceInput: { bucket: source.bucket, object: source.object },
+    sink: { bucket: request.sink?.bucket, prefix: request.sink?.prefix },
+    error: failure,
+    warnings: ['async-cleanservice-job-failed'],
+    updatedAt: now,
+  };
+  const materialSummary = {
+    serviceName,
+    latestVersion: request.asset_version,
+    status: failure.status,
+    cleanState: failure.cleanState,
+    productLabel,
+    jobId: request.job_id,
+    prefix: request.sink?.prefix,
+    provenanceObjectName: null,
+    stats,
+    sourceInput: taskSummary.sourceInput,
+    error: failure,
+    updatedAt: now,
+  };
+  return { taskSummary, materialSummary };
+}
+
+async function persistCleanServiceSummaries({ task, material, serviceName, taskSummary, materialSummary }) {
+  await dbPatch(`/tasks/${encodeURIComponent(task.id)}`, {
+    metadata: {
+      ...(task.metadata || {}),
+      cleanServiceJobs: {
+        ...(task.metadata?.cleanServiceJobs || {}),
+        [serviceName]: taskSummary,
+      },
+    },
+  });
+  await dbPatch(`/materials/${encodeURIComponent(task.materialId)}`, {
+    metadata: {
+      ...(material.metadata || {}),
+      cleanMaterials: {
+        ...(material.metadata?.cleanMaterials || {}),
+        [serviceName]: materialSummary,
+      },
+    },
+  });
+}
+
+async function prepareExternalCleanServiceTocRebuild(task, deps, options = {}) {
   const allowed = new Set(['review-pending', 'completed']);
   if (!allowed.has(String(task.state))) {
     const err = new Error(`Only review-pending/completed tasks can run toc-rebuild manually (current: ${task.state})`);
@@ -1011,6 +1212,42 @@ async function runExternalCleanServiceTocRebuild(task, deps, options = {}) {
     },
   };
 
+  return {
+    task,
+    material,
+    deps,
+    minio,
+    config,
+    serviceName,
+    parsedBucket,
+    cleanBucket,
+    zipObjectName,
+    existingTaskJob,
+    existingMaterialJob,
+    forceNewVersion,
+    submittedAt,
+    assetVersion,
+    jobId,
+    request,
+  };
+}
+
+async function executeExternalCleanServiceTocRebuild(context) {
+  const {
+    task,
+    material,
+    minio,
+    config,
+    serviceName,
+    parsedBucket,
+    cleanBucket,
+    zipObjectName,
+    forceNewVersion,
+    assetVersion,
+    jobId,
+    request,
+  } = context;
+
   await emitAndLog({
     taskId: task.id,
     event: 'toc-rebuild-cleanservice-started',
@@ -1023,6 +1260,9 @@ async function runExternalCleanServiceTocRebuild(task, deps, options = {}) {
   if (!submitResult?.ok || !submitResult.job) {
     const err = new Error(submitResult?.job?.error?.message || 'CleanService job failed');
     err.statusCode = 502;
+    err.cleanState = submitResult?.job?.cleanState;
+    err.code = submitResult?.job?.error?.code;
+    err.retriable = submitResult?.job?.error?.retriable;
     throw err;
   }
 
@@ -1048,6 +1288,16 @@ async function runExternalCleanServiceTocRebuild(task, deps, options = {}) {
   if (!verification.ok) {
     const err = new Error(`CleanService output verification failed: ${(verification.errors || []).join(', ')}`);
     err.statusCode = 502;
+    throw err;
+  }
+
+  const latestTaskBeforeApply = await dbGet(`/tasks/${encodeURIComponent(task.id)}`).catch(() => null);
+  if (latestTaskBeforeApply?.state === 'canceled') {
+    const err = new Error('Task was canceled before CleanService metadata apply');
+    err.statusCode = 409;
+    err.code = 'canceled';
+    err.cleanState = 'skipped';
+    err.retriable = false;
     throw err;
   }
 
@@ -1114,6 +1364,103 @@ async function runExternalCleanServiceTocRebuild(task, deps, options = {}) {
     prefix: request.sink.prefix,
     engine: submitResult.job.stats?.engine || 'mineru-popo',
     artifacts: plan.taskPatch.metadata.cleanServiceJobs[serviceName].artifacts,
+  };
+}
+
+async function runExternalCleanServiceTocRebuild(task, deps, options = {}) {
+  const context = await prepareExternalCleanServiceTocRebuild(task, deps, options);
+  return await executeExternalCleanServiceTocRebuild(context);
+}
+
+async function markExternalCleanServiceTocRebuildFailed(context, error) {
+  const { task, material, request, submittedAt, serviceName } = context;
+  const latestTask = await dbGet(`/tasks/${encodeURIComponent(task.id)}`).catch(() => null) || task;
+  const latestMaterial = await dbGet(`/materials/${encodeURIComponent(task.materialId)}`).catch(() => null) || material;
+  const currentJob = latestTask.metadata?.cleanServiceJobs?.[serviceName];
+  if (currentJob?.jobId && currentJob.jobId !== request.job_id && currentJob.status === 'completed') {
+    return null;
+  }
+
+  const { taskSummary, materialSummary } = buildFailedCleanServiceSummaries({
+    task: latestTask,
+    request,
+    submittedAt,
+    error,
+  });
+  await persistCleanServiceSummaries({
+    task: latestTask,
+    material: latestMaterial,
+    serviceName,
+    taskSummary,
+    materialSummary,
+  });
+  await emitAndLog({
+    taskId: task.id,
+    event: 'toc-rebuild-cleanservice-failed',
+    message: `MinerU-Popo 目录重建失败: ${taskSummary.error?.message || 'unknown error'}`,
+    update: { cleanServiceJobs: { [serviceName]: taskSummary } },
+    payload: {
+      materialId: task.materialId,
+      jobId: request.job_id,
+      assetVersion: request.asset_version,
+      status: taskSummary.status,
+      cleanState: taskSummary.cleanState,
+      error: taskSummary.error,
+    },
+  });
+  return taskSummary;
+}
+
+async function startExternalCleanServiceTocRebuildAsync(task, deps, options = {}) {
+  const active = getActiveTocRebuild(task.id);
+  if (active) {
+    return { ok: true, accepted: true, ...active };
+  }
+
+  const context = await prepareExternalCleanServiceTocRebuild(task, deps, options);
+  const { serviceName, request, material, submittedAt } = context;
+  const { taskSummary, materialSummary } = buildRunningCleanServiceSummaries({ task, request, submittedAt });
+  await persistCleanServiceSummaries({ task, material, serviceName, taskSummary, materialSummary });
+  await emitAndLog({
+    taskId: task.id,
+    event: 'toc-rebuild-cleanservice-queued',
+    message: `MinerU-Popo 目录重建已提交后台执行: ${request.job_id}`,
+    update: { cleanServiceJobs: { [serviceName]: taskSummary } },
+    payload: {
+      materialId: task.materialId,
+      jobId: request.job_id,
+      assetVersion: request.asset_version,
+      prefix: request.sink?.prefix,
+    },
+  });
+
+  activeTocRebuildJobs.set(String(task.id), {
+    taskId: task.id,
+    materialId: String(task.materialId),
+    jobId: request.job_id,
+    assetVersion: request.asset_version,
+    prefix: request.sink?.prefix,
+    submittedAt,
+  });
+
+  void executeExternalCleanServiceTocRebuild(context)
+    .catch((error) => markExternalCleanServiceTocRebuildFailed(context, error).catch((inner) => {
+      console.error(`[task-actions] failed to persist async toc-rebuild failure for ${task.id}:`, inner);
+    }))
+    .finally(() => {
+      const activeNow = activeTocRebuildJobs.get(String(task.id));
+      if (activeNow?.jobId === request.job_id) activeTocRebuildJobs.delete(String(task.id));
+    });
+
+  return {
+    ok: true,
+    accepted: true,
+    status: 'running',
+    taskId: task.id,
+    materialId: String(task.materialId),
+    jobId: request.job_id,
+    assetVersion: request.asset_version,
+    prefix: request.sink?.prefix,
   };
 }
 
@@ -1604,6 +1951,23 @@ export function registerTaskActionRoutes(app, deps = {}) {
     }
   });
 
+  app.get('/tasks/:id/toc-rebuild', async (req, res) => {
+    try {
+      const task = await loadTask(req, res);
+      if (!task) return;
+      const serviceName = 'toc-rebuild';
+      const active = getActiveTocRebuild(task.id);
+      res.json({
+        ok: true,
+        taskId: task.id,
+        active,
+        job: task.metadata?.cleanServiceJobs?.[serviceName] || null,
+      });
+    } catch (err) {
+      handleActionError(res, err);
+    }
+  });
+
   app.post('/tasks/:id/toc-rebuild', async (req, res) => {
     try {
       const task = await loadTask(req, res);
@@ -1617,9 +1981,9 @@ export function registerTaskActionRoutes(app, deps = {}) {
         throw err;
       }
       const result = config.enabled
-        ? await runExternalCleanServiceTocRebuild(task, safeDeps, { forceNewVersion })
+        ? await startExternalCleanServiceTocRebuildAsync(task, safeDeps, { forceNewVersion })
         : await runManualTocRebuild(task, safeDeps);
-      res.json(result);
+      res.status(config.enabled ? 202 : 200).json(result);
     } catch (err) {
       handleActionError(res, err);
     }

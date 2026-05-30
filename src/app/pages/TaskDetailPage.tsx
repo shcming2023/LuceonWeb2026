@@ -290,6 +290,8 @@ export function TaskDetailPage() {
     () => buildCleanMaterialView({ material, task }),
     [material, task],
   );
+  const tocRebuildJob = task?.metadata?.cleanServiceJobs?.['toc-rebuild'] as any | undefined;
+  const tocRebuildJobRunning = ['running', 'pending'].includes(String(tocRebuildJob?.status || tocRebuildJob?.cleanState || ''));
   const rebuiltMarkdownArtifactKey = useMemo(
     () => cleanMaterialView.artifacts
       .map((artifact) => `${artifact.role}:${artifact.bucket || ''}:${artifact.object}:${artifact.sha256 || ''}`)
@@ -498,6 +500,14 @@ export function TaskDetailPage() {
     };
   }, [id]);
 
+  useEffect(() => {
+    if (!id || !tocRebuildJobRunning) return;
+    const timer = window.setInterval(() => {
+      fetchData({ background: true });
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [id, tocRebuildJobRunning]);
+
   // ── 任务动作（Retry/Reparse/Re-AI/Cancel）──────────────
   const callAction = async (action: 'retry' | 'reparse' | 're-ai' | 'cancel') => {
     if (!id) return;
@@ -579,7 +589,13 @@ export function TaskDetailPage() {
       });
       const payload = await res.json().catch(() => ({} as any));
       if (!res.ok) throw new Error(payload?.error || `HTTP ${res.status}`);
-      toast.success(options?.cleanserviceRerun ? 'Popo 目录重建已完成' : '目录重建已完成', { description: payload?.prefix || payload?.jobId });
+      if (payload?.accepted || payload?.status === 'running') {
+        toast.success(options?.cleanserviceRerun ? 'Popo 目录重建已提交后台执行' : '目录重建已提交后台执行', {
+          description: payload?.jobId || payload?.prefix,
+        });
+      } else {
+        toast.success(options?.cleanserviceRerun ? 'Popo 目录重建已完成' : '目录重建已完成', { description: payload?.prefix || payload?.jobId });
+      }
       await fetchData({ background: true });
     } catch (err) {
       toast.error('目录重建失败', { description: String(err) });
@@ -664,10 +680,12 @@ export function TaskDetailPage() {
   const canTocRebuild = ['review-pending', 'completed'].includes(String(task.state))
     && resourceStatus.materialExists
     && resourceStatus.markdownExists
-    && !cleanMaterialView.present;
+    && !cleanMaterialView.present
+    && !tocRebuildJobRunning;
   const canPopoRerun = ['review-pending', 'completed'].includes(String(task.state))
     && resourceStatus.materialExists
-    && Boolean(material?.metadata?.zipObjectName || task.metadata?.zipObjectName);
+    && Boolean(material?.metadata?.zipObjectName || task.metadata?.zipObjectName)
+    && !tocRebuildJobRunning;
   const tocRebuildDisabledReason = cleanMaterialView.present
     ? '当前任务已存在目录重建结果'
     : (canTocRebuild ? '基于 MinerU Markdown 手动生成目录重建 Clean Material' : '需要任务进入待复核/完成并具备 Markdown 产物');
@@ -801,6 +819,14 @@ export function TaskDetailPage() {
                       }
                     ]}
                   />
+                  {tocRebuildJob && (
+                    <div className="basis-full rounded border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs text-slate-300">
+                      <span className="font-semibold text-slate-100">目录重建：</span>
+                      <span>{tocRebuildJob.productLabel || tocRebuildJob.status || tocRebuildJob.cleanState}</span>
+                      {tocRebuildJob.jobId && <span className="ml-2 text-slate-500">{tocRebuildJob.jobId}</span>}
+                      {tocRebuildJob.error?.message && <span className="block mt-1 text-red-300">{tocRebuildJob.error.message}</span>}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
