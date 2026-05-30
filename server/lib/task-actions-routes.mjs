@@ -993,7 +993,6 @@ function classifyCleanServiceError(error) {
 function buildRunningCleanServiceSummaries({ task, request, submittedAt }) {
   const serviceName = request.service_name || 'toc-rebuild';
   const source = request.inputs?.[0]?.source || {};
-  const productLabel = failure.status === 'canceled' ? '目录重建已取消' : '目录重建失败';
   const stats = {
     tokensPrompt: 0,
     tokensCompletion: 0,
@@ -1046,6 +1045,7 @@ function buildFailedCleanServiceSummaries({ task, request, submittedAt, error })
   const now = new Date().toISOString();
   const serviceName = request.service_name || 'toc-rebuild';
   const source = request.inputs?.[0]?.source || {};
+  const productLabel = failure.status === 'canceled' ? '目录重建已取消' : '目录重建失败';
   const stats = {
     tokensPrompt: 0,
     tokensCompletion: 0,
