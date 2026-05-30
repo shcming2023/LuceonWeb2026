@@ -1131,7 +1131,6 @@ async function persistCleanServiceSummaries({ task, material, serviceName, taskS
 }
 
 async function prepareExternalCleanServiceTocRebuild(task, deps, options = {}) {
-  console.log(`[prepareExternalCleanServiceTocRebuild] options:`, JSON.stringify(options), `taskState:`, task.state);
   const isPopoRerun = options.forceCleanService === true || options.cleanservice === true;
   const allowed = isPopoRerun
     ? new Set(['review-pending', 'completed', 'failed', 'canceled'])
@@ -1322,7 +1321,9 @@ async function executeExternalCleanServiceTocRebuild(context) {
     }
 
     const latestTaskBeforeApply = await dbGet(`/tasks/${encodeURIComponent(task.id)}`).catch(() => null);
-    if (latestTaskBeforeApply?.state === 'canceled') {
+    const activeJob = latestTaskBeforeApply?.metadata?.cleanServiceJobs?.[serviceName];
+    const isNewCancellation = activeJob?.jobId === jobId && ['canceled', 'skipped'].includes(String(activeJob.status || activeJob.cleanState || ''));
+    if (isNewCancellation) {
       try {
         await fetch(`${queryUrl}:cancel`, { method: 'POST', signal: AbortSignal.timeout(3000) });
       } catch(e) {}
@@ -1372,7 +1373,9 @@ async function executeExternalCleanServiceTocRebuild(context) {
   }
 
   const latestTaskBeforeApply = await dbGet(`/tasks/${encodeURIComponent(task.id)}`).catch(() => null);
-  if (latestTaskBeforeApply?.state === 'canceled') {
+  const activeJob = latestTaskBeforeApply?.metadata?.cleanServiceJobs?.[serviceName];
+  const isNewCancellation = activeJob?.jobId === jobId && ['canceled', 'skipped'].includes(String(activeJob.status || activeJob.cleanState || ''));
+  if (isNewCancellation) {
     const err = new Error('Task was canceled before CleanService metadata apply');
     err.statusCode = 409;
     err.code = 'canceled';
@@ -2050,21 +2053,20 @@ export function registerTaskActionRoutes(app, deps = {}) {
 
   app.post('/tasks/:id/toc-rebuild', async (req, res) => {
     try {
-      console.log(`[POST /tasks/:id/toc-rebuild] body:`, JSON.stringify(req.body));
       const task = await loadTask(req, res);
       if (!task) return;
       const config = loadCleanServiceConfig();
       const forceCleanService = req.body?.mode === 'cleanservice-rerun' || req.body?.cleanservice === true;
       const forceNewVersion = req.body?.forceNewVersion === true || forceCleanService;
-      
+
       const useCleanService = config.enabled || forceCleanService;
-      
+
       if (forceCleanService && !config.endpoint) {
         const err = new Error('MinerU-Popo CleanService endpoint 未配置，无法执行 Popo 重新目录重建');
         err.statusCode = 503;
         throw err;
       }
-      
+
       const result = useCleanService
         ? await startExternalCleanServiceTocRebuildAsync(task, safeDeps, { forceNewVersion, forceCleanService })
         : await runManualTocRebuild(task, safeDeps);
