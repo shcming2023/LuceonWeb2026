@@ -885,7 +885,36 @@ async function runManualTocRebuild(task, deps) {
   };
 }
 
-async function runExternalCleanServiceTocRebuild(task, deps) {
+function parseAssetVersionNumber(value) {
+  const match = String(value || '').match(/^v(\d+)$/i);
+  return match ? Number(match[1]) : 0;
+}
+
+function nextTocRebuildAssetVersion(existingTaskJob, existingMaterialJob) {
+  const current = Math.max(
+    parseAssetVersionNumber(existingTaskJob?.assetVersion),
+    parseAssetVersionNumber(existingMaterialJob?.latestVersion),
+    1,
+  );
+  return `v${current + 1}`;
+}
+
+function withoutCleanServiceMetadata(record, serviceName) {
+  const metadata = { ...(record?.metadata || {}) };
+  if (metadata.cleanServiceJobs) {
+    const cleanServiceJobs = { ...metadata.cleanServiceJobs };
+    delete cleanServiceJobs[serviceName];
+    metadata.cleanServiceJobs = cleanServiceJobs;
+  }
+  if (metadata.cleanMaterials) {
+    const cleanMaterials = { ...metadata.cleanMaterials };
+    delete cleanMaterials[serviceName];
+    metadata.cleanMaterials = cleanMaterials;
+  }
+  return { ...(record || {}), metadata };
+}
+
+async function runExternalCleanServiceTocRebuild(task, deps, options = {}) {
   const allowed = new Set(['review-pending', 'completed']);
   if (!allowed.has(String(task.state))) {
     const err = new Error(`Only review-pending/completed tasks can run toc-rebuild manually (current: ${task.state})`);
@@ -911,7 +940,8 @@ async function runExternalCleanServiceTocRebuild(task, deps) {
   const serviceName = 'toc-rebuild';
   const existingTaskJob = task.metadata?.cleanServiceJobs?.[serviceName];
   const existingMaterialJob = material.metadata?.cleanMaterials?.[serviceName];
-  if (existingTaskJob || existingMaterialJob) {
+  const forceNewVersion = options.forceNewVersion === true;
+  if ((existingTaskJob || existingMaterialJob) && !forceNewVersion) {
     const err = new Error('当前任务或素材已存在 toc-rebuild Clean Material 元数据；为避免覆盖，请先审计现有版本');
     err.statusCode = 409;
     throw err;
@@ -946,9 +976,11 @@ async function runExternalCleanServiceTocRebuild(task, deps) {
 
   const parsedBucket = deps.getParsedBucket();
   const cleanBucket = process.env.MINIO_CLEAN_BUCKET || 'eduassets-clean';
-  const assetVersion = 'v1';
-  const jobId = `luceon-${task.id}-${serviceName}-${assetVersion}`;
   const submittedAt = new Date().toISOString();
+  const assetVersion = forceNewVersion ? nextTocRebuildAssetVersion(existingTaskJob, existingMaterialJob) : 'v1';
+  const jobId = forceNewVersion
+    ? `luceon-${task.id}-${serviceName}-${assetVersion}-${Date.now()}`
+    : `luceon-${task.id}-${serviceName}-${assetVersion}`;
   const request = {
     job_id: jobId,
     service_name: serviceName,
@@ -1024,10 +1056,12 @@ async function runExternalCleanServiceTocRebuild(task, deps) {
     verification,
     now: () => new Date().toISOString(),
   });
+  const existingTaskForApply = forceNewVersion ? withoutCleanServiceMetadata(task, serviceName) : task;
+  const existingMaterialForApply = forceNewVersion ? withoutCleanServiceMetadata(material, serviceName) : material;
   const plan = buildCleanMetadataPersistencePlan({
     candidate,
-    existingTask: task,
-    existingMaterial: material,
+    existingTask: existingTaskForApply,
+    existingMaterial: existingMaterialForApply,
     now: () => new Date().toISOString(),
   });
 
@@ -1035,8 +1069,8 @@ async function runExternalCleanServiceTocRebuild(task, deps) {
     plan,
     taskId: task.id,
     materialId: String(task.materialId),
-    existingTask: task,
-    existingMaterial: material,
+    existingTask: existingTaskForApply,
+    existingMaterial: existingMaterialForApply,
     allowRealApply: true,
     dbClient: {
       async updateTask(taskId, patch) {
@@ -1575,8 +1609,15 @@ export function registerTaskActionRoutes(app, deps = {}) {
       const task = await loadTask(req, res);
       if (!task) return;
       const config = loadCleanServiceConfig();
+      const forceCleanService = req.body?.mode === 'cleanservice-rerun' || req.body?.cleanservice === true;
+      const forceNewVersion = req.body?.forceNewVersion === true || forceCleanService;
+      if (forceCleanService && (!config.enabled || !config.endpoint)) {
+        const err = new Error('MinerU-Popo CleanService 未启用，无法执行 Popo 重新目录重建');
+        err.statusCode = 503;
+        throw err;
+      }
       const result = config.enabled
-        ? await runExternalCleanServiceTocRebuild(task, safeDeps)
+        ? await runExternalCleanServiceTocRebuild(task, safeDeps, { forceNewVersion })
         : await runManualTocRebuild(task, safeDeps);
       res.json(result);
     } catch (err) {

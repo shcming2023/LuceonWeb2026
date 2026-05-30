@@ -566,18 +566,20 @@ export function TaskDetailPage() {
     }
   };
 
-  const handleTocRebuild = async () => {
+  const handleTocRebuild = async (options?: { cleanserviceRerun?: boolean }) => {
     if (!id) return;
     setTocRebuildRunning(true);
     try {
       const res = await fetch(`/__proxy/upload/tasks/${encodeURIComponent(id)}/toc-rebuild`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trigger: 'operator-manual' }),
+        body: JSON.stringify(options?.cleanserviceRerun
+          ? { trigger: 'operator-manual', mode: 'cleanservice-rerun', cleanservice: true, forceNewVersion: true }
+          : { trigger: 'operator-manual' }),
       });
       const payload = await res.json().catch(() => ({} as any));
       if (!res.ok) throw new Error(payload?.error || `HTTP ${res.status}`);
-      toast.success('目录重建已完成', { description: payload?.prefix || payload?.jobId });
+      toast.success(options?.cleanserviceRerun ? 'Popo 目录重建已完成' : '目录重建已完成', { description: payload?.prefix || payload?.jobId });
       await fetchData({ background: true });
     } catch (err) {
       toast.error('目录重建失败', { description: String(err) });
@@ -663,6 +665,9 @@ export function TaskDetailPage() {
     && resourceStatus.materialExists
     && resourceStatus.markdownExists
     && !cleanMaterialView.present;
+  const canPopoRerun = ['review-pending', 'completed'].includes(String(task.state))
+    && resourceStatus.materialExists
+    && Boolean(material?.metadata?.zipObjectName || task.metadata?.zipObjectName);
   const tocRebuildDisabledReason = cleanMaterialView.present
     ? '当前任务已存在目录重建结果'
     : (canTocRebuild ? '基于 MinerU Markdown 手动生成目录重建 Clean Material' : '需要任务进入待复核/完成并具备 Markdown 产物');
@@ -785,7 +790,8 @@ export function TaskDetailPage() {
                       { kind: 'item', label: `重试 (${TASK_ACTION_TERMS.retry})`, disabled: !canRetry, onClick: () => callAction('retry') },
                       { kind: 'item', label: `重新解析 (${TASK_ACTION_TERMS.reparse})`, disabled: !canReparse, onClick: () => callAction('reparse') },
                       { kind: 'item', label: `重跑AI (${TASK_ACTION_TERMS['re-ai']})`, disabled: !canReAi, onClick: () => callAction('re-ai') },
-                      { kind: 'item', label: '目录重建 (TocRebuild)', disabled: !canTocRebuild || tocRebuildRunning, onClick: handleTocRebuild },
+                      { kind: 'item', label: '目录重建 (TocRebuild)', disabled: !canTocRebuild || tocRebuildRunning, onClick: () => handleTocRebuild() },
+                      { kind: 'item', label: '调用 Popo 重新目录重建', disabled: !canPopoRerun || tocRebuildRunning, onClick: () => handleTocRebuild({ cleanserviceRerun: true }) },
                       { kind: 'item', label: '下载产物 ZIP', disabled: !(['completed', 'review-pending', 'failed'].includes(String(task.state)) && resourceStatus.markdownExists), onClick: handleDownloadZip },
                       { kind: 'item', label: '取消任务', danger: true, disabled: !canCancel, onClick: () => {
                           const mineruTaskId = task.metadata?.mineruTaskId;
