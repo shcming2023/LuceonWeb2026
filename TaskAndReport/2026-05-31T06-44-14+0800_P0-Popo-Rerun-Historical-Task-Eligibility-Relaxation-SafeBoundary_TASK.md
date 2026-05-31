@@ -130,4 +130,3 @@ Write a short execution report in `TaskAndReport/` containing:
 - generated job id and version/prefix if a real rerun was executed;
 - readback evidence for key artifacts;
 - explicit boundary statement.
-

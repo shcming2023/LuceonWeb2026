@@ -86,4 +86,3 @@ This validates the host-Mac MPS worker route and one small PDF Popo directory re
 - public internet launch readiness.
 
 The host worker is currently managed by tmux, not yet by launchd/system service. A later operational-hardening task should make the worker auto-start and add a health-gated startup check if this route is kept.
-
