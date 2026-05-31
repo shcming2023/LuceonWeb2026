@@ -6,7 +6,7 @@ Issued at: `2026-05-31T07:46:23+0800`
 
 Issued by: Luceon
 
-Execution owner: lucode
+Execution owner: Luceon
 
 Baseline branch:
 
@@ -29,6 +29,15 @@ real Raw Material / MinerU parsed artifact
 ```
 
 This task is not a UI polish task, not a broad historical compatibility task, and not an operations hardening task. The only success target is repeatable, real Popo/toc-rebuild output that can be reviewed as Clean-stage primary product.
+
+Execution environment decision:
+
+```text
+Run the real-sample execution in /Users/concm/prod_workspace/Luceon2026
+against the existing production/control runtime and its existing MinIO data.
+```
+
+Do not ask lucode to obtain raw MinIO credentials, do not sync production sample objects into the dev MinIO, and do not treat the dev container's empty MinIO as a blocker for this task. If the production/control runtime reveals a code defect, Luceon may issue a follow-up implementation fix to lucode after capturing exact evidence.
 
 ## Current Evidence
 
