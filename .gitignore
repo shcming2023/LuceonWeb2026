@@ -32,6 +32,10 @@ ops/logs/
 # TypeScript
 *.tsbuildinfo
 
+# Python bytecode
+__pycache__/
+*.py[cod]
+
 # Vite 缓存
 .vite/
 
