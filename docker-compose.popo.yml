@@ -41,7 +41,7 @@ services:
       - POPO_GENERATE_TIMEOUT_SECONDS=${POPO_GENERATE_TIMEOUT_SECONDS:-900}
       - POPO_MAX_NEW_TOKENS=${POPO_MAX_NEW_TOKENS:-256}
       - POPO_MPS_CHUNK_SIZE=${POPO_MPS_CHUNK_SIZE:-10}
-      - POPO_MPS_RENDER_SCALE=${POPO_MPS_RENDER_SCALE:-1.0}
+      - POPO_MPS_RENDER_SCALE=${POPO_MPS_RENDER_SCALE:-0.5}
       - POPO_MPS_MIN_PIXELS=${POPO_MPS_MIN_PIXELS:-3136}
       - POPO_MPS_MAX_PIXELS=${POPO_MPS_MAX_PIXELS:-589824}
       - TZ=Asia/Shanghai
@@ -49,6 +49,8 @@ services:
       - /Users/concm/prod_workspace/MineruPopo/runtime:/app/runtime
       # Optional: place downloaded model weights under /Users/concm/prod_workspace/MineruPopo/models
       - /Users/concm/prod_workspace/MineruPopo/models:/app/models:ro
+      # Task 313: inject progress-aware adapter code
+      - ./luceon_service:/app/luceon_service
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).read()"]
       interval: 30s

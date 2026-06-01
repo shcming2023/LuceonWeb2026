@@ -599,6 +599,96 @@ async function runTests() {
     assert.equal(mockDb.calls.length, 0);
   }
 
+  // Case 12: Bounded CleanService patch applies successfully over pre-existing metadata with legacy long AI fields (Fix metadata apply scope regression)
+  {
+    console.log('  [12] bounded CleanService patch applies successfully over legacy long AI fields without misclassification...');
+
+    const legacyExistingTask = {
+      id: targetTaskId,
+      metadata: {
+        rawPreview: 'A extremely long legacy AI preview string that is far greater than 1000 characters. ' + 'a'.repeat(2000),
+        aiClassificationV02: {
+          evidence: Array(50).fill({ note: 'legacy evidence block data that would normally fail arrays limit' }),
+          unauthorized_legacy_nodes: [{ id: 1 }, { id: 2 }]
+        },
+        cleanServiceJobs: {},
+      }
+    };
+
+    const legacyExistingMaterial = {
+      id: targetMaterialId,
+      metadata: {
+        rawPreview: 'A extremely long legacy material preview string. ' + 'b'.repeat(2000),
+        cleanMaterials: {},
+      }
+    };
+
+    const plan = buildCleanMetadataPersistencePlan({
+      candidate: defaultCandidate,
+      existingTask: legacyExistingTask,
+      existingMaterial: legacyExistingMaterial,
+      now: customNow,
+    });
+
+    // Shallow-merge existing metadata (mimic the real apply-executor flow)
+    plan.taskPatch.metadata = {
+      ...legacyExistingTask.metadata,
+      ...plan.taskPatch.metadata,
+    };
+    plan.materialPatch.metadata = {
+      ...legacyExistingMaterial.metadata,
+      ...plan.materialPatch.metadata,
+    };
+
+    const mockDb = createMockDbClient();
+
+    const res = await applyCleanMetadataPersistencePlan({
+      plan,
+      taskId: targetTaskId,
+      materialId: targetMaterialId,
+      dbClient: mockDb,
+      existingTask: legacyExistingTask,
+      existingMaterial: legacyExistingMaterial,
+      allowRealApply: true,
+    });
+
+    assert.equal(res.ok, true, `Expected success, got: ${res.reason}`);
+    assert.equal(res.classification, 'APPLIED_SINGLE_SAMPLE_METADATA');
+  }
+
+  // Case 13: Bounded CleanService patch with nested illegal full content fields in cleanservice jobs is still blocked
+  {
+    console.log('  [13] CleanService patch containing nested illegal full content is still strictly blocked...');
+    const plan = buildCleanMetadataPersistencePlan({
+      candidate: defaultCandidate,
+      existingTask: defaultExistingTask,
+      existingMaterial: defaultExistingMaterial,
+      now: customNow,
+    });
+
+    // Injects illegal block structure inside our newly written cleanservice job metadata
+    plan.taskPatch.metadata.cleanServiceJobs['toc-rebuild'].flooded_content = {
+      bucket: 'eduassets-clean',
+      object: 'flooded_content.json',
+      blocks: Array(30).fill({ text: 'unauthorized nested full content' }),
+    };
+
+    const mockDb = createMockDbClient();
+
+    const res = await applyCleanMetadataPersistencePlan({
+      plan,
+      taskId: targetTaskId,
+      materialId: targetMaterialId,
+      dbClient: mockDb,
+      existingTask: defaultExistingTask,
+      existingMaterial: defaultExistingMaterial,
+      allowRealApply: true,
+    });
+
+    assert.equal(res.ok, false);
+    assert.equal(res.classification, 'BLOCKED_FULL_CONTENT_IN_METADATA');
+  }
+
   console.log('All apply-executor smoke cases passed successfully!');
 }
 

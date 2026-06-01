@@ -224,7 +224,17 @@ export async function applyCleanMetadataPersistencePlan({
   }
 
   // 7. Full Content Check: Block embedded parsed artifact data bodies
-  if (hasFullContentInMetadata(plan.taskPatch) || hasFullContentInMetadata(plan.materialPatch)) {
+  // We only inspect the newly written CleanService subtree changes to prevent unrelated historical
+  // legacy metadata fields (such as rawPreview, aiClassificationV02.evidence etc.) from causing false blocks.
+  const taskCleanSubtree = plan.taskPatch?.metadata?.cleanServiceJobs?.[serviceName] || plan.taskPatch?.metadata?.cleanServiceJobs;
+  const materialCleanSubtree = plan.materialPatch?.metadata?.cleanMaterials?.[serviceName] || plan.materialPatch?.metadata?.cleanMaterials;
+
+  // Re-structure the target so hasFullContentInMetadata inspects the subtree under its expected key hierarchy,
+  // falling back to inspecting the raw patch if no cleanservice metadata properties are present.
+  const inspectTaskTarget = taskCleanSubtree ? { metadata: { cleanServiceJobs: { [serviceName]: taskCleanSubtree } } } : plan.taskPatch;
+  const inspectMaterialTarget = materialCleanSubtree ? { metadata: { cleanMaterials: { [serviceName]: materialCleanSubtree } } } : plan.materialPatch;
+
+  if (hasFullContentInMetadata(inspectTaskTarget) || hasFullContentInMetadata(inspectMaterialTarget)) {
     return {
       ok: false,
       applied: false,
