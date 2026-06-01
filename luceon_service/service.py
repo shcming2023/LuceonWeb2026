@@ -21,6 +21,14 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 WORK_ROOT = Path(os.environ.get("POPO_WORK_ROOT", REPO_ROOT / "runtime/work")).resolve()
 DEFAULT_SOURCE_BUCKET = os.environ.get("POPO_SOURCE_BUCKET", "eduassets")
 DEFAULT_CLEAN_BUCKET = os.environ.get("POPO_CLEAN_BUCKET", "eduassets-clean")
+TOC_VIEW_SUPPLEMENT_TYPES = {
+    "page_number",
+    "header",
+    "footer",
+    "page_footnote",
+    "page_title",
+    "aside_text",
+}
 
 
 class AdapterError(RuntimeError):
@@ -544,6 +552,45 @@ def _render_tree_markdown(tree: dict[str, Any]) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
+def _render_tree_preview(tree: dict[str, Any]) -> str:
+    lines: list[str] = []
+
+    def visit(node: dict[str, Any], depth: int) -> None:
+        indent = " " * (depth * 4)
+        title = str(node.get("title") or "")
+        content = str(node.get("content") or "")
+        data_preview = content[:30] + ("..." if len(content) > 30 else "")
+        lines.append(f"{indent}{title}|{data_preview}")
+        for child in node.get("children") or []:
+            if isinstance(child, dict):
+                visit(child, depth + 1)
+
+    visit(tree, 0)
+    return "\n".join(lines) + "\n"
+
+
+def _filter_toc_view_tree(tree: dict[str, Any]) -> dict[str, Any]:
+    def should_drop(node: dict[str, Any]) -> bool:
+        node_type = str(node.get("type") or "").strip()
+        return node_type in TOC_VIEW_SUPPLEMENT_TYPES
+
+    def visit(node: dict[str, Any]) -> dict[str, Any] | None:
+        if should_drop(node):
+            return None
+        filtered = {key: value for key, value in node.items() if key != "children"}
+        children = []
+        for child in node.get("children") or []:
+            if not isinstance(child, dict):
+                continue
+            filtered_child = visit(child)
+            if filtered_child is not None:
+                children.append(filtered_child)
+        filtered["children"] = children
+        return filtered
+
+    return visit(tree) or {"type": "root", "title": "", "metadata": "", "content": "", "level": 0, "location": [], "block_ids": [], "children": []}
+
+
 def _flatten_tree(tree: dict[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
 
@@ -643,12 +690,12 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
     ], REPO_ROOT, job_state, "running_build_tree")
 
     tree_path = outputs / "build_tree/mineru" / f"{material_id}.json"
-    preview_path = outputs / "build_tree_txt/mineru" / f"{material_id}.txt"
     tree = json.loads(tree_path.read_text(encoding="utf-8"))
-    readable = preview_path.read_text(encoding="utf-8")
-    rebuilt_markdown = _render_tree_markdown(tree)
-    flooded_content = _flatten_tree(tree)
-    _assert_usable_outputs(tree, readable, rebuilt_markdown, flooded_content)
+    toc_view_tree = _filter_toc_view_tree(tree)
+    readable = _render_tree_preview(toc_view_tree)
+    rebuilt_markdown = _render_tree_markdown(toc_view_tree)
+    flooded_content = _flatten_tree(toc_view_tree)
+    _assert_usable_outputs(toc_view_tree, readable, rebuilt_markdown, flooded_content)
     unresolved: list[dict[str, Any]] = []
     metrics = {
         "engine": "mineru-popo",
@@ -676,7 +723,7 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
 
     artifacts = {
         "flooded_content": _put_json(client, sink_bucket, f"{sink_prefix}flooded_content.json", flooded_content),
-        "logic_tree": _put_json(client, sink_bucket, f"{sink_prefix}logic_tree.json", tree),
+        "logic_tree": _put_json(client, sink_bucket, f"{sink_prefix}logic_tree.json", toc_view_tree),
         "readable_tree": _put_text(client, sink_bucket, f"{sink_prefix}readable_tree.md", readable, "text/markdown"),
         "skeleton": _put_json(client, sink_bucket, f"{sink_prefix}skeleton.json", {"source": "mineru-popo", "normalized_input": f"outputs/label_normalization/mineru/{material_id}.json"}),
         "unresolved_anchors": _put_json(client, sink_bucket, f"{sink_prefix}unresolved_anchors.json", unresolved),
