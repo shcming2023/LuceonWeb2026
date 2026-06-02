@@ -7,7 +7,7 @@ Branch: `codex/popo-native-pipeline-restore`
 
 ## Result
 
-Status: `IMPLEMENTED_READY_FOR_PRODUCTION_VALIDATION`
+Status: `PRODUCTION_ENTRY_VALIDATED`
 
 Luceon adapter full-background execution now returns to the official MinerU-Popo inference entrypoint.
 
@@ -46,3 +46,37 @@ rg -n "chunk_checkpoint_runner|POPO_FULL_BACKGROUND_CHUNK_SIZE|running_inference
 ## Next Validation
 
 Rebuild `mineru-popo` in production and submit a full-background job. Expected: active process is official `post_processing/run_inference.py`, not `luceon_service/chunk_checkpoint_runner.py`.
+
+## Production Validation
+
+Performed at: 2026-06-02T13:43-13:46+0800
+
+Evidence:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.popo.yml up -d --build mineru-popo
+curl http://127.0.0.1:18082/health
+docker exec mineru-popo sh -lc 'test ! -f /app/luceon_service/chunk_checkpoint_runner.py'
+docker top mineru-popo -eo pid,ppid,etime,stat,pcpu,pmem,args
+curl http://127.0.0.1:18083/health
+```
+
+Observed:
+
+- `mineru-popo` rebuilt and restarted healthy.
+- Container-mounted adapter no longer contains `luceon_service/chunk_checkpoint_runner.py`.
+- Container-mounted adapter references official `/app/post_processing/run_inference.py`.
+- Same large-PDF v6 recoverable job entered `running_inference` with `normalized_pages=891`, `inference_chunks_total=264`, and `active_chunk=contd_chunk_0000.json`.
+- Active process was official:
+
+```text
+/usr/local/bin/python3 /app/post_processing/run_inference.py --input-dir .../outputs/label_normalization/mineru --model-path /app/models/MinerU-Popo --output-dir .../outputs/inference/mineru --raw-output-root .../outputs/inference_raw --limit 1 --resume
+```
+
+- Host MPS worker received the generation request (`active_generations=1`) through `popo_generate`.
+- Luceon canceled the job after entry verification to avoid a long interactive large-PDF run.
+- After cancel, the Popo subprocess exited. The host MPS worker still reported `active_generations=1`; Luceon restarted only the `popo-mps-worker` tmux session and verified recovery to `active_generations=0`.
+
+Conclusion:
+
+The production invocation boundary is corrected: full-background now enters the official MinerU-Popo `run_inference.py --resume` path. This validation does not prove full 891-page completion on Home Mac mini MPS; it only validates deployment and invocation shape.
