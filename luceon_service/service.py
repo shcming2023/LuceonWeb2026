@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -21,6 +22,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 WORK_ROOT = Path(os.environ.get("POPO_WORK_ROOT", REPO_ROOT / "runtime/work")).resolve()
 DEFAULT_SOURCE_BUCKET = os.environ.get("POPO_SOURCE_BUCKET", "eduassets")
 DEFAULT_CLEAN_BUCKET = os.environ.get("POPO_CLEAN_BUCKET", "eduassets-clean")
+DEFAULT_INVOCATION_MODE = os.environ.get("POPO_TOC_REBUILD_DEFAULT_MODE", "bounded")
+BOUNDED_CHUNK_LIMIT = int(os.environ.get("POPO_BOUNDED_CHUNK_LIMIT", 12))
+BOUNDED_PAGE_LIMIT = int(os.environ.get("POPO_BOUNDED_PAGE_LIMIT", 24))
+CHUNK_SECONDS_ESTIMATE = float(os.environ.get("POPO_MPS_CHUNK_SECONDS_ESTIMATE", 780))
 TOC_VIEW_SUPPLEMENT_TYPES = {
     "page_number",
     "header",
@@ -61,6 +66,196 @@ class JobStore:
 MAX_CONCURRENT_JOBS = int(os.environ.get("POPO_MAX_CONCURRENT_JOBS", 1))
 JOB_TIMEOUT_SECONDS = int(os.environ.get("POPO_JOB_TIMEOUT_SECONDS", 600))
 KILL_GRACE_SECONDS = int(os.environ.get("POPO_KILL_GRACE_SECONDS", 10))
+
+
+def _page_sort_key(value: Any) -> tuple[int, str]:
+    text = str(value)
+    try:
+        return (int(text), text)
+    except ValueError:
+        return (10**9, text)
+
+
+def _coerce_pages(normalized_payload: Any) -> dict[str, list[dict[str, Any]]]:
+    if isinstance(normalized_payload, dict) and isinstance(normalized_payload.get("pages"), dict):
+        source = normalized_payload["pages"]
+    elif isinstance(normalized_payload, dict):
+        source = normalized_payload
+    else:
+        return {}
+
+    pages: dict[str, list[dict[str, Any]]] = {}
+    for page, blocks in source.items():
+        if not isinstance(blocks, list):
+            continue
+        normalized_blocks = [block for block in blocks if isinstance(block, dict)]
+        pages[str(page)] = normalized_blocks
+    return pages
+
+
+def _block_text(block: dict[str, Any]) -> str:
+    content = block.get("content")
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        return " ".join(str(item).strip() for item in content if str(item).strip())
+    if isinstance(content, dict):
+        for key in ("text", "content", "caption", "html"):
+            value = content.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return str(block.get("text") or "").strip()
+
+
+def _estimate_items(pages: dict[str, list[dict[str, Any]]]) -> dict[str, list[dict[str, Any]]]:
+    items = {"contd": [], "title": [], "image": []}
+    for page_key, blocks in pages.items():
+        try:
+            page_num = int(page_key)
+        except ValueError:
+            continue
+        for block in blocks:
+            block_type = str(block.get("type") or block.get("popo_type") or "text")
+            if block_type in TOC_VIEW_SUPPLEMENT_TYPES:
+                continue
+            if not _block_text(block):
+                continue
+            item = {"page": page_num}
+            # MinerU-Popo runs three families. This preflight is intentionally
+            # conservative: all meaningful blocks can affect each family.
+            items["contd"].append(item)
+            items["title"].append(item)
+            items["image"].append(item)
+    return items
+
+
+def _adaptive_chunk_ranges(items: list[dict[str, Any]], chunk_size: int, overlap: int = 1) -> list[list[int]]:
+    chunk_size = max(1, int(chunk_size))
+    if not items:
+        return []
+
+    sorted_items = sorted(items, key=lambda item: item["page"])
+    pages = [item["page"] for item in sorted_items]
+    unique_pages = sorted(set(pages))
+    boundaries = []
+    current_min = unique_pages[0]
+
+    while current_min < unique_pages[-1]:
+        target = current_min + chunk_size
+        search_range = range(max(unique_pages[0], target - 5), min(unique_pages[-1], target + 5) + 1)
+        freq = {}
+        for page in search_range:
+            if page in unique_pages:
+                freq[page] = pages.count(page)
+        if freq:
+            boundary = max(freq, key=freq.get)
+        else:
+            boundary = min((page for page in unique_pages if page > target), default=unique_pages[-1])
+        boundaries.append(boundary)
+        current_min = boundary
+
+    ranges = []
+    prev_boundary = unique_pages[0]
+    for boundary in boundaries:
+        chunk_items = [
+            item for item in sorted_items
+            if prev_boundary - overlap <= item["page"] <= boundary + overlap
+        ]
+        if chunk_items:
+            start = prev_boundary if prev_boundary == unique_pages[0] else prev_boundary - overlap
+            end = min(unique_pages[-1], boundary + overlap)
+            ranges.append([start, end])
+        prev_boundary = boundary
+
+    last_chunk = [
+        item for item in sorted_items
+        if prev_boundary - overlap <= item["page"] <= unique_pages[-1]
+    ]
+    if last_chunk:
+        start = prev_boundary if prev_boundary == unique_pages[0] else prev_boundary - overlap
+        if unique_pages[-1] - start > 2:
+            ranges.append([start, unique_pages[-1]])
+
+    return ranges
+
+
+def _estimate_ranges_from_pages(page_numbers: list[int], chunk_size: int, overlap: int = 1) -> list[list[int]]:
+    if not page_numbers:
+        return []
+    pages = sorted(set(page_numbers))
+    ranges = []
+    start_index = 0
+    while start_index < len(pages):
+        end_index = min(len(pages) - 1, start_index + max(1, chunk_size) - 1)
+        start_page = pages[start_index]
+        end_page = pages[end_index]
+        if ranges:
+            start_page = max(pages[0], start_page - overlap)
+        if end_index < len(pages) - 1:
+            end_page = min(pages[-1], end_page + overlap)
+        ranges.append([start_page, end_page])
+        start_index += max(1, chunk_size)
+    return ranges
+
+
+def _estimate_toc_rebuild(normalized_payload: Any, chunk_size: int | None = None) -> dict[str, Any]:
+    chunk_size = int(chunk_size or os.environ.get("POPO_MPS_CHUNK_SIZE", 10))
+    pages = _coerce_pages(normalized_payload)
+    ordered_page_keys = sorted(pages.keys(), key=_page_sort_key)
+    normalized_blocks = sum(len(blocks) for blocks in pages.values())
+    items_by_task = _estimate_items(pages)
+    ranges_by_task = {}
+    for task, items in items_by_task.items():
+        page_numbers = [int(item["page"]) for item in items if isinstance(item.get("page"), int)]
+        ranges_by_task[task] = _estimate_ranges_from_pages(page_numbers, chunk_size)
+    chunks_by_task = {task: len(ranges) for task, ranges in ranges_by_task.items()}
+    total_chunks = sum(chunks_by_task.values())
+    return {
+        "schema": "luceon-popo-preflight/v1",
+        "chunk_size": chunk_size,
+        "normalized_pages": len(ordered_page_keys),
+        "normalized_blocks": normalized_blocks,
+        "page_start": ordered_page_keys[0] if ordered_page_keys else None,
+        "page_end": ordered_page_keys[-1] if ordered_page_keys else None,
+        "chunks_by_task": chunks_by_task,
+        "ranges_by_task_sample": {task: ranges[:3] for task, ranges in ranges_by_task.items()},
+        "inference_chunks_total": total_chunks,
+        "estimated_seconds": int(math.ceil(total_chunks * CHUNK_SECONDS_ESTIMATE)),
+        "risk_class": "large-mps" if total_chunks > BOUNDED_CHUNK_LIMIT else "interactive",
+    }
+
+
+def _slice_normalized_payload(normalized_payload: Any, max_pages: int) -> Any:
+    pages = _coerce_pages(normalized_payload)
+    selected_keys = sorted(pages.keys(), key=_page_sort_key)[:max(1, int(max_pages))]
+    selected_pages = {key: pages[key] for key in selected_keys}
+    if isinstance(normalized_payload, dict) and isinstance(normalized_payload.get("pages"), dict):
+        return {**normalized_payload, "pages": selected_pages}
+    return selected_pages
+
+
+def _build_bounded_payload(normalized_payload: Any, chunk_size: int) -> tuple[Any, dict[str, Any]]:
+    original_estimate = _estimate_toc_rebuild(normalized_payload, chunk_size)
+    max_pages = min(
+        max(1, BOUNDED_PAGE_LIMIT),
+        max(1, int(original_estimate["normalized_pages"] or 1)),
+    )
+    bounded_payload = _slice_normalized_payload(normalized_payload, max_pages)
+    bounded_estimate = _estimate_toc_rebuild(bounded_payload, chunk_size)
+    while (
+        max_pages > 1
+        and bounded_estimate["inference_chunks_total"] > BOUNDED_CHUNK_LIMIT
+    ):
+        max_pages = max(1, max_pages - max(1, max_pages // 4))
+        bounded_payload = _slice_normalized_payload(normalized_payload, max_pages)
+        bounded_estimate = _estimate_toc_rebuild(bounded_payload, chunk_size)
+    return bounded_payload, {
+        "mode": "bounded",
+        "bounded_page_limit": max_pages,
+        "bounded_chunk_limit": BOUNDED_CHUNK_LIMIT,
+        "original": original_estimate,
+        "selected": bounded_estimate,
+    }
 
 class JobManager:
     def __init__(self, job_store: JobStore):
@@ -165,7 +360,6 @@ class JobManager:
         return res
 
 def _get_live_progress(job_state: dict[str, Any]) -> dict[str, Any]:
-    import math
     import re
     progress = {
         "current_step": job_state.get("current_step", "queued"),
@@ -182,6 +376,8 @@ def _get_live_progress(job_state: dict[str, Any]) -> dict[str, Any]:
         "last_completed_chunk": None,
         "last_error": None,
         "chunks_by_task": {},
+        "preflight": job_state.get("preflight"),
+        "invocation": job_state.get("invocation"),
     }
 
     payload = job_state.get("payload", {})
@@ -201,9 +397,12 @@ def _get_live_progress(job_state: dict[str, Any]) -> dict[str, Any]:
             for f in norm_dir.glob("*.json"):
                 try:
                     data = json.loads(f.read_text())
-                    progress["normalized_pages"] = len(data)
-                    progress["normalized_blocks"] = sum(len(page) if isinstance(page, list) else 0 for page in data)
-                    progress["inference_chunks_total"] = math.ceil(len(data) / chunk_size)
+                    estimate = _estimate_toc_rebuild(data, chunk_size)
+                    progress["normalized_pages"] = estimate["normalized_pages"]
+                    progress["normalized_blocks"] = estimate["normalized_blocks"]
+                    progress["inference_chunks_total"] = estimate["inference_chunks_total"]
+                    if not progress.get("preflight"):
+                        progress["preflight"] = {"original": estimate}
                 except Exception:
                     pass
                 break
@@ -230,6 +429,7 @@ def _get_live_progress(job_state: dict[str, Any]) -> dict[str, Any]:
 
         completed_chunks = []
         chunks_by_task = {}
+        completed_records = []
 
         if target_dir.exists():
             for f in target_dir.glob("**/*_chunk_*.json"):
@@ -237,9 +437,17 @@ def _get_live_progress(job_state: dict[str, Any]) -> dict[str, Any]:
                     data = json.loads(f.read_text())
                     if isinstance(data, dict):
                         task = str(data.get("task") or "unknown")
+                        chunk_index = data.get("chunk_index")
                         # Register completed chunk filename and task family count
                         completed_chunks.append(f.name)
                         chunks_by_task[task] = chunks_by_task.get(task, 0) + 1
+                        completed_records.append({
+                            "file": f.name,
+                            "task": task,
+                            "chunk_index": chunk_index if isinstance(chunk_index, int) else None,
+                            "range": data.get("range"),
+                            "pages": data.get("pages"),
+                        })
 
                         # Validate blocks from internal 'parsed' page list
                         parsed_pages = data.get("parsed") or []
@@ -254,14 +462,19 @@ def _get_live_progress(job_state: dict[str, Any]) -> dict[str, Any]:
         progress["inference_chunks_completed"] = len(completed_chunks)
         progress["chunks_by_task"] = chunks_by_task
 
-        if completed_chunks:
-            progress["last_completed_chunk"] = completed_chunks[-1]
+        completed_records = sorted(
+            completed_records,
+            key=lambda item: (str(item.get("task") or ""), int(item.get("chunk_index") or 0), str(item.get("file") or "")),
+        )
+        if completed_records:
+            last_record = completed_records[-1]
+            progress["last_completed_chunk"] = last_record["file"]
             # Safely capture next chunk with same family prefix and correct padding length
-            m = re.match(r'^(.+)_chunk_(\d+)\.json$', completed_chunks[-1])
+            m = re.match(r'^(.+)_chunk_(\d+)\.json$', last_record["file"])
             if m:
                 prefix = m.group(1)
                 idx_str = m.group(2)
-                next_idx = int(idx_str) + 1
+                next_idx = int(last_record.get("chunk_index") if last_record.get("chunk_index") is not None else idx_str) + 1
                 progress["active_chunk"] = f"{prefix}_chunk_{next_idx:0{len(idx_str)}d}.json"
             else:
                 progress["active_chunk"] = "title_chunk_0000.json"
@@ -643,6 +856,14 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
     material_id = str(payload.get("material_id") or "")
     asset_version = str(payload.get("asset_version") or "v1")
     service_name = payload.get("service_name") or "toc-rebuild"
+    options = payload.get("options") if isinstance(payload.get("options"), dict) else {}
+    requested_mode = str(
+        options.get("toc_rebuild_mode")
+        or options.get("invocation_mode")
+        or options.get("mode")
+        or DEFAULT_INVOCATION_MODE
+    ).strip().lower()
+    invocation_mode = "full" if requested_mode in {"full", "recoverable-full", "background-full"} else "bounded"
     sink = payload.get("sink") or {}
     sink_bucket = sink.get("bucket") or DEFAULT_CLEAN_BUCKET
     sink_prefix = sink.get("prefix") or f"{service_name}/{material_id}/{asset_version}/"
@@ -655,7 +876,8 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
 
     client = _s3_client(storage_endpoint, storage_use_ssl)
     work_dir = WORK_ROOT / job_id
-    if work_dir.exists():
+    recoverable_full = invocation_mode == "full"
+    if work_dir.exists() and not recoverable_full:
         shutil.rmtree(work_dir)
     (work_dir / "post-process/mineru" / material_id / "vlm").mkdir(parents=True, exist_ok=True)
     (work_dir / "eval_pdf_dir").mkdir(parents=True, exist_ok=True)
@@ -672,14 +894,56 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
         "--output-dir", str(outputs / "label_normalization"),
         "--pdf-dir", str(work_dir / "eval_pdf_dir"),
     ], REPO_ROOT, job_state, "running_normalization")
-    _run_with_state([
+
+    chunk_size = int(os.environ.get("POPO_MPS_CHUNK_SIZE", 10))
+    normalized_path = outputs / "label_normalization/mineru" / f"{material_id}.json"
+    normalized_payload = json.loads(normalized_path.read_text(encoding="utf-8"))
+    original_preflight = _estimate_toc_rebuild(normalized_payload, chunk_size)
+    selected_input_dir = outputs / "label_normalization/mineru"
+    selected_preflight = original_preflight
+    invocation = {
+        "mode": invocation_mode,
+        "requested_mode": requested_mode or DEFAULT_INVOCATION_MODE,
+        "recoverable": recoverable_full,
+        "bounded": invocation_mode == "bounded",
+        "resume": recoverable_full,
+    }
+
+    if invocation_mode == "bounded":
+        bounded_payload, bounded_plan = _build_bounded_payload(normalized_payload, chunk_size)
+        selected_input_dir = outputs / "label_normalization_bounded/mineru"
+        selected_input_dir.mkdir(parents=True, exist_ok=True)
+        (selected_input_dir / f"{material_id}.json").write_text(
+            json.dumps(bounded_payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        selected_preflight = bounded_plan["selected"]
+        invocation.update({
+            "bounded_page_limit": bounded_plan["bounded_page_limit"],
+            "bounded_chunk_limit": bounded_plan["bounded_chunk_limit"],
+            "bounded_reason": "interactive toc-rebuild defaults to bounded Home Mac mini MPS profile",
+        })
+
+    job_state["preflight"] = {
+        "original": original_preflight,
+        "selected": selected_preflight,
+    }
+    job_state["invocation"] = invocation
+
+    inference_args = [
         sys.executable,
         str(REPO_ROOT / "post_processing/run_inference.py"),
-        "--input-dir", str(outputs / "label_normalization/mineru"),
+        "--input-dir", str(selected_input_dir),
         "--model-path", model_path,
         "--output-dir", str(outputs / "inference/mineru"),
         "--raw-output-root", str(outputs / "inference_raw"),
         "--limit", "1",
+    ]
+    if recoverable_full:
+        inference_args.append("--resume")
+
+    _run_with_state([
+        *inference_args
     ], REPO_ROOT, job_state, "running_inference")
     _run_with_state([
         sys.executable,
@@ -700,6 +964,11 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
     metrics = {
         "engine": "mineru-popo",
         "model_path": model_path,
+        "invocation": invocation,
+        "preflight": {
+            "original": original_preflight,
+            "selected": selected_preflight,
+        },
         "tokens": {"total": max(1, len(content_bytes) // 4)},
         "input_bytes": {"content_list_v2": len(content_bytes), "pdf": len(pdf_bytes)},
         "unresolved_anchor_count": 0,
@@ -710,6 +979,11 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
         "service": {"name": service_name, "version": "mineru-popo-adapter.v0.1", "protocol_version": "v1", "engine": "mineru-popo"},
         "asset": {"material_id": material_id, "asset_version": asset_version},
         "job": {"job_id": job_id, "parse_task_id": payload.get("parse_task_id")},
+        "invocation": invocation,
+        "preflight": {
+            "original": original_preflight,
+            "selected": selected_preflight,
+        },
         "inputs": [
             {
                 "bucket": provenance_input_ref.bucket,
@@ -746,6 +1020,11 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
         "provenance": provenance,
         "stats": {
             "engine": "mineru-popo",
+            "invocation": invocation,
+            "preflight": {
+                "original": original_preflight,
+                "selected": selected_preflight,
+            },
             "tokens": metrics["tokens"],
             "cost_cny_actual": 0,
             "unresolved_anchor_count": 0,
