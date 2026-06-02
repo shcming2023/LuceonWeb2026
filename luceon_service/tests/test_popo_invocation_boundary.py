@@ -180,10 +180,78 @@ def test_live_progress_preserves_mps_worker_release_evidence():
     assert progress["mps_worker_release"]["active_generations"] == 1
 
 
+def test_full_background_progress_aware_wait_ignores_whole_job_timeout():
+    old_job_timeout = service.JOB_TIMEOUT_SECONDS
+    old_poll = service.FULL_BACKGROUND_POLL_SECONDS
+    old_single = service.FULL_BACKGROUND_SINGLE_GENERATION_TIMEOUT_SECONDS
+    old_health = service._host_mps_worker_health
+    try:
+        service.JOB_TIMEOUT_SECONDS = 1
+        service.FULL_BACKGROUND_POLL_SECONDS = 0.1
+        service.FULL_BACKGROUND_SINGLE_GENERATION_TIMEOUT_SECONDS = 60
+        service._host_mps_worker_health = lambda: {
+            "ok": True,
+            "active_generations": 1,
+            "generation_count": 1,
+        }
+        job_state = {
+            "payload": {"job_id": "progress-aware-sleep", "material_id": "m1"},
+            "start_time": time.time(),
+            "canceled": False,
+            "invocation": {
+                "mode": "full-background",
+                "recoverable": True,
+            },
+        }
+        stdout = service._run_with_state(
+            [sys.executable, "-c", "import time; time.sleep(1.5); print('done')"],
+            Path.cwd(),
+            job_state,
+            "running_inference",
+        )
+    finally:
+        service.JOB_TIMEOUT_SECONDS = old_job_timeout
+        service.FULL_BACKGROUND_POLL_SECONDS = old_poll
+        service.FULL_BACKGROUND_SINGLE_GENERATION_TIMEOUT_SECONDS = old_single
+        service._host_mps_worker_health = old_health
+
+    assert "done" in stdout
+    assert job_state["long_run_policy"]["mode"] == "progress-aware"
+
+
+def test_bounded_path_still_uses_whole_job_timeout():
+    old_job_timeout = service.JOB_TIMEOUT_SECONDS
+    try:
+        service.JOB_TIMEOUT_SECONDS = 1
+        job_state = {
+            "payload": {"job_id": "bounded-sleep", "material_id": "m1"},
+            "start_time": time.time(),
+            "canceled": False,
+            "invocation": {
+                "mode": "bounded-preview",
+                "recoverable": False,
+            },
+        }
+        try:
+            service._run_with_state(
+                [sys.executable, "-c", "import time; time.sleep(2)"],
+                Path.cwd(),
+                job_state,
+                "running_inference",
+            )
+            assert False, "bounded-preview should have timed out"
+        except service.AdapterError as exc:
+            assert exc.code == "timeout"
+    finally:
+        service.JOB_TIMEOUT_SECONDS = old_job_timeout
+
+
 if __name__ == "__main__":
     test_wrapped_normalized_label_counts_pages_and_chunks()
     test_bounded_payload_keeps_large_original_estimate_but_limits_selected_work()
     test_live_progress_reads_real_pages_and_raw_chunk_metadata()
     test_release_host_mps_worker_posts_force_release_payload()
     test_live_progress_preserves_mps_worker_release_evidence()
+    test_full_background_progress_aware_wait_ignores_whole_job_timeout()
+    test_bounded_path_still_uses_whole_job_timeout()
     print("PASS popo invocation boundary tests")

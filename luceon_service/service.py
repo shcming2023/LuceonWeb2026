@@ -13,6 +13,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -68,6 +69,10 @@ class JobStore:
 MAX_CONCURRENT_JOBS = int(os.environ.get("POPO_MAX_CONCURRENT_JOBS", 1))
 JOB_TIMEOUT_SECONDS = int(os.environ.get("POPO_JOB_TIMEOUT_SECONDS", 600))
 KILL_GRACE_SECONDS = int(os.environ.get("POPO_KILL_GRACE_SECONDS", 10))
+FULL_BACKGROUND_STALL_TIMEOUT_SECONDS = int(os.environ.get("POPO_FULL_BACKGROUND_STALL_TIMEOUT_SECONDS", 3600))
+FULL_BACKGROUND_POLL_SECONDS = float(os.environ.get("POPO_FULL_BACKGROUND_POLL_SECONDS", 30))
+FULL_BACKGROUND_SOFT_CHECKPOINT_SECONDS = int(os.environ.get("POPO_FULL_BACKGROUND_SOFT_CHECKPOINT_SECONDS", 18000))
+FULL_BACKGROUND_SINGLE_GENERATION_TIMEOUT_SECONDS = int(os.environ.get("POPO_FULL_BACKGROUND_SINGLE_GENERATION_TIMEOUT_SECONDS", 18000))
 
 
 def _page_sort_key(value: Any) -> tuple[int, str]:
@@ -414,6 +419,7 @@ def _get_live_progress(job_state: dict[str, Any]) -> dict[str, Any]:
         "invocation": job_state.get("invocation"),
         "chunk_checkpoint": job_state.get("chunk_checkpoint"),
         "mps_worker_release": job_state.get("mps_worker_release"),
+        "long_run_policy": job_state.get("long_run_policy"),
     }
 
     payload = job_state.get("payload", {})
@@ -777,6 +783,9 @@ def _run_with_state(args: list[str], cwd: Path, job_state: dict[str, Any], step_
     job_state["process"] = process
     job_state["pgid"] = os.getpgid(process.pid)
 
+    if _should_use_progress_aware_wait(job_state, step_name, timeout_seconds):
+        return _wait_with_progress_aware_timeout(process, job_state, step_name)
+
     try:
         stdout, _ = process.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -795,6 +804,149 @@ def _run_with_state(args: list[str], cwd: Path, job_state: dict[str, Any], step_
         raise AdapterError("popo-command-failed", f"{' '.join(args)} failed:\n{stdout[-4000:]}")
 
     return stdout or ""
+
+
+def _should_use_progress_aware_wait(job_state: dict[str, Any], step_name: str, timeout_seconds: float | None) -> bool:
+    invocation = job_state.get("invocation") if isinstance(job_state.get("invocation"), dict) else {}
+    return (
+        timeout_seconds is None
+        and step_name == "running_inference"
+        and invocation.get("mode") == "full-background"
+        and invocation.get("recoverable") is True
+    )
+
+
+def _progress_signature(progress: dict[str, Any], mps_health: dict[str, Any] | None = None) -> tuple[Any, ...]:
+    health = mps_health or {}
+    return (
+        progress.get("inference_chunks_completed"),
+        progress.get("inference_blocks_validated"),
+        progress.get("last_completed_chunk"),
+        progress.get("active_chunk"),
+        json.dumps(progress.get("chunks_by_task") or {}, sort_keys=True),
+        health.get("generation_count"),
+    )
+
+
+def _host_mps_worker_health() -> dict[str, Any]:
+    url = os.environ.get("POPO_GENERATE_URL", "").rstrip("/")
+    if not url:
+        return {"ok": False, "status": "not-configured"}
+    try:
+        with urllib.request.urlopen(f"{url}/health", timeout=5) as response:
+            body = response.read().decode("utf-8")
+            data = json.loads(body)
+            if isinstance(data, dict):
+                return data
+            return {"ok": False, "status": "invalid-response"}
+    except Exception as exc:
+        return {"ok": False, "status": "request-failed", "error": str(exc)}
+
+
+def _wait_with_progress_aware_timeout(process: subprocess.Popen, job_state: dict[str, Any], step_name: str) -> str:
+    stdout_lines: deque[str] = deque(maxlen=500)
+
+    def read_stdout() -> None:
+        if process.stdout is None:
+            return
+        for line in process.stdout:
+            stdout_lines.append(line)
+
+    reader = threading.Thread(target=read_stdout, daemon=True)
+    reader.start()
+
+    started_at = time.time()
+    last_progress_at = started_at
+    last_generation_started_at = None
+    soft_checkpoint_recorded = False
+    progress = _get_live_progress(job_state)
+    mps_health = _host_mps_worker_health()
+    last_signature = _progress_signature(progress, mps_health)
+    job_state["long_run_policy"] = {
+        "mode": "progress-aware",
+        "stall_timeout_seconds": FULL_BACKGROUND_STALL_TIMEOUT_SECONDS,
+        "poll_seconds": FULL_BACKGROUND_POLL_SECONDS,
+        "soft_checkpoint_seconds": FULL_BACKGROUND_SOFT_CHECKPOINT_SECONDS,
+        "single_generation_timeout_seconds": FULL_BACKGROUND_SINGLE_GENERATION_TIMEOUT_SECONDS,
+        "started_at": started_at,
+        "last_progress_at": last_progress_at,
+        "last_signature": list(last_signature),
+    }
+
+    while True:
+        if job_state.get("canceled"):
+            try:
+                os.killpg(job_state["pgid"], signal.SIGTERM)
+            except Exception:
+                pass
+            process.wait(timeout=KILL_GRACE_SECONDS)
+            raise AdapterError("canceled", "Job was canceled")
+
+        returncode = process.poll()
+        now = time.time()
+        progress = _get_live_progress(job_state)
+        mps_health = _host_mps_worker_health()
+        signature = _progress_signature(progress, mps_health)
+        active_generations = int(mps_health.get("active_generations") or 0)
+        generation_count = mps_health.get("generation_count")
+
+        if signature != last_signature:
+            last_signature = signature
+            last_progress_at = now
+            last_generation_started_at = now if active_generations > 0 else None
+        elif active_generations > 0 and last_generation_started_at is None:
+            last_generation_started_at = now
+        elif active_generations == 0:
+            last_generation_started_at = None
+
+        policy = job_state.setdefault("long_run_policy", {})
+        policy.update({
+            "mode": "progress-aware",
+            "stall_timeout_seconds": FULL_BACKGROUND_STALL_TIMEOUT_SECONDS,
+            "poll_seconds": FULL_BACKGROUND_POLL_SECONDS,
+            "soft_checkpoint_seconds": FULL_BACKGROUND_SOFT_CHECKPOINT_SECONDS,
+            "single_generation_timeout_seconds": FULL_BACKGROUND_SINGLE_GENERATION_TIMEOUT_SECONDS,
+            "last_progress_at": last_progress_at,
+            "seconds_since_progress": int(now - last_progress_at),
+            "last_signature": list(last_signature),
+            "mps_active_generations": active_generations,
+            "mps_generation_count": generation_count,
+        })
+
+        if not soft_checkpoint_recorded and now - started_at >= FULL_BACKGROUND_SOFT_CHECKPOINT_SECONDS:
+            policy["soft_checkpoint_reached"] = True
+            policy["soft_checkpoint_at"] = now
+            soft_checkpoint_recorded = True
+
+        single_generation_stalled = (
+            active_generations > 0
+            and last_generation_started_at is not None
+            and now - last_generation_started_at >= FULL_BACKGROUND_SINGLE_GENERATION_TIMEOUT_SECONDS
+        )
+        no_progress_stalled = active_generations == 0 and now - last_progress_at >= FULL_BACKGROUND_STALL_TIMEOUT_SECONDS
+
+        if single_generation_stalled or no_progress_stalled:
+            try:
+                os.killpg(job_state["pgid"], signal.SIGTERM)
+            except Exception:
+                pass
+            process.wait(timeout=KILL_GRACE_SECONDS)
+            job_state["stage_finished_at"] = time.time()
+            reason = "job-single-generation-stalled-timeout" if single_generation_stalled else "job-stalled-timeout"
+            job_state["mps_worker_release"] = _release_host_mps_worker(reason, force_terminate_if_busy=True)
+            raise AdapterError("timeout", f"{step_name} stalled without progress for {int(now - last_progress_at)}s")
+
+        if returncode is not None:
+            reader.join(timeout=2)
+            job_state["stage_finished_at"] = time.time()
+            stdout = "".join(stdout_lines)
+            if job_state.get("canceled"):
+                raise AdapterError("canceled", "Job was canceled")
+            if returncode != 0:
+                raise AdapterError("popo-command-failed", f"{step_name} failed:\n{stdout[-4000:]}")
+            return stdout
+
+        time.sleep(max(1.0, FULL_BACKGROUND_POLL_SECONDS))
 
 
 def _release_host_mps_worker(reason: str, force_terminate_if_busy: bool = False) -> dict[str, Any]:
