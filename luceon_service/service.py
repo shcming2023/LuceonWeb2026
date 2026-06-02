@@ -330,6 +330,9 @@ class JobManager:
             release = _release_host_mps_worker("job-canceled", force_terminate_if_busy=True)
             job_state["mps_worker_release"] = release
             self._persist_mps_worker_release(job_id, release)
+            timer = threading.Timer(2.0, self._persist_mps_worker_release, args=(job_id, release))
+            timer.daemon = True
+            timer.start()
             return True
 
     def _persist_mps_worker_release(self, job_id: str, release: dict[str, Any]) -> None:
