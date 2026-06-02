@@ -106,6 +106,8 @@ def test_live_progress_reads_real_pages_and_raw_chunk_metadata():
             raw_dir = outputs / "inference_raw" / "mineru" / "4134323036518274"
             label_dir.mkdir(parents=True)
             raw_dir.mkdir(parents=True)
+            archive_dir = raw_dir / "profile_archive" / "chunk-size-4-legacy"
+            archive_dir.mkdir(parents=True)
             (label_dir / "4134323036518274.json").write_text(json.dumps(payload), encoding="utf-8")
             (raw_dir / "contd_chunk_0000.json").write_text(json.dumps({
                 "task": "contd",
@@ -113,6 +115,13 @@ def test_live_progress_reads_real_pages_and_raw_chunk_metadata():
                 "range": [1, 16],
                 "pages": [1, 2, 3, 4, 5, 12, 13, 14, 15, 16],
                 "parsed": [[{"src_id": 1, "tgt_id": 2}]],
+            }), encoding="utf-8")
+            (archive_dir / "contd_chunk_0009.json").write_text(json.dumps({
+                "task": "contd",
+                "chunk_index": 9,
+                "range": [90, 99],
+                "pages": [90],
+                "parsed": [[{"src_id": 9, "tgt_id": 10}]],
             }), encoding="utf-8")
 
             progress = service._get_live_progress({

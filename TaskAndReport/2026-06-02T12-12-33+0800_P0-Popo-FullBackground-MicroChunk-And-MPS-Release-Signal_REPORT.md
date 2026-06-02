@@ -17,6 +17,7 @@ Task 315 proved checkpoint/resume works but `contd_chunk_0001` still timed out a
 - `run_luceon_job` now passes the full-background chunk size to `chunk_checkpoint_runner.py`.
 - `chunk_checkpoint_runner.py` now passes explicit `chunk_size` into MinerU-Popo native `adaptive_chunk`.
 - Existing raw chunks from a different or unknown chunk profile are archived under `profile_archive/` before micro-profile resume, preventing mixed chunk plans.
+- Progress probing ignores archived raw chunks under `profile_archive/` and reports `contd_chunk_0000.json` when a micro-profile run has no completed chunks yet.
 - `service.py` probes `POPO_GENERATE_URL/health` after `running_inference_chunk` timeout.
 - If host MPS still reports `active_generations > 0`, the adapter returns `mps-worker-release-required`.
 - Focused smoke now verifies micro chunking creates more, smaller chunks than the larger profile.

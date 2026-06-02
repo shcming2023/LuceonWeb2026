@@ -457,6 +457,9 @@ def _get_live_progress(job_state: dict[str, Any]) -> dict[str, Any]:
                 except Exception:
                     pass
             for f in target_dir.glob("**/*_chunk_*.json"):
+                rel_parts = f.relative_to(target_dir).parts
+                if "profile_archive" in rel_parts:
+                    continue
                 try:
                     data = json.loads(f.read_text())
                     if isinstance(data, dict):
@@ -502,8 +505,8 @@ def _get_live_progress(job_state: dict[str, Any]) -> dict[str, Any]:
                 progress["active_chunk"] = f"{prefix}_chunk_{next_idx:0{len(idx_str)}d}.json"
             else:
                 progress["active_chunk"] = "title_chunk_0000.json"
-        elif progress["inference_chunks_total"] > 0 and progress["current_step"] == "running_inference":
-            progress["active_chunk"] = "title_chunk_0000.json"
+        elif progress["inference_chunks_total"] > 0 and progress["current_step"] in {"running_inference", "running_inference_chunk"}:
+            progress["active_chunk"] = "contd_chunk_0000.json"
 
     except Exception as e:
         progress["last_error"] = str(e)
