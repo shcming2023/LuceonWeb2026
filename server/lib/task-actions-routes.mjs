@@ -1009,7 +1009,7 @@ function buildRunningCleanServiceSummaries({ task, request, submittedAt }) {
   const serviceName = request.service_name || 'toc-rebuild';
   const source = request.inputs?.[0]?.source || {};
   const invocation = {
-    mode: request.options?.toc_rebuild_mode || request.options?.invocation_mode || 'bounded',
+    mode: request.options?.toc_rebuild_mode || request.options?.invocation_mode || 'bounded-preview',
     recoverable: request.options?.recoverable === true,
   };
   const stats = {
@@ -1068,7 +1068,7 @@ function buildFailedCleanServiceSummaries({ task, request, submittedAt, error })
   const source = request.inputs?.[0]?.source || {};
   const productLabel = failure.status === 'canceled' ? '目录重建已取消' : '目录重建失败';
   const invocation = {
-    mode: request.options?.toc_rebuild_mode || request.options?.invocation_mode || 'bounded',
+    mode: request.options?.toc_rebuild_mode || request.options?.invocation_mode || 'bounded-preview',
     recoverable: request.options?.recoverable === true,
   };
   const stats = {
@@ -1173,8 +1173,10 @@ async function prepareExternalCleanServiceTocRebuild(task, deps, options = {}) {
   const existingTaskJob = task.metadata?.cleanServiceJobs?.[serviceName];
   const existingMaterialJob = material.metadata?.cleanMaterials?.[serviceName];
   const forceNewVersion = options.forceNewVersion === true;
-  const requestedInvocationMode = String(options.tocRebuildMode || options.invocationMode || 'bounded').toLowerCase();
-  const tocRebuildMode = ['full', 'recoverable-full', 'background-full'].includes(requestedInvocationMode) ? 'full' : 'bounded';
+  const requestedInvocationMode = String(options.tocRebuildMode || options.invocationMode || 'bounded-preview').toLowerCase();
+  const tocRebuildMode = ['full', 'recoverable-full', 'background-full', 'full-background'].includes(requestedInvocationMode)
+    ? 'full-background'
+    : 'bounded-preview';
 
   const isTaskJobRunning = ['running', 'pending'].includes(String(existingTaskJob?.status || existingTaskJob?.cleanState || ''));
   const isMaterialJobRunning = ['running', 'pending'].includes(String(existingMaterialJob?.status || existingMaterialJob?.cleanState || ''));
@@ -1261,7 +1263,7 @@ async function prepareExternalCleanServiceTocRebuild(task, deps, options = {}) {
       max_cost_cny: config.costPolicy?.hardLimitCny ?? 8,
       toc_rebuild_mode: tocRebuildMode,
       invocation_mode: tocRebuildMode,
-      recoverable: tocRebuildMode === 'full',
+      recoverable: tocRebuildMode === 'full-background',
       requested_by: 'operator-manual',
     },
   };
@@ -1527,14 +1529,14 @@ async function startExternalCleanServiceTocRebuildAsync(task, deps, options = {}
   await emitAndLog({
     taskId: task.id,
     event: 'toc-rebuild-cleanservice-queued',
-    message: `MinerU-Popo 目录重建已提交后台执行 (${request.options?.toc_rebuild_mode || 'bounded'}): ${request.job_id}`,
+    message: `MinerU-Popo 目录重建已提交后台执行 (${request.options?.toc_rebuild_mode || 'bounded-preview'}): ${request.job_id}`,
     update: { cleanServiceJobs: { [serviceName]: taskSummary } },
     payload: {
       materialId: task.materialId,
       jobId: request.job_id,
       assetVersion: request.asset_version,
       prefix: request.sink?.prefix,
-      tocRebuildMode: request.options?.toc_rebuild_mode || 'bounded',
+      tocRebuildMode: request.options?.toc_rebuild_mode || 'bounded-preview',
     },
   });
 
@@ -1544,7 +1546,7 @@ async function startExternalCleanServiceTocRebuildAsync(task, deps, options = {}
     jobId: request.job_id,
     assetVersion: request.asset_version,
     prefix: request.sink?.prefix,
-    tocRebuildMode: request.options?.toc_rebuild_mode || 'bounded',
+    tocRebuildMode: request.options?.toc_rebuild_mode || 'bounded-preview',
     submittedAt,
   });
 
@@ -2080,7 +2082,7 @@ export function registerTaskActionRoutes(app, deps = {}) {
       const config = loadCleanServiceConfig();
       const forceCleanService = req.body?.mode === 'cleanservice-rerun' || req.body?.cleanservice === true;
       const forceNewVersion = req.body?.forceNewVersion === true || forceCleanService;
-      const tocRebuildMode = req.body?.tocRebuildMode || req.body?.toc_rebuild_mode || req.body?.invocationMode || 'bounded';
+      const tocRebuildMode = req.body?.tocRebuildMode || req.body?.toc_rebuild_mode || req.body?.invocationMode || 'bounded-preview';
 
       const useCleanService = config.enabled || forceCleanService;
 

@@ -51,11 +51,13 @@ def test_bounded_payload_keeps_large_original_estimate_but_limits_selected_work(
 
     bounded_payload, plan = service._build_bounded_payload(payload, chunk_size=10)
 
-    assert plan["mode"] == "bounded"
+    assert plan["mode"] == "bounded-preview"
     assert plan["original"]["normalized_pages"] == 891
-    assert plan["selected"]["normalized_pages"] < 891
+    assert plan["selected"]["normalized_pages"] <= service.BOUNDED_PAGE_LIMIT
     assert plan["selected"]["inference_chunks_total"] <= service.BOUNDED_CHUNK_LIMIT
     assert len(bounded_payload["pages"]) == plan["selected"]["normalized_pages"]
+    assert bounded_payload["luceon_invocation"]["mode"] == "bounded-preview"
+    assert bounded_payload["luceon_invocation"]["source_pages"] == 891
 
 
 def test_live_progress_reads_real_pages_and_raw_chunk_metadata():

@@ -22,9 +22,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 WORK_ROOT = Path(os.environ.get("POPO_WORK_ROOT", REPO_ROOT / "runtime/work")).resolve()
 DEFAULT_SOURCE_BUCKET = os.environ.get("POPO_SOURCE_BUCKET", "eduassets")
 DEFAULT_CLEAN_BUCKET = os.environ.get("POPO_CLEAN_BUCKET", "eduassets-clean")
-DEFAULT_INVOCATION_MODE = os.environ.get("POPO_TOC_REBUILD_DEFAULT_MODE", "bounded")
-BOUNDED_CHUNK_LIMIT = int(os.environ.get("POPO_BOUNDED_CHUNK_LIMIT", 12))
-BOUNDED_PAGE_LIMIT = int(os.environ.get("POPO_BOUNDED_PAGE_LIMIT", 24))
+DEFAULT_INVOCATION_MODE = os.environ.get("POPO_TOC_REBUILD_DEFAULT_MODE", "bounded-preview")
+BOUNDED_CHUNK_LIMIT = int(os.environ.get("POPO_BOUNDED_CHUNK_LIMIT", 3))
+BOUNDED_PAGE_LIMIT = int(os.environ.get("POPO_BOUNDED_PAGE_LIMIT", 10))
 CHUNK_SECONDS_ESTIMATE = float(os.environ.get("POPO_MPS_CHUNK_SECONDS_ESTIMATE", 780))
 TOC_VIEW_SUPPLEMENT_TYPES = {
     "page_number",
@@ -249,8 +249,19 @@ def _build_bounded_payload(normalized_payload: Any, chunk_size: int) -> tuple[An
         max_pages = max(1, max_pages - max(1, max_pages // 4))
         bounded_payload = _slice_normalized_payload(normalized_payload, max_pages)
         bounded_estimate = _estimate_toc_rebuild(bounded_payload, chunk_size)
+    if isinstance(bounded_payload, dict) and isinstance(bounded_payload.get("pages"), dict):
+        bounded_payload = {
+            **bounded_payload,
+            "luceon_invocation": {
+                "mode": "bounded-preview",
+                "bounded_page_limit": max_pages,
+                "bounded_chunk_limit": BOUNDED_CHUNK_LIMIT,
+                "source_pages": original_estimate["normalized_pages"],
+                "selected_pages": bounded_estimate["normalized_pages"],
+            },
+        }
     return bounded_payload, {
-        "mode": "bounded",
+        "mode": "bounded-preview",
         "bounded_page_limit": max_pages,
         "bounded_chunk_limit": BOUNDED_CHUNK_LIMIT,
         "original": original_estimate,
@@ -863,7 +874,7 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
         or options.get("mode")
         or DEFAULT_INVOCATION_MODE
     ).strip().lower()
-    invocation_mode = "full" if requested_mode in {"full", "recoverable-full", "background-full"} else "bounded"
+    invocation_mode = "full-background" if requested_mode in {"full", "recoverable-full", "background-full", "full-background"} else "bounded-preview"
     sink = payload.get("sink") or {}
     sink_bucket = sink.get("bucket") or DEFAULT_CLEAN_BUCKET
     sink_prefix = sink.get("prefix") or f"{service_name}/{material_id}/{asset_version}/"
@@ -876,7 +887,7 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
 
     client = _s3_client(storage_endpoint, storage_use_ssl)
     work_dir = WORK_ROOT / job_id
-    recoverable_full = invocation_mode == "full"
+    recoverable_full = invocation_mode == "full-background"
     if work_dir.exists() and not recoverable_full:
         shutil.rmtree(work_dir)
     (work_dir / "post-process/mineru" / material_id / "vlm").mkdir(parents=True, exist_ok=True)
@@ -905,11 +916,11 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
         "mode": invocation_mode,
         "requested_mode": requested_mode or DEFAULT_INVOCATION_MODE,
         "recoverable": recoverable_full,
-        "bounded": invocation_mode == "bounded",
+        "bounded": invocation_mode == "bounded-preview",
         "resume": recoverable_full,
     }
 
-    if invocation_mode == "bounded":
+    if invocation_mode == "bounded-preview":
         bounded_payload, bounded_plan = _build_bounded_payload(normalized_payload, chunk_size)
         selected_input_dir = outputs / "label_normalization_bounded/mineru"
         selected_input_dir.mkdir(parents=True, exist_ok=True)
@@ -921,7 +932,7 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
         invocation.update({
             "bounded_page_limit": bounded_plan["bounded_page_limit"],
             "bounded_chunk_limit": bounded_plan["bounded_chunk_limit"],
-            "bounded_reason": "interactive toc-rebuild defaults to bounded Home Mac mini MPS profile",
+            "bounded_reason": "Popo preflight uses bounded-preview Home Mac mini MPS profile",
         })
 
     job_state["preflight"] = {

@@ -426,7 +426,7 @@ export function AssetDetailPage() {
       const res = await fetch(`/__proxy/upload/tasks/${encodeURIComponent(currentTask.id)}/toc-rebuild`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trigger: 'asset-detail-manual', tocRebuildMode: 'bounded' }),
+        body: JSON.stringify({ trigger: 'asset-detail-manual', tocRebuildMode: 'bounded-preview' }),
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(payload?.error || `HTTP ${res.status}`);
