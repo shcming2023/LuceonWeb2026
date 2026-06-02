@@ -16,6 +16,7 @@ Task 315 proved checkpoint/resume works but `contd_chunk_0001` still timed out a
 - Added `POPO_FULL_BACKGROUND_CHUNK_SIZE`, defaulting to `4`, in `docker-compose.popo.yml`.
 - `run_luceon_job` now passes the full-background chunk size to `chunk_checkpoint_runner.py`.
 - `chunk_checkpoint_runner.py` now passes explicit `chunk_size` into MinerU-Popo native `adaptive_chunk`.
+- Existing raw chunks from a different or unknown chunk profile are archived under `profile_archive/` before micro-profile resume, preventing mixed chunk plans.
 - `service.py` probes `POPO_GENERATE_URL/health` after `running_inference_chunk` timeout.
 - If host MPS still reports `active_generations > 0`, the adapter returns `mps-worker-release-required`.
 - Focused smoke now verifies micro chunking creates more, smaller chunks than the larger profile.
@@ -46,4 +47,4 @@ npm run build
 
 ## Next Validation
 
-Rebuild/restart `mineru-popo`, resume the same large PDF job, and confirm the next full-background plan reflects micro chunking. Expected behavior: a smaller chunk profile is used, timeout errors explicitly identify MPS release-required when the host worker remains active, and completed raw chunks remain reusable.
+Rebuild/restart `mineru-popo`, resume the same large PDF job, and confirm the next full-background plan reflects micro chunking. Expected behavior: old v6 raw chunks from the previous profile are archived, a smaller chunk profile is used, timeout errors explicitly identify MPS release-required when the host worker remains active, and new-profile completed raw chunks remain reusable.

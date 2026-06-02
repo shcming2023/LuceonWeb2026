@@ -256,6 +256,53 @@ def _write_checkpoint(raw_doc_dir: Path, payload: dict[str, Any]) -> None:
     _write_json(raw_doc_dir / "checkpoint.json", payload)
 
 
+def _read_existing_chunk_size(path: Path) -> int | None:
+    try:
+        data = _read_json(path)
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    try:
+        return int(data.get("chunk_size"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _annotate_chunk_size(path: Path, chunk_size: int) -> None:
+    try:
+        data = _read_json(path)
+    except Exception:
+        return
+    if not isinstance(data, dict):
+        return
+    data["chunk_size"] = chunk_size
+    data["chunk_profile"] = "full-background-microchunk-v1"
+    _write_json(path, data)
+
+
+def _archive_incompatible_chunks(raw_doc_dir: Path, chunk_size: int) -> None:
+    chunk_paths = sorted(raw_doc_dir.glob("*_chunk_*.json"))
+    if not chunk_paths:
+        return
+    if all(_read_existing_chunk_size(path) == chunk_size for path in chunk_paths):
+        return
+
+    archive_dir = raw_doc_dir / "profile_archive" / f"chunk-size-{chunk_size}-{int(time.time())}"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    for path in chunk_paths:
+        path.rename(archive_dir / path.name)
+    summary = raw_doc_dir / "summary.json"
+    if summary.exists():
+        summary.rename(archive_dir / summary.name)
+    _write_checkpoint(raw_doc_dir, {
+        "status": "profile_reset",
+        "chunk_size": chunk_size,
+        "archived_to": str(archive_dir),
+        "reason": "existing raw chunks were produced by a different or unknown chunk profile",
+    })
+
+
 def _assemble_output(
     doc_blocks: list[dict[str, Any]],
     raw_doc_dir: Path,
@@ -289,13 +336,15 @@ def run_next_chunk(args: argparse.Namespace) -> dict[str, Any]:
     output_dir = Path(args.output_dir)
     raw_doc_dir = Path(args.raw_doc_dir)
     raw_doc_dir.mkdir(parents=True, exist_ok=True)
+    chunk_size = int(args.chunk_size)
+    _archive_incompatible_chunks(raw_doc_dir, chunk_size)
 
     input_label, pages = _load_pages(normalized_input, pdf_path)
     if not Path(input_label).exists():
         input_label = str(pdf_path)
     doc_stem = args.doc_id or _safe_doc_stem(input_label)
     doc_blocks = _prepare_doc_blocks(pages)
-    chunks_by_task, large_block_linking = _build_chunks(doc_blocks, chunk_size=args.chunk_size)
+    chunks_by_task, large_block_linking = _build_chunks(doc_blocks, chunk_size=chunk_size)
     plan = {task: len(value["chunks"]) for task, value in chunks_by_task.items()}
 
     for task in ("contd", "title", "image"):
@@ -304,14 +353,27 @@ def run_next_chunk(args: argparse.Namespace) -> dict[str, Any]:
         for index, (rng, chunk) in enumerate(zip(ranges, chunks)):
             if _chunk_path(raw_doc_dir, task, index).exists():
                 continue
-            _write_checkpoint(raw_doc_dir, {"status": "running_chunk", "task": task, "chunk_index": index, "plan": plan})
+            _write_checkpoint(raw_doc_dir, {
+                "status": "running_chunk",
+                "task": task,
+                "chunk_index": index,
+                "chunk_size": chunk_size,
+                "plan": plan,
+            })
             if task == "contd":
                 _run_contd_chunk(raw_doc_dir, input_label, index, rng, chunk)
             elif task == "title":
                 _run_title_chunk(raw_doc_dir, input_label, index, rng, chunk)
             else:
                 _run_image_chunk(raw_doc_dir, input_label, index, rng, chunk)
-            result = {"status": "partial", "completed_task": task, "completed_chunk_index": index, "plan": plan}
+            _annotate_chunk_size(_chunk_path(raw_doc_dir, task, index), chunk_size)
+            result = {
+                "status": "partial",
+                "completed_task": task,
+                "completed_chunk_index": index,
+                "chunk_size": chunk_size,
+                "plan": plan,
+            }
             _write_checkpoint(raw_doc_dir, result)
             return result
 
@@ -320,14 +382,32 @@ def run_next_chunk(args: argparse.Namespace) -> dict[str, Any]:
     for index, merge_input in enumerate(merge_inputs):
         if _chunk_path(raw_doc_dir, "table_merge", index).exists():
             continue
-        _write_checkpoint(raw_doc_dir, {"status": "running_chunk", "task": "table_merge", "chunk_index": index, "plan": {**plan, "table_merge": len(merge_inputs)}})
+        _write_checkpoint(raw_doc_dir, {
+            "status": "running_chunk",
+            "task": "table_merge",
+            "chunk_index": index,
+            "chunk_size": chunk_size,
+            "plan": {**plan, "table_merge": len(merge_inputs)},
+        })
         _run_table_merge_chunk(raw_doc_dir, index, merge_input)
-        result = {"status": "partial", "completed_task": "table_merge", "completed_chunk_index": index, "plan": {**plan, "table_merge": len(merge_inputs)}}
+        _annotate_chunk_size(_chunk_path(raw_doc_dir, "table_merge", index), chunk_size)
+        result = {
+            "status": "partial",
+            "completed_task": "table_merge",
+            "completed_chunk_index": index,
+            "chunk_size": chunk_size,
+            "plan": {**plan, "table_merge": len(merge_inputs)},
+        }
         _write_checkpoint(raw_doc_dir, result)
         return result
 
     _assemble_output(doc_blocks, raw_doc_dir, output_dir, doc_stem, input_label, large_block_linking)
-    result = {"status": "completed", "output_json": str(output_dir / f"{doc_stem}.json"), "plan": {**plan, "table_merge": len(merge_inputs)}}
+    result = {
+        "status": "completed",
+        "output_json": str(output_dir / f"{doc_stem}.json"),
+        "chunk_size": chunk_size,
+        "plan": {**plan, "table_merge": len(merge_inputs)},
+    }
     _write_checkpoint(raw_doc_dir, result)
     return result
 

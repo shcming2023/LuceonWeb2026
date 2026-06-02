@@ -154,9 +154,32 @@ def test_full_background_runner_uses_explicit_micro_chunk_size():
     assert len(micro_chunks["image"]["chunks"]) > len(large_chunks["image"]["chunks"])
 
 
+def test_profile_change_archives_legacy_raw_chunks_before_micro_resume():
+    with tempfile.TemporaryDirectory() as tmp:
+        raw_dir = Path(tmp)
+        legacy = raw_dir / "contd_chunk_0000.json"
+        legacy.write_text(json.dumps({
+            "task": "contd",
+            "chunk_index": 0,
+            "range": [1, 16],
+            "pages": [1, 2, 3],
+            "parsed": [],
+        }), encoding="utf-8")
+
+        chunk_checkpoint_runner._archive_incompatible_chunks(raw_dir, chunk_size=4)
+
+        assert not legacy.exists()
+        archived = list((raw_dir / "profile_archive").rglob("contd_chunk_0000.json"))
+        assert len(archived) == 1
+        checkpoint = json.loads((raw_dir / "checkpoint.json").read_text(encoding="utf-8"))
+        assert checkpoint["status"] == "profile_reset"
+        assert checkpoint["chunk_size"] == 4
+
+
 if __name__ == "__main__":
     test_wrapped_normalized_label_counts_pages_and_chunks()
     test_bounded_payload_keeps_large_original_estimate_but_limits_selected_work()
     test_live_progress_reads_real_pages_and_raw_chunk_metadata()
     test_full_background_runner_uses_explicit_micro_chunk_size()
+    test_profile_change_archives_legacy_raw_chunks_before_micro_resume()
     print("PASS popo invocation boundary tests")
