@@ -130,15 +130,15 @@ def _run_image_chunk(raw_doc_dir: Path, input_label: str, index: int, rng: list[
     inference.write_raw_record(str(raw_doc_dir), "image", index, rng, pages, prompt, raw_response, parsed)
 
 
-def _build_chunks(doc_blocks: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[int, int]]:
+def _build_chunks(doc_blocks: list[dict[str, Any]], chunk_size: int | None = None) -> tuple[dict[str, Any], dict[int, int]]:
     contd = inference.add_contd(inference.filter_contd(doc_blocks))
     title = inference.add_title(inference.filter_title(doc_blocks))
     image_judge_blocks, large_block_linking = inference.filter_image(doc_blocks)
     image = inference.add_image(image_judge_blocks)
 
-    contd_ranges, contd_chunks = inference.adaptive_chunk(inference.parse_string_notype(contd))
-    title_ranges, title_chunks = inference.adaptive_chunk(inference.parse_string_notype(title))
-    image_ranges, image_chunks = inference.adaptive_chunk(inference.parse_string_type(image))
+    contd_ranges, contd_chunks = inference.adaptive_chunk(inference.parse_string_notype(contd), chunk_size=chunk_size)
+    title_ranges, title_chunks = inference.adaptive_chunk(inference.parse_string_notype(title), chunk_size=chunk_size)
+    image_ranges, image_chunks = inference.adaptive_chunk(inference.parse_string_type(image), chunk_size=chunk_size)
 
     return {
         "contd": {"ranges": contd_ranges, "chunks": contd_chunks},
@@ -295,7 +295,7 @@ def run_next_chunk(args: argparse.Namespace) -> dict[str, Any]:
         input_label = str(pdf_path)
     doc_stem = args.doc_id or _safe_doc_stem(input_label)
     doc_blocks = _prepare_doc_blocks(pages)
-    chunks_by_task, large_block_linking = _build_chunks(doc_blocks)
+    chunks_by_task, large_block_linking = _build_chunks(doc_blocks, chunk_size=args.chunk_size)
     plan = {task: len(value["chunks"]) for task, value in chunks_by_task.items()}
 
     for task in ("contd", "title", "image"):
@@ -339,6 +339,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--raw-doc-dir", required=True)
     parser.add_argument("--doc-id", default="")
+    default_chunk_size = int(os.environ.get(
+        "POPO_FULL_BACKGROUND_CHUNK_SIZE",
+        os.environ.get("POPO_MPS_CHUNK_SIZE", "10"),
+    ))
+    parser.add_argument("--chunk-size", type=int, default=default_chunk_size)
     return parser.parse_args()
 
 

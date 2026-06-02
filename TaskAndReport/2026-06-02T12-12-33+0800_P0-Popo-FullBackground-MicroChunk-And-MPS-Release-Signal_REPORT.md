@@ -1,0 +1,49 @@
+# P0 Popo FullBackground MicroChunk And MPS Release Signal Report
+
+Reported by: Luceon
+Reported at: 2026-06-02T12:12:33+0800
+Task ID: TASK-20260602-121233-P0-Popo-FullBackground-MicroChunk-And-MPS-Release-Signal
+Branch: `codex/popo-microchunk-worker-release`
+
+## Result
+
+Status: `IMPLEMENTED_READY_FOR_PRODUCTION_VALIDATION`
+
+Task 315 proved checkpoint/resume works but `contd_chunk_0001` still timed out after about 907 seconds and left host MPS active. This task narrows the full-background path further without changing MinerU-Popo core.
+
+## Changes
+
+- Added `POPO_FULL_BACKGROUND_CHUNK_SIZE`, defaulting to `4`, in `docker-compose.popo.yml`.
+- `run_luceon_job` now passes the full-background chunk size to `chunk_checkpoint_runner.py`.
+- `chunk_checkpoint_runner.py` now passes explicit `chunk_size` into MinerU-Popo native `adaptive_chunk`.
+- `service.py` probes `POPO_GENERATE_URL/health` after `running_inference_chunk` timeout.
+- If host MPS still reports `active_generations > 0`, the adapter returns `mps-worker-release-required`.
+- Focused smoke now verifies micro chunking creates more, smaller chunks than the larger profile.
+
+## Verification
+
+Passed:
+
+```bash
+PYTHONPATH=. python3 luceon_service/tests/test_popo_invocation_boundary.py
+python3 -m py_compile luceon_service/app.py luceon_service/service.py luceon_service/chunk_checkpoint_runner.py luceon_service/tests/test_popo_invocation_boundary.py
+git diff --check
+```
+
+```bash
+node --check server/lib/task-actions-routes.mjs
+npx tsc --noEmit
+npm run build
+```
+
+`npm run build` completed with the existing Vite large chunk warning.
+
+## Boundaries
+
+- No MinerU-Popo core/model changes.
+- No DB/MinIO cleanup or source asset mutation.
+- No production deployment or full large-PDF completion claim.
+
+## Next Validation
+
+Rebuild/restart `mineru-popo`, resume the same large PDF job, and confirm the next full-background plan reflects micro chunking. Expected behavior: a smaller chunk profile is used, timeout errors explicitly identify MPS release-required when the host worker remains active, and completed raw chunks remain reusable.

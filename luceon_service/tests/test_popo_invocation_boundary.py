@@ -9,7 +9,35 @@ from pathlib import Path
 
 sys.modules.setdefault("boto3", types.SimpleNamespace(client=lambda *args, **kwargs: None))
 
+
+def _fake_adaptive_chunk(items, chunk_size=None, overlap=1):
+    size = max(1, int(chunk_size or 10))
+    ranges = []
+    chunks = []
+    for start in range(0, len(items), size):
+        chunk = items[start:start + size]
+        if not chunk:
+            continue
+        ranges.append([chunk[0]["page"], chunk[-1]["page"]])
+        chunks.append(chunk)
+    return ranges, chunks
+
+
+sys.modules.setdefault("inference", types.SimpleNamespace(
+    safe_doc_stem=lambda value: str(value),
+    filter_contd=lambda blocks: blocks,
+    add_contd=lambda blocks: blocks,
+    filter_title=lambda blocks: blocks,
+    add_title=lambda blocks: blocks,
+    filter_image=lambda blocks: (blocks, {}),
+    add_image=lambda blocks: blocks,
+    parse_string_notype=lambda blocks: blocks,
+    parse_string_type=lambda blocks: blocks,
+    adaptive_chunk=_fake_adaptive_chunk,
+))
+
 from luceon_service import service
+from luceon_service import chunk_checkpoint_runner
 
 
 def make_pages(count: int) -> dict[str, list[dict]]:
@@ -104,8 +132,31 @@ def test_live_progress_reads_real_pages_and_raw_chunk_metadata():
     assert progress["inference_blocks_validated"] == 1
 
 
+def test_full_background_runner_uses_explicit_micro_chunk_size():
+    doc_blocks = []
+    for page in range(1, 31):
+        doc_blocks.append({
+            "id": page,
+            "type": "text",
+            "page": page,
+            "box": [0, 0, 10, 10],
+            "content": f"page {page}",
+            "contd": -1,
+            "level": -1,
+            "image": -1,
+        })
+
+    large_chunks, _ = chunk_checkpoint_runner._build_chunks(doc_blocks, chunk_size=10)
+    micro_chunks, _ = chunk_checkpoint_runner._build_chunks(doc_blocks, chunk_size=4)
+
+    assert len(micro_chunks["contd"]["chunks"]) > len(large_chunks["contd"]["chunks"])
+    assert len(micro_chunks["title"]["chunks"]) > len(large_chunks["title"]["chunks"])
+    assert len(micro_chunks["image"]["chunks"]) > len(large_chunks["image"]["chunks"])
+
+
 if __name__ == "__main__":
     test_wrapped_normalized_label_counts_pages_and_chunks()
     test_bounded_payload_keeps_large_original_estimate_but_limits_selected_work()
     test_live_progress_reads_real_pages_and_raw_chunk_metadata()
+    test_full_background_runner_uses_explicit_micro_chunk_size()
     print("PASS popo invocation boundary tests")

@@ -11,6 +11,8 @@ import zipfile
 import signal
 import threading
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -25,6 +27,7 @@ DEFAULT_CLEAN_BUCKET = os.environ.get("POPO_CLEAN_BUCKET", "eduassets-clean")
 DEFAULT_INVOCATION_MODE = os.environ.get("POPO_TOC_REBUILD_DEFAULT_MODE", "bounded-preview")
 BOUNDED_CHUNK_LIMIT = int(os.environ.get("POPO_BOUNDED_CHUNK_LIMIT", 3))
 BOUNDED_PAGE_LIMIT = int(os.environ.get("POPO_BOUNDED_PAGE_LIMIT", 10))
+FULL_BACKGROUND_CHUNK_SIZE = int(os.environ.get("POPO_FULL_BACKGROUND_CHUNK_SIZE", os.environ.get("POPO_MPS_CHUNK_SIZE", 10)))
 CHUNK_SECONDS_ESTIMATE = float(os.environ.get("POPO_MPS_CHUNK_SECONDS_ESTIMATE", 780))
 TOC_VIEW_SUPPLEMENT_TYPES = {
     "page_number",
@@ -757,6 +760,13 @@ def _run_with_state(args: list[str], cwd: Path, job_state: dict[str, Any], step_
         os.killpg(job_state["pgid"], signal.SIGTERM)
         process.communicate()
         job_state["stage_finished_at"] = time.time()
+        mps_health = _host_mps_health()
+        if step_name == "running_inference_chunk" and int(mps_health.get("active_generations") or 0) > 0:
+            job_state["mps_worker_health"] = mps_health
+            raise AdapterError(
+                "mps-worker-release-required",
+                "Chunk timeout occurred while host MPS worker still reports active generation; restart/release the worker before resuming",
+            )
         raise AdapterError("timeout", f"{step_name} exceeded maximum execution time")
 
     job_state["stage_finished_at"] = time.time()
@@ -767,6 +777,20 @@ def _run_with_state(args: list[str], cwd: Path, job_state: dict[str, Any], step_
         raise AdapterError("popo-command-failed", f"{' '.join(args)} failed:\n{stdout[-4000:]}")
 
     return stdout or ""
+
+
+def _host_mps_health() -> dict[str, Any]:
+    url = os.environ.get("POPO_GENERATE_URL", "").rstrip("/")
+    if not url:
+        return {"available": False, "error": "POPO_GENERATE_URL is not configured"}
+    try:
+        with urllib.request.urlopen(f"{url}/health", timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+            if isinstance(payload, dict):
+                return payload
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
+        return {"available": False, "error": str(exc)}
+    return {"available": False, "error": "invalid health payload"}
 
 
 
@@ -971,6 +995,7 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
                 "--output-dir", str(inference_output_dir),
                 "--raw-doc-dir", str(raw_doc_dir),
                 "--doc-id", material_id,
+                "--chunk-size", str(FULL_BACKGROUND_CHUNK_SIZE),
             ], REPO_ROOT, job_state, "running_inference_chunk", timeout_seconds=CHUNK_TIMEOUT_SECONDS)
             try:
                 runner_result = json.loads((stdout or "").strip().splitlines()[-1])
