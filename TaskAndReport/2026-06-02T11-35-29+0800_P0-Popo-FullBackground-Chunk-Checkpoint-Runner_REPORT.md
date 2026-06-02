@@ -45,3 +45,31 @@ git diff --check
 ## Next Validation
 
 Deploy/rebuild `mineru-popo` and run a same-job full-background resume test on the v6 large PDF workdir. Expected result: existing `contd_chunk_0000.json` is skipped and the job continues at `contd_chunk_0001.json`.
+
+## Production Validation
+
+Validated by Luceon at 2026-06-02T11:39-12:05+0800 on production/control workspace.
+
+Actions:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.popo.yml up -d --build mineru-popo
+POST http://127.0.0.1:18082/api/v1/jobs
+GET  http://127.0.0.1:18082/api/v1/jobs/luceon-task-1780291805535-toc-rebuild-v6-1780366071573
+GET  http://127.0.0.1:18083/health
+```
+
+Observed:
+
+- `mineru-popo` restarted healthy and loaded mounted `luceon_service/chunk_checkpoint_runner.py`.
+- Same job resume accepted for `luceon-task-1780291805535-toc-rebuild-v6-1780366071573`.
+- Existing raw chunk was preserved and skipped: `contd_chunk_0000.json`.
+- New checkpoint moved to `task=contd`, `chunk_index=1`, proving resume continued at `contd_chunk_0001.json`.
+- Progress reported `normalized_pages=891`, `inference_chunks_total=264`, `inference_chunks_completed=1`, `active_chunk=contd_chunk_0001.json`, `last_completed_chunk=contd_chunk_0000.json`.
+- No partial raw output was written for chunk 1 before completion.
+- Chunk 1 exceeded the single chunk timeout after about 907 seconds with error `running_inference_chunk exceeded maximum execution time`.
+- After chunk timeout, host MPS worker still showed `active_generations=1`; Luceon restarted the host worker and verified recovery to `active_generations=0`.
+
+Conclusion:
+
+`PRODUCTION_VALIDATION_PARTIAL_PASS_CHECKPOINT_BOUNDARY`: the adapter-side checkpoint/resume boundary works in production and no longer loses the completed first chunk or applies timeout to the whole book. The large PDF still needs a smaller/faster chunk profile or worker-side cancellation/release hardening before full completion can be expected on Home Mac mini MPS.
