@@ -11,6 +11,8 @@ import zipfile
 import signal
 import threading
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -320,6 +322,7 @@ class JobManager:
                     os.killpg(pgid, signal.SIGTERM)
                 except Exception:
                     pass
+            job_state["mps_worker_release"] = _release_host_mps_worker("job-canceled", force_terminate_if_busy=True)
             return True
 
     def _run_job_background(self, job_id: str, job_state: dict[str, Any]):
@@ -390,6 +393,7 @@ def _get_live_progress(job_state: dict[str, Any]) -> dict[str, Any]:
         "preflight": job_state.get("preflight"),
         "invocation": job_state.get("invocation"),
         "chunk_checkpoint": job_state.get("chunk_checkpoint"),
+        "mps_worker_release": job_state.get("mps_worker_release"),
     }
 
     payload = job_state.get("payload", {})
@@ -759,6 +763,8 @@ def _run_with_state(args: list[str], cwd: Path, job_state: dict[str, Any], step_
         os.killpg(job_state["pgid"], signal.SIGTERM)
         process.communicate()
         job_state["stage_finished_at"] = time.time()
+        if step_name == "running_inference":
+            job_state["mps_worker_release"] = _release_host_mps_worker("job-timeout", force_terminate_if_busy=True)
         raise AdapterError("timeout", f"{step_name} exceeded maximum execution time")
 
     job_state["stage_finished_at"] = time.time()
@@ -769,6 +775,38 @@ def _run_with_state(args: list[str], cwd: Path, job_state: dict[str, Any], step_
         raise AdapterError("popo-command-failed", f"{' '.join(args)} failed:\n{stdout[-4000:]}")
 
     return stdout or ""
+
+
+def _release_host_mps_worker(reason: str, force_terminate_if_busy: bool = False) -> dict[str, Any]:
+    url = os.environ.get("POPO_GENERATE_URL", "").rstrip("/")
+    if not url:
+        return {"ok": False, "status": "not-configured", "reason": reason}
+
+    payload = json.dumps({
+        "reason": reason,
+        "force_terminate_if_busy": force_terminate_if_busy,
+    }).encode("utf-8")
+    request = urllib.request.Request(
+        f"{url}/release",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            body = response.read().decode("utf-8")
+            data = json.loads(body)
+            if isinstance(data, dict):
+                return data
+            return {"ok": False, "status": "invalid-response", "reason": reason}
+    except urllib.error.HTTPError as exc:
+        try:
+            detail = exc.read().decode("utf-8")
+        except Exception:
+            detail = ""
+        return {"ok": False, "status": "http-error", "reason": reason, "status_code": exc.code, "detail": detail[:1000]}
+    except Exception as exc:
+        return {"ok": False, "status": "request-failed", "reason": reason, "error": str(exc)}
 
 
 

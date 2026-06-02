@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
+import http.server
 import sys
 import tempfile
+import threading
 import time
 import types
 from pathlib import Path
@@ -113,8 +116,74 @@ def test_live_progress_reads_real_pages_and_raw_chunk_metadata():
     assert progress["inference_blocks_validated"] == 1
 
 
+def test_release_host_mps_worker_posts_force_release_payload():
+    captured = {}
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            captured["path"] = self.path
+            captured["payload"] = json.loads(body.decode("utf-8"))
+            response = {
+                "ok": True,
+                "status": "terminating",
+                "active_generations": 1,
+            }
+            encoded = json.dumps(response).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+
+        def log_message(self, format, *args):
+            return
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever)
+    thread.daemon = True
+    thread.start()
+    old_url = os.environ.get("POPO_GENERATE_URL")
+    try:
+        os.environ["POPO_GENERATE_URL"] = f"http://127.0.0.1:{server.server_port}"
+        result = service._release_host_mps_worker("job-canceled", force_terminate_if_busy=True)
+    finally:
+        if old_url is None:
+            os.environ.pop("POPO_GENERATE_URL", None)
+        else:
+            os.environ["POPO_GENERATE_URL"] = old_url
+        server.shutdown()
+        thread.join(timeout=2)
+
+    assert captured["path"] == "/release"
+    assert captured["payload"] == {
+        "reason": "job-canceled",
+        "force_terminate_if_busy": True,
+    }
+    assert result["ok"] is True
+    assert result["status"] == "terminating"
+
+
+def test_live_progress_preserves_mps_worker_release_evidence():
+    progress = service._get_live_progress({
+        "payload": {"job_id": "missing-workdir", "material_id": "m1"},
+        "start_time": time.time(),
+        "current_step": "canceled",
+        "mps_worker_release": {
+            "ok": True,
+            "status": "terminating",
+            "active_generations": 1,
+        },
+    })
+
+    assert progress["mps_worker_release"]["status"] == "terminating"
+    assert progress["mps_worker_release"]["active_generations"] == 1
+
+
 if __name__ == "__main__":
     test_wrapped_normalized_label_counts_pages_and_chunks()
     test_bounded_payload_keeps_large_original_estimate_but_limits_selected_work()
     test_live_progress_reads_real_pages_and_raw_chunk_metadata()
+    test_release_host_mps_worker_posts_force_release_payload()
+    test_live_progress_preserves_mps_worker_release_evidence()
     print("PASS popo invocation boundary tests")
