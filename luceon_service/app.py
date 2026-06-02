@@ -45,9 +45,15 @@ async def submit_job(request: Request) -> JSONResponse:
     if not isinstance(job_id, str) or not job_id.strip():
         raise HTTPException(status_code=422, detail="job_id is required")
 
-    # Idempotent: return existing state if job already exists
+    # Idempotent for active/completed jobs. Recoverable full-background jobs may
+    # be resumed after timeout/failure using the same job_id and work directory.
     if job_store.exists(job_id):
-        return JSONResponse(job_store.read(job_id))
+        existing = job_store.read(job_id)
+        options = payload.get("options") if isinstance(payload.get("options"), dict) else {}
+        recoverable = options.get("recoverable") is True or str(options.get("toc_rebuild_mode") or "") in {"full-background", "full"}
+        terminal_resume_state = str(existing.get("status") or "").lower() in {"timeout", "failed", "canceled"}
+        if not (recoverable and terminal_resume_state):
+            return JSONResponse(existing)
 
     if job_manager.is_busy():
         raise HTTPException(status_code=409, detail="已有目录重建任务运行中")

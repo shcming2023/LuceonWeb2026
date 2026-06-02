@@ -65,6 +65,7 @@ class JobStore:
 
 MAX_CONCURRENT_JOBS = int(os.environ.get("POPO_MAX_CONCURRENT_JOBS", 1))
 JOB_TIMEOUT_SECONDS = int(os.environ.get("POPO_JOB_TIMEOUT_SECONDS", 600))
+CHUNK_TIMEOUT_SECONDS = int(os.environ.get("POPO_CHUNK_TIMEOUT_SECONDS", os.environ.get("POPO_GENERATE_TIMEOUT_SECONDS", 900)))
 KILL_GRACE_SECONDS = int(os.environ.get("POPO_KILL_GRACE_SECONDS", 10))
 
 
@@ -389,6 +390,7 @@ def _get_live_progress(job_state: dict[str, Any]) -> dict[str, Any]:
         "chunks_by_task": {},
         "preflight": job_state.get("preflight"),
         "invocation": job_state.get("invocation"),
+        "chunk_checkpoint": job_state.get("chunk_checkpoint"),
     }
 
     payload = job_state.get("payload", {})
@@ -443,6 +445,14 @@ def _get_live_progress(job_state: dict[str, Any]) -> dict[str, Any]:
         completed_records = []
 
         if target_dir.exists():
+            checkpoint_path = target_dir / "checkpoint.json"
+            if checkpoint_path.exists():
+                try:
+                    checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+                    if isinstance(checkpoint, dict):
+                        progress["chunk_checkpoint"] = checkpoint
+                except Exception:
+                    pass
             for f in target_dir.glob("**/*_chunk_*.json"):
                 try:
                     data = json.loads(f.read_text())
@@ -719,7 +729,7 @@ def _object_ref(bucket: str, key: str, data: bytes, content_type: str) -> dict[s
     }
 
 
-def _run_with_state(args: list[str], cwd: Path, job_state: dict[str, Any], step_name: str) -> None:
+def _run_with_state(args: list[str], cwd: Path, job_state: dict[str, Any], step_name: str, timeout_seconds: float | None = None) -> str:
     if job_state.get("canceled"):
         raise AdapterError("canceled", "Job was canceled")
 
@@ -728,8 +738,11 @@ def _run_with_state(args: list[str], cwd: Path, job_state: dict[str, Any], step_
     job_state["current_step"] = step_name
     job_state["stage_started_at"] = time.time()
 
-    time_elapsed = time.time() - job_state.get("start_time", time.time())
-    timeout = max(1.0, float(JOB_TIMEOUT_SECONDS) - time_elapsed)
+    if timeout_seconds is None:
+        time_elapsed = time.time() - job_state.get("start_time", time.time())
+        timeout = max(1.0, float(JOB_TIMEOUT_SECONDS) - time_elapsed)
+    else:
+        timeout = max(1.0, float(timeout_seconds))
 
     process = subprocess.Popen(
         args, cwd=str(cwd), text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -744,7 +757,7 @@ def _run_with_state(args: list[str], cwd: Path, job_state: dict[str, Any], step_
         os.killpg(job_state["pgid"], signal.SIGTERM)
         process.communicate()
         job_state["stage_finished_at"] = time.time()
-        raise AdapterError("timeout", "Job exceeded maximum execution time")
+        raise AdapterError("timeout", f"{step_name} exceeded maximum execution time")
 
     job_state["stage_finished_at"] = time.time()
     if job_state.get("canceled"):
@@ -752,6 +765,8 @@ def _run_with_state(args: list[str], cwd: Path, job_state: dict[str, Any], step_
 
     if process.returncode != 0:
         raise AdapterError("popo-command-failed", f"{' '.join(args)} failed:\n{stdout[-4000:]}")
+
+    return stdout or ""
 
 
 
@@ -941,21 +956,39 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
     }
     job_state["invocation"] = invocation
 
-    inference_args = [
-        sys.executable,
-        str(REPO_ROOT / "post_processing/run_inference.py"),
-        "--input-dir", str(selected_input_dir),
-        "--model-path", model_path,
-        "--output-dir", str(outputs / "inference/mineru"),
-        "--raw-output-root", str(outputs / "inference_raw"),
-        "--limit", "1",
-    ]
+    inference_output_dir = outputs / "inference/mineru"
     if recoverable_full:
-        inference_args.append("--resume")
-
-    _run_with_state([
-        *inference_args
-    ], REPO_ROOT, job_state, "running_inference")
+        raw_doc_dir = outputs / "inference_raw/mineru" / material_id
+        chunk_runner = REPO_ROOT / "luceon_service/chunk_checkpoint_runner.py"
+        while True:
+            if job_state.get("canceled"):
+                raise AdapterError("canceled", "Job was canceled")
+            stdout = _run_with_state([
+                sys.executable,
+                str(chunk_runner),
+                "--normalized-input", str(normalized_path),
+                "--pdf-path", str(work_dir / "eval_pdf_dir" / f"{material_id}.pdf"),
+                "--output-dir", str(inference_output_dir),
+                "--raw-doc-dir", str(raw_doc_dir),
+                "--doc-id", material_id,
+            ], REPO_ROOT, job_state, "running_inference_chunk", timeout_seconds=CHUNK_TIMEOUT_SECONDS)
+            try:
+                runner_result = json.loads((stdout or "").strip().splitlines()[-1])
+            except Exception as exc:
+                raise AdapterError("chunk-runner-invalid-output", f"chunk runner did not return valid JSON: {exc}")
+            job_state["chunk_checkpoint"] = runner_result
+            if runner_result.get("status") == "completed":
+                break
+    else:
+        _run_with_state([
+            sys.executable,
+            str(REPO_ROOT / "post_processing/run_inference.py"),
+            "--input-dir", str(selected_input_dir),
+            "--model-path", model_path,
+            "--output-dir", str(inference_output_dir),
+            "--raw-output-root", str(outputs / "inference_raw"),
+            "--limit", "1",
+        ], REPO_ROOT, job_state, "running_inference")
     _run_with_state([
         sys.executable,
         str(REPO_ROOT / "post_processing/get_json_tree.py"),
