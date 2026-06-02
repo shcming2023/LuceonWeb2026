@@ -49,3 +49,24 @@ npm run build
 ## Next Validation
 
 Rebuild/restart `mineru-popo`, resume the same large PDF job, and confirm the next full-background plan reflects micro chunking. Expected behavior: old v6 raw chunks from the previous profile are archived, a smaller chunk profile is used, timeout errors explicitly identify MPS release-required when the host worker remains active, and new-profile completed raw chunks remain reusable.
+
+## Production Validation
+
+Validated by Luceon at 2026-06-02T12:16-12:25+0800.
+
+Passed:
+
+- `mineru-popo` was rebuilt with `POPO_FULL_BACKGROUND_CHUNK_SIZE=4`.
+- Same-job recoverable resume was accepted for `luceon-task-1780291805535-toc-rebuild-v6-1780366071573`.
+- Legacy `contd_chunk_0000.json` from the old profile was archived under `profile_archive/chunk-size-4-1780373853/`.
+- Progress no longer counted archived chunks as completed: `inference_chunks_completed=0`, `active_chunk=contd_chunk_0000.json`.
+- Host MPS worker stayed idle while planning: `active_generations=0`, `last_error=null`.
+
+Blocked:
+
+- The micro-profile runner spent more than 4 minutes at about 99% CPU inside `chunk_checkpoint_runner.py --chunk-size 4` before reaching MPS generation.
+- The job was canceled by Luceon before model generation to avoid leaving another long-running validation process active.
+
+Conclusion:
+
+`PRODUCTION_VALIDATION_PARTIAL_PASS_PROFILE_BOUNDARY_CPU_PLANNING_BLOCKER`: profile compatibility and progress semantics are now correct, but full-background cannot yet scale because the runner recomputes the full-document chunk plan for every chunk. The next narrow blocker is to persist/cache the chunk plan once and resume from that plan, instead of rebuilding all full-book task-family chunks on every invocation.
