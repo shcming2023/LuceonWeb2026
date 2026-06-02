@@ -147,6 +147,95 @@ def _build_chunks(doc_blocks: list[dict[str, Any]], chunk_size: int | None = Non
     }, large_block_linking
 
 
+def _chunk_plan_path(raw_doc_dir: Path) -> Path:
+    return raw_doc_dir / "chunk_plan.json"
+
+
+def _serializable_large_block_linking(value: dict[int, int]) -> dict[str, int]:
+    return {str(key): int(item) for key, item in value.items()}
+
+
+def _parse_large_block_linking(value: Any) -> dict[int, int]:
+    if not isinstance(value, dict):
+        return {}
+    parsed: dict[int, int] = {}
+    for key, item in value.items():
+        try:
+            parsed[int(key)] = int(item)
+        except (TypeError, ValueError):
+            continue
+    return parsed
+
+
+def _plan_matches(plan: Any, chunk_size: int, doc_stem: str) -> bool:
+    if not isinstance(plan, dict):
+        return False
+    if plan.get("schema") != "luceon-popo-chunk-plan/v1":
+        return False
+    if str(plan.get("doc_stem") or "") != doc_stem:
+        return False
+    try:
+        return int(plan.get("chunk_size")) == int(chunk_size)
+    except (TypeError, ValueError):
+        return False
+
+
+def _load_or_build_chunk_plan(
+    raw_doc_dir: Path,
+    doc_blocks: list[dict[str, Any]],
+    doc_stem: str,
+    chunk_size: int,
+) -> dict[str, Any]:
+    plan_path = _chunk_plan_path(raw_doc_dir)
+    if plan_path.exists():
+        try:
+            existing = _read_json(plan_path)
+            if _plan_matches(existing, chunk_size, doc_stem):
+                return existing
+        except Exception:
+            pass
+
+    chunks_by_task, large_block_linking = _build_chunks(doc_blocks, chunk_size=chunk_size)
+    plan = {
+        "schema": "luceon-popo-chunk-plan/v1",
+        "chunk_profile": "full-background-microchunk-v1",
+        "chunk_size": chunk_size,
+        "doc_stem": doc_stem,
+        "created_at": time.time(),
+        "doc_blocks": doc_blocks,
+        "large_block_linking": _serializable_large_block_linking(large_block_linking),
+        "tasks": {
+            task: {
+                "ranges": value["ranges"],
+                "chunks": value["chunks"],
+                "count": len(value["chunks"]),
+            }
+            for task, value in chunks_by_task.items()
+        },
+    }
+    _write_json(plan_path, plan)
+    return plan
+
+
+def _plan_task(plan: dict[str, Any], task: str) -> dict[str, Any]:
+    tasks = plan.get("tasks")
+    if not isinstance(tasks, dict):
+        return {"ranges": [], "chunks": [], "count": 0}
+    value = tasks.get(task)
+    if not isinstance(value, dict):
+        return {"ranges": [], "chunks": [], "count": 0}
+    ranges = value.get("ranges") if isinstance(value.get("ranges"), list) else []
+    chunks = value.get("chunks") if isinstance(value.get("chunks"), list) else []
+    return {"ranges": ranges, "chunks": chunks, "count": len(chunks)}
+
+
+def _plan_counts(plan: dict[str, Any]) -> dict[str, int]:
+    return {
+        task: int(_plan_task(plan, task)["count"])
+        for task in ("contd", "title", "image")
+    }
+
+
 def _apply_primary_labels(doc_blocks: list[dict[str, Any]], raw_doc_dir: Path, large_block_linking: dict[int, int]) -> None:
     contd_results: list[dict[str, Any]] = []
     for record in _read_raw_records(raw_doc_dir, "contd"):
@@ -295,6 +384,9 @@ def _archive_incompatible_chunks(raw_doc_dir: Path, chunk_size: int) -> None:
     summary = raw_doc_dir / "summary.json"
     if summary.exists():
         summary.rename(archive_dir / summary.name)
+    plan_path = _chunk_plan_path(raw_doc_dir)
+    if plan_path.exists():
+        plan_path.rename(archive_dir / plan_path.name)
     _write_checkpoint(raw_doc_dir, {
         "status": "profile_reset",
         "chunk_size": chunk_size,
@@ -344,12 +436,15 @@ def run_next_chunk(args: argparse.Namespace) -> dict[str, Any]:
         input_label = str(pdf_path)
     doc_stem = args.doc_id or _safe_doc_stem(input_label)
     doc_blocks = _prepare_doc_blocks(pages)
-    chunks_by_task, large_block_linking = _build_chunks(doc_blocks, chunk_size=chunk_size)
-    plan = {task: len(value["chunks"]) for task, value in chunks_by_task.items()}
+    chunk_plan = _load_or_build_chunk_plan(raw_doc_dir, doc_blocks, doc_stem, chunk_size)
+    doc_blocks = chunk_plan.get("doc_blocks") if isinstance(chunk_plan.get("doc_blocks"), list) else doc_blocks
+    large_block_linking = _parse_large_block_linking(chunk_plan.get("large_block_linking"))
+    plan = _plan_counts(chunk_plan)
 
     for task in ("contd", "title", "image"):
-        ranges = chunks_by_task[task]["ranges"]
-        chunks = chunks_by_task[task]["chunks"]
+        task_plan = _plan_task(chunk_plan, task)
+        ranges = task_plan["ranges"]
+        chunks = task_plan["chunks"]
         for index, (rng, chunk) in enumerate(zip(ranges, chunks)):
             if _chunk_path(raw_doc_dir, task, index).exists():
                 continue
@@ -358,6 +453,7 @@ def run_next_chunk(args: argparse.Namespace) -> dict[str, Any]:
                 "task": task,
                 "chunk_index": index,
                 "chunk_size": chunk_size,
+                "chunk_plan": str(_chunk_plan_path(raw_doc_dir)),
                 "plan": plan,
             })
             if task == "contd":
@@ -372,6 +468,7 @@ def run_next_chunk(args: argparse.Namespace) -> dict[str, Any]:
                 "completed_task": task,
                 "completed_chunk_index": index,
                 "chunk_size": chunk_size,
+                "chunk_plan": str(_chunk_plan_path(raw_doc_dir)),
                 "plan": plan,
             }
             _write_checkpoint(raw_doc_dir, result)
@@ -387,6 +484,7 @@ def run_next_chunk(args: argparse.Namespace) -> dict[str, Any]:
             "task": "table_merge",
             "chunk_index": index,
             "chunk_size": chunk_size,
+            "chunk_plan": str(_chunk_plan_path(raw_doc_dir)),
             "plan": {**plan, "table_merge": len(merge_inputs)},
         })
         _run_table_merge_chunk(raw_doc_dir, index, merge_input)
@@ -396,6 +494,7 @@ def run_next_chunk(args: argparse.Namespace) -> dict[str, Any]:
             "completed_task": "table_merge",
             "completed_chunk_index": index,
             "chunk_size": chunk_size,
+            "chunk_plan": str(_chunk_plan_path(raw_doc_dir)),
             "plan": {**plan, "table_merge": len(merge_inputs)},
         }
         _write_checkpoint(raw_doc_dir, result)
@@ -406,6 +505,7 @@ def run_next_chunk(args: argparse.Namespace) -> dict[str, Any]:
         "status": "completed",
         "output_json": str(output_dir / f"{doc_stem}.json"),
         "chunk_size": chunk_size,
+        "chunk_plan": str(_chunk_plan_path(raw_doc_dir)),
         "plan": {**plan, "table_merge": len(merge_inputs)},
     }
     _write_checkpoint(raw_doc_dir, result)

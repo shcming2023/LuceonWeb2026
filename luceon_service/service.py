@@ -448,6 +448,24 @@ def _get_live_progress(job_state: dict[str, Any]) -> dict[str, Any]:
         completed_records = []
 
         if target_dir.exists():
+            chunk_plan_path = target_dir / "chunk_plan.json"
+            if chunk_plan_path.exists():
+                try:
+                    chunk_plan = json.loads(chunk_plan_path.read_text(encoding="utf-8"))
+                    tasks = chunk_plan.get("tasks") if isinstance(chunk_plan, dict) else {}
+                    if isinstance(tasks, dict):
+                        plan_counts = {}
+                        for task, value in tasks.items():
+                            if not isinstance(value, dict):
+                                continue
+                            chunks = value.get("chunks")
+                            count = len(chunks) if isinstance(chunks, list) else int(value.get("count") or 0)
+                            plan_counts[str(task)] = count
+                        if plan_counts:
+                            progress["inference_chunks_total"] = sum(plan_counts.values())
+                            progress.setdefault("chunk_plan", str(chunk_plan_path))
+                except Exception:
+                    pass
             checkpoint_path = target_dir / "checkpoint.json"
             if checkpoint_path.exists():
                 try:
