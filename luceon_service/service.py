@@ -322,8 +322,25 @@ class JobManager:
                     os.killpg(pgid, signal.SIGTERM)
                 except Exception:
                     pass
-            job_state["mps_worker_release"] = _release_host_mps_worker("job-canceled", force_terminate_if_busy=True)
+            job_state["mps_worker_release"] = {
+                "ok": None,
+                "status": "release-requested",
+                "reason": "job-canceled",
+            }
+            release = _release_host_mps_worker("job-canceled", force_terminate_if_busy=True)
+            job_state["mps_worker_release"] = release
+            self._persist_mps_worker_release(job_id, release)
             return True
+
+    def _persist_mps_worker_release(self, job_id: str, release: dict[str, Any]) -> None:
+        try:
+            existing = self.job_store.read(job_id)
+            progress = existing.get("progress") if isinstance(existing.get("progress"), dict) else {}
+            progress["mps_worker_release"] = release
+            existing["progress"] = progress
+            self.job_store.write(job_id, existing)
+        except Exception:
+            pass
 
     def _run_job_background(self, job_id: str, job_state: dict[str, Any]):
         try:
