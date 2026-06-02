@@ -11,8 +11,6 @@ import zipfile
 import signal
 import threading
 import time
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -27,7 +25,6 @@ DEFAULT_CLEAN_BUCKET = os.environ.get("POPO_CLEAN_BUCKET", "eduassets-clean")
 DEFAULT_INVOCATION_MODE = os.environ.get("POPO_TOC_REBUILD_DEFAULT_MODE", "bounded-preview")
 BOUNDED_CHUNK_LIMIT = int(os.environ.get("POPO_BOUNDED_CHUNK_LIMIT", 3))
 BOUNDED_PAGE_LIMIT = int(os.environ.get("POPO_BOUNDED_PAGE_LIMIT", 10))
-FULL_BACKGROUND_CHUNK_SIZE = int(os.environ.get("POPO_FULL_BACKGROUND_CHUNK_SIZE", os.environ.get("POPO_MPS_CHUNK_SIZE", 10)))
 CHUNK_SECONDS_ESTIMATE = float(os.environ.get("POPO_MPS_CHUNK_SECONDS_ESTIMATE", 780))
 TOC_VIEW_SUPPLEMENT_TYPES = {
     "page_number",
@@ -68,7 +65,6 @@ class JobStore:
 
 MAX_CONCURRENT_JOBS = int(os.environ.get("POPO_MAX_CONCURRENT_JOBS", 1))
 JOB_TIMEOUT_SECONDS = int(os.environ.get("POPO_JOB_TIMEOUT_SECONDS", 600))
-CHUNK_TIMEOUT_SECONDS = int(os.environ.get("POPO_CHUNK_TIMEOUT_SECONDS", os.environ.get("POPO_GENERATE_TIMEOUT_SECONDS", 900)))
 KILL_GRACE_SECONDS = int(os.environ.get("POPO_KILL_GRACE_SECONDS", 10))
 
 
@@ -448,24 +444,6 @@ def _get_live_progress(job_state: dict[str, Any]) -> dict[str, Any]:
         completed_records = []
 
         if target_dir.exists():
-            chunk_plan_path = target_dir / "chunk_plan.json"
-            if chunk_plan_path.exists():
-                try:
-                    chunk_plan = json.loads(chunk_plan_path.read_text(encoding="utf-8"))
-                    tasks = chunk_plan.get("tasks") if isinstance(chunk_plan, dict) else {}
-                    if isinstance(tasks, dict):
-                        plan_counts = {}
-                        for task, value in tasks.items():
-                            if not isinstance(value, dict):
-                                continue
-                            chunks = value.get("chunks")
-                            count = len(chunks) if isinstance(chunks, list) else int(value.get("count") or 0)
-                            plan_counts[str(task)] = count
-                        if plan_counts:
-                            progress["inference_chunks_total"] = sum(plan_counts.values())
-                            progress.setdefault("chunk_plan", str(chunk_plan_path))
-                except Exception:
-                    pass
             checkpoint_path = target_dir / "checkpoint.json"
             if checkpoint_path.exists():
                 try:
@@ -523,7 +501,7 @@ def _get_live_progress(job_state: dict[str, Any]) -> dict[str, Any]:
                 progress["active_chunk"] = f"{prefix}_chunk_{next_idx:0{len(idx_str)}d}.json"
             else:
                 progress["active_chunk"] = "title_chunk_0000.json"
-        elif progress["inference_chunks_total"] > 0 and progress["current_step"] in {"running_inference", "running_inference_chunk"}:
+        elif progress["inference_chunks_total"] > 0 and progress["current_step"] == "running_inference":
             progress["active_chunk"] = "contd_chunk_0000.json"
 
     except Exception as e:
@@ -781,13 +759,6 @@ def _run_with_state(args: list[str], cwd: Path, job_state: dict[str, Any], step_
         os.killpg(job_state["pgid"], signal.SIGTERM)
         process.communicate()
         job_state["stage_finished_at"] = time.time()
-        mps_health = _host_mps_health()
-        if step_name == "running_inference_chunk" and int(mps_health.get("active_generations") or 0) > 0:
-            job_state["mps_worker_health"] = mps_health
-            raise AdapterError(
-                "mps-worker-release-required",
-                "Chunk timeout occurred while host MPS worker still reports active generation; restart/release the worker before resuming",
-            )
         raise AdapterError("timeout", f"{step_name} exceeded maximum execution time")
 
     job_state["stage_finished_at"] = time.time()
@@ -798,20 +769,6 @@ def _run_with_state(args: list[str], cwd: Path, job_state: dict[str, Any], step_
         raise AdapterError("popo-command-failed", f"{' '.join(args)} failed:\n{stdout[-4000:]}")
 
     return stdout or ""
-
-
-def _host_mps_health() -> dict[str, Any]:
-    url = os.environ.get("POPO_GENERATE_URL", "").rstrip("/")
-    if not url:
-        return {"available": False, "error": "POPO_GENERATE_URL is not configured"}
-    try:
-        with urllib.request.urlopen(f"{url}/health", timeout=5) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-            if isinstance(payload, dict):
-                return payload
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
-        return {"available": False, "error": str(exc)}
-    return {"available": False, "error": "invalid health payload"}
 
 
 
@@ -1002,39 +959,18 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
     job_state["invocation"] = invocation
 
     inference_output_dir = outputs / "inference/mineru"
+    inference_args = [
+        sys.executable,
+        str(REPO_ROOT / "post_processing/run_inference.py"),
+        "--input-dir", str(selected_input_dir),
+        "--model-path", model_path,
+        "--output-dir", str(inference_output_dir),
+        "--raw-output-root", str(outputs / "inference_raw"),
+        "--limit", "1",
+    ]
     if recoverable_full:
-        raw_doc_dir = outputs / "inference_raw/mineru" / material_id
-        chunk_runner = REPO_ROOT / "luceon_service/chunk_checkpoint_runner.py"
-        while True:
-            if job_state.get("canceled"):
-                raise AdapterError("canceled", "Job was canceled")
-            stdout = _run_with_state([
-                sys.executable,
-                str(chunk_runner),
-                "--normalized-input", str(normalized_path),
-                "--pdf-path", str(work_dir / "eval_pdf_dir" / f"{material_id}.pdf"),
-                "--output-dir", str(inference_output_dir),
-                "--raw-doc-dir", str(raw_doc_dir),
-                "--doc-id", material_id,
-                "--chunk-size", str(FULL_BACKGROUND_CHUNK_SIZE),
-            ], REPO_ROOT, job_state, "running_inference_chunk", timeout_seconds=CHUNK_TIMEOUT_SECONDS)
-            try:
-                runner_result = json.loads((stdout or "").strip().splitlines()[-1])
-            except Exception as exc:
-                raise AdapterError("chunk-runner-invalid-output", f"chunk runner did not return valid JSON: {exc}")
-            job_state["chunk_checkpoint"] = runner_result
-            if runner_result.get("status") == "completed":
-                break
-    else:
-        _run_with_state([
-            sys.executable,
-            str(REPO_ROOT / "post_processing/run_inference.py"),
-            "--input-dir", str(selected_input_dir),
-            "--model-path", model_path,
-            "--output-dir", str(inference_output_dir),
-            "--raw-output-root", str(outputs / "inference_raw"),
-            "--limit", "1",
-        ], REPO_ROOT, job_state, "running_inference")
+        inference_args.append("--resume")
+    _run_with_state(inference_args, REPO_ROOT, job_state, "running_inference")
     _run_with_state([
         sys.executable,
         str(REPO_ROOT / "post_processing/get_json_tree.py"),
