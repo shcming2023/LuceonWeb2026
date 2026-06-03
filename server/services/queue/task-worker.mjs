@@ -11,6 +11,7 @@ import { getAllTasks, updateTask, updateMaterial } from '../tasks/task-client.mj
 import { logTaskEvent } from '../logging/task-events.mjs';
 import { processWithLocalMinerU, resumeWithLocalMinerU, MineruStillProcessingError, MineruSubmitUnreachableError } from '../mineru/local-adapter.mjs';
 import { processWithOnlineMinerU, resumeWithOnlineMinerU } from '../mineru/v4-online-adapter.mjs';
+import { processWithRemoteGpuPipeline, resumeWithRemoteGpuPipeline, isRemoteGpuPipelineTask } from '../gpu-pipeline/remote-adapter.mjs';
 import { isMineruAdmissionCircuitOpen, openMineruAdmissionCircuit, readMineruAdmissionCircuit } from '../mineru/admission-circuit.mjs';
 import { createAiMetadataJob } from '../ai/metadata-job-client.mjs';
 import { parseLatestMineruProgress } from '../../lib/ops-mineru-log-parser.mjs';
@@ -22,6 +23,10 @@ const ONLINE_MINERU_MODE =
   process.env.MINERU_ENGINE === 'online' ||
   process.env.MINERU_MODE === 'online' ||
   process.env.MINERU_ONLINE_ENABLED === 'true';
+const REMOTE_GPU_MINERU_MODE =
+  process.env.MINERU_BACKEND === 'remote-gpu' ||
+  process.env.MINERU_MODE === 'remote-gpu' ||
+  process.env.REMOTE_GPU_PIPELINE_ENABLED === 'true';
 
 // stale-running 自愈缓冲期（PRD v0.4 §9.3）
 const STALE_GRACE_MS = 60_000;
@@ -30,6 +35,33 @@ const RECOVERY_DELAY_MS = 2_000;
 
 // 内存队列锁，防止同一个实例中的多个 tick 重复处理
 const processingMap = new Set();
+
+function selectDefaultMineruProcessor() {
+  if (REMOTE_GPU_MINERU_MODE) return processWithRemoteGpuPipeline;
+  if (ONLINE_MINERU_MODE) return processWithOnlineMinerU;
+  return processWithLocalMinerU;
+}
+
+function selectDefaultMineruResumer() {
+  if (REMOTE_GPU_MINERU_MODE) return resumeWithRemoteGpuPipeline;
+  if (ONLINE_MINERU_MODE) return resumeWithOnlineMinerU;
+  return resumeWithLocalMinerU;
+}
+
+function mapStillProcessingStage(task, status) {
+  if (!isRemoteGpuPipelineTask(task)) {
+    return status === 'queued' ? 'mineru-queued' : 'mineru-processing';
+  }
+  if (status === 'queued') return 'remote-gpu-queued';
+  return 'remote-gpu-processing';
+}
+
+function buildStillProcessingMessage(task, status) {
+  if (isRemoteGpuPipelineTask(task)) {
+    return `远端 GPU Pipeline 仍在 ${status}，后台将继续观测`;
+  }
+  return `本地等待超时但 MinerU 仍在 ${status}，后台将继续观测`;
+}
 
 export function buildTaskEventLogMessage(update = {}, eventName = 'task-update') {
   if (update.message) return update.message;
@@ -61,8 +93,8 @@ export class ParseTaskWorker {
       || (typeof options.getFileStream === 'function' ? options : null);
     this.eventBus = options.eventBus || null;
     this.taskClient = options.taskClient || { getAllTasks, updateTask, updateMaterial };
-    this.mineruProcessor = options.mineruProcessor || (ONLINE_MINERU_MODE ? processWithOnlineMinerU : processWithLocalMinerU);
-    this.mineruResumer = options.mineruResumer || (ONLINE_MINERU_MODE ? resumeWithOnlineMinerU : resumeWithLocalMinerU);
+    this.mineruProcessor = options.mineruProcessor || selectDefaultMineruProcessor();
+    this.mineruResumer = options.mineruResumer || selectDefaultMineruResumer();
     this.pendingTaskPatches = new Map();
     this.pendingMaterialPatches = new Map();
     this.mineruSubmitCircuitOpenUntil = 0;
@@ -217,6 +249,33 @@ export class ParseTaskWorker {
         // P0 Patch 2: check if MinerU is still processing before resetting
         const mineruTaskId = task.metadata?.mineruTaskId;
         const localEndpointRaw = task.optionsSnapshot?.localEndpoint;
+
+        if (mineruTaskId && task.engine === 'local-mineru' && isRemoteGpuPipelineTask(task)) {
+          await this.updateTaskWithRetry(task.id, {
+            state: 'running',
+            stage: 'remote-gpu-processing',
+            message: '重启恢复：检测到远端 GPU Pipeline 任务，正在接管',
+            metadata: {
+              ...(task.metadata || {}),
+              mineruStatus: task.metadata?.mineruStatus || 'processing',
+            }
+          }, { enqueueOnFailure: true });
+          await logTaskEvent({
+            taskId: task.id,
+            taskType: 'parse',
+            level: 'info',
+            event: 'parse-restart-remote-gpu-resumed',
+            message: `重启恢复：检测到远端 GPU Pipeline 任务 (${mineruTaskId})，已接管`,
+            payload: {
+              mineruTaskId,
+              previousState: task.state,
+              newState: 'running',
+              backend: 'remote-gpu-pipeline',
+            },
+          });
+          this.resumeMineruTask(task, mineruTaskId).catch(err => console.error(`[task-worker] Error resuming remote GPU task ${task.id}:`, err));
+          continue;
+        }
 
         if (mineruTaskId && localEndpointRaw && task.engine === 'local-mineru') {
           let localEndpoint = localEndpointRaw;
@@ -464,7 +523,8 @@ export class ParseTaskWorker {
       t.engine === 'local-mineru' &&
       t.state === 'running' &&
       eligibleStages.includes(t.stage) &&
-      t.metadata?.mineruTaskId
+      t.metadata?.mineruTaskId &&
+      !isRemoteGpuPipelineTask(t)
     );
 
     if (candidates.length === 0) return;
@@ -625,6 +685,25 @@ export class ParseTaskWorker {
       // 而不需要等待 1 小时的 timeoutMs！
       const mineruTaskId = task.metadata?.mineruTaskId;
       if (mineruTaskId && task.engine === 'local-mineru') {
+        if (isRemoteGpuPipelineTask(task)) {
+          const shouldTakeOverRemote = task.metadata?.localTimeoutOccurred === true || (now - updatedAt) > 60_000;
+          if (shouldTakeOverRemote) {
+            await this.updateTaskWithRetry(task.id, {
+              state: 'running',
+              stage: 'remote-gpu-processing',
+              message: '检测到远端 GPU Pipeline 任务仍未终态，正在接管继续轮询',
+              updatedAt: new Date().toISOString(),
+              metadata: {
+                ...(task.metadata || {}),
+                mineruStatus: task.metadata?.mineruStatus || 'processing',
+              },
+            }, { enqueueOnFailure: true });
+            this.resumeMineruTask(task, mineruTaskId).catch(err =>
+              console.error(`[task-worker] Error resuming stale remote GPU task ${task.id}:`, err)
+            );
+          }
+          continue;
+        }
         const shouldTakeOverLocalTimeout = task.metadata?.localTimeoutOccurred === true;
         if (shouldTakeOverLocalTimeout || (now - updatedAt) > 60_000) {
           await this._adjudicateStaleWithMineruApi(task, mineruTaskId, 'stale-running-adjudication');
@@ -885,6 +964,7 @@ export class ParseTaskWorker {
       if (t.state !== 'failed') return false;
       if (!t.metadata?.mineruTaskId) return false;
       if (t.engine !== 'local-mineru') return false;
+      if (isRemoteGpuPipelineTask(t)) return false;
       // P1 Patch: Do not automatically recover tasks that failed during AI provider invocation.
       // This prevents infinite loops of creating new AI jobs when the AI provider repeatedly fails.
       if (t.stage === 'ai') return false;
@@ -1215,6 +1295,14 @@ export class ParseTaskWorker {
     // 必须改走 resumeWithLocalMinerU 路径
     const existingMineruTaskId = task.metadata?.mineruTaskId;
     if (existingMineruTaskId && task.engine === 'local-mineru') {
+      if (isRemoteGpuPipelineTask(task)) {
+        console.log(`[task-worker] Task ${task.id} already has remote GPU mineruTaskId=${existingMineruTaskId}, routing to resume (not re-POST)`);
+        processingMap.delete(task.id);
+        this.resumeMineruTask(task, existingMineruTaskId).catch(err =>
+          console.error(`[task-worker] Error resuming remote GPU task ${task.id}:`, err)
+        );
+        return;
+      }
       console.log(`[task-worker] Task ${task.id} already has mineruTaskId=${existingMineruTaskId}, routing to adjudication+resume (not re-POST)`);
       // 必须先释放 processingMap，否则 fire-and-forget 的 resumeMineruTask
       // 会因为 processingMap.has(task.id) === true 而立即退出
@@ -1436,8 +1524,8 @@ export class ParseTaskWorker {
         console.log(`[task-worker] Task ${task.id}: MinerU ${error.mineruTaskId} 仍在 ${error.mineruStatus}，保持 running 等待后续轮询接管`);
         await this.transition(task, {
           state: 'running',
-          stage: error.mineruStatus === 'queued' ? 'mineru-queued' : 'mineru-processing',
-          message: `本地等待超时但 MinerU 仍在 ${error.mineruStatus}，后台将继续观测`,
+          stage: mapStillProcessingStage(task, error.mineruStatus),
+          message: buildStillProcessingMessage(task, error.mineruStatus),
           metadata: {
             ...(task.metadata || {}),
             mineruTaskId: error.mineruTaskId,
@@ -1887,6 +1975,24 @@ export class ParseTaskWorker {
 
     } catch (error) {
       if (error instanceof MineruStillProcessingError || error?.name === 'MineruStillProcessingError') {
+        if (isRemoteGpuPipelineTask(task)) {
+          console.log(`[task-worker] Task ${task.id} (resume): Remote GPU Pipeline ${error.mineruTaskId} 仍在 ${error.mineruStatus}，保持 running 等待后续轮询接管`);
+          await this.transition(task, {
+            state: 'running',
+            stage: mapStillProcessingStage(task, error.mineruStatus),
+            message: buildStillProcessingMessage(task, error.mineruStatus),
+            metadata: {
+              ...(task.metadata || {}),
+              mineruTaskId: error.mineruTaskId,
+              mineruStatus: error.mineruStatus,
+              mineruLastStatusAt: new Date().toISOString(),
+              localTimeoutOccurred: true,
+              localTimeoutAt: new Date().toISOString()
+            }
+          }, 'mineru-timeout-but-still-processing', 'warn');
+          return;
+        }
+
         const confirmed = await this.readMineruApiStatus(task, error.mineruTaskId || mineruTaskId, 5000);
         if (this.isCompletedMineruStatus(confirmed.status)) {
           const completedMineruTaskId = error.mineruTaskId || mineruTaskId;
@@ -1954,8 +2060,8 @@ export class ParseTaskWorker {
         console.log(`[task-worker] Task ${task.id} (resume): MinerU ${error.mineruTaskId} 仍在 ${error.mineruStatus}，保持 running 等待后续轮询接管`);
         await this.transition(task, {
           state: 'running',
-          stage: error.mineruStatus === 'queued' ? 'mineru-queued' : 'mineru-processing',
-          message: `本地等待超时但 MinerU 仍在 ${error.mineruStatus}，后台将继续观测`,
+          stage: mapStillProcessingStage(task, error.mineruStatus),
+          message: buildStillProcessingMessage(task, error.mineruStatus),
           metadata: {
             ...(task.metadata || {}),
             mineruTaskId: error.mineruTaskId,
