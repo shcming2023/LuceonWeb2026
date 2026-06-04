@@ -420,6 +420,69 @@ standardform 149
     assert by_title["Exercise 4.4"]["parent_id"] != by_title["Unit 2"]["node_id"]
 
 
+def test_cleanlatex_pilot_packs_are_structure_level_and_source_bound():
+    markdown = """
+## > Contents
+
+## Unit 1
+
+Review of number concepts
+1.1 Different types of numbers 4
+Collectingorganisingand
+displayingdata 107
+4.1 Colectingand classifyingdata 110
+"""
+    review_tree = {
+        "schema": "luceon-toc-review-tree/v1",
+        "type": "root",
+        "title": "TOC Review View",
+        "children": [
+            {"type": "text", "title": "Unit 1", "id": "b-unit-1", "page": 3, "children": [
+                {"type": "text", "title": "1 Review of number concepts", "block_ids": ["b-ch-1"], "page": 4, "children": [
+                    {"type": "text", "title": "1.1 Different types of numbers", "block_ids": ["b-1-1"], "page": 4, "content": "Numbers content", "children": []},
+                ]},
+                {"type": "text", "title": "4 Collectingorganisingand displayingdata", "block_ids": ["b-ch-4"], "page": 107, "children": [
+                    {"type": "text", "title": "4.1 Colectingand classifyingdata", "block_ids": ["b-4-1"], "page": 110, "content": "Data content", "children": []},
+                ]},
+            ]},
+        ],
+    }
+
+    canonical_toc = service._compile_canonical_toc(review_tree, markdown)
+    chapter_spans = service._compile_chapter_spans(canonical_toc)
+    packs_manifest = service._compile_cleanlatex_pilot_packs(
+        canonical_toc,
+        chapter_spans,
+        review_tree,
+        "4134323036518274",
+        "v-test",
+    )
+
+    assert packs_manifest["schema"] == "luceon-cleanlatex-pack-manifest/v1"
+    assert packs_manifest["selection_policy"]["schema"] == "luceon-cleanlatex-pack-selection-policy/v1"
+    assert packs_manifest["stats"]["pack_count"] == 2
+    packs = {pack["node"]["number"]: pack for pack in packs_manifest["packs"]}
+    assert set(packs) == {"1.1", "4.1"}
+    pack_11 = packs["1.1"]
+    pack_41 = packs["4.1"]
+    assert pack_11["schema"] == "luceon-cleanlatex-cleaning-unit-pack/v1"
+    assert pack_11["pack_boundary"]["boundary_basis"] == "structure-level"
+    assert pack_11["pack_boundary"]["semantic_kind_is_boundary_driver"] is False
+    assert pack_11["pack_boundary"]["pack_level"] >= 3
+    assert pack_11["node"]["canonical_kind"] == "section"
+    assert pack_11["node"]["parent_title"] == "1 Review of number concepts"
+    assert pack_41["node"]["parent_title"] == "4 Collectingorganisingand displayingdata"
+    assert "b-1-1" in pack_11["source_span"]["source_block_ids"]
+    assert "b-4-1" in pack_41["source_span"]["source_block_ids"]
+    assert pack_11["content_blocks"][0]["block_id"] == "b-1-1"
+    assert pack_41["content_blocks"][0]["raw_text"].endswith("Data content")
+    assert packs_manifest["prompts"][pack_11["pack_id"]].startswith("# CleanLaTeX Cleaning Unit Pack")
+    assert "semantic label is guidance only" in packs_manifest["prompts"][pack_11["pack_id"]]
+    validation = {item["pack_id"]: item for item in packs_manifest["validation_manifests"]}
+    assert validation[pack_11["pack_id"]]["input_counts"]["unresolved_source_blocks"] == 0
+    assert validation[pack_41["pack_id"]]["output_checks"]["structure_boundary"] == "pending"
+
+
 def test_release_host_mps_worker_posts_force_release_payload():
     captured = {}
 
@@ -558,6 +621,7 @@ if __name__ == "__main__":
     test_canonical_toc_compiler_builds_traceable_chapter_scaffold_without_llm_structure()
     test_contents_first_canonical_toc_uses_book_contents_as_global_spine()
     test_contents_first_recovers_implicit_chapters_and_reparents_orphan_exercises()
+    test_cleanlatex_pilot_packs_are_structure_level_and_source_bound()
     test_release_host_mps_worker_posts_force_release_payload()
     test_live_progress_preserves_mps_worker_release_evidence()
     test_full_background_progress_aware_wait_ignores_whole_job_timeout()

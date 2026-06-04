@@ -1926,6 +1926,384 @@ def _compile_rawlatex_scaffold(canonical_toc: dict[str, Any], chapter_spans: dic
     }
 
 
+def _cleanlatex_pack_selection_policy() -> dict[str, Any]:
+    return {
+        "schema": "luceon-cleanlatex-pack-selection-policy/v1",
+        "primary_candidate_levels": [3, 4],
+        "assembly_levels": [1, 2],
+        "inline_child_levels": [4, 5],
+        "hard_limits": {
+            "max_pages": 8,
+            "max_blocks": 120,
+            "max_chars": 18000,
+            "max_images": 12,
+            "max_tables": 8,
+            "max_formulas": 80,
+        },
+        "soft_targets": {
+            "target_pages": 1,
+            "target_blocks": 40,
+            "target_chars": 6000,
+        },
+        "selection_order": [
+            "source_span_continuity",
+            "stable_parent_boundary",
+            "content_size",
+            "child_count",
+            "asset_density",
+            "semantic_hint",
+        ],
+    }
+
+
+def _source_hash(payload: Any) -> str:
+    data = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    return "sha256:" + hashlib.sha256(data).hexdigest()
+
+
+def _source_nodes_by_block_id(source_tree: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    by_id: dict[str, dict[str, Any]] = {}
+
+    def visit(node: dict[str, Any], path: list[str]) -> None:
+        title = _toc_text(node.get("title")).strip()
+        content = str(node.get("content") or "").strip()
+        order = len(by_id) + 1
+        pages = _source_pages_from_node(node)
+        block_ids = _source_block_ids_from_node(node)
+        row = {
+            "source_order": order,
+            "title": title,
+            "content": content,
+            "type": str(node.get("type") or "text"),
+            "source_block_ids": block_ids,
+            "page": pages[0] if pages else None,
+            "pages": pages,
+            "bbox": node.get("bbox") or node.get("box") or [],
+            "location": node.get("location") or [],
+            "path": [*path, *([title] if title else [])],
+            "source_hash": _source_hash({
+                "title": title,
+                "content": content,
+                "block_ids": block_ids,
+                "page": pages,
+                "bbox": node.get("bbox") or node.get("box") or [],
+            }),
+        }
+        for block_id in block_ids:
+            by_id.setdefault(str(block_id), row)
+        for child in node.get("children") or []:
+            if isinstance(child, dict):
+                visit(child, row["path"])
+
+    visit(source_tree, [])
+    return by_id
+
+
+def _cleanlatex_block_type(source_row: dict[str, Any]) -> str:
+    raw_type = _toc_compact(source_row.get("type") or "")
+    text = f"{source_row.get('title') or ''}\n{source_row.get('content') or ''}"
+    if "image" in raw_type:
+        return "image"
+    if "table" in raw_type:
+        return "table"
+    if "formula" in raw_type or re.search(r"\$[^$]+\$|\\begin\{(?:equation|align|gather)", text):
+        return "formula"
+    if re.search(r"(?i)^exercise\s*\d|^\(?[0-9]+\)?[.)]", str(source_row.get("title") or "").strip()):
+        return "question_like"
+    if re.search(r"(?i)worked\s*example|example\s*\d", str(source_row.get("title") or "")):
+        return "example_like"
+    if source_row.get("title") and not source_row.get("content"):
+        return "title"
+    return "text"
+
+
+def _asset_hash_names_from_text(text: str) -> list[str]:
+    matches = re.findall(r"\b[0-9a-fA-F]{16,}\.(?:png|jpe?g|webp|gif|svg)\b", text or "")
+    seen: set[str] = set()
+    result: list[str] = []
+    for match in matches:
+        if match not in seen:
+            seen.add(match)
+            result.append(match)
+    return result
+
+
+def _content_block_from_source_row(block_id: str, source_row: dict[str, Any]) -> dict[str, Any]:
+    raw_text = "\n".join(
+        value for value in [str(source_row.get("title") or "").strip(), str(source_row.get("content") or "").strip()]
+        if value
+    )
+    block_type = _cleanlatex_block_type(source_row)
+    block = {
+        "block_id": str(block_id),
+        "source_block_ids": list(source_row.get("source_block_ids") or [str(block_id)]),
+        "source_order": source_row.get("source_order"),
+        "page": source_row.get("page"),
+        "pages": source_row.get("pages") or [],
+        "bbox": source_row.get("bbox") or [],
+        "type": block_type,
+        "raw_text": raw_text,
+        "normalized_text": None,
+        "source_hash": source_row.get("source_hash"),
+        "warnings": [],
+    }
+    if block_type == "image":
+        block["asset_hash_names"] = _asset_hash_names_from_text(raw_text)
+    if block_type == "formula":
+        block["latex"] = raw_text
+        block["source_format"] = "mineru-popo"
+    if block_type == "table":
+        block["raw_markdown"] = raw_text
+        block["raw_html"] = None
+        block["cells"] = []
+    return block
+
+
+def _canonical_node_depths(canonical_toc: dict[str, Any]) -> dict[str, int]:
+    depths: dict[str, int] = {}
+
+    def visit(node: dict[str, Any], depth: int) -> None:
+        node_id = str(node.get("node_id") or "")
+        if node_id:
+            depths[node_id] = depth
+        for child in node.get("children") or []:
+            if isinstance(child, dict):
+                visit(child, depth + 1)
+
+    root = canonical_toc.get("root")
+    if isinstance(root, dict):
+        visit(root, 0)
+    return depths
+
+
+def _ancestor_path_for_node(node: dict[str, Any], nodes_by_id: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    path: list[dict[str, Any]] = []
+    current = node
+    while current.get("parent_id"):
+        parent = nodes_by_id.get(str(current.get("parent_id")))
+        if not parent or parent.get("node_id") == "toc-root":
+            break
+        path.append({
+            "node_id": parent.get("node_id"),
+            "canonical_kind": parent.get("kind"),
+            "title": parent.get("title"),
+        })
+        current = parent
+    return list(reversed(path))
+
+
+def _build_cleanlatex_prompt(pack: dict[str, Any]) -> str:
+    lines = [
+        "# CleanLaTeX Cleaning Unit Pack",
+        "",
+        "## Identity",
+        "You clean exactly one source-bound structural cleaning unit.",
+        "The semantic label is guidance only; it does not define or change the boundary.",
+        "",
+        "## Structural Boundary",
+        f"- Pack id: {pack['pack_id']}",
+        f"- Node id: {pack['node']['node_id']}",
+        f"- Pack level: {pack['pack_boundary']['pack_level']}",
+        f"- Canonical kind: {pack['node']['canonical_kind']}",
+        f"- Title: {pack['node']['title']}",
+        f"- Parent: {pack['node'].get('parent_title') or ''}",
+        f"- Source pages: {pack['source_span'].get('source_page_range') or []}",
+        f"- Source block ids: {pack['source_span'].get('source_block_ids') or []}",
+        "",
+        "## Non-Negotiable Rules",
+        "- Do not create, delete, reorder, or rename book structure.",
+        "- Do not move content outside this pack.",
+        "- Do not invent textbook content.",
+        "- Preserve image hash names exactly.",
+        "- Preserve source block id references.",
+        "- Return JSON matching luceon-cleanlatex-output/v1.",
+        "",
+        "## Source Blocks",
+    ]
+    for block in pack.get("content_blocks") or []:
+        lines.extend([
+            "",
+            f"### {block.get('block_id')} [{block.get('type')}]",
+            f"- page: {block.get('page')}",
+            f"- source_order: {block.get('source_order')}",
+            "",
+            str(block.get("raw_text") or ""),
+        ])
+    lines.extend([
+        "",
+        "## Required Output",
+        "Return only a JSON object that conforms to luceon-cleanlatex-output/v1.",
+    ])
+    return "\n".join(lines)
+
+
+def _compile_cleanlatex_pilot_packs(
+    canonical_toc: dict[str, Any],
+    chapter_spans: dict[str, Any],
+    source_tree: dict[str, Any],
+    material_id: str,
+    asset_version: str,
+    pilot_numbers: tuple[str, ...] = ("1.1", "4.1"),
+) -> dict[str, Any]:
+    policy = _cleanlatex_pack_selection_policy()
+    nodes = [node for node in _iter_canonical_nodes(canonical_toc) if node.get("node_id") != "toc-root"]
+    nodes_by_id = {str(node.get("node_id")): node for node in nodes}
+    depths = _canonical_node_depths(canonical_toc)
+    span_by_node_id = {str(span.get("node_id")): span for span in chapter_spans.get("spans") or []}
+    source_by_block_id = _source_nodes_by_block_id(source_tree)
+
+    selected_nodes: list[dict[str, Any]] = []
+    for number in pilot_numbers:
+        node = next(
+            (
+                item for item in nodes
+                if item.get("kind") not in {"unit", "chapter", "root"}
+                and str(item.get("metadata", {}).get("number") or "") == number
+            ),
+            None,
+        )
+        if node:
+            selected_nodes.append(node)
+
+    packs: list[dict[str, Any]] = []
+    prompts: dict[str, str] = {}
+    validations: list[dict[str, Any]] = []
+    for node in selected_nodes:
+        node_id = str(node.get("node_id"))
+        span = span_by_node_id.get(node_id, {})
+        source_block_ids = [str(value) for value in span.get("source_block_ids") or node.get("source_block_ids") or []]
+        content_blocks: list[dict[str, Any]] = []
+        unresolved_block_ids: list[str] = []
+        for block_id in source_block_ids:
+            source_row = source_by_block_id.get(block_id)
+            if source_row:
+                content_blocks.append(_content_block_from_source_row(block_id, source_row))
+            else:
+                unresolved_block_ids.append(block_id)
+        content_blocks.sort(key=lambda block: (block.get("source_order") or 0, block.get("block_id") or ""))
+
+        asset_hashes: list[str] = []
+        for block in content_blocks:
+            asset_hashes.extend(block.get("asset_hash_names") or _asset_hash_names_from_text(block.get("raw_text") or ""))
+        asset_hashes = sorted(set(asset_hashes))
+        parent = nodes_by_id.get(str(node.get("parent_id")))
+        pack_level = depths.get(node_id, 0)
+        block_chars = sum(len(str(block.get("raw_text") or "")) for block in content_blocks)
+        pack_id = f"cleaning-unit:{node_id}"
+        pack = {
+            "schema": "luceon-cleanlatex-cleaning-unit-pack/v1",
+            "pack_id": pack_id,
+            "material_id": material_id,
+            "asset_version": asset_version,
+            "node": {
+                "node_id": node_id,
+                "canonical_kind": node.get("kind"),
+                "semantic_label": node.get("kind"),
+                "title": node.get("title"),
+                "number": node.get("metadata", {}).get("number"),
+                "parent_id": node.get("parent_id"),
+                "parent_title": parent.get("title") if parent else None,
+                "ancestor_path": _ancestor_path_for_node(node, nodes_by_id),
+            },
+            "pack_boundary": {
+                "pack_level": pack_level,
+                "pack_role": "primary_cleaning_unit",
+                "boundary_basis": "structure-level",
+                "selection_reason": [
+                    "stable_parent",
+                    "continuous_source_span",
+                    "content_size_within_limit" if block_chars <= policy["hard_limits"]["max_chars"] else "content_size_exceeds_limit",
+                    "pilot_requested",
+                ],
+                "semantic_kind_is_boundary_driver": False,
+            },
+            "source_span": {
+                "source_order_range": span.get("source_order_range") or [],
+                "source_page_range": span.get("source_page_range") or [],
+                "source_block_ids": source_block_ids,
+                "unresolved_source_block_ids": unresolved_block_ids,
+            },
+            "content_blocks": content_blocks,
+            "child_units": [
+                {
+                    "node_id": child.get("node_id"),
+                    "canonical_kind": child.get("kind"),
+                    "title": child.get("title"),
+                    "source_block_ids": child.get("source_block_ids") or [],
+                }
+                for child in node.get("children") or []
+                if isinstance(child, dict)
+            ],
+            "assets": {
+                "images": [{"asset_hash_name": name} for name in asset_hashes],
+                "tables": [block for block in content_blocks if block.get("type") == "table"],
+                "formulas": [block for block in content_blocks if block.get("type") == "formula"],
+                "audio": [],
+            },
+            "cleaning_contract": {
+                "unit": "cleaning_unit",
+                "may_clean_ocr_text": True,
+                "may_normalize_math_latex": True,
+                "may_reorder_within_pack": True,
+                "must_not_change_node_id": True,
+                "must_not_change_parent_id": True,
+                "must_not_create_or_delete_book_structure": True,
+                "must_not_move_blocks_outside_pack": True,
+                "must_preserve_source_block_ids": True,
+                "must_preserve_asset_hash_names": True,
+                "must_report_unresolved_items": True,
+                "semantic_guidance": {
+                    "canonical_kind": node.get("kind"),
+                    "do_not_answer_questions": node.get("kind") == "exercise",
+                },
+            },
+            "expected_output": {
+                "schema": "luceon-cleanlatex-output/v1",
+                "output_role": "cleaning_unit_cleanlatex",
+                "path": _rawlatex_path_for(node_id, str(node.get("kind") or "unit"), str(node.get("title") or "")),
+            },
+            "warnings": [*(node.get("warnings") or []), *([] if content_blocks else ["empty-pack-content-blocks"])],
+        }
+        prompts[pack_id] = _build_cleanlatex_prompt(pack)
+        validations.append({
+            "schema": "luceon-cleanlatex-validation-manifest/v1",
+            "pack_id": pack_id,
+            "pack_level": pack_level,
+            "selection_policy": policy["schema"],
+            "input_counts": {
+                "blocks": len(content_blocks),
+                "images": len(pack["assets"]["images"]),
+                "formulas": len(pack["assets"]["formulas"]),
+                "tables": len(pack["assets"]["tables"]),
+                "unresolved_source_blocks": len(unresolved_block_ids),
+            },
+            "output_checks": {
+                "source_block_coverage": "pending",
+                "asset_hash_preservation": "pending",
+                "latex_parse": "pending",
+                "forbidden_custom_commands": "pending",
+                "structure_boundary": "pending",
+            },
+        })
+        packs.append(pack)
+
+    return {
+        "schema": "luceon-cleanlatex-pack-manifest/v1",
+        "compiler": "luceon-layer3-deterministic-rules/cleanlatex-pack-generator-pilot",
+        "selection_policy": policy,
+        "pilot_numbers": list(pilot_numbers),
+        "packs": packs,
+        "prompts": prompts,
+        "validation_manifests": validations,
+        "stats": {
+            "pack_count": len(packs),
+            "content_block_count": sum(len(pack.get("content_blocks") or []) for pack in packs),
+            "unresolved_source_block_count": sum(len(pack.get("source_span", {}).get("unresolved_source_block_ids") or []) for pack in packs),
+            "asset_hash_count": sum(len(pack.get("assets", {}).get("images") or []) for pack in packs),
+        },
+    }
+
+
 def _assert_usable_outputs(tree: dict[str, Any], readable: str, rebuilt_markdown: str, flooded_content: list[dict[str, Any]]) -> None:
     title = str(tree.get("title") or "").strip().lower()
     has_children = bool(tree.get("children"))
@@ -2058,6 +2436,13 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
     canonical_toc = _compile_canonical_toc(toc_view_tree, markdown_text)
     chapter_spans = _compile_chapter_spans(canonical_toc)
     rawlatex_scaffold = _compile_rawlatex_scaffold(canonical_toc, chapter_spans)
+    cleanlatex_pack_manifest = _compile_cleanlatex_pilot_packs(
+        canonical_toc,
+        chapter_spans,
+        tree,
+        material_id,
+        asset_version,
+    )
     unresolved: list[dict[str, Any]] = []
     metrics = {
         "engine": "mineru-popo",
@@ -2076,6 +2461,7 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
         "rawlatex_scaffold": {
             "file_count": rawlatex_scaffold.get("manifest", {}).get("file_count", 0),
         },
+        "cleanlatex_packs": cleanlatex_pack_manifest.get("stats", {}),
         "contents_first": {
             "enabled": bool(markdown_text and canonical_toc.get("stats", {}).get("contents_outline_count")),
             "outline_count": canonical_toc.get("stats", {}).get("contents_outline_count", 0),
@@ -2106,6 +2492,9 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
             "canonical_toc": "canonical_toc.json",
             "chapter_spans": "chapter_spans.json",
             "rawlatex_scaffold": "rawlatex_scaffold.json",
+            "cleanlatex_pack_manifest": "cleanlatex_pack_manifest.json",
+            "cleaning_unit_packs": "cleaning_unit_packs.json",
+            "cleaning_unit_prompts": "cleaning_unit_prompts.json",
             "compat_logic_tree": "logic_tree.json",
         },
         "contents_first": {
@@ -2123,6 +2512,13 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
         "canonical_toc": _put_json(client, sink_bucket, f"{sink_prefix}canonical_toc.json", canonical_toc),
         "chapter_spans": _put_json(client, sink_bucket, f"{sink_prefix}chapter_spans.json", chapter_spans),
         "rawlatex_scaffold": _put_json(client, sink_bucket, f"{sink_prefix}rawlatex_scaffold.json", rawlatex_scaffold),
+        "cleanlatex_pack_manifest": _put_json(client, sink_bucket, f"{sink_prefix}cleanlatex_pack_manifest.json", {
+            key: value for key, value in cleanlatex_pack_manifest.items()
+            if key not in {"packs", "prompts", "validation_manifests"}
+        }),
+        "cleaning_unit_packs": _put_json(client, sink_bucket, f"{sink_prefix}cleaning_unit_packs.json", cleanlatex_pack_manifest.get("packs") or []),
+        "cleaning_unit_prompts": _put_json(client, sink_bucket, f"{sink_prefix}cleaning_unit_prompts.json", cleanlatex_pack_manifest.get("prompts") or {}),
+        "cleanlatex_validation_manifests": _put_json(client, sink_bucket, f"{sink_prefix}cleanlatex_validation_manifests.json", cleanlatex_pack_manifest.get("validation_manifests") or []),
         "official_popo_tree": _put_json(client, sink_bucket, f"{sink_prefix}official_popo_tree.json", tree),
         "raw_tree": _put_json(client, sink_bucket, f"{sink_prefix}raw_tree.json", tree),
         "skeleton": _put_json(client, sink_bucket, f"{sink_prefix}skeleton.json", {
@@ -2132,6 +2528,8 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
             "canonical_toc": f"{sink_prefix}canonical_toc.json",
             "chapter_spans": f"{sink_prefix}chapter_spans.json",
             "rawlatex_scaffold": f"{sink_prefix}rawlatex_scaffold.json",
+            "cleanlatex_pack_manifest": f"{sink_prefix}cleanlatex_pack_manifest.json",
+            "cleaning_unit_packs": f"{sink_prefix}cleaning_unit_packs.json",
             "raw_tree": f"{sink_prefix}official_popo_tree.json",
         }),
         "unresolved_anchors": _put_json(client, sink_bucket, f"{sink_prefix}unresolved_anchors.json", unresolved),
