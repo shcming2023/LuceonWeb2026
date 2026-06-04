@@ -692,6 +692,28 @@ function validateCleanerResponseAgainstImageMap({ llmResponse, imageMap }) {
   return checks;
 }
 
+function repeatedLargeTextSegments(markdown) {
+  const counts = new Map();
+  const repeated = [];
+  const segments = String(markdown || '')
+    .split(/\n{2,}|<\|txt_split\|>/g)
+    .map((segment) => normalizeTextForMetric(segment))
+    .filter((segment) => segment.length >= 80);
+
+  for (const segment of segments) {
+    const count = (counts.get(segment) || 0) + 1;
+    counts.set(segment, count);
+    if (count === 2) {
+      repeated.push({
+        preview: segment.slice(0, 120),
+        normalized_chars: segment.length,
+      });
+    }
+  }
+
+  return repeated.slice(0, 20);
+}
+
 function validateCleanCode({ cleanMarkdown, chapterTitle, imageMap, cleanChapterDir, copiedImages, missingImages, unresolvedItems, rawMarkdown, cleanerMode, llmResponse }) {
   const checks = [];
   const risks = [];
@@ -722,6 +744,8 @@ function validateCleanCode({ cleanMarkdown, chapterTitle, imageMap, cleanChapter
   const hasHeading = chapterTitle
     ? cleanMarkdown.includes(chapterTitle) || /^#\s+/m.test(cleanMarkdown)
     : /^#\s+/m.test(cleanMarkdown);
+  const splitMarkerCount = (cleanMarkdown.match(/<\|txt_split\|>/g) || []).length;
+  const repeatedSegments = repeatedLargeTextSegments(cleanMarkdown);
 
   checks.push(...validateCleanerResponseAgainstImageMap({ llmResponse, imageMap }));
   checks.push({
@@ -750,6 +774,16 @@ function validateCleanCode({ cleanMarkdown, chapterTitle, imageMap, cleanChapter
     detail: { rawNormalizedChars: rawNormalized.length, cleanNormalizedChars: cleanNormalized.length, ratio: Number(coverageRatio.toFixed(4)) },
   });
   checks.push({
+    id: 'raw_split_markers_resolved',
+    status: splitMarkerCount === 0 ? 'PASS' : 'NEEDS_REVIEW',
+    detail: { splitMarkerCount },
+  });
+  checks.push({
+    id: 'duplicate_large_text_segments_absent',
+    status: repeatedSegments.length === 0 ? 'PASS' : 'NEEDS_REVIEW',
+    detail: { repeatedSegments },
+  });
+  checks.push({
     id: 'unresolved_items_landed',
     status: Array.isArray(unresolvedItems) ? 'PASS' : 'BLOCKED',
     detail: { unresolvedCount: Array.isArray(unresolvedItems) ? unresolvedItems.length : null },
@@ -763,6 +797,8 @@ function validateCleanCode({ cleanMarkdown, chapterTitle, imageMap, cleanChapter
   if (requiredMissingFromMarkdown.length > 0) risks.push('required_image_missing_from_markdown');
   if (missingRefs.length > 0 || missingImages.length > 0) risks.push('missing_image_file');
   if (coverageRatio < 0.55) risks.push('low_content_coverage_ratio');
+  if (splitMarkerCount > 0) risks.push('raw_split_markers_remaining');
+  if (repeatedSegments.length > 0) risks.push('duplicate_large_text_segments');
   if (cleanerMode === 'llm-dry-run') risks.push('llm_dry_run_requires_review');
 
   const hasBlocked = checks.some((check) => check.status === 'BLOCKED');

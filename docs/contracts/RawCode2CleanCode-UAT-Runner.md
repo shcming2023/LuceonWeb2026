@@ -1,8 +1,8 @@
 # RawCode2CleanCode UAT Runner 交付与测试指南
 
-作者：Manus AI  
-状态：P0.1 UAT 可测交付  
-适用范围：RawCode Bundle 到 CleanCode Bundle 的本地批处理、证据面留存与 UAT 安全门控  
+作者：Manus AI
+状态：P0.1 UAT 可测交付
+适用范围：RawCode Bundle 到 CleanCode Bundle 的本地批处理、证据面留存与 UAT 安全门控
 最后更新：2026-06-04
 
 ## 1. 交付目标

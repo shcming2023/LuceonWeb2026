@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { convertCleanlatexPacksToRawCode } from '../../scripts/cleanlatex-pack-to-rawcode.mjs';
 import { buildFixtureRawCode } from '../../scripts/rawcode2cleancode-pilot.mjs';
 import { runRawCode2CleanCodeUatRunner } from '../../scripts/rawcode2cleancode-runner.mjs';
 
@@ -184,6 +185,165 @@ try {
     assert.equal(result.operationCounts.dbWrite, 0);
     assert.deepEqual(calls.map((call) => call.mode), ['dry-run', 'dry-run', 'real', 'real']);
     assert.equal(result.readinessClaimed, false);
+  }
+
+  {
+    console.log('  [7] Task329 cleaning_unit_pack artifacts adapt into RawCode and run through CleanCode dry-run...');
+    const packsPath = join(tmpRoot, 'cleaning_unit_packs.json');
+    await writeFile(packsPath, JSON.stringify([
+      {
+        schema: 'luceon-cleanlatex-cleaning-unit-pack/v1',
+        pack_id: 'cleaning-unit:toc-0003',
+        material_id: 'fixture-material',
+        asset_version: 'v329',
+        node: {
+          node_id: 'toc-0003',
+          canonical_kind: 'section',
+          title: '1.1 Different types of numbers',
+          number: '1.1',
+          parent_id: 'toc-0002',
+          parent_title: '1 Review of number concepts',
+        },
+        pack_boundary: {
+          pack_level: 3,
+          boundary_basis: 'structure-level',
+          semantic_kind_is_boundary_driver: false,
+        },
+        source_span: {
+          source_page_range: [16, 17],
+          source_block_ids: ['b1', 'b2'],
+          unresolved_source_block_ids: [],
+        },
+        content_blocks: [
+          { block_id: 'b1', source_block_ids: ['b1'], source_order: 1, page: 16, type: 'text', raw_text: '1.1 Different types of numbers' },
+          { block_id: 'b2', source_block_ids: ['b2'], source_order: 2, page: 16, type: 'text', raw_text: 'Real numbers include rational and irrational numbers.' },
+        ],
+        assets: { images: [], formulas: [], tables: [], audio: [] },
+        warnings: [],
+      },
+      {
+        schema: 'luceon-cleanlatex-cleaning-unit-pack/v1',
+        pack_id: 'cleaning-unit:toc-0024',
+        material_id: 'fixture-material',
+        asset_version: 'v329',
+        node: {
+          node_id: 'toc-0024',
+          canonical_kind: 'section',
+          title: '4.1 Collecting and classifying data',
+          number: '4.1',
+          parent_id: 'toc-0023',
+          parent_title: '4 Collecting, organising and displaying data',
+        },
+        pack_boundary: {
+          pack_level: 3,
+          boundary_basis: 'structure-level',
+          semantic_kind_is_boundary_driver: false,
+        },
+        source_span: {
+          source_page_range: [122, 123],
+          source_block_ids: ['c1'],
+          unresolved_source_block_ids: [],
+        },
+        content_blocks: [
+          { block_id: 'c1', source_block_ids: ['c1'], source_order: 10, page: 122, type: 'text', raw_text: 'Data is a set of facts, numbers or other information.' },
+        ],
+        assets: { images: [], formulas: [], tables: [], audio: [] },
+        warnings: [],
+      },
+    ], null, 2));
+
+    const adapted = await convertCleanlatexPacksToRawCode({
+      packsPath,
+      outDir: join(tmpRoot, 'pack-adapter-out'),
+      operatorId: 'local-operator',
+      versionOverride: 'rawcode-from-v329',
+    });
+    assert.equal(adapted.ok, true);
+    assert.equal(adapted.packCount, 2);
+    assert.equal(existsSync(join(adapted.rawBundleDir, 'chapters', 'toc-0003', 'source_map.json')), true);
+
+    const result = await runRawCode2CleanCodeUatRunner({
+      samples: [
+        {
+          sampleId: 'pack-toc-0003',
+          rawBundleDir: adapted.rawBundleDir,
+          chapterId: 'toc-0003',
+          title: '1.1 Different types of numbers',
+        },
+        {
+          sampleId: 'pack-toc-0024',
+          rawBundleDir: adapted.rawBundleDir,
+          chapterId: 'toc-0024',
+          title: '4.1 Collecting and classifying data',
+        },
+      ],
+      mode: 'dry-run',
+      operatorId: 'local-operator',
+      outDir: join(tmpRoot, 'pack-runner-out'),
+      cleaner: 'deterministic',
+      deps: { now: () => '2026-06-04T00:05:00.000Z', manifestSha: 'f'.repeat(64) },
+    });
+    assert.equal(result.ok, true, JSON.stringify(result, null, 2));
+    assert.equal(result.completedSampleCount, 2);
+    assert.equal(result.operationCounts.dbWrite, 0);
+    assert.equal(result.operationCounts.minioWrite, 0);
+    assert.equal(result.operationCounts.runtimeWorkerPost, 0);
+  }
+
+  {
+    console.log('  [8] raw split markers and repeated large text downgrade CleanCode candidate to NEEDS_REVIEW...');
+    const packsPath = join(tmpRoot, 'dirty_cleaning_unit_packs.json');
+    const repeatedText = 'This paragraph is intentionally long enough to be detected as a repeated source segment for validation. It should not be silently accepted.';
+    await writeFile(packsPath, JSON.stringify([
+      {
+        schema: 'luceon-cleanlatex-cleaning-unit-pack/v1',
+        pack_id: 'cleaning-unit:toc-dirty',
+        material_id: 'fixture-material',
+        asset_version: 'v329',
+        node: {
+          node_id: 'toc-dirty',
+          canonical_kind: 'section',
+          title: 'Dirty section',
+          number: 'D.1',
+        },
+        pack_boundary: {
+          pack_level: 3,
+          boundary_basis: 'structure-level',
+          semantic_kind_is_boundary_driver: false,
+        },
+        source_span: {
+          source_page_range: [1, 2],
+          source_block_ids: ['d1', 'd2'],
+          unresolved_source_block_ids: [],
+        },
+        content_blocks: [
+          { block_id: 'd1', source_block_ids: ['d1'], source_order: 1, page: 1, type: 'text', raw_text: `${repeatedText}<|txt_split|>Question one.` },
+          { block_id: 'd2', source_block_ids: ['d2'], source_order: 2, page: 1, type: 'text', raw_text: repeatedText },
+        ],
+        assets: { images: [], formulas: [], tables: [], audio: [] },
+        warnings: [],
+      },
+    ], null, 2));
+
+    const adapted = await convertCleanlatexPacksToRawCode({
+      packsPath,
+      outDir: join(tmpRoot, 'dirty-pack-adapter-out'),
+      operatorId: 'local-operator',
+      versionOverride: 'rawcode-from-v329',
+    });
+    const result = await runRawCode2CleanCodeUatRunner({
+      samples: [{ sampleId: 'dirty-pack', rawBundleDir: adapted.rawBundleDir, chapterId: 'toc-dirty', title: 'Dirty section' }],
+      mode: 'dry-run',
+      operatorId: 'local-operator',
+      outDir: join(tmpRoot, 'dirty-pack-runner-out'),
+      cleaner: 'deterministic',
+      deps: { now: () => '2026-06-04T00:06:00.000Z', manifestSha: '1'.repeat(64) },
+    });
+    assert.equal(result.ok, true, JSON.stringify(result, null, 2));
+    assert.equal(result.samples[0].status, 'NEEDS_REVIEW');
+    const qualityReport = JSON.parse(await readFile(result.samples[0].evidence.output.qualityReport, 'utf8'));
+    assert.equal(qualityReport.risks.includes('raw_split_markers_remaining'), true);
+    assert.equal(qualityReport.risks.includes('duplicate_large_text_segments'), true);
   }
 
   console.log('RawCode2CleanCode UAT runner smoke passed.');

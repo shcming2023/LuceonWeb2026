@@ -28,7 +28,7 @@ echo -e "${CYAN}============================================================${NC
 echo ""
 
 # ── 阶段 1：冒烟测试 ────────────────────────────────────────
-echo -e "${CYAN}【阶段 1/3】冒烟测试 (smoke)${NC}"
+echo -e "${CYAN}【阶段 1/4】冒烟测试 (smoke)${NC}"
 echo ""
 cd "$PROJECT_DIR"
 if BASE_URL="$BASE_URL" bash uat/smoke-test.sh; then
