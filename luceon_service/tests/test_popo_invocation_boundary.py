@@ -573,7 +573,7 @@ displayingdata 107
     assert "1.1 Different types of numbers" in full_titles
     assert "4.1" in full_numbers
     assert "4.2" in full_numbers
-    assert "Exercise4.1" in full_titles
+    assert "Exercise4.1" not in full_titles
     assert full_manifest["selection_mode"] == "full-book"
 
 

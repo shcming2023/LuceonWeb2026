@@ -667,6 +667,26 @@ function rulePostProcess({ llmResponse, chapterTitle, imageMap }) {
     .replace(/^(#{1,6}\s+[^\n]+)\n(?!\n)/gm, '$1\n\n')
     .replace(/\[\s*\]/g, '[ ]')
     .trim();
+
+  const cleanRefs = new Set(extractMarkdownImages(clean).map((item) => normalizeSlashes(item.ref)));
+  const missingRequiredImages = requiredImageRefs(imageMap).filter((ref) => !cleanRefs.has(ref));
+  if (missingRequiredImages.length > 0) {
+    const reviewLines = [
+      '',
+      '## Visual evidence requiring placement review',
+      '',
+      ...missingRequiredImages.map((ref) => `![Required visual evidence](${ref})`),
+    ];
+    clean = `${clean}\n${reviewLines.join('\n')}`;
+    unresolvedItems.push(...missingRequiredImages.map((ref) => ({
+      type: 'required_image_placement',
+      source_excerpt: ref,
+      reason: 'Required image was declared in the source image map but omitted by the cleaner; postprocessor preserved the asset hash and requires placement review.',
+      suggested_action: 'manual_review',
+    })));
+    changeSummary.push(`postprocessor restored ${missingRequiredImages.length} required image reference(s) for placement review`);
+    riskFlags.add('required_image_placement_review');
+  }
   clean = `${clean}\n`;
 
   if (normalizedImages.changes.length > 0) {
@@ -1259,7 +1279,13 @@ async function runPilot({ rawBundleDir, chapterId, outDir, cleanerMode, model, a
   const rawMdBuffer = await readFile(loaded.rawMdPath);
   const inputMarkdownBuffer = await readFile(loaded.rawMarkdownInputPath);
   const cleanMdPath = join(cleanChapterDir, 'clean.md');
+  const cleanSourceMapPath = join(cleanChapterDir, 'source_map.json');
+  const cleanImageMapPath = join(cleanChapterDir, 'image_map.json');
+  const cleanChunkManifestPath = join(cleanChapterDir, 'chunk_manifest.json');
   await writeText(cleanMdPath, postProcessResult.cleanMarkdown);
+  await copyFile(loaded.sourceMapPath, cleanSourceMapPath);
+  await copyFile(loaded.imageMapPath, cleanImageMapPath);
+  await copyFile(loaded.chunkManifestPath, cleanChunkManifestPath);
   const cleanMdBuffer = await readFile(cleanMdPath);
 
   const cleanerManifest = {
@@ -1299,6 +1325,9 @@ async function runPilot({ rawBundleDir, chapterId, outDir, cleanerMode, model, a
     },
     output: {
       clean_md: cleanMdPath,
+      source_map: cleanSourceMapPath,
+      image_map: cleanImageMapPath,
+      chunk_manifest: cleanChunkManifestPath,
       images_dir: imageCopyResult.cleanImagesDir,
       quality_report: join(cleanChapterDir, 'quality_report.json'),
       unresolved_items: join(cleanChapterDir, 'unresolved_items.json'),

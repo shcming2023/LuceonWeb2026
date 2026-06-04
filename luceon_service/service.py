@@ -2283,19 +2283,25 @@ def _source_row_matches_canonical_node(row: dict[str, Any], node: dict[str, Any]
     title = str(node.get("title") or "")
     compact_title = _toc_compact(title)
     number = str(node.get("metadata", {}).get("number") or "").strip()
-    if number and re.search(
-        rf"^\s*(?:unit|chapter|exercise|past\s+paper\s+questions\s+for\s+unit)?\s*{re.escape(number)}(?!\d)",
-        text,
-        flags=re.IGNORECASE,
-    ):
-        return True
-    if number and re.search(
-        rf"(?i)\b(?:unit|chapter|exercise)\s*{re.escape(number)}(?!\d)",
-        text,
-    ):
-        return True
-    if compact_title and compact_text and compact_title in compact_text:
-        return True
+    kind = str(node.get("kind") or "")
+    if number:
+        escaped = re.escape(number)
+        if kind == "exercise":
+            return bool(re.search(rf"^\s*exercise\s*{escaped}(?!\d)", text, flags=re.IGNORECASE))
+        if kind == "unit":
+            return bool(re.search(rf"^\s*unit\s*{escaped}(?!\d)", text, flags=re.IGNORECASE))
+        if kind == "past_paper":
+            return bool(re.search(r"^\s*past\s+paper\s+questions\b", text, flags=re.IGNORECASE))
+        if kind == "section":
+            return bool(re.search(rf"^\s*{escaped}(?!\d)", text, flags=re.IGNORECASE))
+        if kind == "chapter":
+            return bool(re.search(rf"^\s*(?:chapter\s*)?{escaped}(?!\d)", text, flags=re.IGNORECASE))
+    if compact_title and compact_text:
+        if kind in {"index", "glossary"}:
+            return compact_text == compact_title
+        if len(compact_title) >= 8 and compact_text.startswith(compact_title):
+            return True
+        return False
     return False
 
 
@@ -2327,6 +2333,11 @@ def _source_start_order_for_node_after(
     match_orders_by_node: dict[str, list[int]] | None = None,
 ) -> int | None:
     node_id = str(node.get("node_id") or "")
+    if match_orders_by_node is not None:
+        orders = match_orders_by_node.get(node_id) or []
+        index = bisect.bisect_right(orders, after_order)
+        if index < len(orders):
+            return orders[index]
     direct_order = (
         direct_start_orders.get(node_id)
         if direct_start_orders is not None
@@ -2334,10 +2345,6 @@ def _source_start_order_for_node_after(
     )
     if isinstance(direct_order, int) and direct_order > after_order:
         return direct_order
-    if match_orders_by_node is not None:
-        orders = match_orders_by_node.get(node_id) or []
-        index = bisect.bisect_right(orders, after_order)
-        return orders[index] if index < len(orders) else None
     matching_orders = [
         row.get("source_order")
         for row in source_rows
@@ -2360,11 +2367,40 @@ def _expanded_source_block_ids_for_cleaning_node(
     descendant_boundary_kinds: set[str] | None = None,
 ) -> list[str]:
     node_id = str(node.get("node_id") or "")
-    start_order = (
-        direct_start_orders.get(node_id)
-        if direct_start_orders is not None
-        else _source_start_order_for_node(node, source_by_block_id)
-    )
+    start_order = None
+    current_index = (node_indices or {}).get(node_id, -1)
+    if match_orders_by_node is not None:
+        orders = match_orders_by_node.get(node_id) or []
+        if str(node.get("kind") or "") == "past_paper":
+            try:
+                occurrence_index = int(str(node.get("metadata", {}).get("number") or "")) - 1
+            except Exception:
+                occurrence_index = -1
+            if 0 <= occurrence_index < len(orders):
+                start_order = orders[occurrence_index]
+        if start_order is None:
+            after_order = 0
+            if current_index > 0:
+                for previous in canonical_nodes[:current_index]:
+                    previous_id = str(previous.get("node_id") or "")
+                    previous_orders = match_orders_by_node.get(previous_id) or []
+                    previous_order = previous_orders[0] if previous_orders else None
+                    if previous_order is None:
+                        previous_order = (
+                            direct_start_orders.get(previous_id)
+                            if direct_start_orders is not None
+                            else _source_start_order_for_node(previous, source_by_block_id)
+                        )
+                    if isinstance(previous_order, int):
+                        after_order = max(after_order, previous_order)
+            index = bisect.bisect_right(orders, after_order)
+            start_order = orders[index] if index < len(orders) else None
+    if start_order is None:
+        start_order = (
+            direct_start_orders.get(node_id)
+            if direct_start_orders is not None
+            else _source_start_order_for_node(node, source_by_block_id)
+        )
     if start_order is None:
         return [str(value) for value in node.get("source_block_ids") or []]
 
@@ -2396,11 +2432,12 @@ def _expanded_source_block_ids_for_cleaning_node(
         return False
 
     boundary_orders: list[int] = []
-    current_index = (node_indices or {}).get(node_id, -1)
     for other_index, other in enumerate(canonical_nodes):
         if other.get("node_id") in {node.get("node_id"), "toc-root"}:
             continue
         if current_index >= 0 and other_index >= 0 and other_index <= current_index:
+            continue
+        if str(node.get("kind") or "") == "section" and str(other.get("kind") or "") == "exercise":
             continue
         is_descendant = is_descendant_of_current(other)
         if is_descendant and str(other.get("kind") or "") in (descendant_boundary_kinds or set()):
@@ -2644,7 +2681,9 @@ def _select_cleanlatex_pack_nodes(
     selected: list[dict[str, Any]] = []
     for node in nodes:
         kind = node.get("kind")
-        if kind in {"section", "exercise", "past_paper", "glossary", "index"}:
+        if kind == "section":
+            selected.append(node)
+        elif kind in {"past_paper", "glossary", "index"}:
             selected.append(node)
     return selected
 
@@ -2677,7 +2716,7 @@ def _compile_cleanlatex_pilot_packs(
     match_orders_by_node = _source_match_orders_by_node(nodes, source_rows)
 
     selected_nodes = _select_cleanlatex_pack_nodes(nodes, nodes_by_id, selection_mode, pilot_numbers)
-    descendant_boundary_kinds = {"exercise"} if selection_mode == "full-book" else set()
+    descendant_boundary_kinds: set[str] = set()
 
     packs: list[dict[str, Any]] = []
     prompts: dict[str, str] = {}
