@@ -2,7 +2,7 @@
 # ============================================================
 #  EduAsset CMS — 聚合测试入口
 #
-#  按顺序执行：smoke → server-unit → e2e
+#  按顺序执行：smoke → server-unit → RawCode2CleanCode UAT runner → e2e
 #  任一阶段失败则终止并报错。
 #
 #  用法：
@@ -40,7 +40,7 @@ fi
 echo ""
 
 # ── 阶段 2：服务端单元测试 ──────────────────────────────────
-echo -e "${CYAN}【阶段 2/3】服务端单元测试 (server)${NC}"
+echo -e "${CYAN}【阶段 2/4】服务端单元测试 (server)${NC}"
 echo ""
 cd "$PROJECT_DIR"
 if node server/tests/worker-smoke.mjs; then
@@ -51,8 +51,20 @@ else
 fi
 echo ""
 
-# ── 阶段 3：E2E 测试 ───────────────────────────────────────
-echo -e "${CYAN}【阶段 3/3】E2E 测试 (playwright)${NC}"
+# ── 阶段 3：RawCode2CleanCode UAT Runner ─────────────────────
+echo -e "${CYAN}【阶段 3/4】RawCode2CleanCode UAT runner smoke${NC}"
+echo ""
+cd "$PROJECT_DIR"
+if node server/tests/rawcode2cleancode-runner-smoke.mjs; then
+  echo -e "${GREEN}✓ RawCode2CleanCode UAT runner smoke 通过${NC}"
+else
+  echo -e "${RED}✗ RawCode2CleanCode UAT runner smoke 失败${NC}"
+  EXIT_CODE=1
+fi
+echo ""
+
+# ── 阶段 4：E2E 测试 ───────────────────────────────────────
+echo -e "${CYAN}【阶段 4/4】E2E 测试 (playwright)${NC}"
 echo ""
 cd "$PROJECT_DIR/uat"
 if BASE_URL="$BASE_URL" pnpm exec playwright test; then
@@ -66,9 +78,9 @@ echo ""
 # ── 汇总 ────────────────────────────────────────────────────
 echo -e "${CYAN}============================================================${NC}"
 if [[ $EXIT_CODE -eq 0 ]]; then
-  echo -e "${GREEN}  ✅ 所有测试通过${NC}"
+  echo -e "${GREEN}  所有测试通过${NC}"
 else
-  echo -e "${RED}  ❌ 部分测试失败，请查看上方日志${NC}"
+  echo -e "${RED}  部分测试失败，请查看上方日志${NC}"
 fi
 echo -e "${CYAN}============================================================${NC}"
 
