@@ -4,6 +4,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -37,6 +38,60 @@ TOC_VIEW_SUPPLEMENT_TYPES = {
     "page_title",
     "aside_text",
 }
+TOC_VIEW_DROP_TITLE_PREFIXES = (
+    "tip",
+    "link",
+    "keyword",
+    "keywords",
+    "getting started",
+    "in this chapter",
+    "worked example",
+    "answer",
+    "answers",
+    "apply your skills",
+    "applyyourskills",
+    "reflection",
+    "investigation",
+    "discussion",
+    "self assessment",
+    "selfassessment",
+    "self/peer assessment",
+    "peer assessment",
+    "peerassessment",
+    "mathematical connection",
+    "mathematicalconnection",
+    "summary",
+    "summarycontinued",
+    "go further",
+    "extended content",
+    "tp",
+)
+TOC_VIEW_FRONT_MATTER_PREFIXES = (
+    "default title",
+    "notice to teachers",
+    "cambridge dedicated teacher awards",
+    "congratulations to our incredible winners",
+    "endorsement statement",
+    "> contents",
+    "> introduction",
+    "introduction",
+    "how to use this book",
+    ">how to use this series",
+    "> how to use this series",
+    "> acknowledgements",
+    "acknowledgements",
+)
+TOC_VIEW_KEEP_TITLE_PREFIXES = (
+    "unit",
+    "> unit",
+    "exercise",
+    "practice question",
+    "past paper question",
+    "> glossary",
+    "glossary",
+    "> index",
+    "index",
+)
 
 
 class AdapterError(RuntimeError):
@@ -1008,10 +1063,14 @@ def _render_tree_preview(tree: dict[str, Any]) -> str:
 
     def visit(node: dict[str, Any], depth: int) -> None:
         indent = " " * (depth * 4)
-        title = str(node.get("title") or "")
+        title = str(node.get("title") or "").strip()
         content = str(node.get("content") or "")
         data_preview = content[:30] + ("..." if len(content) > 30 else "")
-        lines.append(f"{indent}{title}|{data_preview}")
+        if title or data_preview:
+            if data_preview:
+                lines.append(f"{indent}{title}|{data_preview}")
+            else:
+                lines.append(f"{indent}{title}")
         for child in node.get("children") or []:
             if isinstance(child, dict):
                 visit(child, depth + 1)
@@ -1020,26 +1079,98 @@ def _render_tree_preview(tree: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _filter_toc_view_tree(tree: dict[str, Any]) -> dict[str, Any]:
-    def should_drop(node: dict[str, Any]) -> bool:
-        node_type = str(node.get("type") or "").strip()
-        return node_type in TOC_VIEW_SUPPLEMENT_TYPES
+def _toc_text(value: Any) -> str:
+    return " ".join(str(value or "").replace("<|txt_split|>", " ").replace("<|txt_contd|>", " ").split())
 
-    def visit(node: dict[str, Any]) -> dict[str, Any] | None:
-        if should_drop(node):
-            return None
-        filtered = {key: value for key, value in node.items() if key != "children"}
-        children = []
+
+def _toc_compact(value: str) -> str:
+    return "".join(ch.lower() for ch in value if ch.isalnum())
+
+
+def _toc_title_kind(title: str) -> str | None:
+    clean = _toc_text(title).strip(" >")
+    lower = clean.lower()
+    compact = _toc_compact(clean)
+    if not clean:
+        return None
+    if lower.startswith(TOC_VIEW_KEEP_TITLE_PREFIXES):
+        return "toc"
+    if compact.startswith("unit") and any(ch.isdigit() for ch in compact[:8]):
+        return "toc"
+    if compact in {"glossary", "index"}:
+        return "toc"
+    if compact.endswith("project") and "unit" in compact:
+        return "toc"
+    if "practicequestions" in compact or "pastpaperquestions" in compact:
+        return "toc"
+    if "exercise" in compact and any(ch.isdigit() for ch in compact):
+        return "toc"
+    if re.match(r"^\d{1,2}(?:\.\d+){1,3}\b", lower):
+        return "toc"
+    if re.match(r"^\d{1,2}\s+[A-Za-z]", clean):
+        return "toc"
+    return None
+
+
+def _toc_should_promote_title(title: str) -> bool:
+    lower = _toc_text(title).strip().lower()
+    compact = _toc_compact(title)
+    if not lower:
+        return True
+    if lower.startswith(TOC_VIEW_DROP_TITLE_PREFIXES):
+        return True
+    if lower.startswith(TOC_VIEW_FRONT_MATTER_PREFIXES):
+        return True
+    if compact.startswith("mathematicalconnection"):
+        return True
+    if compact.startswith("workedexample"):
+        return True
+    if compact.startswith("applyyourskills"):
+        return True
+    return False
+
+
+def _filter_toc_view_tree(tree: dict[str, Any]) -> dict[str, Any]:
+    def should_promote(node: dict[str, Any]) -> bool:
+        node_type = str(node.get("type") or "").strip()
+        if node_type in TOC_VIEW_SUPPLEMENT_TYPES:
+            return True
+        return _toc_should_promote_title(str(node.get("title") or ""))
+
+    def visit(node: dict[str, Any]) -> list[dict[str, Any]]:
+        children: list[dict[str, Any]] = []
         for child in node.get("children") or []:
             if not isinstance(child, dict):
                 continue
-            filtered_child = visit(child)
-            if filtered_child is not None:
-                children.append(filtered_child)
-        filtered["children"] = children
-        return filtered
+            children.extend(visit(child))
 
-    return visit(tree) or {"type": "root", "title": "", "metadata": "", "content": "", "level": 0, "location": [], "block_ids": [], "children": []}
+        title = _toc_text(node.get("title"))
+        promote_current = should_promote(node)
+        keep_current = _toc_title_kind(title) is not None or (bool(children) and not promote_current)
+        if promote_current:
+            return children
+        if not keep_current:
+            return []
+
+        filtered = {key: value for key, value in node.items() if key not in {"children", "content"}}
+        filtered["title"] = title
+        filtered["content"] = ""
+        filtered["toc_view_role"] = "review-heading"
+        filtered["children"] = children
+        return [filtered]
+
+    children = visit(tree)
+    return {
+        "schema": "luceon-toc-review-tree/v1",
+        "type": "root",
+        "title": "TOC Review View",
+        "metadata": "",
+        "content": "",
+        "level": 0,
+        "location": [],
+        "block_ids": [],
+        "children": children,
+    }
 
 
 def _flatten_tree(tree: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1229,13 +1360,27 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
             },
         ],
         "outputs": {"bucket": sink_bucket, "prefix": sink_prefix},
+        "output_views": {
+            "raw_tree": "official_popo_tree.json",
+            "review_tree": "toc_view.json",
+            "compat_logic_tree": "logic_tree.json",
+        },
     }
 
     artifacts = {
         "flooded_content": _put_json(client, sink_bucket, f"{sink_prefix}flooded_content.json", flooded_content),
         "logic_tree": _put_json(client, sink_bucket, f"{sink_prefix}logic_tree.json", toc_view_tree),
         "readable_tree": _put_text(client, sink_bucket, f"{sink_prefix}readable_tree.md", readable, "text/markdown"),
-        "skeleton": _put_json(client, sink_bucket, f"{sink_prefix}skeleton.json", {"source": "mineru-popo", "normalized_input": f"outputs/label_normalization/mineru/{material_id}.json"}),
+        "toc_view": _put_json(client, sink_bucket, f"{sink_prefix}toc_view.json", toc_view_tree),
+        "review_tree": _put_json(client, sink_bucket, f"{sink_prefix}review_tree.json", toc_view_tree),
+        "official_popo_tree": _put_json(client, sink_bucket, f"{sink_prefix}official_popo_tree.json", tree),
+        "raw_tree": _put_json(client, sink_bucket, f"{sink_prefix}raw_tree.json", tree),
+        "skeleton": _put_json(client, sink_bucket, f"{sink_prefix}skeleton.json", {
+            "source": "mineru-popo",
+            "normalized_input": f"outputs/label_normalization/mineru/{material_id}.json",
+            "review_view": f"{sink_prefix}toc_view.json",
+            "raw_tree": f"{sink_prefix}official_popo_tree.json",
+        }),
         "unresolved_anchors": _put_json(client, sink_bucket, f"{sink_prefix}unresolved_anchors.json", unresolved),
         "metrics": _put_json(client, sink_bucket, f"{sink_prefix}metrics.json", metrics),
         "rebuilt_markdown": _put_text(client, sink_bucket, f"{sink_prefix}rebuilt_markdown.md", rebuilt_markdown, "text/markdown"),

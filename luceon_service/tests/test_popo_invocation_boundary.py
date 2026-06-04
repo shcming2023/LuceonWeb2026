@@ -116,6 +116,70 @@ def test_live_progress_reads_real_pages_and_raw_chunk_metadata():
     assert progress["inference_blocks_validated"] == 1
 
 
+def test_toc_review_filter_keeps_outline_and_hides_full_document_noise():
+    raw_tree = {
+        "type": "root",
+        "title": "",
+        "content": "",
+        "children": [
+            {
+                "type": "title",
+                "title": "Default Title",
+                "content": "cover and copyright text that should not reach review",
+                "children": [
+                    {"type": "title", "title": "> Contents", "content": "duplicated table of contents", "children": []},
+                    {
+                        "type": "title",
+                        "title": "> Acknowledgements",
+                        "content": "front matter wrapper",
+                        "children": [
+                            {
+                                "type": "title",
+                                "title": "Unit 1",
+                                "content": "Review of number concepts",
+                                "children": [
+                                    {
+                                        "type": "title",
+                                        "title": "1.1 Different types of numbers",
+                                        "content": "full section body should not be copied",
+                                        "block_ids": ["b-1"],
+                                        "children": [
+                                            {"type": "title", "title": "TIP", "content": "hide tip body", "children": []},
+                                            {"type": "title", "title": "Exercise 1.1", "content": "question text should not flood review", "children": []},
+                                            {"type": "footer", "title": "12", "content": "", "children": []},
+                                        ],
+                                    },
+                                    {"type": "title", "title": "WORKED EXAMPLE1", "content": "hide example", "children": []},
+                                ],
+                            },
+                            {"type": "title", "title": "> Glossary", "content": "terms", "children": []},
+                            {"type": "title", "title": "> Index", "content": "index terms", "children": []},
+                        ],
+                    },
+                ],
+            }
+        ],
+    }
+
+    review_tree = service._filter_toc_view_tree(raw_tree)
+    readable = service._render_tree_preview(review_tree)
+    flattened = service._flatten_tree(review_tree)
+
+    assert review_tree["schema"] == "luceon-toc-review-tree/v1"
+    assert "Default Title" not in readable
+    assert "> Contents" not in readable
+    assert "Acknowledgements" not in readable
+    assert "TIP" not in readable
+    assert "WORKED EXAMPLE" not in readable
+    assert "Unit 1" in readable
+    assert "1.1 Different types of numbers" in readable
+    assert "Exercise 1.1" in readable
+    assert "> Glossary" in readable
+    assert "> Index" in readable
+    assert all(row["content"] == "" for row in flattened)
+    assert any(row["block_ids"] == ["b-1"] for row in flattened)
+
+
 def test_release_host_mps_worker_posts_force_release_payload():
     captured = {}
 
@@ -250,6 +314,7 @@ if __name__ == "__main__":
     test_wrapped_normalized_label_counts_pages_and_chunks()
     test_bounded_payload_keeps_large_original_estimate_but_limits_selected_work()
     test_live_progress_reads_real_pages_and_raw_chunk_metadata()
+    test_toc_review_filter_keeps_outline_and_hides_full_document_noise()
     test_release_host_mps_worker_posts_force_release_payload()
     test_live_progress_preserves_mps_worker_release_evidence()
     test_full_background_progress_aware_wait_ignores_whole_job_timeout()
