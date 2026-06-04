@@ -314,11 +314,11 @@ function rulePreClean(rawMarkdown) {
   };
 }
 
-function buildCleanerRequest({ materialId, version, chapterId, chapterTitle, toc, sourceMap, imageMap, precleanMarkdown }) {
+function buildCleanerRequest({ materialId, version, chapterId, chapterTitle, toc, sourceMap, imageMap, chunkManifest, precleanMarkdown, inputMarkdownRole }) {
   const tocNode = (toc.nodes || []).find((node) => node.id === chapterId) || null;
   return {
     protocol: PROTOCOL,
-    task: 'clean_single_chapter_markdown',
+    task: 'clean_structure_locked_markdown_unit',
     chapter_context: {
       material_id: materialId,
       version,
@@ -326,7 +326,10 @@ function buildCleanerRequest({ materialId, version, chapterId, chapterTitle, toc
       title: chapterTitle,
       toc_order: tocNode?.order ?? null,
       toc_level: tocNode?.level ?? null,
+      unit_path: tocNode?.unit_path ?? null,
+      raw_preview_path: tocNode?.raw_path ?? null,
     },
+    input_markdown_role: inputMarkdownRole || 'unit_markdown',
     preclean_markdown: precleanMarkdown,
     image_map: {
       allowed_refs: allowedImageRefs(imageMap),
@@ -343,9 +346,23 @@ function buildCleanerRequest({ materialId, version, chapterId, chapterTitle, toc
         : [],
     },
     source_map_summary: summarizeSourceMap(sourceMap),
+    structure_lock: {
+      source: 'upstream canonical_toc and cleaning_unit_pack',
+      unit_id: chapterId,
+      pack_id: chunkManifest?.pack_id || null,
+      title: chapterTitle,
+      node: chunkManifest?.node || null,
+      boundary: chunkManifest?.boundary || null,
+      source_span: chunkManifest?.source_span || null,
+      llm_must_not_create_or_delete_book_structure: true,
+      llm_must_not_change_heading_hierarchy: true,
+      llm_must_not_move_content_outside_this_unit: true,
+    },
     constraints: [
       'Return JSON only; do not wrap it in Markdown fences.',
-      'Clean, correct, organize, and standardize Markdown only.',
+      'Clean, correct, organize, and standardize only the provided structure-locked Markdown unit.',
+      'The unit already carries the upstream canonical TOC structure; do not create, delete, promote, demote, or rename book-structure headings.',
+      'Do not decide chapter/section/exercise boundaries. Preserve the existing unit boundary.',
       'Do not summarize, expand, translate, or rewrite as new textbook content.',
       'Do not silently remove any possible original content.',
       'Preserve all required image references exactly in Markdown.',
@@ -366,9 +383,11 @@ function buildCleanerRequest({ materialId, version, chapterId, chapterTitle, toc
 
 function buildCleanerPrompt(requestPayload) {
   return [
-    'You are the RawCode2CleanCode LLM Cleaner for a single textbook chapter.',
+    'You are the RawCode2CleanCode LLM Cleaner for a single structure-locked textbook unit.',
     '',
-    'Your task is constrained content cleaning, not content creation.',
+    'Your task is constrained content cleaning, not content creation and not TOC generation.',
+    'The Markdown input is already cut by the upstream canonical table of contents.',
+    'Do not change the unit boundary, heading hierarchy, parent path, or source scope.',
     'You must preserve the original meaning, order, examples, formulas, image references, and educational intent.',
     'Do not summarize. Do not add new explanations. Do not remove possible source content silently.',
     'If uncertain, keep the content and add an unresolved item.',
@@ -528,8 +547,34 @@ async function callLLMCleaner({ apiBase, model, prompt }) {
   };
 }
 
-async function runCleanerStage({ mode, model, apiBase, materialId, version, chapterId, chapterTitle, toc, sourceMap, imageMap, precleanMarkdown, auditDir }) {
-  const requestPayload = buildCleanerRequest({ materialId, version, chapterId, chapterTitle, toc, sourceMap, imageMap, precleanMarkdown });
+async function runCleanerStage({
+  mode,
+  model,
+  apiBase,
+  materialId,
+  version,
+  chapterId,
+  chapterTitle,
+  toc,
+  sourceMap,
+  imageMap,
+  chunkManifest,
+  precleanMarkdown,
+  inputMarkdownRole,
+  auditDir,
+}) {
+  const requestPayload = buildCleanerRequest({
+    materialId,
+    version,
+    chapterId,
+    chapterTitle,
+    toc,
+    sourceMap,
+    imageMap,
+    chunkManifest,
+    precleanMarkdown,
+    inputMarkdownRole,
+  });
   const prompt = buildCleanerPrompt(requestPayload);
   const requestJson = stableJson(requestPayload);
   const promptHash = sha256Text(prompt);
@@ -977,12 +1022,14 @@ async function loadRawBundle(rawBundleDir, requestedChapterId) {
   if (!chapterIds.includes(chapterId)) throw new Error(`chapter ${chapterId} not found in ${join(rawBundleDir, 'chapters')}`);
 
   const rawChapterDir = join(rawBundleDir, 'chapters', chapterId);
+  const unitMdPath = join(rawChapterDir, 'unit.md');
   const rawMdPath = join(rawChapterDir, 'raw.md');
   const sourceMapPath = join(rawChapterDir, 'source_map.json');
   const imageMapPath = join(rawChapterDir, 'image_map.json');
   const chunkManifestPath = join(rawChapterDir, 'chunk_manifest.json');
 
-  const rawMarkdown = await readFile(rawMdPath, 'utf8');
+  const rawMarkdownInputPath = existsSync(unitMdPath) ? unitMdPath : rawMdPath;
+  const rawMarkdown = await readFile(rawMarkdownInputPath, 'utf8');
   const sourceMap = await readJson(sourceMapPath);
   const imageMap = await readJson(imageMapPath);
   const chunkManifest = await readJson(chunkManifestPath);
@@ -993,7 +1040,10 @@ async function loadRawBundle(rawBundleDir, requestedChapterId) {
     toc,
     chapterId,
     rawChapterDir,
+    unitMdPath,
     rawMdPath,
+    rawMarkdownInputPath,
+    inputMarkdownRole: existsSync(unitMdPath) ? 'structure_locked_unit_markdown' : 'legacy_raw_markdown',
     sourceMapPath,
     imageMapPath,
     chunkManifestPath,
@@ -1050,8 +1100,22 @@ async function buildFixtureRawCode(outDir) {
   await writeTinyPng(globalImage);
   await copyFile(globalImage, chapterImage);
 
+  const unitMarkdown = [
+    '<!-- luceon:unit_id=chapter_001 -->',
+    '<!-- luceon:parent_path=第一章 数与式 -->',
+    '<!-- luceon:pack_level=1 -->',
+    '<!-- luceon:boundary_basis=structure-level -->',
+    '<!-- luceon:source_blocks=b001,b002,b003,b004 -->',
+    '<!-- luceon:asset_hashes=img_001.png -->',
+    '',
+    rawMarkdown,
+    '',
+    '<!-- luceon:end_unit -->',
+  ].join('\n');
+
+  await writeText(join(rawChapterDir, 'unit.md'), unitMarkdown);
   await writeText(join(rawChapterDir, 'raw.md'), rawMarkdown);
-  await writeText(join(rawBundleDir, 'full.md'), rawMarkdown);
+  await writeText(join(rawBundleDir, 'full.md'), unitMarkdown);
 
   await writeJson(join(rawBundleDir, 'manifest.json'), {
     protocol: PROTOCOL,
@@ -1065,7 +1129,12 @@ async function buildFixtureRawCode(outDir) {
       luceon_rules: { available: true, mode: 'fixture' },
     },
     chapters: [
-      { chapter_id: chapterId, title: chapterTitle, path: `chapters/${chapterId}/raw.md` },
+      {
+        chapter_id: chapterId,
+        title: chapterTitle,
+        path: `chapters/${chapterId}/unit.md`,
+        raw_preview_path: `chapters/${chapterId}/raw.md`,
+      },
     ],
   });
 
@@ -1073,7 +1142,14 @@ async function buildFixtureRawCode(outDir) {
     toc_version: 'v0',
     material_id: DEFAULT_MATERIAL_ID,
     nodes: [
-      { id: chapterId, level: 1, title: chapterTitle, order: 1, raw_path: `chapters/${chapterId}/raw.md` },
+      {
+        id: chapterId,
+        level: 1,
+        title: chapterTitle,
+        order: 1,
+        unit_path: `chapters/${chapterId}/unit.md`,
+        raw_path: `chapters/${chapterId}/raw.md`,
+      },
     ],
   });
 
@@ -1108,6 +1184,14 @@ async function buildFixtureRawCode(outDir) {
     order: 1,
     source: 'fixture',
     boundary: { start: 1, end: rawMarkdown.split('\n').length },
+    unit_markdown_path: `chapters/${chapterId}/unit.md`,
+    raw_preview_path: `chapters/${chapterId}/raw.md`,
+    llm_input_policy: {
+      primary_input: 'unit.md',
+      sidecars_for_validation: ['source_map.json', 'image_map.json', 'chunk_manifest.json'],
+      structure_boundary_locked: true,
+      llm_must_not_generate_book_structure: true,
+    },
     risk_flags: [],
   });
 
@@ -1140,7 +1224,9 @@ async function runPilot({ rawBundleDir, chapterId, outDir, cleanerMode, model, a
     toc: loaded.toc,
     sourceMap: loaded.sourceMap,
     imageMap: loaded.imageMap,
+    chunkManifest: loaded.chunkManifest,
     precleanMarkdown: precleanResult.markdown,
+    inputMarkdownRole: loaded.inputMarkdownRole,
     auditDir,
   });
   const postProcessResult = rulePostProcess({
@@ -1171,6 +1257,7 @@ async function runPilot({ rawBundleDir, chapterId, outDir, cleanerMode, model, a
   });
 
   const rawMdBuffer = await readFile(loaded.rawMdPath);
+  const inputMarkdownBuffer = await readFile(loaded.rawMarkdownInputPath);
   const cleanMdPath = join(cleanChapterDir, 'clean.md');
   await writeText(cleanMdPath, postProcessResult.cleanMarkdown);
   const cleanMdBuffer = await readFile(cleanMdPath);
@@ -1202,6 +1289,9 @@ async function runPilot({ rawBundleDir, chapterId, outDir, cleanerMode, model, a
     created_at: createdAt,
     input: {
       raw_bundle_dir: loaded.rawBundleDir,
+      input_markdown: loaded.rawMarkdownInputPath,
+      input_markdown_role: loaded.inputMarkdownRole,
+      unit_md: loaded.unitMdPath,
       raw_md: loaded.rawMdPath,
       source_map: loaded.sourceMapPath,
       image_map: loaded.imageMapPath,
@@ -1235,6 +1325,7 @@ async function runPilot({ rawBundleDir, chapterId, outDir, cleanerMode, model, a
     cleaner: cleanerManifest,
     hashes: {
       raw_md_sha256: sha256Buffer(rawMdBuffer),
+      input_markdown_sha256: sha256Buffer(inputMarkdownBuffer),
       clean_md_sha256: sha256Buffer(cleanMdBuffer),
     },
     side_effects: {

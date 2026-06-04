@@ -134,8 +134,21 @@ function normalizePack(pack, index) {
   return { pack, chapterId, title, materialId, assetVersion, blocks };
 }
 
+function markdownBlocksForPack(blocks) {
+  const output = [];
+  const seenAdjacent = new Set();
+  for (const block of blocks || []) {
+    const rawText = String(block?.raw_text || '').trim();
+    const key = `${block?.source_order ?? ''}\u0000${rawText}`;
+    if (rawText && seenAdjacent.has(key)) continue;
+    output.push(block);
+    if (rawText) seenAdjacent.add(key);
+  }
+  return output;
+}
+
 function rawMarkdownForPack({ title, blocks }) {
-  const blockText = blocks
+  const blockText = markdownBlocksForPack(blocks)
     .map((block) => String(block?.raw_text || '').trim())
     .filter(Boolean)
     .join('\n\n');
@@ -144,6 +157,68 @@ function rawMarkdownForPack({ title, blocks }) {
     return `${blockText.trim()}\n`;
   }
   return [`# ${title}`, blockText].filter(Boolean).join('\n\n').trim() + '\n';
+}
+
+function markdownCommentValue(value) {
+  return String(value ?? '')
+    .replace(/-->/g, '-- >')
+    .replace(/\r?\n/g, ' ')
+    .trim();
+}
+
+function titleLevelForPack(pack) {
+  const level = Number(pack?.pack_boundary?.pack_level ?? pack?.node?.level ?? 1);
+  if (!Number.isFinite(level)) return 1;
+  return Math.min(6, Math.max(1, Math.round(level)));
+}
+
+function ancestorPathForPack(pack, title) {
+  const path = Array.isArray(pack?.node?.ancestor_path)
+    ? pack.node.ancestor_path
+      .map((item) => (typeof item === 'string' ? item : item?.title))
+      .filter(Boolean)
+    : [];
+  return path.length > 0 ? path.map(String) : [String(title || '').trim()].filter(Boolean);
+}
+
+function unitMarkdownForPack(item) {
+  const { pack, chapterId, title, blocks } = item;
+  const sourceBlockIds = Array.isArray(pack?.source_span?.source_block_ids)
+    ? pack.source_span.source_block_ids.map(String)
+    : blocks.flatMap((block) => (Array.isArray(block?.source_block_ids) ? block.source_block_ids.map(String) : [String(block?.block_id || '')])).filter(Boolean);
+  const assetHashNames = new Set();
+  for (const block of blocks) {
+    for (const name of block?.asset_hash_names || []) assetHashNames.add(String(name));
+    for (const ref of block?.asset_refs || []) {
+      if (ref?.asset_hash_name) assetHashNames.add(String(ref.asset_hash_name));
+    }
+  }
+  for (const image of pack?.assets?.images || []) {
+    const name = image?.asset_hash_name || image?.hash_name || image?.name;
+    if (name) assetHashNames.add(String(name));
+  }
+  const headingLevel = titleLevelForPack(pack);
+  const heading = `${'#'.repeat(headingLevel)} ${title}`;
+  const body = rawMarkdownForPack(item)
+    .trim()
+    .replace(/^#{1,6}\s+.+(?:\n+|$)/, '')
+    .trim();
+  const lines = [
+    `<!-- luceon:unit_id=${markdownCommentValue(chapterId)} -->`,
+    `<!-- luceon:pack_id=${markdownCommentValue(pack?.pack_id || '')} -->`,
+    `<!-- luceon:parent_path=${markdownCommentValue(ancestorPathForPack(pack, title).join(' > '))} -->`,
+    `<!-- luceon:pack_level=${markdownCommentValue(headingLevel)} -->`,
+    `<!-- luceon:boundary_basis=${markdownCommentValue(pack?.pack_boundary?.boundary_basis || 'structure-level')} -->`,
+    `<!-- luceon:source_block_count=${markdownCommentValue(sourceBlockIds.length)} -->`,
+    `<!-- luceon:source_order_range=${markdownCommentValue((pack?.source_span?.source_order_range || []).join('-'))} -->`,
+    '<!-- luceon:source_blocks_ref=source_map.json -->',
+    `<!-- luceon:asset_hashes=${markdownCommentValue(Array.from(assetHashNames).sort().join(','))} -->`,
+    '',
+    heading,
+  ];
+  if (body) lines.push('', body);
+  lines.push('', '<!-- luceon:end_unit -->', '');
+  return lines.join('\n');
 }
 
 function sourceBlockFor(block, index) {
@@ -262,12 +337,14 @@ async function convertCleanlatexPacksToRawCode({ packsPath, outDir, operatorId =
   for (const [index, item] of normalized.entries()) {
     const chapterDir = join(rawBundleDir, 'chapters', item.chapterId);
     const rawMarkdown = rawMarkdownForPack(item);
+    const unitMarkdown = unitMarkdownForPack(item);
     const sourceBlocks = item.blocks.map(sourceBlockFor);
-    const imageMap = imageMapForPack(item.pack, rawMarkdown);
+    const imageMap = imageMapForPack(item.pack, unitMarkdown);
     const chapterAssetCopy = await copyDeclaredImages({ imageMap, rawBundleDir, assetRoot });
     assetCopy.copied.push(...chapterAssetCopy.copied.map((entry) => ({ ...entry, chapter_id: item.chapterId })));
     assetCopy.missing.push(...chapterAssetCopy.missing.map((entry) => ({ ...entry, chapter_id: item.chapterId })));
 
+    await writeText(join(chapterDir, 'unit.md'), unitMarkdown);
     await writeText(join(chapterDir, 'raw.md'), rawMarkdown);
     await writeJson(join(chapterDir, 'source_map.json'), {
       protocol: PROTOCOL,
@@ -296,6 +373,14 @@ async function convertCleanlatexPacksToRawCode({ packsPath, outDir, operatorId =
       node: item.pack.node || null,
       boundary: item.pack.pack_boundary || null,
       source_span: item.pack.source_span || null,
+      unit_markdown_path: `chapters/${item.chapterId}/unit.md`,
+      raw_preview_path: `chapters/${item.chapterId}/raw.md`,
+      llm_input_policy: {
+        primary_input: 'unit.md',
+        sidecars_for_validation: ['source_map.json', 'image_map.json', 'chunk_manifest.json'],
+        structure_boundary_locked: true,
+        llm_must_not_generate_book_structure: true,
+      },
       risk_flags: item.pack.warnings || [],
     });
 
@@ -305,19 +390,21 @@ async function convertCleanlatexPacksToRawCode({ packsPath, outDir, operatorId =
       title: item.title,
       order: index + 1,
       raw_path: `chapters/${item.chapterId}/raw.md`,
+      unit_path: `chapters/${item.chapterId}/unit.md`,
       source_pack_id: item.pack.pack_id || null,
       source_block_ids: item.pack?.source_span?.source_block_ids || [],
     });
     manifestChapters.push({
       chapter_id: item.chapterId,
       title: item.title,
-      path: `chapters/${item.chapterId}/raw.md`,
+      path: `chapters/${item.chapterId}/unit.md`,
+      raw_preview_path: `chapters/${item.chapterId}/raw.md`,
       source_pack_id: item.pack.pack_id || null,
       image_count: imageMap.images.length,
       copied_image_count: chapterAssetCopy.copied.length,
       missing_image_count: chapterAssetCopy.missing.length,
     });
-    fullParts.push(rawMarkdown.trim());
+    fullParts.push(unitMarkdown.trim());
   }
 
   await writeText(join(rawBundleDir, 'full.md'), `${fullParts.join('\n\n')}\n`);
