@@ -119,7 +119,24 @@ try {
   }
 
   {
-    console.log('  [4] stop-on-first-failure blocks later samples...');
+    console.log('  [4] rejects non-approved LLM model before any sample processing...');
+    const calls = [];
+    const result = await runRawCode2CleanCodeUatRunner({
+      samples: [samples[0]],
+      mode: 'real',
+      operatorId: 'local-operator',
+      confirmRealRun: true,
+      cleaner: 'llm',
+      model: 'gpt-4o-mini',
+      deps: { processSample: fakeProcessSample({ calls }) },
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.code, 'LLM_MODEL_NOT_ALLOWED');
+    assert.equal(calls.length, 0);
+  }
+
+  {
+    console.log('  [5] stop-on-first-failure blocks later samples...');
     const calls = [];
     const result = await runRawCode2CleanCodeUatRunner({
       samples,
@@ -142,7 +159,7 @@ try {
   }
 
   {
-    console.log('  [5] failed real-mode preflight prevents real execution...');
+    console.log('  [6] failed real-mode preflight prevents real execution...');
     const calls = [];
     const result = await runRawCode2CleanCodeUatRunner({
       samples,
@@ -166,7 +183,7 @@ try {
   }
 
   {
-    console.log('  [6] real mode runs preflight then local real phase with zero production side effects...');
+    console.log('  [7] real mode runs preflight then local real phase with zero production side effects...');
     const calls = [];
     const result = await runRawCode2CleanCodeUatRunner({
       samples: [samples[0], samples[1]],
@@ -188,7 +205,7 @@ try {
   }
 
   {
-    console.log('  [7] Task329 cleaning_unit_pack artifacts adapt into RawCode and run through CleanCode dry-run...');
+    console.log('  [8] Task329 cleaning_unit_pack artifacts adapt into RawCode and run through CleanCode dry-run...');
     const packsPath = join(tmpRoot, 'cleaning_unit_packs.json');
     await writeFile(packsPath, JSON.stringify([
       {
@@ -291,7 +308,7 @@ try {
   }
 
   {
-    console.log('  [8] raw split markers and repeated large text downgrade CleanCode candidate to NEEDS_REVIEW...');
+    console.log('  [9] raw split markers and repeated large text downgrade CleanCode candidate to NEEDS_REVIEW...');
     const packsPath = join(tmpRoot, 'dirty_cleaning_unit_packs.json');
     const repeatedText = 'This paragraph is intentionally long enough to be detected as a repeated source segment for validation. It should not be silently accepted.';
     await writeFile(packsPath, JSON.stringify([
@@ -347,7 +364,7 @@ try {
   }
 
   {
-    console.log('  [9] sample processing errors redact API keys from evidence...');
+    console.log('  [10] sample processing errors redact API keys from evidence...');
     const result = await runRawCode2CleanCodeUatRunner({
       samples: [samples[0]],
       mode: 'dry-run',
@@ -365,7 +382,7 @@ try {
   }
 
   {
-    console.log('  [10] duplicate-aware coverage accepts faithful de-duplicated LLM output...');
+    console.log('  [11] duplicate-aware coverage accepts faithful de-duplicated LLM output...');
     const repeatedText = 'This duplicated source paragraph contains all unique educational content for the section and should count once after cleaning.';
     const qualityReport = validateCleanCode({
       cleanMarkdown: `# Dedup section\n\n${repeatedText}\n`,
@@ -390,6 +407,33 @@ try {
     assert.equal(qualityReport.status, 'PASS', JSON.stringify(qualityReport, null, 2));
     assert.equal(coverageCheck.status, 'PASS');
     assert.equal(coverageCheck.detail.duplicateAwarePass, true);
+  }
+
+  {
+    console.log('  [12] visual references without assets or review items require review...');
+    const qualityReport = validateCleanCode({
+      cleanMarkdown: '# Section\n\nThe flow diagram shows the statistical investigation process.\n',
+      chapterTitle: 'Section',
+      imageMap: { images: [] },
+      cleanChapterDir: tmpRoot,
+      copiedImages: [],
+      missingImages: [],
+      unresolvedItems: [],
+      rawMarkdown: '# Section\n\nThe flow diagram shows the statistical investigation process.\n',
+      cleanerMode: 'llm',
+      llmResponse: {
+        clean_markdown: '# Section\n\nThe flow diagram shows the statistical investigation process.\n',
+        kept_images: [],
+        removed_noise: [],
+        unresolved_items: [],
+        change_summary: [],
+        risk_flags: [],
+      },
+    });
+    const visualCheck = qualityReport.checks.find((check) => check.id === 'visual_references_have_assets_or_review_items');
+    assert.equal(qualityReport.status, 'NEEDS_REVIEW', JSON.stringify(qualityReport, null, 2));
+    assert.equal(visualCheck.status, 'NEEDS_REVIEW');
+    assert.equal(qualityReport.risks.includes('visual_reference_without_asset_or_review_item'), true);
   }
 
   console.log('RawCode2CleanCode UAT runner smoke passed.');

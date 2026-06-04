@@ -20,6 +20,7 @@ import {
   DEFAULT_LLM_MODEL,
   DEFAULT_OPENAI_BASE,
   PROTOCOL,
+  REQUIRED_LLM_MODEL,
   runPilot,
   stableJson,
 } from './rawcode2cleancode-pilot.mjs';
@@ -144,6 +145,20 @@ function blocked(code, reason, details = undefined) {
   };
 }
 
+function requiresLlmModelGuard(cleanerMode) {
+  return cleanerMode === 'llm' || cleanerMode === 'llm-dry-run';
+}
+
+function validateAllowedLlmModel({ cleanerMode, model }) {
+  if (!requiresLlmModelGuard(cleanerMode)) return null;
+  if (model === REQUIRED_LLM_MODEL) return null;
+  return blocked('LLM_MODEL_NOT_ALLOWED', `RawCode2CleanCode LLM cleaner model is locked to ${REQUIRED_LLM_MODEL}`, {
+    requestedModel: model || null,
+    requiredModel: REQUIRED_LLM_MODEL,
+    cleanerMode,
+  });
+}
+
 function safeSegment(value, fallback) {
   const segment = String(value || fallback || 'sample')
     .replace(/[^a-zA-Z0-9._-]+/g, '-')
@@ -223,7 +238,7 @@ async function readRunnerManifest(path) {
   };
 }
 
-function validateRunnerInput({ samples, mode, operatorId, hardCap, confirmRealRun }) {
+function validateRunnerInput({ samples, mode, operatorId, hardCap, confirmRealRun, cleaner, model }) {
   if (!operatorId || !String(operatorId).trim()) {
     return blocked('MISSING_OPERATOR', '--operator-id is required for UAT evidence ownership');
   }
@@ -255,6 +270,13 @@ function validateRunnerInput({ samples, mode, operatorId, hardCap, confirmRealRu
     }
     if (sample.cleaner && !CLEANER_MODES.has(sample.cleaner)) {
       return blocked('SAMPLE_CLEANER_INVALID', 'sample.cleaner is not supported', { index, sampleId: sample.sampleId, cleaner: sample.cleaner });
+    }
+    const modelBlock = validateAllowedLlmModel({
+      cleanerMode: sample.cleaner || cleaner || DEFAULT_CLEANER,
+      model,
+    });
+    if (modelBlock) {
+      return modelBlock;
     }
   }
 
@@ -453,7 +475,7 @@ async function runRawCode2CleanCodeUatRunner({
   apiBase = DEFAULT_OPENAI_BASE,
   deps = {},
 } = {}) {
-  const validation = validateRunnerInput({ samples, mode, operatorId, hardCap, confirmRealRun });
+  const validation = validateRunnerInput({ samples, mode, operatorId, hardCap, confirmRealRun, cleaner, model });
   if (!validation.ok) return validation;
 
   const startedAt = deps.now ? deps.now() : nowIso();

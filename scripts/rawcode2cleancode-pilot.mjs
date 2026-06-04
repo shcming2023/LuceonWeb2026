@@ -43,7 +43,8 @@ const DEFAULT_VERSION = 'v0';
 const PILOT_VERSION = 'p0.1-controlled-llm-interface-2026-06-04';
 const DEFAULT_CLEANER = 'deterministic';
 const CLEANER_MODES = new Set(['deterministic', 'llm-dry-run', 'llm']);
-const DEFAULT_LLM_MODEL = process.env.RAWCODE2CLEANCODE_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const REQUIRED_LLM_MODEL = 'deepseek-v4-flash';
+const DEFAULT_LLM_MODEL = REQUIRED_LLM_MODEL;
 const DEFAULT_OPENAI_BASE = process.env.OPENAI_API_BASE || 'https://api.openai.com/v1';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -65,7 +66,19 @@ function usage() {
     '  This is a local P0.1 pilot only.',
     '  It does not write DB, does not write MinIO, and does not call runtime workers.',
     '  LLM calls are disabled unless --cleaner llm is explicitly provided.',
+    `  LLM cleaner model is locked to ${REQUIRED_LLM_MODEL}; any other --model is rejected.`,
   ].join('\n');
+}
+
+function requiresLlmModelGuard(cleanerMode) {
+  return cleanerMode === 'llm' || cleanerMode === 'llm-dry-run';
+}
+
+function assertAllowedLlmModel({ cleanerMode, model }) {
+  if (!requiresLlmModelGuard(cleanerMode)) return;
+  if (model !== REQUIRED_LLM_MODEL) {
+    throw new Error(`RawCode2CleanCode LLM cleaner model is locked to ${REQUIRED_LLM_MODEL}; received ${model || '<empty>'}`);
+  }
 }
 
 function parseArgs(argv) {
@@ -115,6 +128,8 @@ function parseArgs(argv) {
   if (!CLEANER_MODES.has(args.cleaner)) {
     throw new Error(`invalid --cleaner ${args.cleaner}; expected one of ${Array.from(CLEANER_MODES).join(', ')}`);
   }
+
+  assertAllowedLlmModel({ cleanerMode: args.cleaner, model: args.model });
 
   if (!args.fixture && !args.input) {
     args.fixture = true;
@@ -456,6 +471,7 @@ function normalizeCleanerResponse(value) {
 }
 
 async function callLLMCleaner({ apiBase, model, prompt }) {
+  assertAllowedLlmModel({ cleanerMode: 'llm', model });
   if (!process.env.OPENAI_API_KEY) {
     throw new Error('--cleaner llm requires OPENAI_API_KEY in environment');
   }
@@ -731,6 +747,27 @@ function deduplicatedNormalizedTextForMetric(markdown) {
   return uniqueSegments.join('');
 }
 
+function referencedVisualEvidenceGaps({ cleanMarkdown, cleanRefs, unresolvedItems }) {
+  const text = String(cleanMarkdown || '');
+  const terms = [
+    'flow diagram',
+    'diagram',
+    'figure',
+    'chart',
+    'graph',
+    'illustration',
+    'image',
+    'picture',
+  ];
+  const referencedTerms = terms.filter((term) => new RegExp(`\\b${term.replace(/\s+/g, '\\s+')}\\b`, 'i').test(text));
+  if (referencedTerms.length === 0 || cleanRefs.length > 0) return [];
+  if (Array.isArray(unresolvedItems) && unresolvedItems.length > 0) return [];
+  return referencedTerms.map((term) => ({
+    term,
+    reason: 'clean markdown references visual evidence but has no image reference or unresolved item',
+  }));
+}
+
 function validateCleanCode({ cleanMarkdown, chapterTitle, imageMap, cleanChapterDir, copiedImages, missingImages, unresolvedItems, rawMarkdown, cleanerMode, llmResponse }) {
   const checks = [];
   const risks = [];
@@ -768,6 +805,7 @@ function validateCleanCode({ cleanMarkdown, chapterTitle, imageMap, cleanChapter
     : /^#\s+/m.test(cleanMarkdown);
   const splitMarkerCount = (cleanMarkdown.match(/<\|txt_split\|>/g) || []).length;
   const repeatedSegments = repeatedLargeTextSegments(cleanMarkdown);
+  const visualEvidenceGaps = referencedVisualEvidenceGaps({ cleanMarkdown, cleanRefs, unresolvedItems });
 
   checks.push(...validateCleanerResponseAgainstImageMap({ llmResponse, imageMap }));
   checks.push({
@@ -818,6 +856,11 @@ function validateCleanCode({ cleanMarkdown, chapterTitle, imageMap, cleanChapter
     detail: { unresolvedCount: Array.isArray(unresolvedItems) ? unresolvedItems.length : null },
   });
   checks.push({
+    id: 'visual_references_have_assets_or_review_items',
+    status: visualEvidenceGaps.length === 0 ? 'PASS' : 'NEEDS_REVIEW',
+    detail: { visualEvidenceGaps },
+  });
+  checks.push({
     id: 'production_side_effects_absent',
     status: 'PASS',
     detail: { db_writes: 0, minio_writes: 0, runtime_worker_posts: 0 },
@@ -828,6 +871,7 @@ function validateCleanCode({ cleanMarkdown, chapterTitle, imageMap, cleanChapter
   if (!coverageAcceptable) risks.push('low_content_coverage_ratio');
   if (splitMarkerCount > 0) risks.push('raw_split_markers_remaining');
   if (repeatedSegments.length > 0) risks.push('duplicate_large_text_segments');
+  if (visualEvidenceGaps.length > 0) risks.push('visual_reference_without_asset_or_review_item');
   if (cleanerMode === 'llm-dry-run') risks.push('llm_dry_run_requires_review');
 
   const hasBlocked = checks.some((check) => check.status === 'BLOCKED');
@@ -1309,7 +1353,9 @@ export {
   DEFAULT_CLEANER,
   DEFAULT_LLM_MODEL,
   DEFAULT_OPENAI_BASE,
+  REQUIRED_LLM_MODEL,
   PILOT_VERSION,
+  assertAllowedLlmModel,
   buildFixtureRawCode,
   loadRawBundle,
   runPilot,
