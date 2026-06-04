@@ -2439,7 +2439,7 @@ def _compile_cleanlatex_pilot_packs(
         combined_text = "\n".join(str(block.get("raw_text") or "") for block in content_blocks)
         visual_terms = _visual_reference_terms(combined_text)
         visual_requirements: list[dict[str, Any]] = []
-        if visual_terms:
+        if visual_terms or image_assets:
             visual_requirements.append({
                 "terms": visual_terms,
                 "status": "asset-linked" if image_assets else "asset-missing",
