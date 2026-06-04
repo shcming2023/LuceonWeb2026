@@ -33,6 +33,7 @@ const MANIFEST_PROTOCOL = 'RawCode2CleanCode-UAT-Manifest/v0';
 const RUNNER_VERSION = 'rawcode2cleancode-uat-runner-2026-06-04';
 const DEFAULT_HARD_CAP = 3;
 const MAX_OPERATOR_HARD_CAP = 3;
+const MAX_FULL_BOOK_HARD_CAP = 500;
 const MODES = new Set(['dry-run', 'real']);
 const CLEANER_MODES = new Set(['deterministic', 'llm-dry-run', 'llm']);
 const ZERO_PRODUCTION_SIDE_EFFECTS = Object.freeze({
@@ -53,7 +54,7 @@ function usage() {
     'Boundaries:',
     '  dry-run is the default mode and does not call external LLM APIs unless --cleaner llm-dry-run is requested for audit generation.',
     '  real mode requires --confirm-real and first runs a dry-run preflight.',
-    '  hard-cap is capped at 3 samples for UAT safety.',
+    '  hard-cap is capped at 3 samples for UAT safety unless --allow-full-book is explicitly provided.',
     '  all modes are local-file only: no DB writes, no MinIO writes, no runtime worker posts.',
   ].join('\n');
 }
@@ -68,6 +69,7 @@ function parseArgs(argv) {
     model: DEFAULT_LLM_MODEL,
     apiBase: DEFAULT_OPENAI_BASE,
     confirmRealRun: false,
+    allowFullBook: false,
     out: join(repoRoot, '.tmp', 'rawcode2cleancode-runner'),
     help: false,
   };
@@ -98,6 +100,8 @@ function parseArgs(argv) {
       args.apiBase = next();
     } else if (arg === '--confirm-real') {
       args.confirmRealRun = true;
+    } else if (arg === '--allow-full-book') {
+      args.allowFullBook = true;
     } else if (arg === '--out') {
       args.out = next();
     } else {
@@ -238,15 +242,16 @@ async function readRunnerManifest(path) {
   };
 }
 
-function validateRunnerInput({ samples, mode, operatorId, hardCap, confirmRealRun, cleaner, model }) {
+function validateRunnerInput({ samples, mode, operatorId, hardCap, confirmRealRun, cleaner, model, allowFullBook }) {
   if (!operatorId || !String(operatorId).trim()) {
     return blocked('MISSING_OPERATOR', '--operator-id is required for UAT evidence ownership');
   }
   if (!Array.isArray(samples) || samples.length === 0) {
     return blocked('EMPTY_SAMPLE_LIST', 'manifest must contain at least one RawCode sample');
   }
-  if (hardCap > MAX_OPERATOR_HARD_CAP) {
-    return blocked('ENTRY_HARD_CAP_EXCEEDED', 'operator entry hard-cap must be <= 3', { requestedHardCap: hardCap, maxHardCap: MAX_OPERATOR_HARD_CAP });
+  const maxHardCap = allowFullBook ? MAX_FULL_BOOK_HARD_CAP : MAX_OPERATOR_HARD_CAP;
+  if (hardCap > maxHardCap) {
+    return blocked('ENTRY_HARD_CAP_EXCEEDED', `operator entry hard-cap must be <= ${maxHardCap}`, { requestedHardCap: hardCap, maxHardCap, allowFullBook });
   }
   if (samples.length > hardCap) {
     return blocked('HARD_CAP_EXCEEDED', 'sample count exceeds configured hard-cap', { sampleCount: samples.length, hardCap });
@@ -473,9 +478,10 @@ async function runRawCode2CleanCodeUatRunner({
   cleaner = DEFAULT_CLEANER,
   model = DEFAULT_LLM_MODEL,
   apiBase = DEFAULT_OPENAI_BASE,
+  allowFullBook = false,
   deps = {},
 } = {}) {
-  const validation = validateRunnerInput({ samples, mode, operatorId, hardCap, confirmRealRun, cleaner, model });
+  const validation = validateRunnerInput({ samples, mode, operatorId, hardCap, confirmRealRun, cleaner, model, allowFullBook });
   if (!validation.ok) return validation;
 
   const startedAt = deps.now ? deps.now() : nowIso();
@@ -505,6 +511,7 @@ async function runRawCode2CleanCodeUatRunner({
       operatorId,
       requestedMode: mode,
       hardCap,
+      allowFullBook,
       outputRoot,
       realRunExecuted: false,
       productionSideEffects: ZERO_PRODUCTION_SIDE_EFFECTS,
@@ -535,6 +542,7 @@ async function runRawCode2CleanCodeUatRunner({
       operatorId,
       requestedMode: mode,
       hardCap,
+      allowFullBook,
       outputRoot,
       realRunExecuted: false,
       preflight,
@@ -569,6 +577,7 @@ async function runRawCode2CleanCodeUatRunner({
     operatorId,
     requestedMode: mode,
     hardCap,
+    allowFullBook,
     outputRoot,
     realRunExecuted: true,
     preflight,
@@ -587,6 +596,7 @@ function buildEvidenceSurface({ result, runId, manifest, args, startedAt }) {
     operatorId: args.operatorId,
     requestedMode: args.mode,
     hardCap: args.hardCap,
+    allowFullBook: args.allowFullBook,
     cleaner: args.cleaner,
     liveSideEffectsEnabled: false,
     manifest: {
@@ -637,8 +647,9 @@ async function main() {
   args.hardCap = Number(args.hardCap || manifest.hardCap || DEFAULT_HARD_CAP);
   args.cleaner = args.cleaner || manifest.cleaner || DEFAULT_CLEANER;
 
-  if (args.hardCap > MAX_OPERATOR_HARD_CAP) {
-    return blocked('ENTRY_HARD_CAP_EXCEEDED', 'operator entry hard-cap must be <= 3', { requestedHardCap: args.hardCap, maxHardCap: MAX_OPERATOR_HARD_CAP });
+  const maxHardCap = args.allowFullBook ? MAX_FULL_BOOK_HARD_CAP : MAX_OPERATOR_HARD_CAP;
+  if (args.hardCap > maxHardCap) {
+    return blocked('ENTRY_HARD_CAP_EXCEEDED', `operator entry hard-cap must be <= ${maxHardCap}`, { requestedHardCap: args.hardCap, maxHardCap, allowFullBook: args.allowFullBook });
   }
 
   const startedAt = nowIso();
@@ -652,6 +663,7 @@ async function main() {
     cleaner: args.cleaner,
     model: args.model,
     apiBase: args.apiBase,
+    allowFullBook: args.allowFullBook,
     deps: {
       now: () => startedAt,
       manifestSha: manifest.sha256,

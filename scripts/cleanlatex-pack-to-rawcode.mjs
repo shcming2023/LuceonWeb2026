@@ -27,7 +27,7 @@ const repoRoot = resolve(__dirname, '..');
 function usage() {
   return [
     'Usage:',
-    '  node scripts/cleanlatex-pack-to-rawcode.mjs --packs <cleaning_unit_packs.json> --out <dir> [--operator-id <id>] [--version <vN>] [--limit <n>] [--asset-root <dir>]',
+    '  node scripts/cleanlatex-pack-to-rawcode.mjs --packs <cleaning_unit_packs.json> --out <dir> [--operator-id <id>] [--version <vN>] [--limit <n>|--all] [--asset-root <dir>]',
     '',
     'Output:',
     '  <out>/rawcode/<materialId>/<version>/...',
@@ -45,6 +45,7 @@ function parseArgs(argv) {
     operatorId: 'luceon-uat',
     version: null,
     limit: 3,
+    all: false,
     assetRoot: null,
     help: false,
   };
@@ -69,6 +70,8 @@ function parseArgs(argv) {
       args.version = next();
     } else if (arg === '--limit') {
       args.limit = Number(next());
+    } else if (arg === '--all') {
+      args.all = true;
     } else if (arg === '--asset-root') {
       args.assetRoot = next();
     } else {
@@ -77,7 +80,7 @@ function parseArgs(argv) {
   }
 
   if (!args.help && !args.packs) throw new Error('--packs is required');
-  if (!Number.isFinite(args.limit) || args.limit < 1) throw new Error('--limit must be a positive number');
+  if (!args.all && (!Number.isFinite(args.limit) || args.limit < 1)) throw new Error('--limit must be a positive number');
   return args;
 }
 
@@ -317,7 +320,8 @@ async function copyDeclaredImages({ imageMap, rawBundleDir, assetRoot }) {
 async function convertCleanlatexPacksToRawCode({ packsPath, outDir, operatorId = 'luceon-uat', versionOverride = null, limit = 3, assetRoot = null }) {
   const absolutePacksPath = resolve(packsPath);
   const packsRaw = await readFile(absolutePacksPath, 'utf8');
-  const packs = loadPacksFromPayload(JSON.parse(packsRaw)).slice(0, limit);
+  const allPacks = loadPacksFromPayload(JSON.parse(packsRaw));
+  const packs = limit === null ? allPacks : allPacks.slice(0, limit);
   if (packs.length === 0) throw new Error('no cleaning unit packs found');
 
   const normalized = packs.map(normalizePack);
@@ -459,6 +463,7 @@ async function convertCleanlatexPacksToRawCode({ packsPath, outDir, operatorId =
     materialId,
     version,
     packCount: packs.length,
+    inputPackCount: allPacks.length,
     rawBundleDir,
     runnerManifestPath,
     assetCopy: {
@@ -484,7 +489,7 @@ async function main() {
     outDir: args.out,
     operatorId: args.operatorId,
     versionOverride: args.version,
-    limit: args.limit,
+    limit: args.all ? null : args.limit,
     assetRoot: args.assetRoot,
   });
   console.log(stableJson(result));

@@ -559,6 +559,23 @@ displayingdata 107
     assert validation[pack_41["pack_id"]]["input_counts"]["images"] == 1
     assert validation[pack_41["pack_id"]]["output_checks"]["structure_boundary"] == "pending"
 
+    full_manifest = service._compile_cleanlatex_pilot_packs(
+        canonical_toc,
+        chapter_spans,
+        review_tree,
+        "4134323036518274",
+        "v-test",
+        asset_index,
+        selection_mode="full-book",
+    )
+    full_titles = {pack["node"]["title"] for pack in full_manifest["packs"]}
+    full_numbers = {pack["node"]["number"] for pack in full_manifest["packs"]}
+    assert "1.1 Different types of numbers" in full_titles
+    assert "4.1" in full_numbers
+    assert "4.2" in full_numbers
+    assert "Exercise4.1" in full_titles
+    assert full_manifest["selection_mode"] == "full-book"
+
 
 def test_release_host_mps_worker_posts_force_release_payload():
     captured = {}

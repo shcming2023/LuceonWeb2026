@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import bisect
 import hashlib
 import json
 import math
@@ -1252,6 +1253,20 @@ def _source_pages_from_node(node: dict[str, Any]) -> list[int]:
     return sorted(page for page in pages if page > 0)
 
 
+def _source_bbox_from_node(node: dict[str, Any]) -> list[Any]:
+    direct = node.get("bbox") or node.get("box")
+    if isinstance(direct, list) and direct:
+        return direct
+    location = node.get("location") or node.get("locations")
+    if isinstance(location, list):
+        for item in location:
+            if isinstance(item, dict):
+                bbox = item.get("bbox") or item.get("box")
+                if isinstance(bbox, list) and bbox:
+                    return bbox
+    return []
+
+
 def _source_block_ids_from_node(node: dict[str, Any]) -> list[str]:
     block_ids: list[str] = []
     raw = node.get("block_ids") or node.get("blockIds") or []
@@ -1969,6 +1984,7 @@ def _source_nodes_by_block_id(source_tree: dict[str, Any], asset_index: dict[str
         content = str(node.get("content") or "").strip()
         order = len(by_id) + 1
         pages = _source_pages_from_node(node)
+        bbox = _source_bbox_from_node(node)
         block_ids = _source_block_ids_from_node(node)
         row = {
             "source_order": order,
@@ -1978,7 +1994,7 @@ def _source_nodes_by_block_id(source_tree: dict[str, Any], asset_index: dict[str
             "source_block_ids": block_ids,
             "page": pages[0] if pages else None,
             "pages": pages,
-            "bbox": node.get("bbox") or node.get("box") or [],
+            "bbox": bbox,
             "location": node.get("location") or [],
             "path": [*path, *([title] if title else [])],
             "source_hash": _source_hash({
@@ -1986,7 +2002,7 @@ def _source_nodes_by_block_id(source_tree: dict[str, Any], asset_index: dict[str
                 "content": content,
                 "block_ids": block_ids,
                 "page": pages,
-                "bbox": node.get("bbox") or node.get("box") or [],
+                "bbox": bbox,
             }),
         }
         asset = _asset_for_source_node(node, asset_index)
@@ -2119,7 +2135,7 @@ def _asset_for_source_node(node: dict[str, Any], asset_index: dict[str, list[dic
     if match:
         source_index = int(match.group(1))
     pages = _source_pages_from_node(node)
-    bbox = node.get("bbox") or node.get("box") or []
+    bbox = _source_bbox_from_node(node)
     for asset in candidates:
         if source_index is not None and asset.get("source_index") == source_index:
             return asset
@@ -2203,6 +2219,7 @@ def _source_rows_in_body_order(source_tree: dict[str, Any], asset_index: dict[st
         title = _toc_text(node.get("title")).strip()
         content = str(node.get("content") or "").strip()
         pages = _source_pages_from_node(node)
+        bbox = _source_bbox_from_node(node)
         row = {
             "source_order": len(rows) + 1,
             "title": title,
@@ -2211,7 +2228,7 @@ def _source_rows_in_body_order(source_tree: dict[str, Any], asset_index: dict[st
             "source_block_ids": block_ids,
             "page": pages[0] if pages else None,
             "pages": pages,
-            "bbox": node.get("bbox") or node.get("box") or [],
+            "bbox": bbox,
             "location": node.get("location") or [],
             "path": [title] if title else [],
             "source_hash": _source_hash({
@@ -2219,7 +2236,7 @@ def _source_rows_in_body_order(source_tree: dict[str, Any], asset_index: dict[st
                 "content": content,
                 "block_ids": block_ids,
                 "page": pages,
-                "bbox": node.get("bbox") or node.get("box") or [],
+                "bbox": bbox,
             }),
         }
         asset = _asset_for_source_node(node, asset_index)
@@ -2266,11 +2283,39 @@ def _source_row_matches_canonical_node(row: dict[str, Any], node: dict[str, Any]
     title = str(node.get("title") or "")
     compact_title = _toc_compact(title)
     number = str(node.get("metadata", {}).get("number") or "").strip()
-    if number and re.search(rf"(?<!\d){re.escape(number)}(?!\d)", text):
+    if number and re.search(
+        rf"^\s*(?:unit|chapter|exercise|past\s+paper\s+questions\s+for\s+unit)?\s*{re.escape(number)}(?!\d)",
+        text,
+        flags=re.IGNORECASE,
+    ):
         return True
-    if compact_title and compact_text and (compact_title in compact_text or compact_text in compact_title):
+    if number and re.search(
+        rf"(?i)\b(?:unit|chapter|exercise)\s*{re.escape(number)}(?!\d)",
+        text,
+    ):
+        return True
+    if compact_title and compact_text and compact_title in compact_text:
         return True
     return False
+
+
+def _source_match_orders_by_node(
+    canonical_nodes: list[dict[str, Any]],
+    source_rows: list[dict[str, Any]],
+) -> dict[str, list[int]]:
+    orders_by_node: dict[str, list[int]] = {}
+    for node in canonical_nodes:
+        node_id = str(node.get("node_id") or "")
+        if not node_id:
+            continue
+        orders = [
+            int(row["source_order"])
+            for row in source_rows
+            if isinstance(row.get("source_order"), int)
+            and _source_row_matches_canonical_node(row, node)
+        ]
+        orders_by_node[node_id] = sorted(set(orders))
+    return orders_by_node
 
 
 def _source_start_order_for_node_after(
@@ -2278,10 +2323,21 @@ def _source_start_order_for_node_after(
     after_order: int,
     source_rows: list[dict[str, Any]],
     source_by_block_id: dict[str, dict[str, Any]],
+    direct_start_orders: dict[str, int | None] | None = None,
+    match_orders_by_node: dict[str, list[int]] | None = None,
 ) -> int | None:
-    direct_order = _source_start_order_for_node(node, source_by_block_id)
+    node_id = str(node.get("node_id") or "")
+    direct_order = (
+        direct_start_orders.get(node_id)
+        if direct_start_orders is not None
+        else _source_start_order_for_node(node, source_by_block_id)
+    )
     if isinstance(direct_order, int) and direct_order > after_order:
         return direct_order
+    if match_orders_by_node is not None:
+        orders = match_orders_by_node.get(node_id) or []
+        index = bisect.bisect_right(orders, after_order)
+        return orders[index] if index < len(orders) else None
     matching_orders = [
         row.get("source_order")
         for row in source_rows
@@ -2298,8 +2354,17 @@ def _expanded_source_block_ids_for_cleaning_node(
     depths: dict[str, int],
     source_rows: list[dict[str, Any]],
     source_by_block_id: dict[str, dict[str, Any]],
+    node_indices: dict[str, int] | None = None,
+    direct_start_orders: dict[str, int | None] | None = None,
+    match_orders_by_node: dict[str, list[int]] | None = None,
+    descendant_boundary_kinds: set[str] | None = None,
 ) -> list[str]:
-    start_order = _source_start_order_for_node(node, source_by_block_id)
+    node_id = str(node.get("node_id") or "")
+    start_order = (
+        direct_start_orders.get(node_id)
+        if direct_start_orders is not None
+        else _source_start_order_for_node(node, source_by_block_id)
+    )
     if start_order is None:
         return [str(value) for value in node.get("source_block_ids") or []]
 
@@ -2331,31 +2396,38 @@ def _expanded_source_block_ids_for_cleaning_node(
         return False
 
     boundary_orders: list[int] = []
-    current_index = next(
-        (
-            index for index, item in enumerate(canonical_nodes)
-            if item.get("node_id") == node.get("node_id")
-        ),
-        -1,
-    )
-    for other in canonical_nodes:
+    current_index = (node_indices or {}).get(node_id, -1)
+    for other_index, other in enumerate(canonical_nodes):
         if other.get("node_id") in {node.get("node_id"), "toc-root"}:
             continue
-        other_index = next(
-            (
-                index for index, item in enumerate(canonical_nodes)
-                if item.get("node_id") == other.get("node_id")
-            ),
-            -1,
-        )
         if current_index >= 0 and other_index >= 0 and other_index <= current_index:
             continue
-        if is_descendant_of_current(other) or is_ancestor_of_current(other):
+        is_descendant = is_descendant_of_current(other)
+        if is_descendant and str(other.get("kind") or "") in (descendant_boundary_kinds or set()):
+            other_order = _source_start_order_for_node_after(
+                other,
+                start_order,
+                source_rows,
+                source_by_block_id,
+                direct_start_orders,
+                match_orders_by_node,
+            )
+            if isinstance(other_order, int) and other_order > start_order:
+                boundary_orders.append(other_order)
+            continue
+        if is_descendant or is_ancestor_of_current(other):
             continue
         other_level = _node_pack_level(other, depths)
         if other_level > pack_level:
             continue
-        other_order = _source_start_order_for_node_after(other, start_order, source_rows, source_by_block_id)
+        other_order = _source_start_order_for_node_after(
+            other,
+            start_order,
+            source_rows,
+            source_by_block_id,
+            direct_start_orders,
+            match_orders_by_node,
+        )
         if isinstance(other_order, int) and other_order > start_order:
             boundary_orders.append(other_order)
     end_order = min(boundary_orders) if boundary_orders else None
@@ -2545,6 +2617,38 @@ def _build_cleanlatex_prompt(pack: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _select_cleanlatex_pack_nodes(
+    nodes: list[dict[str, Any]],
+    nodes_by_id: dict[str, dict[str, Any]],
+    selection_mode: str,
+    pilot_numbers: tuple[str, ...] | None,
+) -> list[dict[str, Any]]:
+    if selection_mode == "pilot":
+        selected: list[dict[str, Any]] = []
+        for number in pilot_numbers or ():
+            node = next(
+                (
+                    item for item in nodes
+                    if item.get("kind") not in {"unit", "chapter", "root"}
+                    and str(item.get("metadata", {}).get("number") or "") == number
+                ),
+                None,
+            )
+            if node:
+                selected.append(node)
+        return selected
+
+    if selection_mode != "full-book":
+        raise ValueError(f"unsupported cleanlatex pack selection mode: {selection_mode}")
+
+    selected: list[dict[str, Any]] = []
+    for node in nodes:
+        kind = node.get("kind")
+        if kind in {"section", "exercise", "past_paper", "glossary", "index"}:
+            selected.append(node)
+    return selected
+
+
 def _compile_cleanlatex_pilot_packs(
     canonical_toc: dict[str, Any],
     chapter_spans: dict[str, Any],
@@ -2553,6 +2657,7 @@ def _compile_cleanlatex_pilot_packs(
     asset_version: str,
     asset_index: dict[str, list[dict[str, Any]]] | None = None,
     pilot_numbers: tuple[str, ...] = ("1.1", "4.1"),
+    selection_mode: str = "pilot",
 ) -> dict[str, Any]:
     policy = _cleanlatex_pack_selection_policy()
     nodes = [node for node in _iter_canonical_nodes(canonical_toc) if node.get("node_id") != "toc-root"]
@@ -2564,19 +2669,15 @@ def _compile_cleanlatex_pilot_packs(
     for row in source_rows:
         for block_id in row.get("source_block_ids") or []:
             source_by_block_id.setdefault(str(block_id), row)
+    node_indices = {str(node.get("node_id") or ""): index for index, node in enumerate(nodes)}
+    direct_start_orders = {
+        str(node.get("node_id") or ""): _source_start_order_for_node(node, source_by_block_id)
+        for node in nodes
+    }
+    match_orders_by_node = _source_match_orders_by_node(nodes, source_rows)
 
-    selected_nodes: list[dict[str, Any]] = []
-    for number in pilot_numbers:
-        node = next(
-            (
-                item for item in nodes
-                if item.get("kind") not in {"unit", "chapter", "root"}
-                and str(item.get("metadata", {}).get("number") or "") == number
-            ),
-            None,
-        )
-        if node:
-            selected_nodes.append(node)
+    selected_nodes = _select_cleanlatex_pack_nodes(nodes, nodes_by_id, selection_mode, pilot_numbers)
+    descendant_boundary_kinds = {"exercise"} if selection_mode == "full-book" else set()
 
     packs: list[dict[str, Any]] = []
     prompts: dict[str, str] = {}
@@ -2591,6 +2692,10 @@ def _compile_cleanlatex_pilot_packs(
             depths,
             source_rows,
             source_by_block_id,
+            node_indices,
+            direct_start_orders,
+            match_orders_by_node,
+            descendant_boundary_kinds,
         )
         source_block_ids = expanded_source_block_ids or bound_source_block_ids
         span_expansion = {
@@ -2673,7 +2778,7 @@ def _compile_cleanlatex_pilot_packs(
                     "stable_parent",
                     "continuous_source_span",
                     "content_size_within_limit" if block_chars <= policy["hard_limits"]["max_chars"] else "content_size_exceeds_limit",
-                    "pilot_requested",
+                    "pilot_requested" if selection_mode == "pilot" else "full_book_selection",
                 ],
                 "semantic_kind_is_boundary_driver": False,
             },
@@ -2753,7 +2858,8 @@ def _compile_cleanlatex_pilot_packs(
         "schema": "luceon-cleanlatex-pack-manifest/v1",
         "compiler": "luceon-layer3-deterministic-rules/cleanlatex-pack-generator-pilot",
         "selection_policy": policy,
-        "pilot_numbers": list(pilot_numbers),
+        "selection_mode": selection_mode,
+        "pilot_numbers": list(pilot_numbers or []),
         "packs": packs,
         "prompts": prompts,
         "validation_manifests": validations,
