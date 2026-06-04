@@ -17,7 +17,7 @@ import { existsSync } from 'node:fs';
 
 const PROTOCOL = 'RawCode2CleanCode/v0';
 const PACK_SCHEMA = 'luceon-cleanlatex-cleaning-unit-pack/v1';
-const ADAPTER_VERSION = 'cleanlatex-pack-to-rawcode-2026-06-04';
+const ADAPTER_VERSION = 'cleanlatex-pack-to-rawcode-2026-06-05-inline-visuals';
 const UAT_MANIFEST_PROTOCOL = 'RawCode2CleanCode-UAT-Manifest/v0';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -142,17 +142,73 @@ function markdownBlocksForPack(blocks) {
   const seenAdjacent = new Set();
   for (const block of blocks || []) {
     const rawText = String(block?.raw_text || '').trim();
-    const key = `${block?.source_order ?? ''}\u0000${rawText}`;
-    if (rawText && seenAdjacent.has(key)) continue;
+    const assetNames = assetHashNamesForBlock(block).join(',');
+    const key = `${block?.source_order ?? ''}\u0000${rawText}\u0000${assetNames}`;
+    if ((rawText || assetNames) && seenAdjacent.has(key)) continue;
     output.push(block);
-    if (rawText) seenAdjacent.add(key);
+    if (rawText || assetNames) seenAdjacent.add(key);
   }
   return output;
 }
 
+function sourceBlockIdsForBlock(block, fallback = '') {
+  const ids = Array.isArray(block?.source_block_ids) ? block.source_block_ids.map(String).filter(Boolean) : [];
+  if (ids.length > 0) return ids;
+  const blockId = String(block?.block_id || fallback || '').trim();
+  return blockId ? [blockId] : [];
+}
+
+function assetHashNamesForBlock(block) {
+  const names = new Set();
+  for (const name of block?.asset_hash_names || []) {
+    if (name) names.add(normalizeSlashes(name));
+  }
+  for (const ref of block?.asset_refs || []) {
+    const name = ref?.asset_hash_name || ref?.hash_name || ref?.name || ref?.raw_ref;
+    if (name) names.add(basename(normalizeSlashes(name)));
+  }
+  return Array.from(names).filter(Boolean).sort();
+}
+
+function primaryAssetRefForBlock(block, assetHashName) {
+  const refs = Array.isArray(block?.asset_refs) ? block.asset_refs : [];
+  return refs.find((ref) => {
+    const name = ref?.asset_hash_name || ref?.hash_name || ref?.name || ref?.raw_ref;
+    return name && basename(normalizeSlashes(name)) === assetHashName;
+  }) || null;
+}
+
+function markdownPlaceholderForAssetBlock(block) {
+  const names = assetHashNamesForBlock(block);
+  if (names.length === 0) return '';
+  const kind = String(block?.type || '').toLowerCase().includes('table') ? 'table' : 'image';
+  const sourceBlockIds = sourceBlockIdsForBlock(block, block?.block_id);
+  const page = block?.page ?? block?.source_page ?? block?.sourcePage ?? null;
+  const bbox = Array.isArray(block?.bbox) ? block.bbox : [];
+  const lines = [];
+  for (const assetHashName of names) {
+    const ref = primaryAssetRefForBlock(block, assetHashName);
+    const rawRef = normalizeSlashes(ref?.raw_ref || `images/${assetHashName}`);
+    const normalizedRef = rawRef.startsWith('images/') ? rawRef : `images/${basename(rawRef)}`;
+    const refPage = ref?.source_page ?? page;
+    const refBbox = Array.isArray(ref?.bbox) && ref.bbox.length > 0 ? ref.bbox : bbox;
+    lines.push(
+      `<!-- luceon:visual_block type=${kind} source_block_ids=${markdownCommentValue(sourceBlockIds.join(','))} page=${markdownCommentValue(refPage ?? '')} bbox=${markdownCommentValue(JSON.stringify(refBbox))} asset_hash=${markdownCommentValue(assetHashName)} -->`,
+      `![${kind} source_block=${sourceBlockIds[0] || ''} page=${refPage ?? ''}](${normalizedRef})`,
+    );
+  }
+  return lines.join('\n');
+}
+
+function markdownForBlock(block) {
+  const rawText = String(block?.raw_text || '').trim();
+  const visualPlaceholder = markdownPlaceholderForAssetBlock(block);
+  return [rawText, visualPlaceholder].filter(Boolean).join('\n\n');
+}
+
 function rawMarkdownForPack({ title, blocks }) {
   const blockText = markdownBlocksForPack(blocks)
-    .map((block) => String(block?.raw_text || '').trim())
+    .map(markdownForBlock)
     .filter(Boolean)
     .join('\n\n');
   const titlePattern = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -196,7 +252,11 @@ function unitMarkdownForPack(item) {
       if (ref?.asset_hash_name) assetHashNames.add(String(ref.asset_hash_name));
     }
   }
-  for (const image of pack?.assets?.images || []) {
+  const visualAssets = [
+    ...(Array.isArray(pack?.assets?.images) ? pack.assets.images : []),
+    ...(Array.isArray(pack?.assets?.tables) ? pack.assets.tables : []),
+  ];
+  for (const image of visualAssets) {
     const name = image?.asset_hash_name || image?.hash_name || image?.name;
     if (name) assetHashNames.add(String(name));
   }
@@ -226,9 +286,11 @@ function unitMarkdownForPack(item) {
 
 function sourceBlockFor(block, index) {
   const rawText = String(block?.raw_text || '');
+  const assetNames = assetHashNamesForBlock(block);
+  const sourceBlockIds = sourceBlockIdsForBlock(block, `block-${index + 1}`);
   const sourceBlock = {
     block_id: String(block?.block_id || `block-${index + 1}`),
-    source_block_ids: Array.isArray(block?.source_block_ids) ? block.source_block_ids.map(String) : [String(block?.block_id || `block-${index + 1}`)],
+    source_block_ids: sourceBlockIds,
     source_order: block?.source_order ?? index + 1,
     page: block?.page ?? null,
     pages: Array.isArray(block?.pages) ? block.pages : [],
@@ -236,8 +298,21 @@ function sourceBlockFor(block, index) {
     text: rawText,
     source_hash: block?.source_hash || `sha256:${sha256Text(rawText)}`,
   };
-  if (Array.isArray(block?.asset_hash_names) && block.asset_hash_names.length > 0) {
-    sourceBlock.asset_hash_names = block.asset_hash_names.map(String);
+  if (Array.isArray(block?.bbox) && block.bbox.length > 0) {
+    sourceBlock.bbox = block.bbox;
+  }
+  if (assetNames.length > 0) {
+    sourceBlock.asset_hash_names = assetNames;
+    sourceBlock.markdown_placeholders = assetNames.map((assetHashName) => {
+      const ref = primaryAssetRefForBlock(block, assetHashName);
+      const rawRef = normalizeSlashes(ref?.raw_ref || `images/${assetHashName}`);
+      return {
+        asset_hash_name: assetHashName,
+        normalized_ref: rawRef.startsWith('images/') ? rawRef : `images/${basename(rawRef)}`,
+        source_page: ref?.source_page ?? block?.page ?? null,
+        bbox: Array.isArray(ref?.bbox) && ref.bbox.length > 0 ? ref.bbox : (Array.isArray(block?.bbox) ? block.bbox : []),
+      };
+    });
   }
   if (Array.isArray(block?.asset_refs) && block.asset_refs.length > 0) {
     sourceBlock.asset_refs = block.asset_refs;
@@ -248,7 +323,11 @@ function sourceBlockFor(block, index) {
 function imageMapForPack(pack, rawMarkdown) {
   const images = [];
   const seen = new Set();
-  for (const image of pack?.assets?.images || []) {
+  const visualAssets = [
+    ...(Array.isArray(pack?.assets?.images) ? pack.assets.images : []),
+    ...(Array.isArray(pack?.assets?.tables) ? pack.assets.tables : []),
+  ];
+  for (const image of visualAssets) {
     const assetHashName = normalizeSlashes(image?.asset_hash_name || image?.hash_name || image?.name);
     if (!assetHashName || seen.has(assetHashName)) continue;
     seen.add(assetHashName);

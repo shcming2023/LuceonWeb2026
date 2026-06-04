@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { convertCleanlatexPacksToRawCode } from '../../scripts/cleanlatex-pack-to-rawcode.mjs';
@@ -263,21 +263,65 @@ try {
         },
         content_blocks: [
           { block_id: 'c1', source_block_ids: ['c1'], source_order: 10, page: 122, type: 'text', raw_text: 'Data is a set of facts, numbers or other information.' },
+          {
+            block_id: 'c-table-1',
+            source_block_ids: ['c-table-1'],
+            source_order: 11,
+            page: 122,
+            type: 'table',
+            raw_text: '',
+            bbox: [0.1, 0.2, 0.7, 0.4],
+            asset_hash_names: ['flow-table-hash.jpg'],
+            asset_refs: [{
+              kind: 'table',
+              asset_hash_name: 'flow-table-hash.jpg',
+              raw_ref: 'images/flow-table-hash.jpg',
+              source_page: 122,
+              bbox: [0.1, 0.2, 0.7, 0.4],
+            }],
+          },
         ],
-        assets: { images: [], formulas: [], tables: [], audio: [] },
+        assets: {
+          images: [],
+          formulas: [],
+          tables: [{
+            asset_hash_name: 'flow-table-hash.jpg',
+            source_page: 122,
+            bbox: [0.1, 0.2, 0.7, 0.4],
+            raw_ref: 'images/flow-table-hash.jpg',
+            source_block_ids: ['c-table-1'],
+          }],
+          audio: [],
+        },
         warnings: [],
       },
     ], null, 2));
+
+    const packAssetRoot = join(tmpRoot, 'pack-assets');
+    await mkdir(join(packAssetRoot, 'images'), { recursive: true });
+    await writeFile(join(packAssetRoot, 'images', 'flow-table-hash.jpg'), 'fixture table image');
 
     const adapted = await convertCleanlatexPacksToRawCode({
       packsPath,
       outDir: join(tmpRoot, 'pack-adapter-out'),
       operatorId: 'local-operator',
       versionOverride: 'rawcode-from-v329',
+      assetRoot: packAssetRoot,
     });
     assert.equal(adapted.ok, true);
     assert.equal(adapted.packCount, 2);
     assert.equal(existsSync(join(adapted.rawBundleDir, 'chapters', 'toc-0003', 'source_map.json')), true);
+    const sectionRaw = await readFile(join(adapted.rawBundleDir, 'chapters', 'toc-0024', 'raw.md'), 'utf8');
+    const sectionUnit = await readFile(join(adapted.rawBundleDir, 'chapters', 'toc-0024', 'unit.md'), 'utf8');
+    const sectionSourceMap = JSON.parse(await readFile(join(adapted.rawBundleDir, 'chapters', 'toc-0024', 'source_map.json'), 'utf8'));
+    const sectionImageMap = JSON.parse(await readFile(join(adapted.rawBundleDir, 'chapters', 'toc-0024', 'image_map.json'), 'utf8'));
+    assert.match(sectionRaw, /luceon:visual_block type=table source_block_ids=c-table-1 page=122/);
+    assert.match(sectionRaw, /!\[table source_block=c-table-1 page=122\]\(images\/flow-table-hash\.jpg\)/);
+    assert.match(sectionUnit, /luceon:visual_block type=table source_block_ids=c-table-1 page=122/);
+    const mappedTableBlock = sectionSourceMap.source_blocks.find((block) => block.block_id === 'c-table-1');
+    assert.equal(mappedTableBlock.markdown_placeholders[0].asset_hash_name, 'flow-table-hash.jpg');
+    assert.deepEqual(mappedTableBlock.markdown_placeholders[0].bbox, [0.1, 0.2, 0.7, 0.4]);
+    assert.equal(sectionImageMap.images.find((image) => image.asset_hash_name === 'flow-table-hash.jpg').required, true);
 
     const result = await runRawCode2CleanCodeUatRunner({
       samples: [
