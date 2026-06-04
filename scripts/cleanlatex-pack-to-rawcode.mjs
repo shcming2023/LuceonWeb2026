@@ -144,7 +144,7 @@ function rawMarkdownForPack({ title, blocks }) {
 
 function sourceBlockFor(block, index) {
   const rawText = String(block?.raw_text || '');
-  return {
+  const sourceBlock = {
     block_id: String(block?.block_id || `block-${index + 1}`),
     source_block_ids: Array.isArray(block?.source_block_ids) ? block.source_block_ids.map(String) : [String(block?.block_id || `block-${index + 1}`)],
     source_order: block?.source_order ?? index + 1,
@@ -154,6 +154,13 @@ function sourceBlockFor(block, index) {
     text: rawText,
     source_hash: block?.source_hash || `sha256:${sha256Text(rawText)}`,
   };
+  if (Array.isArray(block?.asset_hash_names) && block.asset_hash_names.length > 0) {
+    sourceBlock.asset_hash_names = block.asset_hash_names.map(String);
+  }
+  if (Array.isArray(block?.asset_refs) && block.asset_refs.length > 0) {
+    sourceBlock.asset_refs = block.asset_refs;
+  }
+  return sourceBlock;
 }
 
 function imageMapForPack(pack, rawMarkdown) {
@@ -171,9 +178,17 @@ function imageMapForPack(pack, rawMarkdown) {
       required: rawMarkdown.includes(assetHashName),
       reason: rawMarkdown.includes(assetHashName) ? 'referenced_by_pack_markdown' : 'declared_by_pack_assets',
       asset_hash_name: assetHashName,
+      source_page: image?.source_page ?? null,
+      bbox: Array.isArray(image?.bbox) ? image.bbox : [],
+      source_block_ids: Array.isArray(image?.source_block_ids) ? image.source_block_ids.map(String) : [],
     });
   }
-  return images;
+  return {
+    images,
+    visual_evidence_requirements: Array.isArray(pack?.visual_evidence_requirements)
+      ? pack.visual_evidence_requirements
+      : [],
+  };
 }
 
 async function convertCleanlatexPacksToRawCode({ packsPath, outDir, operatorId = 'luceon-uat', versionOverride = null, limit = 3 }) {
@@ -199,7 +214,7 @@ async function convertCleanlatexPacksToRawCode({ packsPath, outDir, operatorId =
     const chapterDir = join(rawBundleDir, 'chapters', item.chapterId);
     const rawMarkdown = rawMarkdownForPack(item);
     const sourceBlocks = item.blocks.map(sourceBlockFor);
-    const images = imageMapForPack(item.pack, rawMarkdown);
+    const imageMap = imageMapForPack(item.pack, rawMarkdown);
 
     await writeText(join(chapterDir, 'raw.md'), rawMarkdown);
     await writeJson(join(chapterDir, 'source_map.json'), {
@@ -215,7 +230,7 @@ async function convertCleanlatexPacksToRawCode({ packsPath, outDir, operatorId =
     await writeJson(join(chapterDir, 'image_map.json'), {
       protocol: PROTOCOL,
       chapter_id: item.chapterId,
-      images,
+      ...imageMap,
     });
     await writeJson(join(chapterDir, 'chunk_manifest.json'), {
       protocol: PROTOCOL,

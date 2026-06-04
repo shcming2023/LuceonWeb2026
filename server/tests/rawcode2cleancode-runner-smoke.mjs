@@ -436,6 +436,49 @@ try {
     assert.equal(qualityReport.risks.includes('visual_reference_without_asset_or_review_item'), true);
   }
 
+  {
+    console.log('  [13] pack visual evidence requirements require asset refs or review items...');
+    const imageHashName = '71ef028a11659ad184c2c55a77eec9c6447b1168a81d59e273fb945c43d6929f.jpg';
+    const qualityReport = validateCleanCode({
+      cleanMarkdown: '# Section\n\nStatistical investigation process.\n',
+      chapterTitle: 'Section',
+      imageMap: {
+        images: [{
+          raw_ref: `images/${imageHashName}`,
+          normalized_ref: `images/${imageHashName}`,
+          source_path: `../../images/${imageHashName}`,
+          required: false,
+          asset_hash_name: imageHashName,
+        }],
+        visual_evidence_requirements: [{
+          terms: ['flow diagram'],
+          status: 'asset-linked',
+          required_action: 'preserve_asset_reference_or_report_unresolved',
+          linked_asset_hash_names: [imageHashName],
+          source_block_ids: ['b-4-1'],
+        }],
+      },
+      cleanChapterDir: tmpRoot,
+      copiedImages: [],
+      missingImages: [],
+      unresolvedItems: [],
+      rawMarkdown: '# Section\n\nThe flow diagram shows the statistical investigation process.\n',
+      cleanerMode: 'llm',
+      llmResponse: {
+        clean_markdown: '# Section\n\nStatistical investigation process.\n',
+        kept_images: [],
+        removed_noise: [],
+        unresolved_items: [],
+        change_summary: [],
+        risk_flags: [],
+      },
+    });
+    const visualCheck = qualityReport.checks.find((check) => check.id === 'visual_references_have_assets_or_review_items');
+    assert.equal(qualityReport.status, 'NEEDS_REVIEW', JSON.stringify(qualityReport, null, 2));
+    assert.equal(visualCheck.status, 'NEEDS_REVIEW');
+    assert.equal(visualCheck.detail.visualEvidenceGaps[0].linked_asset_hash_names[0], imageHashName);
+  }
+
   console.log('RawCode2CleanCode UAT runner smoke passed.');
 } finally {
   await rm(tmpRoot, { recursive: true, force: true });

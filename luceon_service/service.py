@@ -1961,7 +1961,7 @@ def _source_hash(payload: Any) -> str:
     return "sha256:" + hashlib.sha256(data).hexdigest()
 
 
-def _source_nodes_by_block_id(source_tree: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def _source_nodes_by_block_id(source_tree: dict[str, Any], asset_index: dict[str, list[dict[str, Any]]] | None = None) -> dict[str, dict[str, Any]]:
     by_id: dict[str, dict[str, Any]] = {}
 
     def visit(node: dict[str, Any], path: list[str]) -> None:
@@ -1989,6 +1989,16 @@ def _source_nodes_by_block_id(source_tree: dict[str, Any]) -> dict[str, dict[str
                 "bbox": node.get("bbox") or node.get("box") or [],
             }),
         }
+        asset = _asset_for_source_node(node, asset_index)
+        if asset:
+            row["asset_refs"] = [{
+                "kind": asset.get("kind"),
+                "asset_hash_name": asset.get("asset_hash_name"),
+                "raw_ref": asset.get("raw_ref"),
+                "source_page": asset.get("page"),
+                "bbox": asset.get("bbox") or [],
+            }]
+            row["asset_hash_names"] = [asset.get("asset_hash_name")]
         for block_id in block_ids:
             by_id.setdefault(str(block_id), row)
         for child in node.get("children") or []:
@@ -2028,6 +2038,120 @@ def _asset_hash_names_from_text(text: str) -> list[str]:
     return result
 
 
+def _asset_hash_name_from_path(value: Any) -> str | None:
+    text = str(value or "").strip().replace("\\", "/")
+    if not text:
+        return None
+    name = text.rsplit("/", 1)[-1]
+    if re.match(r"^[0-9a-fA-F]{16,}\.(?:png|jpe?g|webp|gif|svg)$", name):
+        return name
+    return None
+
+
+def _visual_reference_terms(text: str) -> list[str]:
+    terms = [
+        "flow diagram",
+        "diagram",
+        "figure",
+        "chart",
+        "graph",
+        "illustration",
+        "image",
+        "picture",
+    ]
+    found: list[str] = []
+    for term in terms:
+        pattern = r"\b" + re.escape(term).replace(r"\ ", r"\s*") + r"\b"
+        if re.search(pattern, text or "", flags=re.IGNORECASE):
+            found.append(term)
+    return found
+
+
+def _mineru_asset_index_from_content_bytes(content_bytes: bytes | None) -> dict[str, list[dict[str, Any]]]:
+    if not content_bytes:
+        return {"images": [], "tables": []}
+    try:
+        payload = json.loads(content_bytes.decode("utf-8", errors="replace"))
+    except Exception:
+        return {"images": [], "tables": []}
+    if not isinstance(payload, list):
+        return {"images": [], "tables": []}
+
+    assets = {"images": [], "tables": []}
+    for index, item in enumerate(payload):
+        if not isinstance(item, dict):
+            continue
+        item_type = str(item.get("type") or "").lower()
+        if item_type not in {"image", "table"}:
+            continue
+        raw_path = item.get("img_path") or item.get("image_path") or item.get("path")
+        asset_hash_name = _asset_hash_name_from_path(raw_path)
+        if not asset_hash_name:
+            continue
+        page = None
+        if isinstance(item.get("page"), int):
+            page = item.get("page")
+        elif isinstance(item.get("page_idx"), int):
+            page = int(item.get("page_idx")) + 1
+        asset = {
+            "kind": "image" if item_type == "image" else "table",
+            "asset_hash_name": asset_hash_name,
+            "raw_ref": str(raw_path or ""),
+            "source_index": index,
+            "source_order": index + 1,
+            "page": page,
+            "bbox": item.get("bbox") or [],
+        }
+        assets["images" if item_type == "image" else "tables"].append(asset)
+    return assets
+
+
+def _asset_for_source_node(node: dict[str, Any], asset_index: dict[str, list[dict[str, Any]]] | None) -> dict[str, Any] | None:
+    if not asset_index:
+        return None
+    node_type = str(node.get("type") or node.get("source_label") or "").lower()
+    candidates = asset_index.get("images" if "image" in node_type else "tables" if "table" in node_type else "") or []
+    if not candidates:
+        return None
+    source_id = str(node.get("source_id") or "")
+    source_index = None
+    match = re.search(r":(\d+)$", source_id)
+    if match:
+        source_index = int(match.group(1))
+    pages = _source_pages_from_node(node)
+    bbox = node.get("bbox") or node.get("box") or []
+    for asset in candidates:
+        if source_index is not None and asset.get("source_index") == source_index:
+            return asset
+    for asset in candidates:
+        if pages and asset.get("page") not in pages:
+            continue
+        if bbox and _bbox_equivalent(asset.get("bbox"), bbox):
+            return asset
+    return None
+
+
+def _normalized_bbox(value: Any) -> list[float]:
+    if not isinstance(value, list) or len(value) < 4:
+        return []
+    numbers: list[float] = []
+    for item in value[:4]:
+        try:
+            numbers.append(float(item))
+        except Exception:
+            return []
+    scale = 1000.0 if max(abs(item) for item in numbers) > 10 else 1.0
+    return [item / scale for item in numbers]
+
+
+def _bbox_equivalent(left: Any, right: Any, tolerance: float = 0.005) -> bool:
+    left_box = _normalized_bbox(left)
+    right_box = _normalized_bbox(right)
+    if len(left_box) != 4 or len(right_box) != 4:
+        return False
+    return all(abs(a - b) <= tolerance for a, b in zip(left_box, right_box))
+
+
 def _content_block_from_source_row(block_id: str, source_row: dict[str, Any]) -> dict[str, Any]:
     raw_text = "\n".join(
         value for value in [str(source_row.get("title") or "").strip(), str(source_row.get("content") or "").strip()]
@@ -2048,15 +2172,91 @@ def _content_block_from_source_row(block_id: str, source_row: dict[str, Any]) ->
         "warnings": [],
     }
     if block_type == "image":
-        block["asset_hash_names"] = _asset_hash_names_from_text(raw_text)
+        block["asset_hash_names"] = list(source_row.get("asset_hash_names") or _asset_hash_names_from_text(raw_text))
+        block["asset_refs"] = list(source_row.get("asset_refs") or [])
     if block_type == "formula":
         block["latex"] = raw_text
         block["source_format"] = "mineru-popo"
     if block_type == "table":
+        block["asset_hash_names"] = list(source_row.get("asset_hash_names") or _asset_hash_names_from_text(raw_text))
+        block["asset_refs"] = list(source_row.get("asset_refs") or [])
         block["raw_markdown"] = raw_text
         block["raw_html"] = None
         block["cells"] = []
     return block
+
+
+def _iter_source_nodes(source_tree: dict[str, Any]):
+    def visit(node: dict[str, Any]):
+        yield node
+        for child in node.get("children") or []:
+            if isinstance(child, dict):
+                yield from visit(child)
+
+    yield from visit(source_tree)
+
+
+def _related_asset_blocks_for_span(
+    source_tree: dict[str, Any],
+    source_block_ids: list[str],
+    source_by_block_id: dict[str, dict[str, Any]],
+    asset_index: dict[str, list[dict[str, Any]]] | None = None,
+) -> list[dict[str, Any]]:
+    source_id_set = {str(value) for value in source_block_ids}
+    blocks: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for node in _iter_source_nodes(source_tree):
+        node_type = str(node.get("type") or node.get("source_label") or "").lower()
+        if "image" not in node_type and "table" not in node_type:
+            continue
+        node_ids = _source_block_ids_from_node(node)
+        linked_values: list[str] = []
+        for key in ("image", "table", "contd"):
+            value = node.get(key)
+            if isinstance(value, int) and value >= 0:
+                linked_values.append(str(value))
+            elif isinstance(value, str) and value:
+                linked_values.append(value)
+        if not (source_id_set.intersection(node_ids) or source_id_set.intersection(linked_values)):
+            continue
+        asset = _asset_for_source_node(node, asset_index)
+        if not asset:
+            continue
+        block_id = node_ids[0] if node_ids else f"{asset.get('kind')}-{asset.get('source_order')}"
+        asset_hash_name = asset.get("asset_hash_name")
+        key = f"{block_id}:{asset_hash_name}"
+        if key in seen:
+            continue
+        seen.add(key)
+        source_row = source_by_block_id.get(str(block_id)) or {
+            "source_block_ids": node_ids or [str(block_id)],
+            "source_order": asset.get("source_order"),
+            "page": asset.get("page"),
+            "pages": [asset.get("page")] if asset.get("page") else [],
+            "bbox": asset.get("bbox") or [],
+            "type": node_type,
+            "title": "",
+            "content": "",
+            "source_hash": _source_hash({
+                "asset_hash_name": asset_hash_name,
+                "page": asset.get("page"),
+                "bbox": asset.get("bbox") or [],
+            }),
+        }
+        enriched = {
+            **source_row,
+            "type": "image" if asset.get("kind") == "image" else "table",
+            "asset_hash_names": [asset_hash_name],
+            "asset_refs": [{
+                "kind": asset.get("kind"),
+                "asset_hash_name": asset_hash_name,
+                "raw_ref": asset.get("raw_ref"),
+                "source_page": asset.get("page"),
+                "bbox": asset.get("bbox") or [],
+            }],
+        }
+        blocks.append(_content_block_from_source_row(str(block_id), enriched))
+    return blocks
 
 
 def _canonical_node_depths(canonical_toc: dict[str, Any]) -> dict[str, int]:
@@ -2126,9 +2326,36 @@ def _build_cleanlatex_prompt(pack: dict[str, Any]) -> str:
             f"### {block.get('block_id')} [{block.get('type')}]",
             f"- page: {block.get('page')}",
             f"- source_order: {block.get('source_order')}",
+            f"- asset_hash_names: {block.get('asset_hash_names') or []}",
             "",
             str(block.get("raw_text") or ""),
         ])
+    lines.extend([
+        "",
+        "## Assets",
+    ])
+    for image in pack.get("assets", {}).get("images") or []:
+        lines.append(
+            f"- image: {image.get('asset_hash_name')} page={image.get('source_page')} "
+            f"source_blocks={image.get('source_block_ids') or []}"
+        )
+    for table in pack.get("assets", {}).get("tables") or []:
+        if isinstance(table, dict):
+            lines.append(
+                f"- table: {table.get('asset_hash_name') or table.get('block_id')} "
+                f"page={table.get('source_page') or table.get('page')} "
+                f"source_blocks={table.get('source_block_ids') or []}"
+            )
+    lines.extend([
+        "",
+        "## Visual Evidence Requirements",
+    ])
+    for requirement in pack.get("visual_evidence_requirements") or []:
+        lines.append(
+            f"- terms={requirement.get('terms') or []}; status={requirement.get('status')}; "
+            f"linked_asset_hash_names={requirement.get('linked_asset_hash_names') or []}; "
+            f"required_action={requirement.get('required_action')}"
+        )
     lines.extend([
         "",
         "## Required Output",
@@ -2143,6 +2370,7 @@ def _compile_cleanlatex_pilot_packs(
     source_tree: dict[str, Any],
     material_id: str,
     asset_version: str,
+    asset_index: dict[str, list[dict[str, Any]]] | None = None,
     pilot_numbers: tuple[str, ...] = ("1.1", "4.1"),
 ) -> dict[str, Any]:
     policy = _cleanlatex_pack_selection_policy()
@@ -2150,7 +2378,7 @@ def _compile_cleanlatex_pilot_packs(
     nodes_by_id = {str(node.get("node_id")): node for node in nodes}
     depths = _canonical_node_depths(canonical_toc)
     span_by_node_id = {str(span.get("node_id")): span for span in chapter_spans.get("spans") or []}
-    source_by_block_id = _source_nodes_by_block_id(source_tree)
+    source_by_block_id = _source_nodes_by_block_id(source_tree, asset_index)
 
     selected_nodes: list[dict[str, Any]] = []
     for number in pilot_numbers:
@@ -2180,12 +2408,45 @@ def _compile_cleanlatex_pilot_packs(
                 content_blocks.append(_content_block_from_source_row(block_id, source_row))
             else:
                 unresolved_block_ids.append(block_id)
+        content_blocks.extend(_related_asset_blocks_for_span(source_tree, source_block_ids, source_by_block_id, asset_index))
         content_blocks.sort(key=lambda block: (block.get("source_order") or 0, block.get("block_id") or ""))
 
-        asset_hashes: list[str] = []
+        image_assets: dict[str, dict[str, Any]] = {}
+        table_assets: dict[str, dict[str, Any]] = {}
         for block in content_blocks:
-            asset_hashes.extend(block.get("asset_hash_names") or _asset_hash_names_from_text(block.get("raw_text") or ""))
-        asset_hashes = sorted(set(asset_hashes))
+            for ref in block.get("asset_refs") or []:
+                name = ref.get("asset_hash_name")
+                if not name:
+                    continue
+                target = image_assets if ref.get("kind") == "image" else table_assets
+                target.setdefault(name, {
+                    "asset_hash_name": name,
+                    "source_page": ref.get("source_page"),
+                    "bbox": ref.get("bbox") or [],
+                    "raw_ref": ref.get("raw_ref"),
+                    "source_block_ids": block.get("source_block_ids") or [block.get("block_id")],
+                })
+            for name in block.get("asset_hash_names") or _asset_hash_names_from_text(block.get("raw_text") or ""):
+                if not name:
+                    continue
+                image_assets.setdefault(name, {
+                    "asset_hash_name": name,
+                    "source_page": block.get("page"),
+                    "bbox": block.get("bbox") or [],
+                    "raw_ref": f"images/{name}",
+                    "source_block_ids": block.get("source_block_ids") or [block.get("block_id")],
+                })
+        combined_text = "\n".join(str(block.get("raw_text") or "") for block in content_blocks)
+        visual_terms = _visual_reference_terms(combined_text)
+        visual_requirements: list[dict[str, Any]] = []
+        if visual_terms:
+            visual_requirements.append({
+                "terms": visual_terms,
+                "status": "asset-linked" if image_assets else "asset-missing",
+                "required_action": "preserve_asset_reference_or_report_unresolved",
+                "source_block_ids": source_block_ids,
+                "linked_asset_hash_names": sorted(image_assets.keys()),
+            })
         parent = nodes_by_id.get(str(node.get("parent_id")))
         pack_level = depths.get(node_id, 0)
         block_chars = sum(len(str(block.get("raw_text") or "")) for block in content_blocks)
@@ -2235,11 +2496,12 @@ def _compile_cleanlatex_pilot_packs(
                 if isinstance(child, dict)
             ],
             "assets": {
-                "images": [{"asset_hash_name": name} for name in asset_hashes],
-                "tables": [block for block in content_blocks if block.get("type") == "table"],
+                "images": [image_assets[name] for name in sorted(image_assets)],
+                "tables": [*([table_assets[name] for name in sorted(table_assets)]), *[block for block in content_blocks if block.get("type") == "table" and not block.get("asset_hash_names")]],
                 "formulas": [block for block in content_blocks if block.get("type") == "formula"],
                 "audio": [],
             },
+            "visual_evidence_requirements": visual_requirements,
             "cleaning_contract": {
                 "unit": "cleaning_unit",
                 "may_clean_ocr_text": True,
@@ -2436,12 +2698,14 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
     canonical_toc = _compile_canonical_toc(toc_view_tree, markdown_text)
     chapter_spans = _compile_chapter_spans(canonical_toc)
     rawlatex_scaffold = _compile_rawlatex_scaffold(canonical_toc, chapter_spans)
+    mineru_asset_index = _mineru_asset_index_from_content_bytes(content_bytes)
     cleanlatex_pack_manifest = _compile_cleanlatex_pilot_packs(
         canonical_toc,
         chapter_spans,
         tree,
         material_id,
         asset_version,
+        mineru_asset_index,
     )
     unresolved: list[dict[str, Any]] = []
     metrics = {
@@ -2454,6 +2718,10 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
         },
         "tokens": {"total": max(1, len(content_bytes) // 4)},
         "input_bytes": {"content_list_v2": len(content_bytes), "pdf": len(pdf_bytes)},
+        "mineru_asset_index": {
+            "images": len(mineru_asset_index.get("images") or []),
+            "tables": len(mineru_asset_index.get("tables") or []),
+        },
         "unresolved_anchor_count": 0,
         "cost_cny_actual": 0,
         "canonical_toc": canonical_toc.get("stats", {}),

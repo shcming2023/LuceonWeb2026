@@ -442,10 +442,39 @@ displayingdata 107
                     {"type": "text", "title": "1.1 Different types of numbers", "block_ids": ["b-1-1"], "page": 4, "content": "Numbers content", "children": []},
                 ]},
                 {"type": "text", "title": "4 Collectingorganisingand displayingdata", "block_ids": ["b-ch-4"], "page": 107, "children": [
-                    {"type": "text", "title": "4.1 Colectingand classifyingdata", "block_ids": ["b-4-1"], "page": 110, "content": "Data content", "children": []},
+                    {
+                        "type": "image",
+                        "id": "img-4-1",
+                        "source_id": "fixture:99",
+                        "page": 110,
+                        "image": "b-4-1",
+                        "bbox": [0.2, 0.4, 0.3, 0.5],
+                        "children": [],
+                    },
+                    {
+                        "type": "text",
+                        "title": "4.1 Colectingand classifyingdata",
+                        "block_ids": ["b-4-1"],
+                        "page": 110,
+                        "content": "The flow diagram shows data content",
+                        "children": [],
+                    },
                 ]},
             ]},
         ],
+    }
+    asset_hash_name = "71ef028a11659ad184c2c55a77eec9c6447b1168a81d59e273fb945c43d6929f.jpg"
+    asset_index = {
+        "images": [{
+            "kind": "image",
+            "asset_hash_name": asset_hash_name,
+            "raw_ref": f"images/{asset_hash_name}",
+            "source_index": 10,
+            "source_order": 11,
+            "page": 110,
+            "bbox": [200, 400, 300, 500],
+        }],
+        "tables": [],
     }
 
     canonical_toc = service._compile_canonical_toc(review_tree, markdown)
@@ -456,6 +485,7 @@ displayingdata 107
         review_tree,
         "4134323036518274",
         "v-test",
+        asset_index,
     )
 
     assert packs_manifest["schema"] == "luceon-cleanlatex-pack-manifest/v1"
@@ -475,11 +505,18 @@ displayingdata 107
     assert "b-1-1" in pack_11["source_span"]["source_block_ids"]
     assert "b-4-1" in pack_41["source_span"]["source_block_ids"]
     assert pack_11["content_blocks"][0]["block_id"] == "b-1-1"
-    assert pack_41["content_blocks"][0]["raw_text"].endswith("Data content")
+    text_blocks_41 = [block for block in pack_41["content_blocks"] if block["block_id"] == "b-4-1"]
+    assert text_blocks_41[0]["raw_text"].endswith("The flow diagram shows data content")
+    assert pack_41["assets"]["images"][0]["asset_hash_name"] == asset_hash_name
+    assert "img-4-1" in pack_41["assets"]["images"][0]["source_block_ids"]
+    assert pack_41["visual_evidence_requirements"][0]["status"] == "asset-linked"
+    assert pack_41["visual_evidence_requirements"][0]["linked_asset_hash_names"] == [asset_hash_name]
     assert packs_manifest["prompts"][pack_11["pack_id"]].startswith("# CleanLaTeX Cleaning Unit Pack")
     assert "semantic label is guidance only" in packs_manifest["prompts"][pack_11["pack_id"]]
+    assert asset_hash_name in packs_manifest["prompts"][pack_41["pack_id"]]
     validation = {item["pack_id"]: item for item in packs_manifest["validation_manifests"]}
     assert validation[pack_11["pack_id"]]["input_counts"]["unresolved_source_blocks"] == 0
+    assert validation[pack_41["pack_id"]]["input_counts"]["images"] == 1
     assert validation[pack_41["pack_id"]]["output_checks"]["structure_boundary"] == "pending"
 
 

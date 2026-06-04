@@ -331,6 +331,16 @@ function buildCleanerRequest({ materialId, version, chapterId, chapterTitle, toc
     image_map: {
       allowed_refs: allowedImageRefs(imageMap),
       required_refs: requiredImageRefs(imageMap),
+      declared_images: (imageMap.images || []).map((image) => ({
+        asset_hash_name: image.asset_hash_name || basename(image.normalized_ref || image.raw_ref || ''),
+        normalized_ref: image.normalized_ref || image.raw_ref || null,
+        source_page: image.source_page ?? null,
+        source_block_ids: Array.isArray(image.source_block_ids) ? image.source_block_ids : [],
+        required: image.required === true,
+      })),
+      visual_evidence_requirements: Array.isArray(imageMap.visual_evidence_requirements)
+        ? imageMap.visual_evidence_requirements
+        : [],
     },
     source_map_summary: summarizeSourceMap(sourceMap),
     constraints: [
@@ -339,6 +349,7 @@ function buildCleanerRequest({ materialId, version, chapterId, chapterTitle, toc
       'Do not summarize, expand, translate, or rewrite as new textbook content.',
       'Do not silently remove any possible original content.',
       'Preserve all required image references exactly in Markdown.',
+      'For visual evidence requirements, either preserve the linked image reference exactly or report the issue in unresolved_items.',
       'Move uncertain content to unresolved_items instead of deleting it.',
       'Keep educational content, questions, formulas, tables, captions, and examples faithful to the source.',
     ],
@@ -747,7 +758,7 @@ function deduplicatedNormalizedTextForMetric(markdown) {
   return uniqueSegments.join('');
 }
 
-function referencedVisualEvidenceGaps({ cleanMarkdown, cleanRefs, unresolvedItems }) {
+function referencedVisualEvidenceGaps({ cleanMarkdown, cleanRefs, unresolvedItems, imageMap }) {
   const text = String(cleanMarkdown || '');
   const terms = [
     'flow diagram',
@@ -760,12 +771,30 @@ function referencedVisualEvidenceGaps({ cleanMarkdown, cleanRefs, unresolvedItem
     'picture',
   ];
   const referencedTerms = terms.filter((term) => new RegExp(`\\b${term.replace(/\s+/g, '\\s+')}\\b`, 'i').test(text));
-  if (referencedTerms.length === 0 || cleanRefs.length > 0) return [];
-  if (Array.isArray(unresolvedItems) && unresolvedItems.length > 0) return [];
-  return referencedTerms.map((term) => ({
-    term,
-    reason: 'clean markdown references visual evidence but has no image reference or unresolved item',
-  }));
+  const hasUnresolvedItems = Array.isArray(unresolvedItems) && unresolvedItems.length > 0;
+  const gaps = [];
+  if (referencedTerms.length > 0 && cleanRefs.length === 0 && !hasUnresolvedItems) {
+    gaps.push(...referencedTerms.map((term) => ({
+      term,
+      reason: 'clean markdown references visual evidence but has no image reference or unresolved item',
+    })));
+  }
+
+  for (const requirement of imageMap?.visual_evidence_requirements || []) {
+    const status = String(requirement?.status || '');
+    const linkedAssetNames = Array.isArray(requirement?.linked_asset_hash_names)
+      ? requirement.linked_asset_hash_names.map(String).filter(Boolean)
+      : [];
+    if (status !== 'asset-linked' && status !== 'asset-missing') continue;
+    const linkedRefsPresent = linkedAssetNames.some((name) => cleanRefs.some((ref) => basename(ref) === name));
+    if (linkedRefsPresent || hasUnresolvedItems) continue;
+    gaps.push({
+      term: (requirement?.terms || []).join(', ') || 'visual_evidence_requirement',
+      linked_asset_hash_names: linkedAssetNames,
+      reason: 'visual evidence requirement was neither preserved as an image reference nor reported unresolved',
+    });
+  }
+  return gaps;
 }
 
 function validateCleanCode({ cleanMarkdown, chapterTitle, imageMap, cleanChapterDir, copiedImages, missingImages, unresolvedItems, rawMarkdown, cleanerMode, llmResponse }) {
@@ -805,7 +834,7 @@ function validateCleanCode({ cleanMarkdown, chapterTitle, imageMap, cleanChapter
     : /^#\s+/m.test(cleanMarkdown);
   const splitMarkerCount = (cleanMarkdown.match(/<\|txt_split\|>/g) || []).length;
   const repeatedSegments = repeatedLargeTextSegments(cleanMarkdown);
-  const visualEvidenceGaps = referencedVisualEvidenceGaps({ cleanMarkdown, cleanRefs, unresolvedItems });
+  const visualEvidenceGaps = referencedVisualEvidenceGaps({ cleanMarkdown, cleanRefs, unresolvedItems, imageMap });
 
   checks.push(...validateCleanerResponseAgainstImageMap({ llmResponse, imageMap }));
   checks.push({
