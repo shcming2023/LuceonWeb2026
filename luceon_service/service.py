@@ -1198,6 +1198,350 @@ def _flatten_tree(tree: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+def _source_pages_from_node(node: dict[str, Any]) -> list[int]:
+    pages: set[int] = set()
+    for key in ("page", "page_number", "pageNumber"):
+        value = node.get(key)
+        if isinstance(value, int):
+            pages.add(value)
+        elif isinstance(value, str) and value.isdigit():
+            pages.add(int(value))
+    raw_pages = node.get("pages")
+    if isinstance(raw_pages, list):
+        for value in raw_pages:
+            if isinstance(value, int):
+                pages.add(value)
+            elif isinstance(value, str) and value.isdigit():
+                pages.add(int(value))
+    location = node.get("location") or node.get("locations")
+    if isinstance(location, list):
+        for item in location:
+            if isinstance(item, dict):
+                for key in ("page", "page_number", "pageNumber"):
+                    value = item.get(key)
+                    if isinstance(value, int):
+                        pages.add(value)
+                    elif isinstance(value, str) and value.isdigit():
+                        pages.add(int(value))
+            elif isinstance(item, int):
+                pages.add(item)
+    return sorted(page for page in pages if page > 0)
+
+
+def _source_block_ids_from_node(node: dict[str, Any]) -> list[str]:
+    block_ids: list[str] = []
+    raw = node.get("block_ids") or node.get("blockIds") or []
+    if isinstance(raw, list):
+        block_ids.extend(str(value) for value in raw if value is not None)
+    for key in ("id", "source_id", "sourceId"):
+        value = node.get(key)
+        if value is not None:
+            block_ids.append(str(value))
+    seen: set[str] = set()
+    unique: list[str] = []
+    for value in block_ids:
+        if value and value not in seen:
+            seen.add(value)
+            unique.append(value)
+    return unique
+
+
+def _canonical_title_kind(title: str) -> tuple[str, dict[str, Any], list[str]]:
+    clean = _toc_text(title).strip()
+    compact = _toc_compact(clean)
+    lower = clean.lower()
+    warnings: list[str] = []
+    metadata: dict[str, Any] = {}
+
+    if not clean:
+        return "unknown_heading", metadata, ["empty-title"]
+    if compact in {"glossary", "glossary"} or lower.strip(" >〉") == "glossary":
+        return "glossary", metadata, warnings
+    if compact == "index" or lower.strip(" >〉") == "index":
+        return "index", metadata, warnings
+    if "pastpaperquestions" in compact:
+        return "past_paper", metadata, warnings
+    if "practicequestions" in compact:
+        return "practice", metadata, warnings
+
+    exercise = re.match(r"^exercise\s*([0-9]+(?:\.[0-9]+)*)", lower)
+    if exercise:
+        metadata["number"] = exercise.group(1)
+        metadata["major"] = int(exercise.group(1).split(".")[0])
+        return "exercise", metadata, warnings
+
+    unit = re.match(r"^[>〉]?\s*unit\s*([0-9]+)\b", lower)
+    if unit:
+        metadata["number"] = unit.group(1)
+        if compact.endswith("project"):
+            warnings.append("unit-project-treated-as-unit-boundary")
+        return "unit", metadata, warnings
+
+    numbered = re.match(r"^([0-9]{1,2})(?:\.([0-9]{1,2})(?:\.([0-9]{1,2}))?)?\b", clean)
+    if numbered:
+        metadata["number"] = numbered.group(0)
+        metadata["major"] = int(numbered.group(1))
+        metadata["minor"] = int(numbered.group(2)) if numbered.group(2) else None
+        if numbered.group(2):
+            return "section", metadata, warnings
+        return "chapter", metadata, warnings
+
+    if len(clean) > 90:
+        warnings.append("long-heading-needs-review")
+    if re.search(r"[a-z]{12,}", clean):
+        warnings.append("possible-ocr-merged-word")
+    return "chapter", metadata, warnings
+
+
+def _canonical_node_id(index: int) -> str:
+    return f"toc-{index:04d}"
+
+
+def _rawlatex_path_for(node_id: str, kind: str, title: str) -> str:
+    slug = re.sub(r"[^a-zA-Z0-9]+", "-", title.lower()).strip("-")
+    if not slug:
+        slug = "untitled"
+    return f"rawlatex/{node_id}_{kind}_{slug[:64]}.tex"
+
+
+def _compile_canonical_toc(review_tree: dict[str, Any]) -> dict[str, Any]:
+    candidates: list[dict[str, Any]] = []
+
+    def collect(node: dict[str, Any], depth: int) -> None:
+        title = _toc_text(node.get("title")).strip()
+        if depth > 0 and title:
+            order = len(candidates) + 1
+            kind, kind_meta, warnings = _canonical_title_kind(title)
+            block_ids = _source_block_ids_from_node(node)
+            pages = _source_pages_from_node(node)
+            if not block_ids:
+                warnings = [*warnings, "missing-source-block-ids"]
+            if not pages:
+                warnings = [*warnings, "missing-source-page-range"]
+            candidates.append({
+                "node_id": _canonical_node_id(order),
+                "kind": kind,
+                "title": title,
+                "original_title": str(node.get("title") or ""),
+                "source_order": order,
+                "source_depth": depth,
+                "source_block_ids": block_ids,
+                "source_page_range": [pages[0], pages[-1]] if pages else [],
+                "source_pages": pages,
+                "confidence": 0.9 if not warnings else 0.65,
+                "warnings": warnings,
+                "metadata": kind_meta,
+                "children": [],
+            })
+        for child in node.get("children") or []:
+            if isinstance(child, dict):
+                collect(child, depth + 1)
+
+    collect(review_tree, 0)
+
+    root = {
+        "node_id": "toc-root",
+        "kind": "root",
+        "title": "Canonical TOC",
+        "original_title": review_tree.get("title") or "",
+        "source_order": 0,
+        "source_depth": 0,
+        "source_block_ids": [],
+        "source_page_range": [],
+        "source_pages": [],
+        "confidence": 1.0,
+        "warnings": [],
+        "metadata": {},
+        "children": [],
+    }
+
+    nodes_by_id: dict[str, dict[str, Any]] = {"toc-root": root}
+    current_unit: dict[str, Any] | None = None
+    current_chapter: dict[str, Any] | None = None
+    current_section: dict[str, Any] | None = None
+    last_major: int | None = None
+
+    def attach(parent: dict[str, Any], child: dict[str, Any]) -> None:
+        child["parent_id"] = parent["node_id"]
+        parent["children"].append(child)
+        nodes_by_id[child["node_id"]] = child
+
+    for node in candidates:
+        kind = node["kind"]
+        major = node["metadata"].get("major")
+        if isinstance(major, int) and last_major is not None and major < last_major:
+            node["warnings"].append("numbering-regression")
+            node["confidence"] = min(node["confidence"], 0.55)
+        if isinstance(major, int):
+            last_major = max(last_major or major, major)
+
+        if kind == "unit":
+            attach(root, node)
+            current_unit = node
+            current_chapter = None
+            current_section = None
+        elif kind in {"glossary", "index"}:
+            attach(root, node)
+            current_chapter = None
+            current_section = None
+        elif kind == "chapter":
+            parent = current_unit or root
+            attach(parent, node)
+            current_chapter = node
+            current_section = None
+        elif kind == "section":
+            parent = current_chapter or current_unit or root
+            attach(parent, node)
+            current_section = node
+        elif kind in {"exercise", "practice", "past_paper"}:
+            parent = current_section or current_chapter or current_unit or root
+            attach(parent, node)
+        else:
+            parent = current_section or current_chapter or current_unit or root
+            attach(parent, node)
+
+    return {
+        "schema": "luceon-canonical-toc/v1",
+        "source_schema": review_tree.get("schema") or "unknown",
+        "compiler": "luceon-layer3-deterministic-rules",
+        "root": root,
+        "stats": {
+            "node_count": len(candidates),
+            "warning_count": sum(len(node.get("warnings") or []) for node in candidates),
+            "kind_counts": {
+                kind: sum(1 for node in candidates if node["kind"] == kind)
+                for kind in sorted({node["kind"] for node in candidates})
+            },
+        },
+    }
+
+
+def _iter_canonical_nodes(canonical_toc: dict[str, Any]) -> list[dict[str, Any]]:
+    nodes: list[dict[str, Any]] = []
+
+    def visit(node: dict[str, Any]) -> None:
+        nodes.append(node)
+        for child in node.get("children") or []:
+            if isinstance(child, dict):
+                visit(child)
+
+    root = canonical_toc.get("root")
+    if isinstance(root, dict):
+        visit(root)
+    return nodes
+
+
+def _compile_chapter_spans(canonical_toc: dict[str, Any]) -> dict[str, Any]:
+    spans: list[dict[str, Any]] = []
+
+    def subtree_trace(node: dict[str, Any]) -> tuple[list[int], list[str], list[int]]:
+        orders: list[int] = []
+        block_ids: list[str] = []
+        pages: list[int] = []
+
+        def visit(current: dict[str, Any]) -> None:
+            order = current.get("source_order")
+            if isinstance(order, int) and order > 0:
+                orders.append(order)
+            block_ids.extend(str(value) for value in current.get("source_block_ids") or [])
+            pages.extend(value for value in current.get("source_pages") or [] if isinstance(value, int))
+            for child in current.get("children") or []:
+                if isinstance(child, dict):
+                    visit(child)
+
+        visit(node)
+        return orders, sorted(set(block_ids)), sorted(set(pages))
+
+    for node in _iter_canonical_nodes(canonical_toc):
+        if node.get("node_id") == "toc-root":
+            continue
+        orders, block_ids, pages = subtree_trace(node)
+        warnings = list(node.get("warnings") or [])
+        if node.get("children"):
+            warnings.append("hierarchical-span-contains-child-spans")
+        if not orders:
+            warnings.append("missing-source-order-range")
+        spans.append({
+            "node_id": node["node_id"],
+            "kind": node["kind"],
+            "title": node["title"],
+            "parent_id": node.get("parent_id"),
+            "source_order_range": [min(orders), max(orders)] if orders else [],
+            "source_page_range": [pages[0], pages[-1]] if pages else [],
+            "source_block_ids": block_ids,
+            "asset_refs": [],
+            "formula_refs": [],
+            "table_refs": [],
+            "image_refs": [],
+            "warnings": warnings,
+            "confidence": node.get("confidence", 0.5),
+        })
+
+    return {
+        "schema": "luceon-chapter-spans/v1",
+        "span_semantics": "hierarchical; parent spans may contain child spans and are explicitly warned",
+        "spans": spans,
+        "stats": {
+            "span_count": len(spans),
+            "warning_count": sum(len(span.get("warnings") or []) for span in spans),
+        },
+    }
+
+
+def _compile_rawlatex_scaffold(canonical_toc: dict[str, Any], chapter_spans: dict[str, Any]) -> dict[str, Any]:
+    span_by_id = {span["node_id"]: span for span in chapter_spans.get("spans") or []}
+    files: list[dict[str, Any]] = []
+    manifest_entries: list[dict[str, Any]] = []
+    container_kinds = {"unit", "chapter", "section", "exercise", "practice", "past_paper", "glossary", "index"}
+    for node in _iter_canonical_nodes(canonical_toc):
+        if node.get("node_id") == "toc-root" or node.get("kind") not in container_kinds:
+            continue
+        span = span_by_id.get(node["node_id"], {})
+        path = _rawlatex_path_for(node["node_id"], node["kind"], node["title"])
+        tex = "\n".join([
+            f"% Luceon RawLaTeX scaffold: {node['node_id']}",
+            f"% kind: {node['kind']}",
+            f"% title: {node['title']}",
+            f"% source_order_range: {span.get('source_order_range') or []}",
+            f"% source_page_range: {span.get('source_page_range') or []}",
+            f"% source_block_ids: {span.get('source_block_ids') or []}",
+            f"% warnings: {span.get('warnings') or []}",
+            f"\\section*{{{node['title']}}}",
+            "% TODO(cleanlatex): clean only within the source span above. Do not move chapter boundaries.",
+            "",
+        ])
+        files.append({
+            "path": path,
+            "node_id": node["node_id"],
+            "kind": node["kind"],
+            "title": node["title"],
+            "content": tex,
+            "source_span": span,
+        })
+        manifest_entries.append({
+            "path": path,
+            "node_id": node["node_id"],
+            "kind": node["kind"],
+            "title": node["title"],
+        })
+
+    return {
+        "schema": "luceon-rawlatex-scaffold/v1",
+        "compiler": "luceon-layer3-deterministic-rules",
+        "manifest": {
+            "entrypoint": "rawlatex/manifest.json",
+            "file_count": len(files),
+            "files": manifest_entries,
+        },
+        "files": files,
+        "rules": [
+            "No LLM call was used to decide whole-book structure.",
+            "No new textbook content is invented by this scaffold.",
+            "Later CleanLaTeX must clean only inside source-bound chapter containers.",
+        ],
+    }
+
+
 def _assert_usable_outputs(tree: dict[str, Any], readable: str, rebuilt_markdown: str, flooded_content: list[dict[str, Any]]) -> None:
     title = str(tree.get("title") or "").strip().lower()
     has_children = bool(tree.get("children"))
@@ -1327,6 +1671,9 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
     rebuilt_markdown = _render_tree_markdown(toc_view_tree)
     flooded_content = _flatten_tree(toc_view_tree)
     _assert_usable_outputs(toc_view_tree, readable, rebuilt_markdown, flooded_content)
+    canonical_toc = _compile_canonical_toc(toc_view_tree)
+    chapter_spans = _compile_chapter_spans(canonical_toc)
+    rawlatex_scaffold = _compile_rawlatex_scaffold(canonical_toc, chapter_spans)
     unresolved: list[dict[str, Any]] = []
     metrics = {
         "engine": "mineru-popo",
@@ -1340,6 +1687,11 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
         "input_bytes": {"content_list_v2": len(content_bytes), "pdf": len(pdf_bytes)},
         "unresolved_anchor_count": 0,
         "cost_cny_actual": 0,
+        "canonical_toc": canonical_toc.get("stats", {}),
+        "chapter_spans": chapter_spans.get("stats", {}),
+        "rawlatex_scaffold": {
+            "file_count": rawlatex_scaffold.get("manifest", {}).get("file_count", 0),
+        },
     }
     provenance = {
         "schema": "luceon-provenance/v1",
@@ -1363,6 +1715,9 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
         "output_views": {
             "raw_tree": "official_popo_tree.json",
             "review_tree": "toc_view.json",
+            "canonical_toc": "canonical_toc.json",
+            "chapter_spans": "chapter_spans.json",
+            "rawlatex_scaffold": "rawlatex_scaffold.json",
             "compat_logic_tree": "logic_tree.json",
         },
     }
@@ -1373,12 +1728,18 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
         "readable_tree": _put_text(client, sink_bucket, f"{sink_prefix}readable_tree.md", readable, "text/markdown"),
         "toc_view": _put_json(client, sink_bucket, f"{sink_prefix}toc_view.json", toc_view_tree),
         "review_tree": _put_json(client, sink_bucket, f"{sink_prefix}review_tree.json", toc_view_tree),
+        "canonical_toc": _put_json(client, sink_bucket, f"{sink_prefix}canonical_toc.json", canonical_toc),
+        "chapter_spans": _put_json(client, sink_bucket, f"{sink_prefix}chapter_spans.json", chapter_spans),
+        "rawlatex_scaffold": _put_json(client, sink_bucket, f"{sink_prefix}rawlatex_scaffold.json", rawlatex_scaffold),
         "official_popo_tree": _put_json(client, sink_bucket, f"{sink_prefix}official_popo_tree.json", tree),
         "raw_tree": _put_json(client, sink_bucket, f"{sink_prefix}raw_tree.json", tree),
         "skeleton": _put_json(client, sink_bucket, f"{sink_prefix}skeleton.json", {
             "source": "mineru-popo",
             "normalized_input": f"outputs/label_normalization/mineru/{material_id}.json",
             "review_view": f"{sink_prefix}toc_view.json",
+            "canonical_toc": f"{sink_prefix}canonical_toc.json",
+            "chapter_spans": f"{sink_prefix}chapter_spans.json",
+            "rawlatex_scaffold": f"{sink_prefix}rawlatex_scaffold.json",
             "raw_tree": f"{sink_prefix}official_popo_tree.json",
         }),
         "unresolved_anchors": _put_json(client, sink_bucket, f"{sink_prefix}unresolved_anchors.json", unresolved),

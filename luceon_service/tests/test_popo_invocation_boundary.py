@@ -180,6 +180,110 @@ def test_toc_review_filter_keeps_outline_and_hides_full_document_noise():
     assert any(row["block_ids"] == ["b-1"] for row in flattened)
 
 
+def test_canonical_toc_compiler_builds_traceable_chapter_scaffold_without_llm_structure():
+    raw_tree = {
+        "type": "root",
+        "title": "",
+        "content": "",
+        "children": [
+            {
+                "type": "title",
+                "title": "Default Title",
+                "content": "cover text must not leak",
+                "children": [
+                    {
+                        "type": "title",
+                        "title": "Unit 1",
+                        "content": "unit body must not leak",
+                        "id": "b-unit-1",
+                        "page": 3,
+                        "children": [
+                            {
+                                "type": "title",
+                                "title": "1.1 Different types of numbers",
+                                "content": "section body must not leak",
+                                "block_ids": ["b-sec-1"],
+                                "page": 4,
+                                "children": [
+                                    {
+                                        "type": "title",
+                                        "title": "Exercise 1.1",
+                                        "content": "questions must not leak",
+                                        "block_ids": ["b-ex-1"],
+                                        "page": 6,
+                                        "children": [],
+                                    },
+                                    {
+                                        "type": "title",
+                                        "title": "TIP",
+                                        "content": "noise",
+                                        "block_ids": ["b-tip"],
+                                        "page": 6,
+                                        "children": [],
+                                    },
+                                ],
+                            },
+                            {
+                                "type": "title",
+                                "title": "Practice questions",
+                                "content": "practice body must not leak",
+                                "block_ids": ["b-practice"],
+                                "page": 9,
+                                "children": [],
+                            },
+                        ],
+                    },
+                    {
+                        "type": "title",
+                        "title": "> Glossary",
+                        "content": "glossary body must not leak",
+                        "block_ids": ["b-glossary"],
+                        "page": 100,
+                        "children": [],
+                    },
+                    {
+                        "type": "title",
+                        "title": "> Index",
+                        "content": "index body must not leak",
+                        "block_ids": ["b-index"],
+                        "page": 110,
+                        "children": [],
+                    },
+                ],
+            },
+        ],
+    }
+
+    review_tree = service._filter_toc_view_tree(raw_tree)
+    canonical_toc = service._compile_canonical_toc(review_tree)
+    chapter_spans = service._compile_chapter_spans(canonical_toc)
+    rawlatex_scaffold = service._compile_rawlatex_scaffold(canonical_toc, chapter_spans)
+
+    assert canonical_toc["schema"] == "luceon-canonical-toc/v1"
+    assert chapter_spans["schema"] == "luceon-chapter-spans/v1"
+    assert rawlatex_scaffold["schema"] == "luceon-rawlatex-scaffold/v1"
+    assert canonical_toc["stats"]["kind_counts"]["unit"] == 1
+    assert canonical_toc["stats"]["kind_counts"]["section"] == 1
+    assert canonical_toc["stats"]["kind_counts"]["exercise"] == 1
+    assert canonical_toc["stats"]["kind_counts"]["practice"] == 1
+    assert canonical_toc["stats"]["kind_counts"]["glossary"] == 1
+    assert canonical_toc["stats"]["kind_counts"]["index"] == 1
+
+    spans = {span["title"]: span for span in chapter_spans["spans"]}
+    assert set(spans["1.1 Different types of numbers"]["source_block_ids"]) == {"b-sec-1", "b-ex-1", "b-practice"}
+    assert spans["Exercise 1.1"]["source_block_ids"] == ["b-ex-1"]
+    assert spans["Exercise 1.1"]["source_page_range"] == [6, 6]
+    assert spans["> Glossary"]["source_block_ids"] == ["b-glossary"]
+    assert spans["> Index"]["source_block_ids"] == ["b-index"]
+
+    assert rawlatex_scaffold["manifest"]["file_count"] >= 6
+    exercise_file = next(file for file in rawlatex_scaffold["files"] if file["title"] == "Exercise 1.1")
+    assert "source_block_ids: ['b-ex-1']" in exercise_file["content"]
+    assert "TODO(cleanlatex)" in exercise_file["content"]
+    assert "questions must not leak" not in json.dumps(rawlatex_scaffold, ensure_ascii=False)
+    assert "No LLM call was used to decide whole-book structure." in rawlatex_scaffold["rules"]
+
+
 def test_release_host_mps_worker_posts_force_release_payload():
     captured = {}
 
@@ -315,6 +419,7 @@ if __name__ == "__main__":
     test_bounded_payload_keeps_large_original_estimate_but_limits_selected_work()
     test_live_progress_reads_real_pages_and_raw_chunk_metadata()
     test_toc_review_filter_keeps_outline_and_hides_full_document_noise()
+    test_canonical_toc_compiler_builds_traceable_chapter_scaffold_without_llm_structure()
     test_release_host_mps_worker_posts_force_release_payload()
     test_live_progress_preserves_mps_worker_release_evidence()
     test_full_background_progress_aware_wait_ignores_whole_job_timeout()
