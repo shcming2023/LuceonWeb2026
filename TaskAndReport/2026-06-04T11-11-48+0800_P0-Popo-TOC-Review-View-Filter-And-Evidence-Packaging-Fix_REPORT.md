@@ -51,4 +51,3 @@ Results:
 ## Boundary
 
 No MinerU-Popo upstream code or model behavior was changed. This is a Luceon adapter view and packaging fix only.
-

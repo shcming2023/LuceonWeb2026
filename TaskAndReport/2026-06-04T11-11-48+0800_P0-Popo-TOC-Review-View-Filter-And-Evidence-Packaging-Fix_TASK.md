@@ -47,4 +47,3 @@ Negative:
 - Do not remove existing required artifact roles.
 - Do not store full artifact content in task/material metadata.
 - Do not claim product/UAT acceptance beyond code-level validation.
-

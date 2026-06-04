@@ -57,4 +57,3 @@ This task is layer 3 only.
 - RawLaTeX scaffold contains no invented textbook content.
 - Existing seven CleanService artifacts remain compatible.
 - Focused tests and build gates pass.
-

@@ -36,4 +36,3 @@ Forbidden:
 - Contents expected section count should match canonical section count.
 - Section-to-unit placement should not inherit Task 324 review tree hierarchy drift.
 - Existing Task 325 artifact contract remains compatible.
-
