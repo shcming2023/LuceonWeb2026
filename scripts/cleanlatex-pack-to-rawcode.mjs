@@ -10,9 +10,10 @@
  */
 
 import { createHash } from 'node:crypto';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 
 const PROTOCOL = 'RawCode2CleanCode/v0';
 const PACK_SCHEMA = 'luceon-cleanlatex-cleaning-unit-pack/v1';
@@ -26,7 +27,7 @@ const repoRoot = resolve(__dirname, '..');
 function usage() {
   return [
     'Usage:',
-    '  node scripts/cleanlatex-pack-to-rawcode.mjs --packs <cleaning_unit_packs.json> --out <dir> [--operator-id <id>] [--version <vN>] [--limit <n>]',
+    '  node scripts/cleanlatex-pack-to-rawcode.mjs --packs <cleaning_unit_packs.json> --out <dir> [--operator-id <id>] [--version <vN>] [--limit <n>] [--asset-root <dir>]',
     '',
     'Output:',
     '  <out>/rawcode/<materialId>/<version>/...',
@@ -44,6 +45,7 @@ function parseArgs(argv) {
     operatorId: 'luceon-uat',
     version: null,
     limit: 3,
+    assetRoot: null,
     help: false,
   };
 
@@ -67,6 +69,8 @@ function parseArgs(argv) {
       args.version = next();
     } else if (arg === '--limit') {
       args.limit = Number(next());
+    } else if (arg === '--asset-root') {
+      args.assetRoot = next();
     } else {
       throw new Error(`unknown argument: ${arg}`);
     }
@@ -191,7 +195,51 @@ function imageMapForPack(pack, rawMarkdown) {
   };
 }
 
-async function convertCleanlatexPacksToRawCode({ packsPath, outDir, operatorId = 'luceon-uat', versionOverride = null, limit = 3 }) {
+function findAssetSource(assetRoot, image) {
+  if (!assetRoot) return null;
+  const root = resolve(assetRoot);
+  const candidates = [];
+  for (const value of [image?.raw_ref, image?.source_path, image?.normalized_ref, image?.asset_hash_name]) {
+    const normalized = normalizeSlashes(value);
+    if (!normalized) continue;
+    candidates.push(join(root, normalized));
+    candidates.push(join(root, basename(normalized)));
+  }
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+async function copyDeclaredImages({ imageMap, rawBundleDir, assetRoot }) {
+  const copied = [];
+  const missing = [];
+  const seen = new Set();
+  for (const image of imageMap.images || []) {
+    const normalizedRef = normalizeSlashes(image.normalized_ref || image.raw_ref);
+    if (!normalizedRef || seen.has(normalizedRef)) continue;
+    seen.add(normalizedRef);
+    const source = findAssetSource(assetRoot, image);
+    if (!source) {
+      missing.push({
+        normalized_ref: normalizedRef,
+        asset_hash_name: image.asset_hash_name || basename(normalizedRef),
+      });
+      continue;
+    }
+    const target = join(rawBundleDir, normalizedRef);
+    await ensureDir(dirname(target));
+    await copyFile(source, target);
+    copied.push({
+      normalized_ref: normalizedRef,
+      source_path: source,
+      target_path: target,
+    });
+  }
+  return { copied, missing };
+}
+
+async function convertCleanlatexPacksToRawCode({ packsPath, outDir, operatorId = 'luceon-uat', versionOverride = null, limit = 3, assetRoot = null }) {
   const absolutePacksPath = resolve(packsPath);
   const packsRaw = await readFile(absolutePacksPath, 'utf8');
   const packs = loadPacksFromPayload(JSON.parse(packsRaw)).slice(0, limit);
@@ -209,12 +257,16 @@ async function convertCleanlatexPacksToRawCode({ packsPath, outDir, operatorId =
   const tocNodes = [];
   const manifestChapters = [];
   const fullParts = [];
+  const assetCopy = { copied: [], missing: [] };
 
   for (const [index, item] of normalized.entries()) {
     const chapterDir = join(rawBundleDir, 'chapters', item.chapterId);
     const rawMarkdown = rawMarkdownForPack(item);
     const sourceBlocks = item.blocks.map(sourceBlockFor);
     const imageMap = imageMapForPack(item.pack, rawMarkdown);
+    const chapterAssetCopy = await copyDeclaredImages({ imageMap, rawBundleDir, assetRoot });
+    assetCopy.copied.push(...chapterAssetCopy.copied.map((entry) => ({ ...entry, chapter_id: item.chapterId })));
+    assetCopy.missing.push(...chapterAssetCopy.missing.map((entry) => ({ ...entry, chapter_id: item.chapterId })));
 
     await writeText(join(chapterDir, 'raw.md'), rawMarkdown);
     await writeJson(join(chapterDir, 'source_map.json'), {
@@ -261,6 +313,9 @@ async function convertCleanlatexPacksToRawCode({ packsPath, outDir, operatorId =
       title: item.title,
       path: `chapters/${item.chapterId}/raw.md`,
       source_pack_id: item.pack.pack_id || null,
+      image_count: imageMap.images.length,
+      copied_image_count: chapterAssetCopy.copied.length,
+      missing_image_count: chapterAssetCopy.missing.length,
     });
     fullParts.push(rawMarkdown.trim());
   }
@@ -286,9 +341,16 @@ async function convertCleanlatexPacksToRawCode({ packsPath, outDir, operatorId =
         available: true,
         version: ADAPTER_VERSION,
         input_packs_sha256: `sha256:${sha256Text(packsRaw)}`,
+        asset_root_used: assetRoot ? resolve(assetRoot) : null,
       },
     },
     chapters: manifestChapters,
+    asset_copy: {
+      copied_count: assetCopy.copied.length,
+      missing_count: assetCopy.missing.length,
+      copied: assetCopy.copied,
+      missing: assetCopy.missing,
+    },
   });
 
   const runnerManifestPath = join(resolve(outDir), 'rawcode2cleancode-uat-manifest.json');
@@ -312,6 +374,10 @@ async function convertCleanlatexPacksToRawCode({ packsPath, outDir, operatorId =
     packCount: packs.length,
     rawBundleDir,
     runnerManifestPath,
+    assetCopy: {
+      copiedCount: assetCopy.copied.length,
+      missingCount: assetCopy.missing.length,
+    },
     zeroProductionSideEffects: {
       db_writes: 0,
       minio_writes: 0,
@@ -332,6 +398,7 @@ async function main() {
     operatorId: args.operatorId,
     versionOverride: args.version,
     limit: args.limit,
+    assetRoot: args.assetRoot,
   });
   console.log(stableJson(result));
 }
