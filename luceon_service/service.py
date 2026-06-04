@@ -2186,6 +2186,56 @@ def _content_block_from_source_row(block_id: str, source_row: dict[str, Any]) ->
     return block
 
 
+def _source_rows_in_body_order(source_tree: dict[str, Any], asset_index: dict[str, list[dict[str, Any]]] | None = None) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    seen_nodes: set[int] = set()
+
+    for node in _iter_source_nodes(source_tree):
+        if not isinstance(node, dict):
+            continue
+        node_identity = id(node)
+        if node_identity in seen_nodes:
+            continue
+        seen_nodes.add(node_identity)
+        block_ids = _source_block_ids_from_node(node)
+        if not block_ids:
+            continue
+        title = _toc_text(node.get("title")).strip()
+        content = str(node.get("content") or "").strip()
+        pages = _source_pages_from_node(node)
+        row = {
+            "source_order": len(rows) + 1,
+            "title": title,
+            "content": content,
+            "type": str(node.get("type") or node.get("source_label") or "text"),
+            "source_block_ids": block_ids,
+            "page": pages[0] if pages else None,
+            "pages": pages,
+            "bbox": node.get("bbox") or node.get("box") or [],
+            "location": node.get("location") or [],
+            "path": [title] if title else [],
+            "source_hash": _source_hash({
+                "title": title,
+                "content": content,
+                "block_ids": block_ids,
+                "page": pages,
+                "bbox": node.get("bbox") or node.get("box") or [],
+            }),
+        }
+        asset = _asset_for_source_node(node, asset_index)
+        if asset:
+            row["asset_refs"] = [{
+                "kind": asset.get("kind"),
+                "asset_hash_name": asset.get("asset_hash_name"),
+                "raw_ref": asset.get("raw_ref"),
+                "source_page": asset.get("page"),
+                "bbox": asset.get("bbox") or [],
+            }]
+            row["asset_hash_names"] = [asset.get("asset_hash_name")]
+        rows.append(row)
+    return rows
+
+
 def _iter_source_nodes(source_tree: dict[str, Any]):
     def visit(node: dict[str, Any]):
         yield node
@@ -2194,6 +2244,137 @@ def _iter_source_nodes(source_tree: dict[str, Any]):
                 yield from visit(child)
 
     yield from visit(source_tree)
+
+
+def _node_pack_level(node: dict[str, Any], depths: dict[str, int]) -> int:
+    return depths.get(str(node.get("node_id") or ""), 0)
+
+
+def _source_start_order_for_node(node: dict[str, Any], source_by_block_id: dict[str, dict[str, Any]]) -> int | None:
+    orders = [
+        row.get("source_order")
+        for block_id in node.get("source_block_ids") or []
+        for row in [source_by_block_id.get(str(block_id))]
+        if isinstance(row, dict) and isinstance(row.get("source_order"), int)
+    ]
+    return min(orders) if orders else None
+
+
+def _source_row_matches_canonical_node(row: dict[str, Any], node: dict[str, Any]) -> bool:
+    text = f"{row.get('title') or ''} {row.get('content') or ''}"
+    compact_text = _toc_compact(text)
+    title = str(node.get("title") or "")
+    compact_title = _toc_compact(title)
+    number = str(node.get("metadata", {}).get("number") or "").strip()
+    if number and re.search(rf"(?<!\d){re.escape(number)}(?!\d)", text):
+        return True
+    if compact_title and compact_text and (compact_title in compact_text or compact_text in compact_title):
+        return True
+    return False
+
+
+def _source_start_order_for_node_after(
+    node: dict[str, Any],
+    after_order: int,
+    source_rows: list[dict[str, Any]],
+    source_by_block_id: dict[str, dict[str, Any]],
+) -> int | None:
+    direct_order = _source_start_order_for_node(node, source_by_block_id)
+    if isinstance(direct_order, int) and direct_order > after_order:
+        return direct_order
+    matching_orders = [
+        row.get("source_order")
+        for row in source_rows
+        if isinstance(row.get("source_order"), int)
+        and row["source_order"] > after_order
+        and _source_row_matches_canonical_node(row, node)
+    ]
+    return min(matching_orders) if matching_orders else None
+
+
+def _expanded_source_block_ids_for_cleaning_node(
+    node: dict[str, Any],
+    canonical_nodes: list[dict[str, Any]],
+    depths: dict[str, int],
+    source_rows: list[dict[str, Any]],
+    source_by_block_id: dict[str, dict[str, Any]],
+) -> list[str]:
+    start_order = _source_start_order_for_node(node, source_by_block_id)
+    if start_order is None:
+        return [str(value) for value in node.get("source_block_ids") or []]
+
+    pack_level = _node_pack_level(node, depths)
+    nodes_by_id = {str(item.get("node_id") or ""): item for item in canonical_nodes}
+
+    def is_descendant_of_current(other: dict[str, Any]) -> bool:
+        parent_id = str(other.get("parent_id") or "")
+        current_id = str(node.get("node_id") or "")
+        while parent_id:
+            if parent_id == current_id:
+                return True
+            parent = nodes_by_id.get(parent_id)
+            if not parent:
+                return False
+            parent_id = str(parent.get("parent_id") or "")
+        return False
+
+    def is_ancestor_of_current(other: dict[str, Any]) -> bool:
+        other_id = str(other.get("node_id") or "")
+        parent_id = str(node.get("parent_id") or "")
+        while parent_id:
+            if parent_id == other_id:
+                return True
+            parent = nodes_by_id.get(parent_id)
+            if not parent:
+                return False
+            parent_id = str(parent.get("parent_id") or "")
+        return False
+
+    boundary_orders: list[int] = []
+    current_index = next(
+        (
+            index for index, item in enumerate(canonical_nodes)
+            if item.get("node_id") == node.get("node_id")
+        ),
+        -1,
+    )
+    for other in canonical_nodes:
+        if other.get("node_id") in {node.get("node_id"), "toc-root"}:
+            continue
+        other_index = next(
+            (
+                index for index, item in enumerate(canonical_nodes)
+                if item.get("node_id") == other.get("node_id")
+            ),
+            -1,
+        )
+        if current_index >= 0 and other_index >= 0 and other_index <= current_index:
+            continue
+        if is_descendant_of_current(other) or is_ancestor_of_current(other):
+            continue
+        other_level = _node_pack_level(other, depths)
+        if other_level > pack_level:
+            continue
+        other_order = _source_start_order_for_node_after(other, start_order, source_rows, source_by_block_id)
+        if isinstance(other_order, int) and other_order > start_order:
+            boundary_orders.append(other_order)
+    end_order = min(boundary_orders) if boundary_orders else None
+
+    expanded: list[str] = []
+    seen: set[str] = set()
+    for row in source_rows:
+        order = row.get("source_order")
+        if not isinstance(order, int) or order < start_order:
+            continue
+        if end_order is not None and order >= end_order:
+            continue
+        for block_id in row.get("source_block_ids") or []:
+            text_id = str(block_id)
+            if text_id in seen:
+                continue
+            seen.add(text_id)
+            expanded.append(text_id)
+    return expanded
 
 
 def _related_asset_blocks_for_span(
@@ -2378,7 +2559,11 @@ def _compile_cleanlatex_pilot_packs(
     nodes_by_id = {str(node.get("node_id")): node for node in nodes}
     depths = _canonical_node_depths(canonical_toc)
     span_by_node_id = {str(span.get("node_id")): span for span in chapter_spans.get("spans") or []}
-    source_by_block_id = _source_nodes_by_block_id(source_tree, asset_index)
+    source_rows = _source_rows_in_body_order(source_tree, asset_index)
+    source_by_block_id: dict[str, dict[str, Any]] = {}
+    for row in source_rows:
+        for block_id in row.get("source_block_ids") or []:
+            source_by_block_id.setdefault(str(block_id), row)
 
     selected_nodes: list[dict[str, Any]] = []
     for number in pilot_numbers:
@@ -2399,7 +2584,21 @@ def _compile_cleanlatex_pilot_packs(
     for node in selected_nodes:
         node_id = str(node.get("node_id"))
         span = span_by_node_id.get(node_id, {})
-        source_block_ids = [str(value) for value in span.get("source_block_ids") or node.get("source_block_ids") or []]
+        bound_source_block_ids = [str(value) for value in span.get("source_block_ids") or node.get("source_block_ids") or []]
+        expanded_source_block_ids = _expanded_source_block_ids_for_cleaning_node(
+            node,
+            nodes,
+            depths,
+            source_rows,
+            source_by_block_id,
+        )
+        source_block_ids = expanded_source_block_ids or bound_source_block_ids
+        span_expansion = {
+            "strategy": "canonical-node-to-next-sibling-or-ancestor-boundary",
+            "bound_source_block_ids": bound_source_block_ids,
+            "expanded": source_block_ids != bound_source_block_ids,
+            "expanded_source_block_count": len(source_block_ids),
+        }
         content_blocks: list[dict[str, Any]] = []
         unresolved_block_ids: list[str] = []
         for block_id in source_block_ids:
@@ -2482,6 +2681,7 @@ def _compile_cleanlatex_pilot_packs(
                 "source_order_range": span.get("source_order_range") or [],
                 "source_page_range": span.get("source_page_range") or [],
                 "source_block_ids": source_block_ids,
+                "span_expansion": span_expansion,
                 "unresolved_source_block_ids": unresolved_block_ids,
             },
             "content_blocks": content_blocks,

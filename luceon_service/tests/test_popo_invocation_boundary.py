@@ -431,6 +431,7 @@ Review of number concepts
 Collectingorganisingand
 displayingdata 107
 4.1 Colectingand classifyingdata 110
+4.2 Organisingdata 113
 """
     review_tree = {
         "schema": "luceon-toc-review-tree/v1",
@@ -457,6 +458,37 @@ displayingdata 107
                         "block_ids": ["b-4-1"],
                         "page": 110,
                         "content": "The flow diagram shows data content",
+                        "children": [],
+                    },
+                    {
+                        "type": "text",
+                        "title": "Exercise4.1",
+                        "block_ids": ["b-ex-4-1-title"],
+                        "page": 111,
+                        "content": "",
+                        "children": [
+                            {
+                                "type": "text",
+                                "block_ids": ["b-ex-4-1-body-a"],
+                                "page": 111,
+                                "content": "Draw a table like this one.",
+                                "children": [],
+                            },
+                            {
+                                "type": "text",
+                                "block_ids": ["b-ex-4-1-body-b"],
+                                "page": 111,
+                                "content": "Add five examples of categorical data.",
+                                "children": [],
+                            },
+                        ],
+                    },
+                    {
+                        "type": "text",
+                        "title": "4.2 Organisingdata",
+                        "block_ids": ["b-4-2"],
+                        "page": 113,
+                        "content": "This next section must not leak into 4.1.",
                         "children": [],
                     },
                 ]},
@@ -504,9 +536,17 @@ displayingdata 107
     assert pack_41["node"]["parent_title"] == "4 Collectingorganisingand displayingdata"
     assert "b-1-1" in pack_11["source_span"]["source_block_ids"]
     assert "b-4-1" in pack_41["source_span"]["source_block_ids"]
+    assert "b-ex-4-1-title" in pack_41["source_span"]["source_block_ids"]
+    assert "b-ex-4-1-body-a" in pack_41["source_span"]["source_block_ids"]
+    assert "b-ex-4-1-body-b" in pack_41["source_span"]["source_block_ids"]
+    assert "b-4-2" not in pack_41["source_span"]["source_block_ids"]
+    assert pack_41["source_span"]["span_expansion"]["expanded"] is True
     assert pack_11["content_blocks"][0]["block_id"] == "b-1-1"
     text_blocks_41 = [block for block in pack_41["content_blocks"] if block["block_id"] == "b-4-1"]
     assert text_blocks_41[0]["raw_text"].endswith("The flow diagram shows data content")
+    body_blocks_41 = [block for block in pack_41["content_blocks"] if block["block_id"] == "b-ex-4-1-body-a"]
+    assert body_blocks_41[0]["raw_text"] == "Draw a table like this one."
+    assert not any(block["block_id"] == "b-4-2" for block in pack_41["content_blocks"])
     assert pack_41["assets"]["images"][0]["asset_hash_name"] == asset_hash_name
     assert "img-4-1" in pack_41["assets"]["images"][0]["source_block_ids"]
     assert pack_41["visual_evidence_requirements"][0]["status"] == "asset-linked"
