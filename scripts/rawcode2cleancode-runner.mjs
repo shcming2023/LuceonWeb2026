@@ -156,6 +156,12 @@ function normalizeSlashes(path) {
   return String(path || '').replace(/\\/g, '/');
 }
 
+function redactSensitiveText(value) {
+  return String(value || '')
+    .replace(/sk-[A-Za-z0-9_*.-]{8,}/g, '[REDACTED_API_KEY]')
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, 'Bearer [REDACTED]');
+}
+
 function resolveMaybeRelative(baseDir, value) {
   if (!value) return null;
   const normalized = String(value);
@@ -386,8 +392,8 @@ async function runSamplePhase({ samples, mode, operatorId, phaseLabel, runOutput
         ok: false,
         stage: 'rawcode2cleancode-local-clean',
         code: 'SAMPLE_PROCESSING_ERROR',
-        reason: error.message,
-        evidence: { stack: error.stack || null },
+        reason: redactSensitiveText(error.message),
+        evidence: { stack: redactSensitiveText(error.stack || '') || null },
         operationCounts: {},
         readinessClaimed: false,
       };

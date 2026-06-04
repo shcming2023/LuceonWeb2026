@@ -346,6 +346,24 @@ try {
     assert.equal(qualityReport.risks.includes('duplicate_large_text_segments'), true);
   }
 
+  {
+    console.log('  [9] sample processing errors redact API keys from evidence...');
+    const result = await runRawCode2CleanCodeUatRunner({
+      samples: [samples[0]],
+      mode: 'dry-run',
+      operatorId: 'local-operator',
+      deps: {
+        processSample: async () => {
+          throw new Error('LLM API request failed with 401: Incorrect API key provided: sk-test********************************tail');
+        },
+      },
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.samples[0].reason.includes('sk-test'), false);
+    assert.equal(result.samples[0].reason.includes('[REDACTED_API_KEY]'), true);
+    assert.equal(JSON.stringify(result.samples[0].evidence).includes('sk-test'), false);
+  }
+
   console.log('RawCode2CleanCode UAT runner smoke passed.');
 } finally {
   await rm(tmpRoot, { recursive: true, force: true });
