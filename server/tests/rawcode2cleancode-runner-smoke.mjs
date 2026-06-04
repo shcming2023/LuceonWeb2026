@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { convertCleanlatexPacksToRawCode } from '../../scripts/cleanlatex-pack-to-rawcode.mjs';
-import { buildFixtureRawCode } from '../../scripts/rawcode2cleancode-pilot.mjs';
+import { buildFixtureRawCode, validateCleanCode } from '../../scripts/rawcode2cleancode-pilot.mjs';
 import { runRawCode2CleanCodeUatRunner } from '../../scripts/rawcode2cleancode-runner.mjs';
 
 async function makeFixtureSample(root, n) {
@@ -362,6 +362,34 @@ try {
     assert.equal(result.samples[0].reason.includes('sk-test'), false);
     assert.equal(result.samples[0].reason.includes('[REDACTED_API_KEY]'), true);
     assert.equal(JSON.stringify(result.samples[0].evidence).includes('sk-test'), false);
+  }
+
+  {
+    console.log('  [10] duplicate-aware coverage accepts faithful de-duplicated LLM output...');
+    const repeatedText = 'This duplicated source paragraph contains all unique educational content for the section and should count once after cleaning.';
+    const qualityReport = validateCleanCode({
+      cleanMarkdown: `# Dedup section\n\n${repeatedText}\n`,
+      chapterTitle: 'Dedup section',
+      imageMap: { images: [] },
+      cleanChapterDir: tmpRoot,
+      copiedImages: [],
+      missingImages: [],
+      unresolvedItems: [],
+      rawMarkdown: `# Dedup section\n\n${[repeatedText, repeatedText, repeatedText, repeatedText].join('\n\n')}\n`,
+      cleanerMode: 'llm',
+      llmResponse: {
+        clean_markdown: `# Dedup section\n\n${repeatedText}\n`,
+        kept_images: [],
+        removed_noise: [],
+        unresolved_items: [],
+        change_summary: ['removed exact duplicate source paragraphs'],
+        risk_flags: [],
+      },
+    });
+    const coverageCheck = qualityReport.checks.find((check) => check.id === 'content_coverage_ratio');
+    assert.equal(qualityReport.status, 'PASS', JSON.stringify(qualityReport, null, 2));
+    assert.equal(coverageCheck.status, 'PASS');
+    assert.equal(coverageCheck.detail.duplicateAwarePass, true);
   }
 
   console.log('RawCode2CleanCode UAT runner smoke passed.');

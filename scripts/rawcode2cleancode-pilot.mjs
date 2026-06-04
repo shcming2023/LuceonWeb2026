@@ -714,6 +714,23 @@ function repeatedLargeTextSegments(markdown) {
   return repeated.slice(0, 20);
 }
 
+function deduplicatedNormalizedTextForMetric(markdown) {
+  const seen = new Set();
+  const uniqueSegments = [];
+  const segments = String(markdown || '')
+    .split(/\n{2,}|<\|txt_split\|>/g)
+    .map((segment) => normalizeTextForMetric(segment))
+    .filter(Boolean);
+
+  for (const segment of segments) {
+    if (seen.has(segment)) continue;
+    seen.add(segment);
+    uniqueSegments.push(segment);
+  }
+
+  return uniqueSegments.join('');
+}
+
 function validateCleanCode({ cleanMarkdown, chapterTitle, imageMap, cleanChapterDir, copiedImages, missingImages, unresolvedItems, rawMarkdown, cleanerMode, llmResponse }) {
   const checks = [];
   const risks = [];
@@ -741,6 +758,11 @@ function validateCleanCode({ cleanMarkdown, chapterTitle, imageMap, cleanChapter
   const rawNormalized = normalizeTextForMetric(rawMarkdown);
   const cleanNormalized = normalizeTextForMetric(cleanMarkdown);
   const coverageRatio = rawNormalized.length === 0 ? 0 : cleanNormalized.length / rawNormalized.length;
+  const rawDeduplicatedNormalized = deduplicatedNormalizedTextForMetric(rawMarkdown);
+  const deduplicatedCoverageRatio = rawDeduplicatedNormalized.length === 0
+    ? coverageRatio
+    : cleanNormalized.length / rawDeduplicatedNormalized.length;
+  const coverageAcceptable = coverageRatio >= 0.55 || deduplicatedCoverageRatio >= 0.85;
   const hasHeading = chapterTitle
     ? cleanMarkdown.includes(chapterTitle) || /^#\s+/m.test(cleanMarkdown)
     : /^#\s+/m.test(cleanMarkdown);
@@ -770,8 +792,15 @@ function validateCleanCode({ cleanMarkdown, chapterTitle, imageMap, cleanChapter
   });
   checks.push({
     id: 'content_coverage_ratio',
-    status: coverageRatio >= 0.55 ? 'PASS' : 'NEEDS_REVIEW',
-    detail: { rawNormalizedChars: rawNormalized.length, cleanNormalizedChars: cleanNormalized.length, ratio: Number(coverageRatio.toFixed(4)) },
+    status: coverageAcceptable ? 'PASS' : 'NEEDS_REVIEW',
+    detail: {
+      rawNormalizedChars: rawNormalized.length,
+      rawDeduplicatedNormalizedChars: rawDeduplicatedNormalized.length,
+      cleanNormalizedChars: cleanNormalized.length,
+      ratio: Number(coverageRatio.toFixed(4)),
+      deduplicatedRatio: Number(deduplicatedCoverageRatio.toFixed(4)),
+      duplicateAwarePass: coverageRatio < 0.55 && deduplicatedCoverageRatio >= 0.85,
+    },
   });
   checks.push({
     id: 'raw_split_markers_resolved',
@@ -796,7 +825,7 @@ function validateCleanCode({ cleanMarkdown, chapterTitle, imageMap, cleanChapter
 
   if (requiredMissingFromMarkdown.length > 0) risks.push('required_image_missing_from_markdown');
   if (missingRefs.length > 0 || missingImages.length > 0) risks.push('missing_image_file');
-  if (coverageRatio < 0.55) risks.push('low_content_coverage_ratio');
+  if (!coverageAcceptable) risks.push('low_content_coverage_ratio');
   if (splitMarkerCount > 0) risks.push('raw_split_markers_remaining');
   if (repeatedSegments.length > 0) risks.push('duplicate_large_text_segments');
   if (cleanerMode === 'llm-dry-run') risks.push('llm_dry_run_requires_review');
@@ -814,8 +843,10 @@ function validateCleanCode({ cleanMarkdown, chapterTitle, imageMap, cleanChapter
       raw_chars: rawMarkdown.length,
       clean_chars: cleanMarkdown.length,
       raw_normalized_chars: rawNormalized.length,
+      raw_deduplicated_normalized_chars: rawDeduplicatedNormalized.length,
       clean_normalized_chars: cleanNormalized.length,
       content_coverage_ratio: Number(coverageRatio.toFixed(4)),
+      deduplicated_content_coverage_ratio: Number(deduplicatedCoverageRatio.toFixed(4)),
       clean_image_ref_count: cleanRefs.length,
       required_image_count: requiredImages.length,
       copied_image_count: copiedImages.length,
@@ -1284,6 +1315,7 @@ export {
   runPilot,
   sha256Text,
   stableJson,
+  validateCleanCode,
 };
 
 if (process.argv[1] && resolve(process.argv[1]) === __filename) {
