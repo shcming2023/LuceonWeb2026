@@ -1359,14 +1359,57 @@ def _parse_contents_outline(markdown_text: str | None) -> list[dict[str, Any]]:
     lines = [line for line in raw_lines if line]
     entries: list[dict[str, Any]] = []
     pending: dict[str, Any] | None = None
+    heading_buffer: list[str] = []
+    seen_chapter_numbers: set[int] = set()
+
+    def append_entry(entry: dict[str, Any]) -> None:
+        entries.append(entry)
+        if entry.get("kind") == "chapter" and isinstance(entry.get("major"), int):
+            seen_chapter_numbers.add(entry["major"])
 
     def flush_pending() -> None:
         nonlocal pending
         if pending:
             pending["title"] = _strip_contents_page_number(pending["title"])
             if pending["title"]:
-                entries.append(pending)
+                append_entry(pending)
         pending = None
+
+    def reset_heading_buffer() -> None:
+        heading_buffer.clear()
+
+    def remember_heading(line: str) -> None:
+        title = _strip_contents_page_number(line)
+        lower = _toc_compact(title)
+        if not title:
+            return
+        if lower in {"contents", "introduction", "howtousethisbook", "howtousethisseries", "acknowledgements"}:
+            return
+        if re.match(r"^(pastpaperquestions|unit[0-9]+project|glossary|index)\b", lower, re.I):
+            return
+        heading_buffer.append(title)
+        del heading_buffer[:-3]
+
+    def infer_chapter_before_section(major: int) -> None:
+        if major in seen_chapter_numbers or not heading_buffer:
+            return
+        title = " ".join(heading_buffer).strip()
+        if not title:
+            return
+        append_entry({
+            "kind": "chapter",
+            "title": f"{major} {title}".strip(),
+            "number": str(major),
+            "major": major,
+            "source": "contents",
+            "metadata": {
+                "inferred": True,
+                "inference": "following-section-major",
+                "source_lines": list(heading_buffer),
+            },
+            "warnings": ["inferred_chapter_from_following_section"],
+        })
+        reset_heading_buffer()
 
     for line in lines:
         lower = line.lower()
@@ -1388,14 +1431,16 @@ def _parse_contents_outline(markdown_text: str | None) -> list[dict[str, Any]]:
             flush_pending()
 
         if unit and not project:
-            entries.append({
+            reset_heading_buffer()
+            append_entry({
                 "kind": "unit",
                 "title": f"Unit {int(unit.group(1))}",
                 "number": str(int(unit.group(1))),
                 "source": "contents",
             })
         elif project:
-            entries.append({
+            reset_heading_buffer()
+            append_entry({
                 "kind": "chapter",
                 "title": f"Unit {int(project.group(1))} Project",
                 "number": f"project-{int(project.group(1))}",
@@ -1403,6 +1448,7 @@ def _parse_contents_outline(markdown_text: str | None) -> list[dict[str, Any]]:
                 "metadata": {"project_unit": int(project.group(1))},
             })
         elif section:
+            infer_chapter_before_section(int(section.group(1)))
             pending = {
                 "kind": "section",
                 "title": f"{int(section.group(1))}.{int(section.group(2))} {_strip_contents_page_number(section.group(3))}".strip(),
@@ -1414,6 +1460,7 @@ def _parse_contents_outline(markdown_text: str | None) -> list[dict[str, Any]]:
             if re.search(r"\s+\d{1,4}\s*$", line):
                 flush_pending()
         elif chapter and 1 <= int(chapter.group(1)) <= 99:
+            reset_heading_buffer()
             pending = {
                 "kind": "chapter",
                 "title": f"{int(chapter.group(1))} {_strip_contents_page_number(chapter.group(2))}".strip(),
@@ -1424,18 +1471,23 @@ def _parse_contents_outline(markdown_text: str | None) -> list[dict[str, Any]]:
             if re.search(r"\s+\d{1,4}\s*$", line):
                 flush_pending()
         elif past:
-            entries.append({
+            reset_heading_buffer()
+            append_entry({
                 "kind": "past_paper",
                 "title": f"Past paper questions for Unit {int(past.group(1))}",
                 "number": str(int(past.group(1))),
                 "source": "contents",
             })
         elif glossary:
-            entries.append({"kind": "glossary", "title": "Glossary", "source": "contents"})
+            reset_heading_buffer()
+            append_entry({"kind": "glossary", "title": "Glossary", "source": "contents"})
         elif index:
-            entries.append({"kind": "index", "title": "Index", "source": "contents"})
+            reset_heading_buffer()
+            append_entry({"kind": "index", "title": "Index", "source": "contents"})
         elif pending:
             pending["title"] = f"{pending['title']} {_strip_contents_page_number(line)}".strip()
+        else:
+            remember_heading(line)
 
     flush_pending()
     return entries
@@ -1498,6 +1550,8 @@ def _best_candidate_for_entry(entry: dict[str, Any], candidates: list[dict[str, 
         c_kind = candidate.get("kind")
         c_number = str(candidate.get("metadata", {}).get("number") or "")
         c_title_compact = _toc_compact(candidate.get("title") or "")
+        if kind in {"chapter", "section", "exercise"} and c_kind != kind:
+            continue
         if number and kind in {"chapter", "section", "exercise"} and c_number != number:
             continue
         score = 0
@@ -1520,7 +1574,7 @@ def _best_candidate_for_entry(entry: dict[str, Any], candidates: list[dict[str, 
 
 
 def _make_canonical_node_from_contents(entry: dict[str, Any], index: int, candidate: dict[str, Any] | None) -> dict[str, Any]:
-    warnings = ["source:contents"]
+    warnings = ["source:contents", *(entry.get("warnings") or [])]
     source_block_ids: list[str] = []
     source_page_range: list[int] = []
     source_pages: list[int] = []

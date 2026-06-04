@@ -358,6 +358,68 @@ Index 872
     assert "missing-body-tree-match" in by_title["1.5 Powers,rootsand laws of indices"]["warnings"]
 
 
+def test_contents_first_recovers_implicit_chapters_and_reparents_orphan_exercises():
+    markdown = """
+## > Contents
+
+## Unit 1
+
+Review of number concepts
+1.1 Different types of numbers 4
+1.2 Multiplesand factors 6
+Collectingorganisingand
+displayingdata 107
+4.1 Colectingand classifyingdata 110
+4.2 Organisingdata 113
+Past paper questions for Unit1 145
+
+## Unit 2
+
+5 Fractions,percentagesand
+standardform 149
+5.1 Revisiting fractions 151
+"""
+    review_tree = {
+        "schema": "luceon-toc-review-tree/v1",
+        "type": "root",
+        "title": "TOC Review View",
+        "children": [
+            {"type": "text", "title": "Unit 1", "id": "b-unit-1", "page": 3, "children": []},
+            {"type": "text", "title": "1.1 Different types of numbers", "block_ids": ["b-1-1"], "page": 4, "children": []},
+            {"type": "text", "title": "Exercise 1.8", "block_ids": ["b-ex-1-8"], "page": 31, "children": []},
+            {"type": "text", "title": "4.1 Colectingand classifyingdata", "block_ids": ["b-4-1"], "page": 110, "children": []},
+            {"type": "text", "title": "Exercise 4.4", "block_ids": ["b-ex-4-4"], "page": 125, "children": []},
+        ],
+    }
+
+    canonical_toc = service._compile_canonical_toc(review_tree, markdown)
+
+    nodes = []
+    by_title = {}
+
+    def walk(node):
+        if node.get("node_id") != "toc-root":
+            nodes.append(node)
+            by_title[node["title"]] = node
+        for child in node.get("children") or []:
+            walk(child)
+
+    walk(canonical_toc["root"])
+
+    chapter_1 = by_title["1 Review of number concepts"]
+    chapter_4 = by_title["4 Collectingorganisingand displayingdata"]
+    assert "inferred_chapter_from_following_section" in chapter_1["warnings"]
+    assert "inferred_chapter_from_following_section" in chapter_4["warnings"]
+    assert by_title["1.1 Different types of numbers"]["parent_id"] == chapter_1["node_id"]
+    assert by_title["1.2 Multiplesand factors"]["parent_id"] == chapter_1["node_id"]
+    assert by_title["4.1 Colectingand classifyingdata"]["parent_id"] == chapter_4["node_id"]
+    assert by_title["4.2 Organisingdata"]["parent_id"] == chapter_4["node_id"]
+    assert by_title["Exercise 1.8"]["parent_id"] == chapter_1["node_id"]
+    assert by_title["Exercise 4.4"]["parent_id"] == chapter_4["node_id"]
+    assert by_title["Exercise 1.8"]["parent_id"] != by_title["Unit 2"]["node_id"]
+    assert by_title["Exercise 4.4"]["parent_id"] != by_title["Unit 2"]["node_id"]
+
+
 def test_release_host_mps_worker_posts_force_release_payload():
     captured = {}
 
@@ -495,6 +557,7 @@ if __name__ == "__main__":
     test_toc_review_filter_keeps_outline_and_hides_full_document_noise()
     test_canonical_toc_compiler_builds_traceable_chapter_scaffold_without_llm_structure()
     test_contents_first_canonical_toc_uses_book_contents_as_global_spine()
+    test_contents_first_recovers_implicit_chapters_and_reparents_orphan_exercises()
     test_release_host_mps_worker_posts_force_release_payload()
     test_live_progress_preserves_mps_worker_release_evidence()
     test_full_background_progress_aware_wait_ignores_whole_job_timeout()
