@@ -769,9 +769,31 @@ def _copy_mineru_content_list(extract_root: Path, dest: Path) -> Path:
     return v2_matches[0]
 
 
-def _prepare_inputs(client, payload: dict[str, Any], work_dir: Path, material_id: str) -> tuple[bytes, bytes, ObjectRef, bytes]:
+def _copy_mineru_markdown(extract_root: Path, dest: Path) -> Path | None:
+    matches = sorted(
+        path
+        for path in extract_root.rglob("*")
+        if path.is_file() and path.suffix.lower() == ".md"
+    )
+    if not matches:
+        return None
+    preferred = sorted(
+        matches,
+        key=lambda path: (
+            0 if path.name.lower() == "full.md" else 1,
+            -path.stat().st_size,
+            str(path),
+        ),
+    )[0]
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(preferred, dest)
+    return preferred
+
+
+def _prepare_inputs(client, payload: dict[str, Any], work_dir: Path, material_id: str) -> tuple[bytes, bytes, ObjectRef, bytes, str | None]:
     content_path = work_dir / "post-process/mineru" / material_id / "vlm" / f"{material_id}_content_list.json"
     pdf_path = work_dir / "eval_pdf_dir" / f"{material_id}.pdf"
+    markdown_path = work_dir / "input" / "full.md"
     content_path.parent.mkdir(parents=True, exist_ok=True)
     pdf_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -784,15 +806,17 @@ def _prepare_inputs(client, payload: dict[str, Any], work_dir: Path, material_id
             archive.extractall(extract_root)
 
         extracted_content = _copy_mineru_content_list(extract_root, content_path)
+        extracted_markdown = _copy_mineru_markdown(extract_root, markdown_path)
         extracted_pdf = _find_one(extract_root, ".pdf", "source-pdf")
         shutil.copyfile(extracted_pdf, pdf_path)
-        return content_path.read_bytes(), pdf_path.read_bytes(), zip_ref, zip_bytes
+        markdown_text = markdown_path.read_text(encoding="utf-8", errors="replace") if extracted_markdown else None
+        return content_path.read_bytes(), pdf_path.read_bytes(), zip_ref, zip_bytes, markdown_text
 
     mineru_ref = _primary_input(payload)
     pdf_ref = _find_pdf(client, payload)
     content_bytes = _download(client, mineru_ref, content_path)
     pdf_bytes = _download(client, pdf_ref, pdf_path)
-    return content_bytes, pdf_bytes, mineru_ref, content_bytes
+    return content_bytes, pdf_bytes, mineru_ref, content_bytes, None
 
 
 def _put_text(client, bucket: str, key: str, text: str, content_type: str) -> dict[str, Any]:
@@ -1277,13 +1301,17 @@ def _canonical_title_kind(title: str) -> tuple[str, dict[str, Any], list[str]]:
             warnings.append("unit-project-treated-as-unit-boundary")
         return "unit", metadata, warnings
 
-    numbered = re.match(r"^([0-9]{1,2})(?:\.([0-9]{1,2})(?:\.([0-9]{1,2}))?)?\b", clean)
+    section = re.match(r"^([0-9]{1,2})\.([0-9]{1,2})(?:\.([0-9]{1,2}))?", clean)
+    if section:
+        metadata["number"] = f"{int(section.group(1))}.{int(section.group(2))}"
+        metadata["major"] = int(section.group(1))
+        metadata["minor"] = int(section.group(2))
+        return "section", metadata, warnings
+
+    numbered = re.match(r"^([0-9]{1,2})\s*[A-Za-z]", clean)
     if numbered:
-        metadata["number"] = numbered.group(0)
+        metadata["number"] = str(int(numbered.group(1)))
         metadata["major"] = int(numbered.group(1))
-        metadata["minor"] = int(numbered.group(2)) if numbered.group(2) else None
-        if numbered.group(2):
-            return "section", metadata, warnings
         return "chapter", metadata, warnings
 
     if len(clean) > 90:
@@ -1291,6 +1319,126 @@ def _canonical_title_kind(title: str) -> tuple[str, dict[str, Any], list[str]]:
     if re.search(r"[a-z]{12,}", clean):
         warnings.append("possible-ocr-merged-word")
     return "chapter", metadata, warnings
+
+
+def _strip_contents_page_number(text: str) -> str:
+    return re.sub(r"\s+\d{1,4}\s*$", "", text).strip()
+
+
+def _contents_line(text: str) -> str:
+    text = text.replace("\u3000", " ")
+    text = re.sub(r"^#+\s*", "", text.strip())
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+def _extract_contents_excerpt(markdown_text: str | None) -> str:
+    if not markdown_text:
+        return ""
+    match = re.search(r"(?im)^#{1,3}\s*>?\s*contents\s*$", markdown_text)
+    if not match:
+        match = re.search(r"(?i)\bcontents\b", markdown_text)
+    if not match:
+        return ""
+    start = match.start()
+    tail = markdown_text[match.end():]
+    end_match = re.search(r"(?im)^#{1,3}\s*>?\s*(introduction|how\s*to\s*use|acknowledgements?)\b", tail)
+    if end_match:
+        return markdown_text[start:match.end() + end_match.start()]
+    glossary = re.search(r"(?im)^.*\bindex\s+\d{1,4}\s*$", tail[:40000])
+    if glossary:
+        return markdown_text[start:match.end() + glossary.end()]
+    return markdown_text[start:start + 40000]
+
+
+def _parse_contents_outline(markdown_text: str | None) -> list[dict[str, Any]]:
+    excerpt = _extract_contents_excerpt(markdown_text)
+    if not excerpt:
+        return []
+    raw_lines = [_contents_line(line) for line in excerpt.splitlines()]
+    lines = [line for line in raw_lines if line]
+    entries: list[dict[str, Any]] = []
+    pending: dict[str, Any] | None = None
+
+    def flush_pending() -> None:
+        nonlocal pending
+        if pending:
+            pending["title"] = _strip_contents_page_number(pending["title"])
+            if pending["title"]:
+                entries.append(pending)
+        pending = None
+
+    for line in lines:
+        lower = line.lower()
+        if lower in {"contents", "> contents"}:
+            continue
+        if lower in {"introduction", "howtouse thisbook", "howto use this series", "acknowledgements"}:
+            continue
+
+        unit = re.match(r"^(?:##\s*)?unit\s*([1-9][0-9]*)\b", line, re.I)
+        project = re.match(r"^unit\s*([1-9][0-9]*)\s*project\b", line, re.I)
+        section = re.match(r"^([0-9]{1,2})\.([0-9]{1,2})\s*(.*)$", line)
+        chapter = re.match(r"^([0-9]{1,2})\s*([^\d].*)$", line)
+        past = re.match(r"^past\s*paper\s*questions\s*for\s*unit\s*([0-9]+)", line, re.I)
+        glossary = re.match(r"^glossary\b", line, re.I)
+        index = re.match(r"^index\b", line, re.I)
+
+        starts_new = bool(unit or project or section or chapter or past or glossary or index)
+        if starts_new:
+            flush_pending()
+
+        if unit and not project:
+            entries.append({
+                "kind": "unit",
+                "title": f"Unit {int(unit.group(1))}",
+                "number": str(int(unit.group(1))),
+                "source": "contents",
+            })
+        elif project:
+            entries.append({
+                "kind": "chapter",
+                "title": f"Unit {int(project.group(1))} Project",
+                "number": f"project-{int(project.group(1))}",
+                "source": "contents",
+                "metadata": {"project_unit": int(project.group(1))},
+            })
+        elif section:
+            pending = {
+                "kind": "section",
+                "title": f"{int(section.group(1))}.{int(section.group(2))} {_strip_contents_page_number(section.group(3))}".strip(),
+                "number": f"{int(section.group(1))}.{int(section.group(2))}",
+                "major": int(section.group(1)),
+                "minor": int(section.group(2)),
+                "source": "contents",
+            }
+            if re.search(r"\s+\d{1,4}\s*$", line):
+                flush_pending()
+        elif chapter and 1 <= int(chapter.group(1)) <= 99:
+            pending = {
+                "kind": "chapter",
+                "title": f"{int(chapter.group(1))} {_strip_contents_page_number(chapter.group(2))}".strip(),
+                "number": str(int(chapter.group(1))),
+                "major": int(chapter.group(1)),
+                "source": "contents",
+            }
+            if re.search(r"\s+\d{1,4}\s*$", line):
+                flush_pending()
+        elif past:
+            entries.append({
+                "kind": "past_paper",
+                "title": f"Past paper questions for Unit {int(past.group(1))}",
+                "number": str(int(past.group(1))),
+                "source": "contents",
+            })
+        elif glossary:
+            entries.append({"kind": "glossary", "title": "Glossary", "source": "contents"})
+        elif index:
+            entries.append({"kind": "index", "title": "Index", "source": "contents"})
+        elif pending:
+            pending["title"] = f"{pending['title']} {_strip_contents_page_number(line)}".strip()
+
+    flush_pending()
+    return entries
 
 
 def _canonical_node_id(index: int) -> str:
@@ -1304,7 +1452,7 @@ def _rawlatex_path_for(node_id: str, kind: str, title: str) -> str:
     return f"rawlatex/{node_id}_{kind}_{slug[:64]}.tex"
 
 
-def _compile_canonical_toc(review_tree: dict[str, Any]) -> dict[str, Any]:
+def _collect_review_candidates(review_tree: dict[str, Any]) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
 
     def collect(node: dict[str, Any], depth: int) -> None:
@@ -1338,6 +1486,188 @@ def _compile_canonical_toc(review_tree: dict[str, Any]) -> dict[str, Any]:
                 collect(child, depth + 1)
 
     collect(review_tree, 0)
+    return candidates
+
+
+def _best_candidate_for_entry(entry: dict[str, Any], candidates: list[dict[str, Any]]) -> dict[str, Any] | None:
+    kind = entry.get("kind")
+    number = str(entry.get("number") or "")
+    title_compact = _toc_compact(entry.get("title") or "")
+    ranked: list[tuple[int, dict[str, Any]]] = []
+    for candidate in candidates:
+        c_kind = candidate.get("kind")
+        c_number = str(candidate.get("metadata", {}).get("number") or "")
+        c_title_compact = _toc_compact(candidate.get("title") or "")
+        if number and kind in {"chapter", "section", "exercise"} and c_number != number:
+            continue
+        score = 0
+        if number and c_number == number:
+            score += 100
+        if kind == c_kind:
+            score += 25
+        if title_compact and (title_compact in c_title_compact or c_title_compact in title_compact):
+            score += 10
+        if kind in {"glossary", "index"} and c_kind == kind:
+            score += 80
+        if kind == "past_paper" and c_kind == "past_paper" and number in c_title_compact:
+            score += 80
+        if score > 0:
+            ranked.append((score, candidate))
+    if not ranked:
+        return None
+    ranked.sort(key=lambda item: (-item[0], item[1].get("source_order") or 0))
+    return ranked[0][1]
+
+
+def _make_canonical_node_from_contents(entry: dict[str, Any], index: int, candidate: dict[str, Any] | None) -> dict[str, Any]:
+    warnings = ["source:contents"]
+    source_block_ids: list[str] = []
+    source_page_range: list[int] = []
+    source_pages: list[int] = []
+    if candidate:
+        source_block_ids = list(candidate.get("source_block_ids") or [])
+        source_page_range = list(candidate.get("source_page_range") or [])
+        source_pages = list(candidate.get("source_pages") or [])
+        warnings.extend(candidate.get("warnings") or [])
+    else:
+        warnings.append("missing-body-tree-match")
+    if not source_block_ids:
+        warnings.append("missing-source-block-ids")
+    if not source_page_range:
+        warnings.append("missing-source-page-range")
+    metadata = dict(entry.get("metadata") or {})
+    for key in ("number", "major", "minor"):
+        if entry.get(key) is not None:
+            metadata[key] = entry.get(key)
+    return {
+        "node_id": _canonical_node_id(index),
+        "kind": entry["kind"],
+        "title": entry["title"],
+        "original_title": entry["title"],
+        "source_order": index,
+        "source_depth": 1,
+        "source_block_ids": source_block_ids,
+        "source_page_range": source_page_range,
+        "source_pages": source_pages,
+        "confidence": 0.85 if candidate else 0.55,
+        "warnings": warnings,
+        "metadata": metadata,
+        "children": [],
+    }
+
+
+def _compile_canonical_toc_from_contents(review_tree: dict[str, Any], contents_outline: list[dict[str, Any]]) -> dict[str, Any]:
+    candidates = _collect_review_candidates(review_tree)
+    root = {
+        "node_id": "toc-root",
+        "kind": "root",
+        "title": "Canonical TOC",
+        "original_title": review_tree.get("title") or "",
+        "source_order": 0,
+        "source_depth": 0,
+        "source_block_ids": [],
+        "source_page_range": [],
+        "source_pages": [],
+        "confidence": 1.0,
+        "warnings": ["contents-first"],
+        "metadata": {},
+        "children": [],
+    }
+
+    nodes: list[dict[str, Any]] = []
+    nodes_by_id: dict[str, dict[str, Any]] = {"toc-root": root}
+    current_unit: dict[str, Any] | None = None
+    current_chapter: dict[str, Any] | None = None
+    section_by_number: dict[str, dict[str, Any]] = {}
+
+    def attach(parent: dict[str, Any], child: dict[str, Any]) -> None:
+        child["parent_id"] = parent["node_id"]
+        parent["children"].append(child)
+        nodes_by_id[child["node_id"]] = child
+        nodes.append(child)
+
+    for entry in contents_outline:
+        node = _make_canonical_node_from_contents(entry, len(nodes) + 1, _best_candidate_for_entry(entry, candidates))
+        kind = node["kind"]
+        if kind == "unit":
+            attach(root, node)
+            current_unit = node
+            current_chapter = None
+        elif kind in {"glossary", "index"}:
+            attach(root, node)
+            current_chapter = None
+        elif kind == "chapter":
+            attach(current_unit or root, node)
+            current_chapter = node
+        elif kind == "section":
+            major = node.get("metadata", {}).get("major")
+            if current_chapter is None or (isinstance(major, int) and str(current_chapter.get("metadata", {}).get("number")) != str(major)):
+                chapter_match = next(
+                    (
+                        existing for existing in reversed(nodes)
+                        if existing.get("kind") == "chapter"
+                        and str(existing.get("metadata", {}).get("number")) == str(major)
+                    ),
+                    None,
+                )
+                current_chapter = chapter_match
+            attach(current_chapter or current_unit or root, node)
+            if node.get("metadata", {}).get("number"):
+                section_by_number[str(node["metadata"]["number"])] = node
+        elif kind in {"past_paper", "practice"}:
+            attach(current_unit or root, node)
+        else:
+            attach(current_chapter or current_unit or root, node)
+
+    existing_exercises: set[str] = set()
+    for candidate in candidates:
+        if candidate.get("kind") != "exercise":
+            continue
+        number = str(candidate.get("metadata", {}).get("number") or "")
+        if not number or number in existing_exercises:
+            continue
+        parent = section_by_number.get(number)
+        if not parent:
+            major = number.split(".")[0]
+            parent = next(
+                (
+                    existing for existing in reversed(nodes)
+                    if existing.get("kind") == "chapter"
+                    and str(existing.get("metadata", {}).get("number")) == major
+                ),
+                None,
+            )
+        exercise = {
+            **candidate,
+            "node_id": _canonical_node_id(len(nodes) + 1),
+            "warnings": [*(candidate.get("warnings") or []), "source:body-tree-exercise"],
+        }
+        attach(parent or current_unit or root, exercise)
+        existing_exercises.add(number)
+
+    return {
+        "schema": "luceon-canonical-toc/v1",
+        "source_schema": review_tree.get("schema") or "unknown",
+        "compiler": "luceon-layer3-deterministic-rules/contents-first",
+        "root": root,
+        "stats": {
+            "node_count": len(nodes),
+            "warning_count": sum(len(node.get("warnings") or []) for node in nodes),
+            "kind_counts": {
+                kind: sum(1 for node in nodes if node["kind"] == kind)
+                for kind in sorted({node["kind"] for node in nodes})
+            },
+            "contents_outline_count": len(contents_outline),
+        },
+    }
+
+
+def _compile_canonical_toc(review_tree: dict[str, Any], contents_markdown: str | None = None) -> dict[str, Any]:
+    contents_outline = _parse_contents_outline(contents_markdown)
+    if contents_outline:
+        return _compile_canonical_toc_from_contents(review_tree, contents_outline)
+
+    candidates = _collect_review_candidates(review_tree)
 
     root = {
         "node_id": "toc-root",
@@ -1595,7 +1925,7 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
     (work_dir / "post-process/mineru" / material_id / "vlm").mkdir(parents=True, exist_ok=True)
     (work_dir / "eval_pdf_dir").mkdir(parents=True, exist_ok=True)
 
-    content_bytes, pdf_bytes, provenance_input_ref, provenance_input_bytes = _prepare_inputs(client, payload, work_dir, material_id)
+    content_bytes, pdf_bytes, provenance_input_ref, provenance_input_bytes, markdown_text = _prepare_inputs(client, payload, work_dir, material_id)
 
     outputs = work_dir / "outputs"
     _run_with_state([
@@ -1671,7 +2001,7 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
     rebuilt_markdown = _render_tree_markdown(toc_view_tree)
     flooded_content = _flatten_tree(toc_view_tree)
     _assert_usable_outputs(toc_view_tree, readable, rebuilt_markdown, flooded_content)
-    canonical_toc = _compile_canonical_toc(toc_view_tree)
+    canonical_toc = _compile_canonical_toc(toc_view_tree, markdown_text)
     chapter_spans = _compile_chapter_spans(canonical_toc)
     rawlatex_scaffold = _compile_rawlatex_scaffold(canonical_toc, chapter_spans)
     unresolved: list[dict[str, Any]] = []
@@ -1691,6 +2021,10 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
         "chapter_spans": chapter_spans.get("stats", {}),
         "rawlatex_scaffold": {
             "file_count": rawlatex_scaffold.get("manifest", {}).get("file_count", 0),
+        },
+        "contents_first": {
+            "enabled": bool(markdown_text and canonical_toc.get("stats", {}).get("contents_outline_count")),
+            "outline_count": canonical_toc.get("stats", {}).get("contents_outline_count", 0),
         },
     }
     provenance = {
@@ -1719,6 +2053,10 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
             "chapter_spans": "chapter_spans.json",
             "rawlatex_scaffold": "rawlatex_scaffold.json",
             "compat_logic_tree": "logic_tree.json",
+        },
+        "contents_first": {
+            "enabled": bool(markdown_text and canonical_toc.get("stats", {}).get("contents_outline_count")),
+            "outline_count": canonical_toc.get("stats", {}).get("contents_outline_count", 0),
         },
     }
 

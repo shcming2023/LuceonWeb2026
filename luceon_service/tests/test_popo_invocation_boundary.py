@@ -284,6 +284,80 @@ def test_canonical_toc_compiler_builds_traceable_chapter_scaffold_without_llm_st
     assert "No LLM call was used to decide whole-book structure." in rawlatex_scaffold["rules"]
 
 
+def test_contents_first_canonical_toc_uses_book_contents_as_global_spine():
+    markdown = """
+## > Contents
+
+## Unit 1
+
+Review of number concepts
+1.1 Different types of numbers 4
+1.5 Powers,rootsand laws of indices 17
+Past paper questions for Unit1 145
+Unit1Project 148
+
+## Unit 3
+
+12Averagesandmeasuresof
+spread 366
+12.1 Differenttypesof averages 367
+12.2 Making comparisonsusingaverages
+andranges 371
+
+Unit 4
+15Scaledrawings,bearings and
+trigonometry 471
+15.3 Understanding thetangent,cosineand
+sineratios 479
+15.4 Exact trigonometric ratios 495
+Glossary 867
+Index 872
+
+## > Introduction
+"""
+    review_tree = {
+        "schema": "luceon-toc-review-tree/v1",
+        "type": "root",
+        "title": "TOC Review View",
+        "children": [
+            {"type": "text", "title": "Unit 1", "id": "b-unit-1", "page": 3, "children": [
+                {"type": "text", "title": "1.1 Different types of numbers", "block_ids": ["b-1-1"], "page": 4, "children": []},
+                {"type": "text", "title": "Exercise 1.1", "block_ids": ["b-ex-1-1"], "page": 6, "children": []},
+            ]},
+            {"type": "text", "title": "12.1Different types of average", "block_ids": ["b-12-1"], "page": 367, "children": []},
+            {"type": "text", "title": "15.4 Exact trigonometric ratios", "block_ids": ["b-15-4"], "page": 495, "children": []},
+        ],
+    }
+
+    outline = service._parse_contents_outline(markdown)
+    canonical_toc = service._compile_canonical_toc(review_tree, markdown)
+    spans = service._compile_chapter_spans(canonical_toc)
+
+    assert len([entry for entry in outline if entry["kind"] == "unit"]) == 3
+    assert not any(entry["kind"] == "unit" and "Project" in entry["title"] for entry in outline)
+    assert canonical_toc["compiler"].endswith("contents-first")
+    assert canonical_toc["stats"]["kind_counts"]["unit"] == 3
+
+    nodes = []
+    def walk(node):
+        if node.get("node_id") != "toc-root":
+            nodes.append(node)
+        for child in node.get("children") or []:
+            walk(child)
+    walk(canonical_toc["root"])
+    titles = [node["title"] for node in nodes]
+    assert "1.5 Powers,rootsand laws of indices" in titles
+    assert "12.1 Differenttypesof averages" in titles
+    assert "12.2 Making comparisonsusingaverages andranges" in titles
+    assert "15.4 Exact trigonometric ratios" in titles
+    assert "Unit 1 Project" in titles
+
+    by_title = {span["title"]: span for span in spans["spans"]}
+    assert by_title["12.1 Differenttypesof averages"]["source_block_ids"] == ["b-12-1"]
+    assert by_title["15.4 Exact trigonometric ratios"]["source_block_ids"] == ["b-15-4"]
+    assert "missing-body-tree-match" in by_title["1.5 Powers,rootsand laws of indices"]["warnings"]
+
+
 def test_release_host_mps_worker_posts_force_release_payload():
     captured = {}
 
@@ -420,6 +494,7 @@ if __name__ == "__main__":
     test_live_progress_reads_real_pages_and_raw_chunk_metadata()
     test_toc_review_filter_keeps_outline_and_hides_full_document_noise()
     test_canonical_toc_compiler_builds_traceable_chapter_scaffold_without_llm_structure()
+    test_contents_first_canonical_toc_uses_book_contents_as_global_spine()
     test_release_host_mps_worker_posts_force_release_payload()
     test_live_progress_preserves_mps_worker_release_evidence()
     test_full_background_progress_aware_wait_ignores_whole_job_timeout()
