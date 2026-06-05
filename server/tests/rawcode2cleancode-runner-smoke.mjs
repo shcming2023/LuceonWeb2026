@@ -593,6 +593,20 @@ try {
     assert.match(parsed.clean_markdown, /\\sqrt\{x\}/);
   }
 
+  {
+    console.log('  [15] LLM JSON parser repairs odd backslash runs before LaTeX commands...');
+    const parsed = parseLooseJson(String.raw`{
+      "clean_markdown": "# Section\n\nUsing ratios: $\\\Rightarrow x = 30$ m.",
+      "kept_images": [],
+      "removed_noise": [],
+      "unresolved_items": [],
+      "change_summary": ["converted \mathsf to plain text where appropriate"],
+      "risk_flags": ["contains_formula"]
+    }`);
+    assert.match(parsed.clean_markdown, /\\Rightarrow x = 30/);
+    assert.match(parsed.change_summary[0], /\\mathsf/);
+  }
+
   console.log('RawCode2CleanCode UAT runner smoke passed.');
 } finally {
   await rm(tmpRoot, { recursive: true, force: true });

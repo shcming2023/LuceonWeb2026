@@ -567,7 +567,40 @@ function parseLooseJson(text) {
 }
 
 function repairJsonStringEscapes(text) {
-  return String(text || '').replace(/\\(?!["\\/bfnrtu])/g, '\\\\');
+  const source = String(text || '');
+  let output = '';
+  let inString = false;
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === '"') {
+      output += char;
+      inString = !inString;
+      continue;
+    }
+    if (!inString || char !== '\\') {
+      output += char;
+      continue;
+    }
+
+    let end = index;
+    while (source[end] === '\\') end += 1;
+    const run = source.slice(index, end);
+    const next = source[end] || '';
+    const nextIsValidJsonEscape = /["\\/bfnrtu]/.test(next);
+    if (!nextIsValidJsonEscape && run.length % 2 === 1) {
+      output += `${run}\\`;
+      index = end - 1;
+    } else if (nextIsValidJsonEscape && run.length % 2 === 1) {
+      output += `${run}${next}`;
+      index = end;
+    } else {
+      output += run;
+      index = end - 1;
+    }
+  }
+
+  return output;
 }
 
 function normalizeCleanerResponse(value) {
