@@ -227,6 +227,14 @@ function normalizeImageRefs(markdown, imageMap) {
   let output = markdown;
   const lookup = buildImageMapLookup(imageMap);
   const changes = [];
+  const imageBySourceBlock = new Map();
+  for (const image of imageMap.images || []) {
+    const normalizedRef = normalizeSlashes(image.normalized_ref || image.raw_ref);
+    if (!normalizedRef) continue;
+    for (const sourceBlockId of image.source_block_ids || []) {
+      imageBySourceBlock.set(String(sourceBlockId), normalizedRef);
+    }
+  }
 
   for (const [rawRef, normalizedRef] of lookup.entries()) {
     if (!rawRef || !normalizedRef || rawRef === normalizedRef) continue;
@@ -239,6 +247,21 @@ function normalizeImageRefs(markdown, imageMap) {
       changes.push({ type: 'image_ref_normalized', from: rawRef, to: normalizedRef });
     }
   }
+
+  output = output.replace(/!\[([^\]]*)\]\(([^)\s]+)((?:\s+"[^"]*")?)\)/g, (match, alt, ref, titleSuffix) => {
+    const sourceBlockMatch = String(alt || '').match(/\bsource_block=([^,\s\]]+)/);
+    const sourceBlockId = sourceBlockMatch ? sourceBlockMatch[1] : null;
+    const normalizedRef = sourceBlockId ? imageBySourceBlock.get(sourceBlockId) : null;
+    const currentRef = normalizeSlashes(ref);
+    if (!normalizedRef || currentRef === normalizedRef) return match;
+    changes.push({
+      type: 'image_ref_restored_from_source_block',
+      source_block_id: sourceBlockId,
+      from: currentRef,
+      to: normalizedRef,
+    });
+    return `![${alt}](${normalizedRef}${titleSuffix || ''})`;
+  });
 
   return { markdown: output, changes };
 }
@@ -2003,6 +2026,7 @@ export {
   buildReviewPatchContract,
   buildFixtureRawCode,
   loadRawBundle,
+  normalizeImageRefs,
   parseLooseJson,
   runPilot,
   sha256Text,

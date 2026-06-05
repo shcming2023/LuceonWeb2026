@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { convertCleanlatexPacksToRawCode } from '../../scripts/cleanlatex-pack-to-rawcode.mjs';
-import { buildFixtureRawCode, buildReviewItems, parseLooseJson, validateCleanCode } from '../../scripts/rawcode2cleancode-pilot.mjs';
+import { buildFixtureRawCode, buildReviewItems, normalizeImageRefs, parseLooseJson, validateCleanCode } from '../../scripts/rawcode2cleancode-pilot.mjs';
 import { runRawCode2CleanCodeUatRunner } from '../../scripts/rawcode2cleancode-runner.mjs';
 
 async function makeFixtureSample(root, n) {
@@ -605,6 +605,27 @@ try {
     }`);
     assert.match(parsed.clean_markdown, /\\Rightarrow x = 30/);
     assert.match(parsed.change_summary[0], /\\mathsf/);
+  }
+
+  {
+    console.log('  [16] image refs mutated by LLM are restored from source block evidence...');
+    const lockedHash = '95117af032f57fdb5776539d5189b462e5c33af4a17d38027a1e38eff2af9dd1.jpg';
+    const mutatedHash = '95117af032f57fdb5776539d5189b462e5c33af4a17c38027a1e38eff2af9dd1.jpg';
+    const normalized = normalizeImageRefs(
+      `![image source_block=13549 page=665](images/${mutatedHash})`,
+      {
+        images: [{
+          raw_ref: `images/${lockedHash}`,
+          normalized_ref: `images/${lockedHash}`,
+          source_block_ids: ['13549'],
+          asset_hash_name: lockedHash,
+          required: true,
+        }],
+      },
+    );
+    assert.match(normalized.markdown, new RegExp(`images/${lockedHash}`));
+    assert.equal(normalized.markdown.includes(mutatedHash), false);
+    assert.equal(normalized.changes[0].type, 'image_ref_restored_from_source_block');
   }
 
   console.log('RawCode2CleanCode UAT runner smoke passed.');
