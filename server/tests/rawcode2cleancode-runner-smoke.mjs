@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { convertCleanlatexPacksToRawCode } from '../../scripts/cleanlatex-pack-to-rawcode.mjs';
-import { buildFixtureRawCode, validateCleanCode } from '../../scripts/rawcode2cleancode-pilot.mjs';
+import { buildFixtureRawCode, parseLooseJson, validateCleanCode } from '../../scripts/rawcode2cleancode-pilot.mjs';
 import { runRawCode2CleanCodeUatRunner } from '../../scripts/rawcode2cleancode-runner.mjs';
 
 async function makeFixtureSample(root, n) {
@@ -525,6 +525,22 @@ try {
     assert.equal(qualityReport.status, 'NEEDS_REVIEW', JSON.stringify(qualityReport, null, 2));
     assert.equal(visualCheck.status, 'NEEDS_REVIEW');
     assert.equal(visualCheck.detail.visualEvidenceGaps[0].linked_asset_hash_names[0], imageHashName);
+  }
+
+  {
+    console.log('  [14] LLM JSON parser tolerates unescaped LaTeX backslashes from model content...');
+    const parsed = parseLooseJson([
+      '{',
+      '  "clean_markdown": "# Section\\n\\nAB \\parallel CD and \\sqrt{x} appear in the source.",',
+      '  "kept_images": [],',
+      '  "removed_noise": [],',
+      '  "unresolved_items": [],',
+      '  "change_summary": [],',
+      '  "risk_flags": ["contains_formula"]',
+      '}',
+    ].join('\n'));
+    assert.match(parsed.clean_markdown, /\\parallel CD/);
+    assert.match(parsed.clean_markdown, /\\sqrt\{x\}/);
   }
 
   console.log('RawCode2CleanCode UAT runner smoke passed.');

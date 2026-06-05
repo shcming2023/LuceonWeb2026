@@ -434,6 +434,7 @@ function buildCleanerRequest({ materialId, version, chapterId, chapterTitle, toc
       'For visual evidence requirements, either preserve the linked image reference exactly or report the issue in unresolved_items.',
       'Move uncertain content to unresolved_items instead of deleting it.',
       'Keep educational content, questions, formulas, tables, captions, and examples faithful to the source.',
+      'Escape Markdown and LaTeX backslashes as valid JSON string characters; never emit raw invalid JSON escapes such as \\p, \\s, or \\c.',
     ],
     expected_response_schema: {
       clean_markdown: 'string',
@@ -530,10 +531,27 @@ function parseLooseJson(text) {
     const start = stripped.indexOf('{');
     const end = stripped.lastIndexOf('}');
     if (start >= 0 && end > start) {
-      return JSON.parse(stripped.slice(start, end + 1));
+      const sliced = stripped.slice(start, end + 1);
+      try {
+        return JSON.parse(sliced);
+      } catch (secondError) {
+        try {
+          return JSON.parse(repairJsonStringEscapes(sliced));
+        } catch {
+          throw secondError;
+        }
+      }
     }
-    throw firstError;
+    try {
+      return JSON.parse(repairJsonStringEscapes(stripped));
+    } catch {
+      throw firstError;
+    }
   }
+}
+
+function repairJsonStringEscapes(text) {
+  return String(text || '').replace(/\\(?!["\\/bfnrtu])/g, '\\\\');
 }
 
 function normalizeCleanerResponse(value) {
@@ -608,7 +626,7 @@ async function callLLMCleaner({ apiBase, model, prompt }) {
   return {
     api_response: parsed,
     content,
-    parsed_content: parseLooseJson(content),
+    parsed_content: null,
   };
 }
 
@@ -652,6 +670,7 @@ async function runCleanerStage({
     request_path: null,
     response_path: null,
     raw_api_response_path: null,
+    raw_model_content_path: null,
   };
 
   if (mode === 'llm-dry-run' || mode === 'llm') {
@@ -670,7 +689,17 @@ async function runCleanerStage({
     const llmResult = await callLLMCleaner({ apiBase, model, prompt });
     llmUsed = true;
     apiResponse = llmResult.api_response;
-    rawResponse = llmResult.parsed_content;
+    if (mode === 'llm') {
+      audit.raw_api_response_path = join(auditDir, 'llm_raw_api_response.json');
+      audit.raw_model_content_path = join(auditDir, 'llm_raw_model_content.txt');
+      await writeJson(audit.raw_api_response_path, apiResponse);
+      await writeText(audit.raw_model_content_path, llmResult.content);
+    }
+    try {
+      rawResponse = llmResult.parsed_content || parseLooseJson(llmResult.content);
+    } catch (error) {
+      throw new Error(`LLM content JSON parse failed: ${error.message}; raw_model_content_path=${audit.raw_model_content_path}`);
+    }
   } else {
     rawResponse = deterministicSchemaCleaner({ precleanMarkdown, chapterTitle, imageMap, mode });
   }
@@ -692,7 +721,7 @@ async function runCleanerStage({
   if (mode === 'llm-dry-run' || mode === 'llm') {
     audit.response_path = join(auditDir, mode === 'llm-dry-run' ? 'llm_dry_run_response.json' : 'llm_response.json');
     await writeJson(audit.response_path, normalized.response);
-    if (apiResponse) {
+    if (apiResponse && !audit.raw_api_response_path) {
       audit.raw_api_response_path = join(auditDir, 'llm_raw_api_response.json');
       await writeJson(audit.raw_api_response_path, apiResponse);
     }
@@ -1577,6 +1606,7 @@ export {
   assertAllowedLlmModel,
   buildFixtureRawCode,
   loadRawBundle,
+  parseLooseJson,
   runPilot,
   sha256Text,
   stableJson,
