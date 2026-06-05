@@ -324,8 +324,8 @@ function imageMapForPack(pack, rawMarkdown) {
   const images = [];
   const seen = new Set();
   const visualAssets = [
-    ...(Array.isArray(pack?.assets?.images) ? pack.assets.images : []),
-    ...(Array.isArray(pack?.assets?.tables) ? pack.assets.tables : []),
+    ...(Array.isArray(pack?.assets?.images) ? pack.assets.images.map((asset) => ({ ...asset, asset_kind: asset?.kind || asset?.type || 'image' })) : []),
+    ...(Array.isArray(pack?.assets?.tables) ? pack.assets.tables.map((asset) => ({ ...asset, asset_kind: asset?.kind || asset?.type || 'table' })) : []),
   ];
   for (const image of visualAssets) {
     const assetHashName = normalizeSlashes(image?.asset_hash_name || image?.hash_name || image?.name);
@@ -339,6 +339,7 @@ function imageMapForPack(pack, rawMarkdown) {
       required: rawMarkdown.includes(assetHashName),
       reason: rawMarkdown.includes(assetHashName) ? 'referenced_by_pack_markdown' : 'declared_by_pack_assets',
       asset_hash_name: assetHashName,
+      asset_kind: image?.asset_kind || image?.kind || image?.type || (String(image?.role || '').toLowerCase().includes('table') ? 'table' : 'image'),
       source_page: image?.source_page ?? null,
       bbox: Array.isArray(image?.bbox) ? image.bbox : [],
       source_block_ids: Array.isArray(image?.source_block_ids) ? image.source_block_ids.map(String) : [],

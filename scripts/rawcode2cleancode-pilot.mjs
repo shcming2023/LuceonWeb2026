@@ -259,6 +259,71 @@ function requiredImageRefs(imageMap) {
     .filter(Boolean);
 }
 
+function markdownCommentValue(value) {
+  return String(value ?? '')
+    .replace(/-->/g, '-- >')
+    .replace(/\r?\n/g, ' ')
+    .trim();
+}
+
+function visualBlockCommentForImage(image, markdownImage) {
+  const ref = normalizeSlashes(image?.normalized_ref || image?.raw_ref || markdownImage?.ref || '');
+  const sourceBlockIds = Array.isArray(image?.source_block_ids)
+    ? image.source_block_ids.map(String).filter(Boolean)
+    : [];
+  const altText = String(markdownImage?.alt || '').toLowerCase();
+  const kindFromImage = String(image?.asset_kind || image?.kind || image?.type || '').toLowerCase();
+  const kind = kindFromImage.includes('table') || altText.includes('table') ? 'table' : 'image';
+  const sourcePage = image?.source_page ?? image?.page ?? '';
+  const bbox = Array.isArray(image?.bbox) ? image.bbox : [];
+  const assetHash = image?.asset_hash_name || basename(ref);
+  return `<!-- luceon:visual_block type=${kind} source_block_ids=${markdownCommentValue(sourceBlockIds.join(','))} page=${markdownCommentValue(sourcePage)} bbox=${markdownCommentValue(JSON.stringify(bbox))} asset_hash=${markdownCommentValue(assetHash)} -->`;
+}
+
+function restoreVisualBlockComments(markdown, imageMap) {
+  const imageByRef = new Map();
+  for (const image of imageMap.images || []) {
+    const rawRef = normalizeSlashes(image.raw_ref);
+    const normalizedRef = normalizeSlashes(image.normalized_ref || image.raw_ref);
+    if (rawRef) imageByRef.set(rawRef, image);
+    if (normalizedRef) imageByRef.set(normalizedRef, image);
+    if (normalizedRef) imageByRef.set(`images/${basename(normalizedRef)}`, image);
+  }
+  if (imageByRef.size === 0) return { markdown, inserted: 0 };
+
+  const lines = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
+  const output = [];
+  let inserted = 0;
+  const imageLineRegex = /^(\s*)!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)\s*$/;
+
+  for (const line of lines) {
+    const match = imageLineRegex.exec(line);
+    if (!match) {
+      output.push(line);
+      continue;
+    }
+    const markdownImage = {
+      alt: match[2] || '',
+      ref: normalizeSlashes(match[3] || ''),
+      raw: line,
+    };
+    const image = imageByRef.get(markdownImage.ref);
+    if (!image) {
+      output.push(line);
+      continue;
+    }
+    const previous = output[output.length - 1] || '';
+    const previousHasComment = previous.includes('luceon:visual_block') && previous.includes(image.asset_hash_name || basename(markdownImage.ref));
+    if (!previousHasComment) {
+      output.push(`${match[1] || ''}${visualBlockCommentForImage(image, markdownImage)}`);
+      inserted += 1;
+    }
+    output.push(line);
+  }
+
+  return { markdown: output.join('\n'), inserted };
+}
+
 function allowedImageRefs(imageMap) {
   const refs = new Set();
   for (const image of imageMap.images || []) {
@@ -686,6 +751,11 @@ function rulePostProcess({ llmResponse, chapterTitle, imageMap }) {
     })));
     changeSummary.push(`postprocessor restored ${missingRequiredImages.length} required image reference(s) for placement review`);
     riskFlags.add('required_image_placement_review');
+  }
+  const restoredVisualComments = restoreVisualBlockComments(clean, imageMap);
+  clean = restoredVisualComments.markdown;
+  if (restoredVisualComments.inserted > 0) {
+    changeSummary.push(`postprocessor restored ${restoredVisualComments.inserted} visual block anchor comment(s)`);
   }
   clean = `${clean}\n`;
 

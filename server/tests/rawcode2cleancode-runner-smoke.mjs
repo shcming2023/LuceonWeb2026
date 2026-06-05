@@ -321,7 +321,9 @@ try {
     const mappedTableBlock = sectionSourceMap.source_blocks.find((block) => block.block_id === 'c-table-1');
     assert.equal(mappedTableBlock.markdown_placeholders[0].asset_hash_name, 'flow-table-hash.jpg');
     assert.deepEqual(mappedTableBlock.markdown_placeholders[0].bbox, [0.1, 0.2, 0.7, 0.4]);
-    assert.equal(sectionImageMap.images.find((image) => image.asset_hash_name === 'flow-table-hash.jpg').required, true);
+    const mappedTableImage = sectionImageMap.images.find((image) => image.asset_hash_name === 'flow-table-hash.jpg');
+    assert.equal(mappedTableImage.required, true);
+    assert.equal(mappedTableImage.asset_kind, 'table');
 
     const result = await runRawCode2CleanCodeUatRunner({
       samples: [
@@ -349,6 +351,8 @@ try {
     assert.equal(result.operationCounts.dbWrite, 0);
     assert.equal(result.operationCounts.minioWrite, 0);
     assert.equal(result.operationCounts.runtimeWorkerPost, 0);
+    const cleanTableMarkdown = await readFile(result.samples[1].evidence.output.cleanMd, 'utf8');
+    assert.match(cleanTableMarkdown, /luceon:visual_block type=table source_block_ids=c-table-1 page=122 bbox=\[0\.1,0\.2,0\.7,0\.4\] asset_hash=flow-table-hash\.jpg/);
   }
 
   {
