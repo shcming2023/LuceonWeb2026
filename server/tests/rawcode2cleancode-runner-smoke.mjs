@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { convertCleanlatexPacksToRawCode } from '../../scripts/cleanlatex-pack-to-rawcode.mjs';
 import { buildFixtureRawCode, buildReviewItems, normalizeImageRefs, parseLooseJson, validateCleanCode } from '../../scripts/rawcode2cleancode-pilot.mjs';
@@ -85,6 +85,9 @@ try {
     assert.equal(result.readinessClaimed, false);
     assert.equal(result.samples[0].readinessClaimed, false);
     assert.equal(existsSync(result.samples[0].evidence.output.cleanMd), true);
+    const passCleanMarkdown = await readFile(result.samples[0].evidence.output.cleanMd, 'utf8');
+    assert.equal(/<!--\s*luceon:/i.test(passCleanMarkdown), false);
+    assert.equal((passCleanMarkdown.match(/^#\s+第一章 数与式$/gm) || []).length, 1);
     const passReviewItems = JSON.parse(await readFile(result.samples[0].evidence.output.reviewItems, 'utf8'));
     assert.equal(passReviewItems.schema, 'luceon-cleancode-review-items/v1');
     assert.equal(passReviewItems.status, 'no_review_required');
@@ -370,7 +373,12 @@ try {
     assert.equal(result.operationCounts.minioWrite, 0);
     assert.equal(result.operationCounts.runtimeWorkerPost, 0);
     const cleanTableMarkdown = await readFile(result.samples[1].evidence.output.cleanMd, 'utf8');
-    assert.match(cleanTableMarkdown, /luceon:visual_block type=table source_block_ids=c-table-1 page=122 bbox=\[0\.1,0\.2,0\.7,0\.4\] asset_hash=flow-table-hash\.jpg/);
+    assert.equal(/luceon:visual_block/.test(cleanTableMarkdown), false);
+    assert.match(cleanTableMarkdown, /!\[table source_block=c-table-1 page=122\]\(images\/flow-table-hash\.jpg\)/);
+    const cleanTableImageMap = JSON.parse(await readFile(join(dirname(result.samples[1].evidence.output.cleanMd), 'image_map.json'), 'utf8'));
+    const cleanMappedTable = cleanTableImageMap.images.find((image) => image.asset_hash_name === 'flow-table-hash.jpg');
+    assert.equal(cleanMappedTable.required, true);
+    assert.equal(cleanMappedTable.asset_kind, 'table');
   }
 
   {
@@ -664,6 +672,40 @@ try {
       },
     });
     assert.equal(qualityReport.status, 'PASS', JSON.stringify(qualityReport, null, 2));
+  }
+
+  {
+    console.log('  [18] validator flags reader-surface trace metadata and duplicate opening headings...');
+    const qualityReport = validateCleanCode({
+      cleanMarkdown: [
+        '# Generic Unit',
+        '',
+        '## Generic Unit',
+        '',
+        '<!-- luceon:source_blocks=b1 -->',
+        '',
+        'Readable content.',
+      ].join('\n'),
+      chapterTitle: 'Generic Unit',
+      imageMap: { images: [] },
+      cleanChapterDir: tmpRoot,
+      copiedImages: [],
+      missingImages: [],
+      unresolvedItems: [],
+      rawMarkdown: '# Generic Unit\n\nReadable content.\n',
+      cleanerMode: 'llm',
+      llmResponse: {
+        clean_markdown: '# Generic Unit\n\n## Generic Unit\n\n<!-- luceon:source_blocks=b1 -->\n\nReadable content.\n',
+        kept_images: [],
+        removed_noise: [],
+        unresolved_items: [],
+        change_summary: [],
+        risk_flags: [],
+      },
+    });
+    assert.equal(qualityReport.status, 'NEEDS_REVIEW');
+    assert.equal(qualityReport.checks.find((check) => check.id === 'reader_surface_luceon_metadata_hidden').status, 'NEEDS_REVIEW');
+    assert.equal(qualityReport.checks.find((check) => check.id === 'reader_surface_duplicate_opening_headings_absent').status, 'NEEDS_REVIEW');
   }
 
   console.log('RawCode2CleanCode UAT runner smoke passed.');

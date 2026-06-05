@@ -74,6 +74,7 @@ def main() -> int:
     write_json(output_dir / "cleaning_unit_packs.json", packs_manifest.get("packs") or [])
     write_json(output_dir / "cleaning_unit_prompts.json", packs_manifest.get("prompts") or {})
     write_json(output_dir / "cleanlatex_validation_manifests.json", packs_manifest.get("validation_manifests") or [])
+    write_json(output_dir / "toc_output_coverage.json", packs_manifest.get("toc_output_coverage") or {})
     write_json(
         output_dir / "cleanlatex_pack_manifest.json",
         {key: value for key, value in packs_manifest.items() if key not in {"packs", "prompts", "validation_manifests"}},

@@ -1963,6 +1963,7 @@ def _cleanlatex_pack_selection_policy() -> dict[str, Any]:
         "selection_order": [
             "source_span_continuity",
             "stable_parent_boundary",
+            "source_bearing_leaf_without_selected_ancestor",
             "content_size",
             "child_count",
             "asset_density",
@@ -2773,6 +2774,148 @@ def _select_cleanlatex_pack_nodes(
     return selected
 
 
+def _is_descendant_node(
+    node_id: str,
+    ancestor_id: str,
+    nodes_by_id: dict[str, dict[str, Any]],
+) -> bool:
+    current = nodes_by_id.get(node_id)
+    while isinstance(current, dict) and current.get("parent_id"):
+        parent_id = str(current.get("parent_id") or "")
+        if parent_id == ancestor_id:
+            return True
+        current = nodes_by_id.get(parent_id)
+    return False
+
+
+def _compile_cleanlatex_toc_output_coverage(
+    nodes: list[dict[str, Any]],
+    nodes_by_id: dict[str, dict[str, Any]],
+    span_by_node_id: dict[str, dict[str, Any]],
+    match_orders_by_node: dict[str, list[int]],
+    packs: list[dict[str, Any]],
+    selection_mode: str,
+) -> dict[str, Any]:
+    pack_by_node_id = {
+        str(pack.get("node", {}).get("node_id") or ""): pack
+        for pack in packs
+        if str(pack.get("node", {}).get("node_id") or "")
+    }
+    pack_source_ids_by_node_id = {
+        node_id: {
+            str(value)
+            for value in pack.get("source_span", {}).get("source_block_ids") or []
+        }
+        for node_id, pack in pack_by_node_id.items()
+    }
+
+    records: list[dict[str, Any]] = []
+    for node in nodes:
+        node_id = str(node.get("node_id") or "")
+        if not node_id:
+            continue
+        children = [child for child in node.get("children") or [] if isinstance(child, dict)]
+        direct_source_ids = {str(value) for value in node.get("source_block_ids") or []}
+        span_source_ids = {
+            str(value)
+            for value in span_by_node_id.get(node_id, {}).get("source_block_ids") or []
+        }
+        matched_orders = list(match_orders_by_node.get(node_id) or [])
+        source_ids = sorted(direct_source_ids or span_source_ids)
+        has_source_evidence = bool(source_ids or matched_orders)
+
+        covering_ancestor_pack_ids: list[str] = []
+        for pack_node_id, pack_source_ids in pack_source_ids_by_node_id.items():
+            if not _is_descendant_node(node_id, pack_node_id, nodes_by_id):
+                continue
+            if source_ids and not set(source_ids).intersection(pack_source_ids):
+                continue
+            covering_ancestor_pack_ids.append(pack_by_node_id[pack_node_id]["pack_id"])
+
+        covering_descendant_pack_ids = [
+            pack["pack_id"]
+            for pack_node_id, pack in pack_by_node_id.items()
+            if _is_descendant_node(pack_node_id, node_id, nodes_by_id)
+        ]
+
+        reason_codes: list[str] = []
+        review_required = False
+        if node_id in pack_by_node_id:
+            disposition = "emitted_unit"
+            reason_codes.append("selected_cleaning_unit_pack")
+            covered_by_pack_ids = [pack_by_node_id[node_id]["pack_id"]]
+        elif covering_ancestor_pack_ids:
+            disposition = "covered_by_ancestor_unit"
+            reason_codes.append("content_included_in_ancestor_pack")
+            covered_by_pack_ids = covering_ancestor_pack_ids
+        elif covering_descendant_pack_ids:
+            disposition = (
+                "container_with_source_covered_by_descendants"
+                if has_source_evidence
+                else "container_only_covered_by_descendants"
+            )
+            reason_codes.append("descendant_units_emitted")
+            if has_source_evidence:
+                reason_codes.append("container_source_evidence_requires_sampling_if_intro_text_is_expected")
+            else:
+                reason_codes.append("no_direct_source_match")
+            covered_by_pack_ids = covering_descendant_pack_ids
+        elif has_source_evidence:
+            disposition = "source_available_not_emitted"
+            reason_codes.append("source_match_exists_without_output_unit")
+            covered_by_pack_ids = []
+            review_required = selection_mode == "full-book"
+        else:
+            disposition = "missing_source_match"
+            reason_codes.append("no_source_match_and_no_output_unit")
+            covered_by_pack_ids = []
+            review_required = len(children) == 0
+            if children:
+                reason_codes.append("has_children_but_no_descendant_output")
+                review_required = True
+            else:
+                reason_codes.append("leaf_node")
+
+        records.append({
+            "node_id": node_id,
+            "title": node.get("title"),
+            "kind": node.get("kind"),
+            "parent_id": node.get("parent_id"),
+            "number": node.get("metadata", {}).get("number") if isinstance(node.get("metadata"), dict) else None,
+            "disposition": disposition,
+            "review_required": review_required,
+            "covered_by_pack_ids": covered_by_pack_ids,
+            "source_block_ids": source_ids,
+            "source_match_orders": matched_orders,
+            "child_count": len(children),
+            "reason_codes": reason_codes,
+        })
+
+    counts: dict[str, int] = {}
+    for record in records:
+        key = str(record.get("disposition") or "unknown")
+        counts[key] = counts.get(key, 0) + 1
+
+    return {
+        "schema": "luceon-canonical-toc-output-coverage/v1",
+        "selection_mode": selection_mode,
+        "disposition_semantics": {
+            "emitted_unit": "this canonical node has a direct cleaning unit pack",
+            "covered_by_ancestor_unit": "this node's source evidence is inside an emitted ancestor pack",
+            "container_only_covered_by_descendants": "this structure container has no direct source match and descendant packs cover the readable content",
+            "container_with_source_covered_by_descendants": "this structure container has source evidence and descendant packs cover downstream units; sample if opener text is expected",
+            "source_available_not_emitted": "this node has source evidence but no output unit covers it",
+            "missing_source_match": "this node has no source match and no output coverage; leaf nodes require review",
+        },
+        "records": records,
+        "stats": {
+            "node_count": len(records),
+            "review_required_count": sum(1 for record in records if record.get("review_required")),
+            "disposition_counts": counts,
+        },
+    }
+
+
 def _compile_cleanlatex_pilot_packs(
     canonical_toc: dict[str, Any],
     chapter_spans: dict[str, Any],
@@ -2801,7 +2944,29 @@ def _compile_cleanlatex_pilot_packs(
     match_orders_by_node = _source_match_orders_by_node(nodes, source_rows)
 
     selected_nodes = _select_cleanlatex_pack_nodes(nodes, nodes_by_id, selection_mode, pilot_numbers)
-    descendant_boundary_kinds: set[str] = set()
+    if selection_mode == "full-book":
+        base_selected_ids = {str(node.get("node_id") or "") for node in selected_nodes}
+        expanded_selected: list[dict[str, Any]] = []
+        for node in nodes:
+            node_id = str(node.get("node_id") or "")
+            if node_id in base_selected_ids:
+                expanded_selected.append(node)
+                continue
+            children = [child for child in node.get("children") or [] if isinstance(child, dict)]
+            has_source_evidence = bool(
+                node.get("source_block_ids")
+                or span_by_node_id.get(node_id, {}).get("source_block_ids")
+                or match_orders_by_node.get(node_id)
+            )
+            if children or not has_source_evidence:
+                continue
+            expanded_selected.append(node)
+        selected_nodes = expanded_selected
+    descendant_boundary_kinds: set[str] = {
+        str(node.get("kind") or "")
+        for node in selected_nodes
+        if not [child for child in node.get("children") or [] if isinstance(child, dict)]
+    }
 
     packs: list[dict[str, Any]] = []
     prompts: dict[str, str] = {}
@@ -2988,6 +3153,15 @@ def _compile_cleanlatex_pilot_packs(
         })
         packs.append(pack)
 
+    toc_output_coverage = _compile_cleanlatex_toc_output_coverage(
+        nodes,
+        nodes_by_id,
+        span_by_node_id,
+        match_orders_by_node,
+        packs,
+        selection_mode,
+    )
+
     return {
         "schema": "luceon-cleanlatex-pack-manifest/v1",
         "compiler": "luceon-layer3-deterministic-rules/cleanlatex-pack-generator-pilot",
@@ -2997,11 +3171,13 @@ def _compile_cleanlatex_pilot_packs(
         "packs": packs,
         "prompts": prompts,
         "validation_manifests": validations,
+        "toc_output_coverage": toc_output_coverage,
         "stats": {
             "pack_count": len(packs),
             "content_block_count": sum(len(pack.get("content_blocks") or []) for pack in packs),
             "unresolved_source_block_count": sum(len(pack.get("source_span", {}).get("unresolved_source_block_ids") or []) for pack in packs),
             "asset_hash_count": sum(len(pack.get("assets", {}).get("images") or []) for pack in packs),
+            "toc_output_coverage_review_required_count": toc_output_coverage.get("stats", {}).get("review_required_count", 0),
         },
     }
 
@@ -3203,6 +3379,7 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
             "cleanlatex_pack_manifest": "cleanlatex_pack_manifest.json",
             "cleaning_unit_packs": "cleaning_unit_packs.json",
             "cleaning_unit_prompts": "cleaning_unit_prompts.json",
+            "toc_output_coverage": "toc_output_coverage.json",
             "compat_logic_tree": "logic_tree.json",
         },
         "contents_first": {
@@ -3227,6 +3404,7 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
         "cleaning_unit_packs": _put_json(client, sink_bucket, f"{sink_prefix}cleaning_unit_packs.json", cleanlatex_pack_manifest.get("packs") or []),
         "cleaning_unit_prompts": _put_json(client, sink_bucket, f"{sink_prefix}cleaning_unit_prompts.json", cleanlatex_pack_manifest.get("prompts") or {}),
         "cleanlatex_validation_manifests": _put_json(client, sink_bucket, f"{sink_prefix}cleanlatex_validation_manifests.json", cleanlatex_pack_manifest.get("validation_manifests") or []),
+        "toc_output_coverage": _put_json(client, sink_bucket, f"{sink_prefix}toc_output_coverage.json", cleanlatex_pack_manifest.get("toc_output_coverage") or {}),
         "official_popo_tree": _put_json(client, sink_bucket, f"{sink_prefix}official_popo_tree.json", tree),
         "raw_tree": _put_json(client, sink_bucket, f"{sink_prefix}raw_tree.json", tree),
         "skeleton": _put_json(client, sink_bucket, f"{sink_prefix}skeleton.json", {
@@ -3238,6 +3416,7 @@ def run_luceon_job(payload: dict[str, Any], job_state: dict[str, Any] = None) ->
             "rawlatex_scaffold": f"{sink_prefix}rawlatex_scaffold.json",
             "cleanlatex_pack_manifest": f"{sink_prefix}cleanlatex_pack_manifest.json",
             "cleaning_unit_packs": f"{sink_prefix}cleaning_unit_packs.json",
+            "toc_output_coverage": f"{sink_prefix}toc_output_coverage.json",
             "raw_tree": f"{sink_prefix}official_popo_tree.json",
         }),
         "unresolved_anchors": _put_json(client, sink_bucket, f"{sink_prefix}unresolved_anchors.json", unresolved),

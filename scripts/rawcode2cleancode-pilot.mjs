@@ -190,6 +190,13 @@ function normalizeTextForMetric(text) {
     .trim();
 }
 
+function normalizeHeadingText(text) {
+  return normalizeTextForMetric(String(text || '')
+    .replace(/^#{1,6}\s+/, '')
+    .replace(/^#+\s*$/, '')
+    .replace(/^<!--\s*.*?\s*-->\s*$/, ''));
+}
+
 function uniqueStrings(values) {
   return Array.from(new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean)));
 }
@@ -366,10 +373,73 @@ function allowedImageRefs(imageMap) {
   return Array.from(refs).filter(Boolean).sort();
 }
 
+function stripLuceonMetadataComments(markdown) {
+  const removed = [];
+  const lines = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
+  const kept = [];
+  for (const line of lines) {
+    if (/^\s*<!--\s*luceon:/i.test(line)) {
+      removed.push(line.trim());
+      continue;
+    }
+    kept.push(line);
+  }
+  return {
+    markdown: kept.join('\n'),
+    removed,
+  };
+}
+
+function normalizeOpeningHeadings(markdown, chapterTitle) {
+  const lines = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
+  const output = [];
+  const removed = [];
+  const seenOpeningTitles = new Set();
+  let nonBlankSeen = 0;
+  const expectedTitleKey = normalizeHeadingText(chapterTitle || '');
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      output.push(line);
+      continue;
+    }
+    nonBlankSeen += 1;
+    const headingMatch = /^(#{1,6})\s+(.+?)\s*$/.exec(trimmed);
+    const candidateTitle = headingMatch ? headingMatch[2] : trimmed;
+    const candidateKey = normalizeHeadingText(candidateTitle);
+    const isOpeningWindow = nonBlankSeen <= 4;
+    const isDuplicateOpeningTitle = isOpeningWindow
+      && candidateKey
+      && (seenOpeningTitles.has(candidateKey) || (expectedTitleKey && candidateKey === expectedTitleKey && seenOpeningTitles.size > 0));
+    const isBareTitleAfterHeading = isOpeningWindow && !headingMatch && candidateKey && seenOpeningTitles.has(candidateKey);
+
+    if (isDuplicateOpeningTitle || isBareTitleAfterHeading) {
+      removed.push(line);
+      continue;
+    }
+
+    if (isOpeningWindow && candidateKey) {
+      seenOpeningTitles.add(candidateKey);
+    }
+    output.push(line);
+  }
+
+  return {
+    markdown: output.join('\n'),
+    removed,
+  };
+}
+
 function rulePreClean(rawMarkdown) {
   const removedNoise = [];
   const changes = [];
   let normalizedMarkdown = String(rawMarkdown || '').replace(/\r\n?/g, '\n');
+  const strippedMetadata = stripLuceonMetadataComments(normalizedMarkdown);
+  normalizedMarkdown = strippedMetadata.markdown;
+  if (strippedMetadata.removed.length > 0) {
+    changes.push({ type: 'removed_luceon_trace_metadata_comments', count: strippedMetadata.removed.length });
+  }
   if (/<\|txt_split\|>|<\|txt_contd\|>/.test(normalizedMarkdown)) {
     normalizedMarkdown = normalizedMarkdown
       .replace(/<\|txt_split\|>/g, '\n\n')
@@ -813,12 +883,17 @@ async function runCleanerStage({
 
 function rulePostProcess({ llmResponse, chapterTitle, imageMap }) {
   let clean = llmResponse.clean_markdown || '';
+  const strippedMetadata = stripLuceonMetadataComments(clean);
+  clean = strippedMetadata.markdown;
   const normalizedImages = normalizeImageRefs(clean, imageMap);
   clean = normalizedImages.markdown;
 
   const changeSummary = [...(llmResponse.change_summary || [])];
   const riskFlags = new Set(llmResponse.risk_flags || []);
   const unresolvedItems = [...(llmResponse.unresolved_items || [])];
+  if (strippedMetadata.removed.length > 0) {
+    changeSummary.push(`postprocessor removed ${strippedMetadata.removed.length} Luceon trace metadata comment(s) from reader-facing CleanCode`);
+  }
 
   if (!/^#\s+/m.test(clean) && chapterTitle) {
     clean = `# ${chapterTitle}\n\n${clean}`;
@@ -853,10 +928,10 @@ function rulePostProcess({ llmResponse, chapterTitle, imageMap }) {
     changeSummary.push(`postprocessor restored ${missingRequiredImages.length} required image reference(s) for placement review`);
     riskFlags.add('required_image_placement_review');
   }
-  const restoredVisualComments = restoreVisualBlockComments(clean, imageMap);
-  clean = restoredVisualComments.markdown;
-  if (restoredVisualComments.inserted > 0) {
-    changeSummary.push(`postprocessor restored ${restoredVisualComments.inserted} visual block anchor comment(s)`);
+  const normalizedHeadings = normalizeOpeningHeadings(clean, chapterTitle);
+  clean = normalizedHeadings.markdown;
+  if (normalizedHeadings.removed.length > 0) {
+    changeSummary.push(`postprocessor removed ${normalizedHeadings.removed.length} duplicate opening heading/title line(s)`);
   }
   clean = `${clean}\n`;
 
@@ -977,6 +1052,28 @@ function repeatedLargeTextSegments(markdown) {
   return repeated.slice(0, 20);
 }
 
+function duplicateOpeningHeadingLines(markdown, chapterTitle) {
+  const duplicates = [];
+  const seen = new Set();
+  const expectedKey = normalizeHeadingText(chapterTitle || '');
+  const lines = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
+  let nonBlankSeen = 0;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    nonBlankSeen += 1;
+    if (nonBlankSeen > 5) break;
+    const match = /^(#{1,6})\s+(.+?)\s*$/.exec(trimmed);
+    const key = normalizeHeadingText(match ? match[2] : trimmed);
+    if (!key) continue;
+    if (seen.has(key) || (expectedKey && key === expectedKey && seen.size > 0)) {
+      duplicates.push(trimmed);
+    }
+    seen.add(key);
+  }
+  return duplicates;
+}
+
 function deduplicatedNormalizedTextForMetric(markdown) {
   const seen = new Set();
   const uniqueSegments = [];
@@ -1072,6 +1169,8 @@ function validateCleanCode({ cleanMarkdown, chapterTitle, imageMap, cleanChapter
   const splitMarkerCount = (cleanMarkdown.match(/<\|txt_split\|>/g) || []).length;
   const repeatedSegments = repeatedLargeTextSegments(cleanMarkdown);
   const visualEvidenceGaps = referencedVisualEvidenceGaps({ cleanMarkdown, cleanRefs, unresolvedItems, imageMap });
+  const luceonMetadataCommentCount = (cleanMarkdown.match(/<!--\s*luceon:/gi) || []).length;
+  const duplicateOpeningHeadings = duplicateOpeningHeadingLines(cleanMarkdown, chapterTitle);
 
   checks.push(...validateCleanerResponseAgainstImageMap({
     llmResponse: {
@@ -1124,6 +1223,16 @@ function validateCleanCode({ cleanMarkdown, chapterTitle, imageMap, cleanChapter
     detail: { repeatedSegments },
   });
   checks.push({
+    id: 'reader_surface_luceon_metadata_hidden',
+    status: luceonMetadataCommentCount === 0 ? 'PASS' : 'NEEDS_REVIEW',
+    detail: { luceonMetadataCommentCount },
+  });
+  checks.push({
+    id: 'reader_surface_duplicate_opening_headings_absent',
+    status: duplicateOpeningHeadings.length === 0 ? 'PASS' : 'NEEDS_REVIEW',
+    detail: { duplicateOpeningHeadings },
+  });
+  checks.push({
     id: 'unresolved_items_landed',
     status: Array.isArray(unresolvedItems) ? 'PASS' : 'BLOCKED',
     detail: { unresolvedCount: Array.isArray(unresolvedItems) ? unresolvedItems.length : null },
@@ -1144,6 +1253,8 @@ function validateCleanCode({ cleanMarkdown, chapterTitle, imageMap, cleanChapter
   if (!coverageAcceptable) risks.push('low_content_coverage_ratio');
   if (splitMarkerCount > 0) risks.push('raw_split_markers_remaining');
   if (repeatedSegments.length > 0) risks.push('duplicate_large_text_segments');
+  if (luceonMetadataCommentCount > 0) risks.push('reader_surface_luceon_metadata_visible');
+  if (duplicateOpeningHeadings.length > 0) risks.push('reader_surface_duplicate_opening_headings');
   if (visualEvidenceGaps.length > 0) risks.push('visual_reference_without_asset_or_review_item');
   if (cleanerMode === 'llm-dry-run') risks.push('llm_dry_run_requires_review');
 
@@ -1749,7 +1860,7 @@ async function runPilot({ rawBundleDir, chapterId, outDir, cleanerMode, model, a
     copiedImages: imageCopyResult.copied,
     missingImages: imageCopyResult.missing,
     unresolvedItems: postProcessResult.unresolvedItems,
-    rawMarkdown: loaded.rawMarkdown,
+    rawMarkdown: precleanResult.markdown,
     cleanerMode,
     llmResponse: cleanerStage.response,
   });

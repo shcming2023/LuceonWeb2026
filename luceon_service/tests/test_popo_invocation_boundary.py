@@ -573,8 +573,15 @@ displayingdata 107
     assert "1.1 Different types of numbers" in full_titles
     assert "4.1" in full_numbers
     assert "4.2" in full_numbers
-    assert "Exercise4.1" not in full_titles
+    assert "Exercise4.1" in full_titles
     assert full_manifest["selection_mode"] == "full-book"
+    assert full_manifest["toc_output_coverage"]["schema"] == "luceon-canonical-toc-output-coverage/v1"
+    coverage_by_title = {
+        record["title"]: record
+        for record in full_manifest["toc_output_coverage"]["records"]
+    }
+    assert coverage_by_title["4.1 Colectingand classifyingdata"]["disposition"] == "emitted_unit"
+    assert coverage_by_title["Exercise4.1"]["disposition"] == "emitted_unit"
 
 
 def test_cleanlatex_pack_boundary_uses_unbound_chapter_intro_as_hard_stop():
@@ -698,6 +705,77 @@ def test_cleanlatex_pack_boundary_uses_unbound_chapter_intro_as_hard_stop():
 
     pack_81 = packs["toc-0044"]
     assert "b-8-1-title" in set(pack_81["source_span"]["source_block_ids"])
+
+
+def test_cleanlatex_toc_output_coverage_flags_uncovered_leaf_without_hardcoded_title():
+    canonical_toc = {
+        "root": {
+            "node_id": "toc-root",
+            "kind": "root",
+            "title": "root",
+            "children": [
+                {
+                    "node_id": "toc-chapter-1",
+                    "kind": "chapter",
+                    "title": "Chapter Alpha",
+                    "parent_id": "toc-root",
+                    "source_block_ids": [],
+                    "children": [
+                        {
+                            "node_id": "toc-section-1",
+                            "kind": "section",
+                            "title": "1.1 Source-bound section",
+                            "parent_id": "toc-chapter-1",
+                            "metadata": {"number": "1.1"},
+                            "source_block_ids": ["b-section-1"],
+                            "children": [],
+                        },
+                        {
+                            "node_id": "toc-leaf-unmatched",
+                            "kind": "activity",
+                            "title": "Unmatched terminal activity",
+                            "parent_id": "toc-chapter-1",
+                            "source_block_ids": [],
+                            "children": [],
+                        },
+                    ],
+                },
+            ],
+        }
+    }
+    source_tree = {
+        "type": "root",
+        "title": "root",
+        "children": [
+            {
+                "type": "text",
+                "title": "1.1 Source-bound section",
+                "block_ids": ["b-section-1"],
+                "page": 1,
+                "content": "This is source-bound content.",
+                "children": [],
+            },
+        ],
+    }
+
+    packs_manifest = service._compile_cleanlatex_pilot_packs(
+        canonical_toc,
+        {"spans": []},
+        source_tree,
+        "material-x",
+        "v-test",
+        {},
+        selection_mode="full-book",
+    )
+
+    coverage = {
+        record["node_id"]: record
+        for record in packs_manifest["toc_output_coverage"]["records"]
+    }
+    assert coverage["toc-section-1"]["disposition"] == "emitted_unit"
+    assert coverage["toc-leaf-unmatched"]["disposition"] == "missing_source_match"
+    assert coverage["toc-leaf-unmatched"]["review_required"] is True
+    assert "leaf_node" in coverage["toc-leaf-unmatched"]["reason_codes"]
 
 
 def test_release_host_mps_worker_posts_force_release_payload():
