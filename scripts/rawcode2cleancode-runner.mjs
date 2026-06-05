@@ -358,6 +358,8 @@ function defaultProcessSample() {
           cleanMd: result.cleanMdPath,
           qualityReport: result.qualityReportPath,
           unresolvedItems: result.unresolvedItemsPath,
+          reviewItems: result.reviewItemsPath,
+          reviewPatchContract: result.reviewPatchContractPath,
           diff: result.diffPath,
           auditDir: result.auditDir,
         },

@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { convertCleanlatexPacksToRawCode } from '../../scripts/cleanlatex-pack-to-rawcode.mjs';
-import { buildFixtureRawCode, parseLooseJson, validateCleanCode } from '../../scripts/rawcode2cleancode-pilot.mjs';
+import { buildFixtureRawCode, buildReviewItems, parseLooseJson, validateCleanCode } from '../../scripts/rawcode2cleancode-pilot.mjs';
 import { runRawCode2CleanCodeUatRunner } from '../../scripts/rawcode2cleancode-runner.mjs';
 
 async function makeFixtureSample(root, n) {
@@ -85,6 +85,10 @@ try {
     assert.equal(result.readinessClaimed, false);
     assert.equal(result.samples[0].readinessClaimed, false);
     assert.equal(existsSync(result.samples[0].evidence.output.cleanMd), true);
+    const passReviewItems = JSON.parse(await readFile(result.samples[0].evidence.output.reviewItems, 'utf8'));
+    assert.equal(passReviewItems.schema, 'luceon-cleancode-review-items/v1');
+    assert.equal(passReviewItems.status, 'no_review_required');
+    assert.equal(passReviewItems.item_count, 0);
   }
 
   {
@@ -103,6 +107,20 @@ try {
     assert.equal(result.samples[0].evidence.cleaner.effective, 'llm-dry-run');
     assert.equal(result.operationCounts.llmApiCall, 0);
     assert.equal(existsSync(join(result.samples[0].evidence.output.auditDir, 'llm_prompt.txt')), true);
+    assert.equal(existsSync(result.samples[0].evidence.output.reviewItems), true);
+    assert.equal(existsSync(result.samples[0].evidence.output.reviewPatchContract), true);
+    const reviewItems = JSON.parse(await readFile(result.samples[0].evidence.output.reviewItems, 'utf8'));
+    const patchContract = JSON.parse(await readFile(result.samples[0].evidence.output.reviewPatchContract, 'utf8'));
+    assert.equal(reviewItems.schema, 'luceon-cleancode-review-items/v1');
+    assert.equal(reviewItems.status, 'open');
+    assert.equal(reviewItems.items.length > 0, true);
+    assert.match(reviewItems.items[0].review_item_id, /^review-chapter_001-\d{4}$/);
+    assert.equal(reviewItems.items[0].status, 'open');
+    assert.equal(reviewItems.items[0].unit_id, 'chapter_001');
+    assert.equal(reviewItems.items[0].patch_contract.allowed_actions.includes('edit_clean_excerpt'), true);
+    assert.equal(patchContract.schema, 'luceon-cleancode-review-patch-contract/v1');
+    assert.equal(patchContract.output_policy.all_review_items_must_be_closed_for_final_acceptance, true);
+    assert.equal(patchContract.output_policy.patch_must_not_rename_assets, true);
     assert.equal(result.readinessClaimed, false);
   }
 
@@ -532,6 +550,31 @@ try {
     assert.equal(qualityReport.status, 'NEEDS_REVIEW', JSON.stringify(qualityReport, null, 2));
     assert.equal(visualCheck.status, 'NEEDS_REVIEW');
     assert.equal(visualCheck.detail.visualEvidenceGaps[0].linked_asset_hash_names[0], imageHashName);
+    const reviewItems = buildReviewItems({
+      materialId: 'fixture-material',
+      version: 'v0',
+      chapterId: 'toc-0024',
+      chapterTitle: '4.1 Collecting and classifying data',
+      unresolvedItems: [],
+      qualityReport,
+      sourceMap: { source_blocks: [] },
+      imageMap: {
+        images: [{
+          raw_ref: `images/${imageHashName}`,
+          normalized_ref: `images/${imageHashName}`,
+          required: false,
+          asset_hash_name: imageHashName,
+          source_block_ids: ['b-4-1'],
+        }],
+      },
+      rawMarkdown: '',
+      cleanMarkdown: '# Section\n\nStatistical investigation process.\n',
+      createdAt: '2026-06-04T00:07:00.000Z',
+    });
+    const validatorReview = reviewItems.items.find((item) => item.validator_check_id === 'visual_references_have_assets_or_review_items');
+    assert.equal(validatorReview.origin, 'validator_check');
+    assert.equal(validatorReview.asset_hashes.includes(imageHashName), true);
+    assert.equal(validatorReview.asset_refs[0].normalized_ref, `images/${imageHashName}`);
   }
 
   {

@@ -46,6 +46,8 @@ const CLEANER_MODES = new Set(['deterministic', 'llm-dry-run', 'llm']);
 const REQUIRED_LLM_MODEL = 'deepseek-v4-flash';
 const DEFAULT_LLM_MODEL = REQUIRED_LLM_MODEL;
 const DEFAULT_OPENAI_BASE = process.env.OPENAI_API_BASE || 'https://api.openai.com/v1';
+const REVIEW_ITEMS_SCHEMA = 'luceon-cleancode-review-items/v1';
+const REVIEW_PATCH_CONTRACT_SCHEMA = 'luceon-cleancode-review-patch-contract/v1';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -186,6 +188,10 @@ function normalizeTextForMetric(text) {
     .replace(/[`*_#>\-\[\](){}$\\]/g, '')
     .replace(/\s+/g, '')
     .trim();
+}
+
+function uniqueStrings(values) {
+  return Array.from(new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean)));
 }
 
 function extractMarkdownImages(markdown) {
@@ -1104,6 +1110,305 @@ function validateCleanCode({ cleanMarkdown, chapterTitle, imageMap, cleanChapter
   };
 }
 
+function sourceBlockIdsFromValue(value) {
+  if (Array.isArray(value)) return uniqueStrings(value);
+  if (typeof value === 'string') return uniqueStrings(value.split(/[,，\s]+/g));
+  return [];
+}
+
+function sourceBlockText(block) {
+  return String(block?.text || block?.raw_text || block?.markdown || block?.content || '');
+}
+
+function sourceBlockPage(block) {
+  if (block?.page !== undefined && block?.page !== null) return block.page;
+  if (Array.isArray(block?.pages) && block.pages.length > 0) return block.pages[0];
+  return null;
+}
+
+function sourceBlockIdentitySet(block) {
+  return uniqueStrings([
+    block?.block_id,
+    ...(Array.isArray(block?.source_block_ids) ? block.source_block_ids : []),
+  ]);
+}
+
+function normalizeExcerptForSearch(text) {
+  return normalizeTextForMetric(String(text || '').slice(0, 600));
+}
+
+function findSourceBlocksForReviewItem({ unresolvedItem, sourceMap }) {
+  const blocks = Array.isArray(sourceMap?.source_blocks) ? sourceMap.source_blocks : [];
+  const explicitIds = uniqueStrings([
+    ...sourceBlockIdsFromValue(unresolvedItem?.source_block_ids),
+    ...sourceBlockIdsFromValue(unresolvedItem?.linked_source_block_ids),
+    ...sourceBlockIdsFromValue(unresolvedItem?.block_ids),
+  ]);
+  if (explicitIds.length > 0) {
+    const matched = blocks.filter((block) => sourceBlockIdentitySet(block).some((id) => explicitIds.includes(id)));
+    return {
+      blocks: matched,
+      source_block_ids: explicitIds,
+      match_method: matched.length > 0 ? 'explicit_source_block_ids' : 'explicit_source_block_ids_unmatched',
+      warnings: matched.length > 0 ? [] : ['explicit_source_block_ids_not_found_in_source_map'],
+    };
+  }
+
+  const needle = normalizeExcerptForSearch(unresolvedItem?.source_excerpt);
+  if (!needle || needle.length < 4) {
+    return {
+      blocks: [],
+      source_block_ids: [],
+      match_method: 'no_source_excerpt',
+      warnings: ['source_block_match_not_attempted'],
+    };
+  }
+
+  const matched = blocks
+    .filter((block) => normalizeExcerptForSearch(sourceBlockText(block)).includes(needle))
+    .slice(0, 5);
+  return {
+    blocks: matched,
+    source_block_ids: uniqueStrings(matched.flatMap((block) => sourceBlockIdentitySet(block))),
+    match_method: matched.length > 0 ? 'source_excerpt_direct_substring' : 'source_excerpt_unmatched',
+    warnings: matched.length > 0 ? [] : ['source_excerpt_not_found_in_source_map'],
+  };
+}
+
+function buildSourceRefs(blocks) {
+  return blocks.map((block) => ({
+    block_id: block?.block_id || null,
+    source_block_ids: Array.isArray(block?.source_block_ids) ? block.source_block_ids : [],
+    page: sourceBlockPage(block),
+    pages: Array.isArray(block?.pages) ? block.pages : [],
+    bbox: Array.isArray(block?.bbox) ? block.bbox : null,
+    type: block?.type || null,
+    source_order: block?.source_order ?? null,
+    text_excerpt: sourceBlockText(block).slice(0, 400),
+  }));
+}
+
+function assetRefsForSourceBlocks({ imageMap, sourceBlockIds, unresolvedItem }) {
+  const ids = new Set(uniqueStrings(sourceBlockIds));
+  const itemText = `${unresolvedItem?.source_excerpt || ''} ${unresolvedItem?.clean_excerpt || ''} ${unresolvedItem?.reason || ''}`;
+  const itemAssetNames = new Set([
+    ...sourceBlockIdsFromValue(unresolvedItem?.asset_hashes),
+    ...sourceBlockIdsFromValue(unresolvedItem?.asset_hash_names),
+  ]);
+  const images = Array.isArray(imageMap?.images) ? imageMap.images : [];
+  return images
+    .filter((image) => {
+      const imageIds = uniqueStrings([
+        ...(Array.isArray(image?.source_block_ids) ? image.source_block_ids : []),
+        ...(Array.isArray(image?.linked_source_block_ids) ? image.linked_source_block_ids : []),
+      ]);
+      const assetHash = image?.asset_hash_name || basename(normalizeSlashes(image?.normalized_ref || image?.raw_ref || ''));
+      return imageIds.some((id) => ids.has(id))
+        || itemAssetNames.has(assetHash)
+        || (assetHash && itemText.includes(assetHash));
+    })
+    .slice(0, 20)
+    .map((image) => ({
+      asset_hash_name: image?.asset_hash_name || basename(normalizeSlashes(image?.normalized_ref || image?.raw_ref || '')),
+      normalized_ref: normalizeSlashes(image?.normalized_ref || image?.raw_ref || ''),
+      raw_ref: normalizeSlashes(image?.raw_ref || ''),
+      source_page: image?.source_page ?? image?.page ?? null,
+      bbox: Array.isArray(image?.bbox) ? image.bbox : null,
+      required: image?.required === true,
+      asset_kind: image?.asset_kind || image?.kind || image?.type || 'image',
+      source_block_ids: Array.isArray(image?.source_block_ids) ? image.source_block_ids : [],
+      linked_source_block_ids: Array.isArray(image?.linked_source_block_ids) ? image.linked_source_block_ids : [],
+    }));
+}
+
+function assetRefsForAssetHashes({ imageMap, assetHashes }) {
+  const hashes = new Set(uniqueStrings(assetHashes));
+  if (hashes.size === 0) return [];
+  return (Array.isArray(imageMap?.images) ? imageMap.images : [])
+    .filter((image) => hashes.has(image?.asset_hash_name || basename(normalizeSlashes(image?.normalized_ref || image?.raw_ref || ''))))
+    .map((image) => ({
+      asset_hash_name: image?.asset_hash_name || basename(normalizeSlashes(image?.normalized_ref || image?.raw_ref || '')),
+      normalized_ref: normalizeSlashes(image?.normalized_ref || image?.raw_ref || ''),
+      raw_ref: normalizeSlashes(image?.raw_ref || ''),
+      source_page: image?.source_page ?? image?.page ?? null,
+      bbox: Array.isArray(image?.bbox) ? image.bbox : null,
+      required: image?.required === true,
+      asset_kind: image?.asset_kind || image?.kind || image?.type || 'image',
+      source_block_ids: Array.isArray(image?.source_block_ids) ? image.source_block_ids : [],
+      linked_source_block_ids: Array.isArray(image?.linked_source_block_ids) ? image.linked_source_block_ids : [],
+    }));
+}
+
+function validatorAssetHashes(check) {
+  const detail = check?.detail || {};
+  return uniqueStrings([
+    ...(Array.isArray(detail.missingRequired) ? detail.missingRequired.map((ref) => basename(normalizeSlashes(ref))) : []),
+    ...(Array.isArray(detail.requiredMissingFromMarkdown) ? detail.requiredMissingFromMarkdown.map((ref) => basename(normalizeSlashes(ref))) : []),
+    ...(Array.isArray(detail.visualEvidenceGaps)
+      ? detail.visualEvidenceGaps.flatMap((gap) => Array.isArray(gap?.linked_asset_hash_names) ? gap.linked_asset_hash_names : [])
+      : []),
+  ]);
+}
+
+function excerptAroundNeedle(markdown, needle) {
+  const source = String(markdown || '');
+  const normalizedNeedle = String(needle || '').trim();
+  if (!normalizedNeedle) return '';
+  const index = source.indexOf(normalizedNeedle);
+  if (index < 0) return '';
+  const start = Math.max(0, index - 160);
+  const end = Math.min(source.length, index + normalizedNeedle.length + 160);
+  return source.slice(start, end).trim();
+}
+
+function itemPatchContract() {
+  return {
+    allowed_actions: [
+      'accept_clean_excerpt',
+      'edit_clean_excerpt',
+      'mark_source_ocr_issue_accepted',
+      'keep_unresolved',
+      'request_reparse',
+    ],
+    selected_action: null,
+    manual_clean_excerpt: null,
+    reviewer: null,
+    reviewed_at: null,
+    notes: null,
+  };
+}
+
+function buildReviewItems({ materialId, version, chapterId, chapterTitle, unresolvedItems, qualityReport, sourceMap, imageMap, rawMarkdown, cleanMarkdown, createdAt }) {
+  const items = [];
+  const addItem = (item) => {
+    const reviewItemId = `review-${chapterId}-${String(items.length + 1).padStart(4, '0')}`;
+    items.push({
+      review_item_id: reviewItemId,
+      unit_id: chapterId,
+      unit_title: chapterTitle,
+      status: 'open',
+      ...item,
+      patch_contract: itemPatchContract(),
+    });
+  };
+
+  for (const unresolvedItem of unresolvedItems || []) {
+    const sourceMatch = findSourceBlocksForReviewItem({ unresolvedItem, sourceMap });
+    const sourceRefs = buildSourceRefs(sourceMatch.blocks);
+    const assetRefs = assetRefsForSourceBlocks({ imageMap, sourceBlockIds: sourceMatch.source_block_ids, unresolvedItem });
+    const sourceExcerpt = String(unresolvedItem?.source_excerpt || '').slice(0, 800);
+    const cleanExcerpt = String(unresolvedItem?.clean_excerpt || '').slice(0, 800) || excerptAroundNeedle(cleanMarkdown, sourceExcerpt);
+    addItem({
+      origin: 'llm_unresolved_item',
+      type: unresolvedItem?.type || 'unresolved',
+      severity: 'review',
+      source_block_ids: sourceMatch.source_block_ids,
+      source_match_method: sourceMatch.match_method,
+      source_match_warnings: sourceMatch.warnings,
+      source_refs: sourceRefs,
+      source_excerpt: sourceExcerpt,
+      clean_excerpt: cleanExcerpt,
+      reason: String(unresolvedItem?.reason || '').slice(0, 1000),
+      suggested_action: unresolvedItem?.suggested_action || 'manual_review',
+      asset_hashes: uniqueStrings(assetRefs.map((asset) => asset.asset_hash_name)),
+      asset_refs: assetRefs,
+      raw_context_excerpt: sourceExcerpt ? excerptAroundNeedle(rawMarkdown, sourceExcerpt) : '',
+    });
+  }
+
+  for (const check of qualityReport?.checks || []) {
+    if (check.status === 'PASS') continue;
+    const assetHashes = validatorAssetHashes(check);
+    const assetRefs = assetRefsForAssetHashes({ imageMap, assetHashes });
+    addItem({
+      origin: 'validator_check',
+      type: `validator:${check.id}`,
+      severity: check.status === 'BLOCKED' ? 'blocked' : 'review',
+      source_block_ids: [],
+      source_match_method: 'validator_check_only',
+      source_match_warnings: [],
+      source_refs: [],
+      source_excerpt: '',
+      clean_excerpt: '',
+      reason: `Validator check ${check.id} returned ${check.status}.`,
+      suggested_action: check.status === 'BLOCKED' ? 'fix_before_acceptance' : 'manual_review',
+      asset_hashes: uniqueStrings([...assetHashes, ...assetRefs.map((asset) => asset.asset_hash_name)]),
+      asset_refs: assetRefs,
+      validator_check_id: check.id,
+      validator_status: check.status,
+      validator_detail: check.detail,
+    });
+  }
+
+  return {
+    schema: REVIEW_ITEMS_SCHEMA,
+    protocol: PROTOCOL,
+    material_id: materialId,
+    version,
+    unit_id: chapterId,
+    title: chapterTitle,
+    created_at: createdAt,
+    status: items.length > 0 ? 'open' : 'no_review_required',
+    item_count: items.length,
+    source_policy: {
+      source_truth_must_reference_source_blocks: true,
+      llm_must_not_decide_book_structure: true,
+      asset_hash_names_must_be_preserved: true,
+    },
+    items,
+  };
+}
+
+function buildReviewPatchContract({ materialId, version, chapterId, chapterTitle, reviewItemsPath, cleanMdPath }) {
+  return {
+    schema: REVIEW_PATCH_CONTRACT_SCHEMA,
+    protocol: PROTOCOL,
+    material_id: materialId,
+    version,
+    unit_id: chapterId,
+    title: chapterTitle,
+    inputs: {
+      clean_md: cleanMdPath,
+      review_items: reviewItemsPath,
+    },
+    allowed_item_actions: [
+      {
+        action: 'accept_clean_excerpt',
+        effect: 'mark the current CleanCode wording as accepted for this item',
+        required_fields: ['review_item_id', 'reviewer', 'reviewed_at'],
+      },
+      {
+        action: 'edit_clean_excerpt',
+        effect: 'replace only the cited CleanCode excerpt without changing the cleaning unit boundary',
+        required_fields: ['review_item_id', 'manual_clean_excerpt', 'reviewer', 'reviewed_at'],
+      },
+      {
+        action: 'mark_source_ocr_issue_accepted',
+        effect: 'accept the CleanCode wording while recording that the source OCR remained ambiguous',
+        required_fields: ['review_item_id', 'reviewer', 'reviewed_at', 'notes'],
+      },
+      {
+        action: 'keep_unresolved',
+        effect: 'leave the item open and block final unit acceptance',
+        required_fields: ['review_item_id', 'reviewer', 'reviewed_at', 'notes'],
+      },
+      {
+        action: 'request_reparse',
+        effect: 'route the cited source blocks back to upstream parsing review',
+        required_fields: ['review_item_id', 'reviewer', 'reviewed_at', 'notes'],
+      },
+    ],
+    output_policy: {
+      patched_clean_md: 'patched_clean.md',
+      review_decision_log: 'review_decision_log.json',
+      all_review_items_must_be_closed_for_final_acceptance: true,
+      patch_must_not_change_unit_boundary: true,
+      patch_must_not_rename_assets: true,
+      patch_must_preserve_source_block_refs: true,
+    },
+  };
+}
+
 function buildDiffMarkdown({ chapterId, rawMarkdown, precleanResult, cleanerStage, postProcessResult, qualityReport }) {
   return `# RawCode2CleanCode P0.1 Diff: ${chapterId}\n\n` +
     `## Summary\n\n` +
@@ -1392,11 +1697,38 @@ async function runPilot({ rawBundleDir, chapterId, outDir, cleanerMode, model, a
   const cleanSourceMapPath = join(cleanChapterDir, 'source_map.json');
   const cleanImageMapPath = join(cleanChapterDir, 'image_map.json');
   const cleanChunkManifestPath = join(cleanChapterDir, 'chunk_manifest.json');
+  const qualityReportPath = join(cleanChapterDir, 'quality_report.json');
+  const unresolvedItemsPath = join(cleanChapterDir, 'unresolved_items.json');
+  const reviewItemsPath = join(cleanChapterDir, 'review_items.json');
+  const reviewPatchContractPath = join(cleanChapterDir, 'review_patch_contract.json');
+  const diffPath = join(cleanChapterDir, 'diff.md');
   await writeText(cleanMdPath, postProcessResult.cleanMarkdown);
   await copyFile(loaded.sourceMapPath, cleanSourceMapPath);
   await copyFile(loaded.imageMapPath, cleanImageMapPath);
   await copyFile(loaded.chunkManifestPath, cleanChunkManifestPath);
   const cleanMdBuffer = await readFile(cleanMdPath);
+
+  const reviewItemsPayload = buildReviewItems({
+    materialId,
+    version,
+    chapterId: loaded.chapterId,
+    chapterTitle,
+    unresolvedItems: postProcessResult.unresolvedItems,
+    qualityReport,
+    sourceMap: loaded.sourceMap,
+    imageMap: loaded.imageMap,
+    rawMarkdown: loaded.rawMarkdown,
+    cleanMarkdown: postProcessResult.cleanMarkdown,
+    createdAt,
+  });
+  const reviewPatchContract = buildReviewPatchContract({
+    materialId,
+    version,
+    chapterId: loaded.chapterId,
+    chapterTitle,
+    reviewItemsPath,
+    cleanMdPath,
+  });
 
   const cleanerManifest = {
     mode: cleanerMode,
@@ -1439,9 +1771,11 @@ async function runPilot({ rawBundleDir, chapterId, outDir, cleanerMode, model, a
       image_map: cleanImageMapPath,
       chunk_manifest: cleanChunkManifestPath,
       images_dir: imageCopyResult.cleanImagesDir,
-      quality_report: join(cleanChapterDir, 'quality_report.json'),
-      unresolved_items: join(cleanChapterDir, 'unresolved_items.json'),
-      diff: join(cleanChapterDir, 'diff.md'),
+      quality_report: qualityReportPath,
+      unresolved_items: unresolvedItemsPath,
+      review_items: reviewItemsPath,
+      review_patch_contract: reviewPatchContractPath,
+      diff: diffPath,
       audit_dir: cleanerMode === 'deterministic' ? null : auditDir,
     },
     stages: {
@@ -1459,6 +1793,12 @@ async function runPilot({ rawBundleDir, chapterId, outDir, cleanerMode, model, a
       validator: {
         status: qualityReport.status,
         checks_count: qualityReport.checks.length,
+        review_item_count: reviewItemsPayload.item_count,
+      },
+      review_surface: {
+        schema: REVIEW_ITEMS_SCHEMA,
+        status: reviewItemsPayload.status,
+        item_count: reviewItemsPayload.item_count,
       },
     },
     cleaner: cleanerManifest,
@@ -1483,9 +1823,11 @@ async function runPilot({ rawBundleDir, chapterId, outDir, cleanerMode, model, a
   };
 
   await writeJson(join(cleanChapterDir, 'clean_manifest.json'), cleanManifest);
-  await writeJson(join(cleanChapterDir, 'quality_report.json'), qualityReport);
-  await writeJson(join(cleanChapterDir, 'unresolved_items.json'), unresolvedPayload);
-  await writeText(join(cleanChapterDir, 'diff.md'), buildDiffMarkdown({
+  await writeJson(qualityReportPath, qualityReport);
+  await writeJson(unresolvedItemsPath, unresolvedPayload);
+  await writeJson(reviewItemsPath, reviewItemsPayload);
+  await writeJson(reviewPatchContractPath, reviewPatchContract);
+  await writeText(diffPath, buildDiffMarkdown({
     chapterId: loaded.chapterId,
     rawMarkdown: loaded.rawMarkdown,
     precleanResult,
@@ -1529,6 +1871,9 @@ async function runPilot({ rawBundleDir, chapterId, outDir, cleanerMode, model, a
     validation: {
       status: qualityReport.status,
       quality_report: `chapters/${loaded.chapterId}/quality_report.json`,
+      review_items: `chapters/${loaded.chapterId}/review_items.json`,
+      review_patch_contract: `chapters/${loaded.chapterId}/review_patch_contract.json`,
+      review_item_count: reviewItemsPayload.item_count,
     },
     side_effects: {
       db_writes: 0,
@@ -1549,9 +1894,11 @@ async function runPilot({ rawBundleDir, chapterId, outDir, cleanerMode, model, a
     cleanBundleDir,
     cleanChapterDir,
     cleanMdPath,
-    qualityReportPath: join(cleanChapterDir, 'quality_report.json'),
-    unresolvedItemsPath: join(cleanChapterDir, 'unresolved_items.json'),
-    diffPath: join(cleanChapterDir, 'diff.md'),
+    qualityReportPath,
+    unresolvedItemsPath,
+    reviewItemsPath,
+    reviewPatchContractPath,
+    diffPath,
     auditDir: cleanerMode === 'deterministic' ? null : auditDir,
     sideEffects: cleanManifest.side_effects,
   };
@@ -1597,6 +1944,8 @@ async function main() {
     clean_md: result.cleanMdPath,
     quality_report: result.qualityReportPath,
     unresolved_items: result.unresolvedItemsPath,
+    review_items: result.reviewItemsPath,
+    review_patch_contract: result.reviewPatchContractPath,
     diff: result.diffPath,
     audit_dir: result.auditDir,
     side_effects: result.sideEffects,
@@ -1614,7 +1963,11 @@ export {
   DEFAULT_OPENAI_BASE,
   REQUIRED_LLM_MODEL,
   PILOT_VERSION,
+  REVIEW_ITEMS_SCHEMA,
+  REVIEW_PATCH_CONTRACT_SCHEMA,
   assertAllowedLlmModel,
+  buildReviewItems,
+  buildReviewPatchContract,
   buildFixtureRawCode,
   loadRawBundle,
   parseLooseJson,
