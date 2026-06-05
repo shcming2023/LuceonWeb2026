@@ -873,7 +873,7 @@ function rulePostProcess({ llmResponse, chapterTitle, imageMap }) {
     unresolvedItems,
     changeSummary,
     riskFlags: Array.from(riskFlags),
-    keptImages: Array.from(new Set([...(llmResponse.kept_images || []), ...extractMarkdownImages(clean).map((item) => item.ref)])),
+    keptImages: Array.from(new Set(extractMarkdownImages(clean).map((item) => item.ref))),
   };
 }
 
@@ -1073,7 +1073,14 @@ function validateCleanCode({ cleanMarkdown, chapterTitle, imageMap, cleanChapter
   const repeatedSegments = repeatedLargeTextSegments(cleanMarkdown);
   const visualEvidenceGaps = referencedVisualEvidenceGaps({ cleanMarkdown, cleanRefs, unresolvedItems, imageMap });
 
-  checks.push(...validateCleanerResponseAgainstImageMap({ llmResponse, imageMap }));
+  checks.push(...validateCleanerResponseAgainstImageMap({
+    llmResponse: {
+      ...llmResponse,
+      clean_markdown: cleanMarkdown,
+      kept_images: cleanRefs,
+    },
+    imageMap,
+  }));
   checks.push({
     id: 'clean_markdown_exists',
     status: cleanMarkdown.trim().length > 0 ? 'PASS' : 'BLOCKED',

@@ -628,6 +628,44 @@ try {
     assert.equal(normalized.changes[0].type, 'image_ref_restored_from_source_block');
   }
 
+  {
+    console.log('  [17] validator checks final postprocessed image refs after hash restoration...');
+    const lockedHash = '95117af032f57fdb5776539d5189b462e5c33af4a17d38027a1e38eff2af9dd1.jpg';
+    const mutatedHash = '95117af032f57fdb5776539d5189b462e5c33af4a17c38027a1e38eff2af9dd1.jpg';
+    const cleanChapterDir = join(tmpRoot, 'restored-image-validation');
+    await mkdir(join(cleanChapterDir, 'images'), { recursive: true });
+    await writeFile(join(cleanChapterDir, 'images', lockedHash), 'fixture image');
+    const qualityReport = validateCleanCode({
+      cleanMarkdown: `# Section\n\n![image source_block=13549 page=665](images/${lockedHash})\n`,
+      chapterTitle: 'Section',
+      imageMap: {
+        images: [{
+          raw_ref: `images/${lockedHash}`,
+          normalized_ref: `images/${lockedHash}`,
+          source_path: `../../images/${lockedHash}`,
+          source_block_ids: ['13549'],
+          required: true,
+          asset_hash_name: lockedHash,
+        }],
+      },
+      cleanChapterDir,
+      copiedImages: [{ normalized_ref: `images/${lockedHash}` }],
+      missingImages: [],
+      unresolvedItems: [],
+      rawMarkdown: `# Section\n\n![image source_block=13549 page=665](images/${lockedHash})\n`,
+      cleanerMode: 'llm',
+      llmResponse: {
+        clean_markdown: `# Section\n\n![image source_block=13549 page=665](images/${mutatedHash})\n`,
+        kept_images: [`images/${mutatedHash}`],
+        removed_noise: [],
+        unresolved_items: [],
+        change_summary: [],
+        risk_flags: [],
+      },
+    });
+    assert.equal(qualityReport.status, 'PASS', JSON.stringify(qualityReport, null, 2));
+  }
+
   console.log('RawCode2CleanCode UAT runner smoke passed.');
 } finally {
   await rm(tmpRoot, { recursive: true, force: true });
