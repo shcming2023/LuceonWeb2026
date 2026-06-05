@@ -577,6 +577,128 @@ displayingdata 107
     assert full_manifest["selection_mode"] == "full-book"
 
 
+def test_cleanlatex_pack_boundary_uses_unbound_chapter_intro_as_hard_stop():
+    canonical_toc = {
+        "root": {
+            "node_id": "toc-root",
+            "kind": "root",
+            "title": "root",
+            "children": [
+                {
+                    "node_id": "toc-unit-2",
+                    "kind": "unit",
+                    "title": "Unit 2",
+                    "parent_id": "toc-root",
+                    "metadata": {"number": "2"},
+                    "source_block_ids": [],
+                    "children": [
+                        {
+                            "node_id": "toc-0039",
+                            "kind": "chapter",
+                            "title": "7 Perimeter,areaandvolume",
+                            "parent_id": "toc-unit-2",
+                            "metadata": {"number": "7"},
+                            "source_block_ids": [],
+                            "children": [
+                                {
+                                    "node_id": "toc-0042",
+                                    "kind": "section",
+                                    "title": "7.3 Surface areas and volumes of solids",
+                                    "parent_id": "toc-0039",
+                                    "metadata": {"number": "7.3"},
+                                    "source_block_ids": ["b-7-3-title"],
+                                    "children": [],
+                                },
+                            ],
+                        },
+                        {
+                            "node_id": "toc-0043",
+                            "kind": "chapter",
+                            "title": "8 Introductiontoprobability",
+                            "parent_id": "toc-unit-2",
+                            "metadata": {"number": "8"},
+                            "source_block_ids": [],
+                            "children": [
+                                {
+                                    "node_id": "toc-0044",
+                                    "kind": "section",
+                                    "title": "8.1 Understandingbasic probability",
+                                    "parent_id": "toc-0043",
+                                    "metadata": {"number": "8.1"},
+                                    "source_block_ids": ["b-8-1-title"],
+                                    "children": [],
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        }
+    }
+    source_tree = {
+        "type": "root",
+        "title": "root",
+        "children": [
+            {
+                "type": "text",
+                "title": "7.3 Surface areas and volumes of solids",
+                "block_ids": ["b-7-3-title"],
+                "page": 219,
+                "content": "Surface area and volume content starts here.",
+                "children": [],
+            },
+            {
+                "type": "text",
+                "title": "",
+                "block_ids": ["b-7-3-body"],
+                "page": 220,
+                "content": "More 7.3 content before the next chapter.",
+                "children": [],
+            },
+            {
+                "type": "text",
+                "title": "Introduction to probability",
+                "block_ids": ["b-8-intro-title"],
+                "page": 227,
+                "content": "IN THIS CHAPTER YOU WILL: express probabilities mathematically.",
+                "children": [],
+            },
+            {
+                "type": "text",
+                "title": "8.1 Understandingbasic probability",
+                "block_ids": ["b-8-1-title"],
+                "page": 228,
+                "content": "Basic probability content starts here.",
+                "children": [],
+            },
+        ],
+    }
+
+    packs_manifest = service._compile_cleanlatex_pilot_packs(
+        canonical_toc,
+        {"spans": []},
+        source_tree,
+        "4134323036518274",
+        "v-test",
+        {},
+        selection_mode="full-book",
+    )
+
+    packs = {pack["node"]["node_id"]: pack for pack in packs_manifest["packs"]}
+    pack_73 = packs["toc-0042"]
+    ids_73 = set(pack_73["source_span"]["source_block_ids"])
+    assert "b-7-3-title" in ids_73
+    assert "b-7-3-body" in ids_73
+    assert "b-8-intro-title" not in ids_73
+    assert "b-8-1-title" not in ids_73
+    text_73 = "\n".join(str(block.get("raw_text") or "") for block in pack_73["content_blocks"])
+    assert "Introduction to probability" not in text_73
+    assert "IN THIS CHAPTER YOU WILL" not in text_73
+
+    pack_81 = packs["toc-0044"]
+    assert "b-8-1-title" in set(pack_81["source_span"]["source_block_ids"])
+
+
 def test_release_host_mps_worker_posts_force_release_payload():
     captured = {}
 

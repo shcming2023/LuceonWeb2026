@@ -2277,6 +2277,14 @@ def _source_start_order_for_node(node: dict[str, Any], source_by_block_id: dict[
     return min(orders) if orders else None
 
 
+def _title_without_leading_number(title: str, number: str) -> str:
+    text = str(title or "").strip()
+    numeric = str(number or "").strip()
+    if numeric:
+        text = re.sub(rf"^\s*(?:chapter\s*)?{re.escape(numeric)}(?:[\s.:-]+|$)", "", text, flags=re.IGNORECASE)
+    return text.strip()
+
+
 def _source_row_matches_canonical_node(row: dict[str, Any], node: dict[str, Any]) -> bool:
     text = f"{row.get('title') or ''} {row.get('content') or ''}"
     compact_text = _toc_compact(text)
@@ -2295,7 +2303,12 @@ def _source_row_matches_canonical_node(row: dict[str, Any], node: dict[str, Any]
         if kind == "section":
             return bool(re.search(rf"^\s*{escaped}(?!\d)", text, flags=re.IGNORECASE))
         if kind == "chapter":
-            return bool(re.search(rf"^\s*(?:chapter\s*)?{escaped}(?!\d)", text, flags=re.IGNORECASE))
+            if re.search(rf"^\s*(?:chapter\s*)?{escaped}(?![\d.])", text, flags=re.IGNORECASE):
+                return True
+            compact_title_without_number = _toc_compact(_title_without_leading_number(title, number))
+            if compact_title_without_number and compact_text:
+                return compact_text == compact_title_without_number or compact_text.startswith(compact_title_without_number)
+            return False
     if compact_title and compact_text:
         if kind in {"index", "glossary"}:
             return compact_text == compact_title
