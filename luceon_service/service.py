@@ -2083,6 +2083,15 @@ def _visual_reference_terms(text: str) -> list[str]:
     return found
 
 
+def _clean_pack_raw_text(value: Any) -> str:
+    return (
+        str(value or "")
+        .replace("<|txt_split|>", "\n\n")
+        .replace("<|txt_contd|>", " ")
+        .strip()
+    )
+
+
 def _mineru_asset_index_from_content_bytes(content_bytes: bytes | None) -> dict[str, list[dict[str, Any]]]:
     if not content_bytes:
         return {"images": [], "tables": []}
@@ -2170,7 +2179,10 @@ def _bbox_equivalent(left: Any, right: Any, tolerance: float = 0.005) -> bool:
 
 def _content_block_from_source_row(block_id: str, source_row: dict[str, Any]) -> dict[str, Any]:
     raw_text = "\n".join(
-        value for value in [str(source_row.get("title") or "").strip(), str(source_row.get("content") or "").strip()]
+        value for value in [
+            _clean_pack_raw_text(source_row.get("title")),
+            _clean_pack_raw_text(source_row.get("content")),
+        ]
         if value
     )
     block_type = _cleanlatex_block_type(source_row)
@@ -2187,6 +2199,8 @@ def _content_block_from_source_row(block_id: str, source_row: dict[str, Any]) ->
         "source_hash": source_row.get("source_hash"),
         "warnings": [],
     }
+    if source_row.get("linked_source_block_ids"):
+        block["linked_source_block_ids"] = list(source_row.get("linked_source_block_ids") or [])
     if block_type == "image":
         block["asset_hash_names"] = list(source_row.get("asset_hash_names") or _asset_hash_names_from_text(raw_text))
         block["asset_refs"] = list(source_row.get("asset_refs") or [])
@@ -2200,6 +2214,32 @@ def _content_block_from_source_row(block_id: str, source_row: dict[str, Any]) ->
         block["raw_html"] = None
         block["cells"] = []
     return block
+
+
+def _content_row_key(source_row: dict[str, Any]) -> str:
+    source_order = source_row.get("source_order")
+    source_hash = str(source_row.get("source_hash") or "")
+    if isinstance(source_order, int) and source_hash:
+        return f"{source_order}:{source_hash}"
+    block_ids = ",".join(str(value) for value in source_row.get("source_block_ids") or [])
+    return f"{source_order}:{block_ids}:{source_hash}"
+
+
+def _deduplicate_content_blocks(content_blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for block in content_blocks:
+        key = ":".join([
+            str(block.get("source_order") or ""),
+            str(block.get("source_hash") or ""),
+            ",".join(str(value) for value in block.get("asset_hash_names") or []),
+            str(block.get("block_id") or ""),
+        ])
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(block)
+    return deduped
 
 
 def _source_rows_in_body_order(source_tree: dict[str, Any], asset_index: dict[str, list[dict[str, Any]]] | None = None) -> list[dict[str, Any]]:
@@ -2239,6 +2279,20 @@ def _source_rows_in_body_order(source_tree: dict[str, Any], asset_index: dict[st
                 "bbox": bbox,
             }),
         }
+        linked_source_block_ids: list[str] = []
+        for key in ("image", "table", "contd"):
+            value = node.get(key)
+            if isinstance(value, int) and value >= 0:
+                linked_source_block_ids.append(str(value))
+            elif isinstance(value, str) and value:
+                linked_source_block_ids.append(value)
+        node_type_lower = str(node.get("type") or node.get("source_label") or "").lower()
+        level_value = node.get("level")
+        if ("image" in node_type_lower or "table" in node_type_lower) and isinstance(level_value, int) and level_value > 0:
+            linked_source_block_ids.append(str(level_value))
+        linked_source_block_ids = list(dict.fromkeys(linked_source_block_ids))
+        if linked_source_block_ids:
+            row["linked_source_block_ids"] = linked_source_block_ids
         asset = _asset_for_source_node(node, asset_index)
         if asset:
             row["asset_refs"] = [{
@@ -2247,6 +2301,7 @@ def _source_rows_in_body_order(source_tree: dict[str, Any], asset_index: dict[st
                 "raw_ref": asset.get("raw_ref"),
                 "source_page": asset.get("page"),
                 "bbox": asset.get("bbox") or [],
+                "linked_source_block_ids": linked_source_block_ids,
             }]
             row["asset_hash_names"] = [asset.get("asset_hash_name")]
         rows.append(row)
@@ -2572,6 +2627,7 @@ def _related_asset_blocks_for_span(
                 "raw_ref": asset.get("raw_ref"),
                 "source_page": asset.get("page"),
                 "bbox": asset.get("bbox") or [],
+                "linked_source_block_ids": source_row.get("linked_source_block_ids") or [],
             }],
         }
         blocks.append(_content_block_from_source_row(str(block_id), enriched))
@@ -2774,13 +2830,21 @@ def _compile_cleanlatex_pilot_packs(
         }
         content_blocks: list[dict[str, Any]] = []
         unresolved_block_ids: list[str] = []
+        seen_content_rows: set[str] = set()
         for block_id in source_block_ids:
             source_row = source_by_block_id.get(block_id)
             if source_row:
-                content_blocks.append(_content_block_from_source_row(block_id, source_row))
+                row_key = _content_row_key(source_row)
+                if row_key in seen_content_rows:
+                    continue
+                seen_content_rows.add(row_key)
+                row_block_ids = [str(value) for value in source_row.get("source_block_ids") or []]
+                primary_block_id = row_block_ids[0] if row_block_ids else block_id
+                content_blocks.append(_content_block_from_source_row(primary_block_id, source_row))
             else:
                 unresolved_block_ids.append(block_id)
         content_blocks.extend(_related_asset_blocks_for_span(source_tree, source_block_ids, source_by_block_id, asset_index))
+        content_blocks = _deduplicate_content_blocks(content_blocks)
         content_blocks.sort(key=lambda block: (block.get("source_order") or 0, block.get("block_id") or ""))
 
         image_assets: dict[str, dict[str, Any]] = {}
@@ -2797,6 +2861,7 @@ def _compile_cleanlatex_pilot_packs(
                     "bbox": ref.get("bbox") or [],
                     "raw_ref": ref.get("raw_ref"),
                     "source_block_ids": block.get("source_block_ids") or [block.get("block_id")],
+                    "linked_source_block_ids": ref.get("linked_source_block_ids") or block.get("linked_source_block_ids") or [],
                 })
             for name in block.get("asset_hash_names") or _asset_hash_names_from_text(block.get("raw_text") or ""):
                 if not name:
@@ -2807,14 +2872,15 @@ def _compile_cleanlatex_pilot_packs(
                     "bbox": block.get("bbox") or [],
                     "raw_ref": f"images/{name}",
                     "source_block_ids": block.get("source_block_ids") or [block.get("block_id")],
+                    "linked_source_block_ids": block.get("linked_source_block_ids") or [],
                 })
         combined_text = "\n".join(str(block.get("raw_text") or "") for block in content_blocks)
         visual_terms = _visual_reference_terms(combined_text)
         visual_requirements: list[dict[str, Any]] = []
-        if visual_terms or image_assets:
+        if image_assets:
             visual_requirements.append({
                 "terms": visual_terms,
-                "status": "asset-linked" if image_assets else "asset-missing",
+                "status": "asset-linked",
                 "required_action": "preserve_asset_reference_or_report_unresolved",
                 "source_block_ids": source_block_ids,
                 "linked_asset_hash_names": sorted(image_assets.keys()),

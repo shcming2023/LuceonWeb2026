@@ -407,7 +407,7 @@ try {
     assert.equal(result.ok, true, JSON.stringify(result, null, 2));
     assert.equal(result.samples[0].status, 'NEEDS_REVIEW');
     const qualityReport = JSON.parse(await readFile(result.samples[0].evidence.output.qualityReport, 'utf8'));
-    assert.equal(qualityReport.risks.includes('raw_split_markers_remaining'), true);
+    assert.equal(qualityReport.risks.includes('raw_split_markers_remaining'), false);
     assert.equal(qualityReport.risks.includes('duplicate_large_text_segments'), true);
   }
 
@@ -462,7 +462,14 @@ try {
     const qualityReport = validateCleanCode({
       cleanMarkdown: '# Section\n\nThe flow diagram shows the statistical investigation process.\n',
       chapterTitle: 'Section',
-      imageMap: { images: [] },
+      imageMap: {
+        images: [],
+        visual_evidence_requirements: [{
+          terms: ['flow diagram'],
+          status: 'asset-missing',
+          linked_asset_hash_names: [],
+        }],
+      },
       cleanChapterDir: tmpRoot,
       copiedImages: [],
       missingImages: [],

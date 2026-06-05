@@ -271,13 +271,16 @@ function visualBlockCommentForImage(image, markdownImage) {
   const sourceBlockIds = Array.isArray(image?.source_block_ids)
     ? image.source_block_ids.map(String).filter(Boolean)
     : [];
+  const linkedSourceBlockIds = Array.isArray(image?.linked_source_block_ids)
+    ? image.linked_source_block_ids.map(String).filter(Boolean)
+    : [];
   const altText = String(markdownImage?.alt || '').toLowerCase();
   const kindFromImage = String(image?.asset_kind || image?.kind || image?.type || '').toLowerCase();
   const kind = kindFromImage.includes('table') || altText.includes('table') ? 'table' : 'image';
   const sourcePage = image?.source_page ?? image?.page ?? '';
   const bbox = Array.isArray(image?.bbox) ? image.bbox : [];
   const assetHash = image?.asset_hash_name || basename(ref);
-  return `<!-- luceon:visual_block type=${kind} source_block_ids=${markdownCommentValue(sourceBlockIds.join(','))} page=${markdownCommentValue(sourcePage)} bbox=${markdownCommentValue(JSON.stringify(bbox))} asset_hash=${markdownCommentValue(assetHash)} -->`;
+  return `<!-- luceon:visual_block type=${kind} source_block_ids=${markdownCommentValue(sourceBlockIds.join(','))} page=${markdownCommentValue(sourcePage)} bbox=${markdownCommentValue(JSON.stringify(bbox))} asset_hash=${markdownCommentValue(assetHash)} linked_source_block_ids=${markdownCommentValue(linkedSourceBlockIds.join(','))} -->`;
 }
 
 function restoreVisualBlockComments(markdown, imageMap) {
@@ -337,7 +340,14 @@ function allowedImageRefs(imageMap) {
 function rulePreClean(rawMarkdown) {
   const removedNoise = [];
   const changes = [];
-  const lines = String(rawMarkdown || '').replace(/\r\n?/g, '\n').split('\n');
+  let normalizedMarkdown = String(rawMarkdown || '').replace(/\r\n?/g, '\n');
+  if (/<\|txt_split\|>|<\|txt_contd\|>/.test(normalizedMarkdown)) {
+    normalizedMarkdown = normalizedMarkdown
+      .replace(/<\|txt_split\|>/g, '\n\n')
+      .replace(/<\|txt_contd\|>/g, ' ');
+    changes.push({ type: 'normalized_popo_text_separators' });
+  }
+  const lines = normalizedMarkdown.split('\n');
   const kept = [];
   let previousBlank = false;
 
@@ -936,8 +946,9 @@ function referencedVisualEvidenceGaps({ cleanMarkdown, cleanRefs, unresolvedItem
   ];
   const referencedTerms = terms.filter((term) => new RegExp(`\\b${term.replace(/\s+/g, '\\s+')}\\b`, 'i').test(text));
   const hasUnresolvedItems = Array.isArray(unresolvedItems) && unresolvedItems.length > 0;
+  const hasVisualContract = (imageMap?.images || []).length > 0 || (imageMap?.visual_evidence_requirements || []).length > 0;
   const gaps = [];
-  if (referencedTerms.length > 0 && cleanRefs.length === 0 && !hasUnresolvedItems) {
+  if (hasVisualContract && referencedTerms.length > 0 && cleanRefs.length === 0 && !hasUnresolvedItems) {
     gaps.push(...referencedTerms.map((term) => ({
       term,
       reason: 'clean markdown references visual evidence but has no image reference or unresolved item',

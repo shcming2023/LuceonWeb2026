@@ -158,6 +158,27 @@ function sourceBlockIdsForBlock(block, fallback = '') {
   return blockId ? [blockId] : [];
 }
 
+function linkedSourceBlockIdsForBlock(block) {
+  const ids = Array.isArray(block?.linked_source_block_ids)
+    ? block.linked_source_block_ids.map(String).filter(Boolean)
+    : [];
+  if (ids.length > 0) return ids;
+  for (const ref of block?.asset_refs || []) {
+    if (Array.isArray(ref?.linked_source_block_ids)) {
+      return ref.linked_source_block_ids.map(String).filter(Boolean);
+    }
+  }
+  return [];
+}
+
+function normalizePopoSeparators(text) {
+  return String(text || '')
+    .replace(/<\|txt_split\|>/g, '\n\n')
+    .replace(/<\|txt_contd\|>/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function assetHashNamesForBlock(block) {
   const names = new Set();
   for (const name of block?.asset_hash_names || []) {
@@ -183,6 +204,7 @@ function markdownPlaceholderForAssetBlock(block) {
   if (names.length === 0) return '';
   const kind = String(block?.type || '').toLowerCase().includes('table') ? 'table' : 'image';
   const sourceBlockIds = sourceBlockIdsForBlock(block, block?.block_id);
+  const linkedSourceBlockIds = linkedSourceBlockIdsForBlock(block);
   const page = block?.page ?? block?.source_page ?? block?.sourcePage ?? null;
   const bbox = Array.isArray(block?.bbox) ? block.bbox : [];
   const lines = [];
@@ -192,8 +214,11 @@ function markdownPlaceholderForAssetBlock(block) {
     const normalizedRef = rawRef.startsWith('images/') ? rawRef : `images/${basename(rawRef)}`;
     const refPage = ref?.source_page ?? page;
     const refBbox = Array.isArray(ref?.bbox) && ref.bbox.length > 0 ? ref.bbox : bbox;
+    const linkedIds = Array.isArray(ref?.linked_source_block_ids) && ref.linked_source_block_ids.length > 0
+      ? ref.linked_source_block_ids.map(String).filter(Boolean)
+      : linkedSourceBlockIds;
     lines.push(
-      `<!-- luceon:visual_block type=${kind} source_block_ids=${markdownCommentValue(sourceBlockIds.join(','))} page=${markdownCommentValue(refPage ?? '')} bbox=${markdownCommentValue(JSON.stringify(refBbox))} asset_hash=${markdownCommentValue(assetHashName)} -->`,
+      `<!-- luceon:visual_block type=${kind} source_block_ids=${markdownCommentValue(sourceBlockIds.join(','))} page=${markdownCommentValue(refPage ?? '')} bbox=${markdownCommentValue(JSON.stringify(refBbox))} asset_hash=${markdownCommentValue(assetHashName)} linked_source_block_ids=${markdownCommentValue(linkedIds.join(','))} -->`,
       `![${kind} source_block=${sourceBlockIds[0] || ''} page=${refPage ?? ''}](${normalizedRef})`,
     );
   }
@@ -201,7 +226,7 @@ function markdownPlaceholderForAssetBlock(block) {
 }
 
 function markdownForBlock(block) {
-  const rawText = String(block?.raw_text || '').trim();
+  const rawText = normalizePopoSeparators(block?.raw_text);
   const visualPlaceholder = markdownPlaceholderForAssetBlock(block);
   return [rawText, visualPlaceholder].filter(Boolean).join('\n\n');
 }
@@ -285,9 +310,10 @@ function unitMarkdownForPack(item) {
 }
 
 function sourceBlockFor(block, index) {
-  const rawText = String(block?.raw_text || '');
+  const rawText = normalizePopoSeparators(block?.raw_text);
   const assetNames = assetHashNamesForBlock(block);
   const sourceBlockIds = sourceBlockIdsForBlock(block, `block-${index + 1}`);
+  const linkedSourceBlockIds = linkedSourceBlockIdsForBlock(block);
   const sourceBlock = {
     block_id: String(block?.block_id || `block-${index + 1}`),
     source_block_ids: sourceBlockIds,
@@ -298,6 +324,9 @@ function sourceBlockFor(block, index) {
     text: rawText,
     source_hash: block?.source_hash || `sha256:${sha256Text(rawText)}`,
   };
+  if (linkedSourceBlockIds.length > 0) {
+    sourceBlock.linked_source_block_ids = linkedSourceBlockIds;
+  }
   if (Array.isArray(block?.bbox) && block.bbox.length > 0) {
     sourceBlock.bbox = block.bbox;
   }
@@ -306,11 +335,15 @@ function sourceBlockFor(block, index) {
     sourceBlock.markdown_placeholders = assetNames.map((assetHashName) => {
       const ref = primaryAssetRefForBlock(block, assetHashName);
       const rawRef = normalizeSlashes(ref?.raw_ref || `images/${assetHashName}`);
+      const linkedIds = Array.isArray(ref?.linked_source_block_ids) && ref.linked_source_block_ids.length > 0
+        ? ref.linked_source_block_ids.map(String).filter(Boolean)
+        : linkedSourceBlockIds;
       return {
         asset_hash_name: assetHashName,
         normalized_ref: rawRef.startsWith('images/') ? rawRef : `images/${basename(rawRef)}`,
         source_page: ref?.source_page ?? block?.page ?? null,
         bbox: Array.isArray(ref?.bbox) && ref.bbox.length > 0 ? ref.bbox : (Array.isArray(block?.bbox) ? block.bbox : []),
+        linked_source_block_ids: linkedIds,
       };
     });
   }
@@ -343,6 +376,7 @@ function imageMapForPack(pack, rawMarkdown) {
       source_page: image?.source_page ?? null,
       bbox: Array.isArray(image?.bbox) ? image.bbox : [],
       source_block_ids: Array.isArray(image?.source_block_ids) ? image.source_block_ids.map(String) : [],
+      linked_source_block_ids: Array.isArray(image?.linked_source_block_ids) ? image.linked_source_block_ids.map(String) : [],
     });
   }
   return {
