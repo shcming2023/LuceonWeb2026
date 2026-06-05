@@ -2368,20 +2368,16 @@ def _source_start_order_for_node_after(
     return min(matching_orders) if matching_orders else None
 
 
-def _expanded_source_block_ids_for_cleaning_node(
+def _canonical_start_order_for_node(
     node: dict[str, Any],
     canonical_nodes: list[dict[str, Any]],
-    depths: dict[str, int],
-    source_rows: list[dict[str, Any]],
+    current_index: int,
     source_by_block_id: dict[str, dict[str, Any]],
-    node_indices: dict[str, int] | None = None,
-    direct_start_orders: dict[str, int | None] | None = None,
-    match_orders_by_node: dict[str, list[int]] | None = None,
-    descendant_boundary_kinds: set[str] | None = None,
-) -> list[str]:
+    direct_start_orders: dict[str, int | None] | None,
+    match_orders_by_node: dict[str, list[int]] | None,
+) -> int | None:
     node_id = str(node.get("node_id") or "")
     start_order = None
-    current_index = (node_indices or {}).get(node_id, -1)
     if match_orders_by_node is not None:
         orders = match_orders_by_node.get(node_id) or []
         if str(node.get("kind") or "") == "past_paper":
@@ -2414,10 +2410,33 @@ def _expanded_source_block_ids_for_cleaning_node(
             if direct_start_orders is not None
             else _source_start_order_for_node(node, source_by_block_id)
         )
+    return start_order
+
+
+def _expanded_source_block_ids_for_cleaning_node(
+    node: dict[str, Any],
+    canonical_nodes: list[dict[str, Any]],
+    depths: dict[str, int],
+    source_rows: list[dict[str, Any]],
+    source_by_block_id: dict[str, dict[str, Any]],
+    node_indices: dict[str, int] | None = None,
+    direct_start_orders: dict[str, int | None] | None = None,
+    match_orders_by_node: dict[str, list[int]] | None = None,
+    descendant_boundary_kinds: set[str] | None = None,
+) -> list[str]:
+    node_id = str(node.get("node_id") or "")
+    current_index = (node_indices or {}).get(node_id, -1)
+    start_order = _canonical_start_order_for_node(
+        node,
+        canonical_nodes,
+        current_index,
+        source_by_block_id,
+        direct_start_orders,
+        match_orders_by_node,
+    )
     if start_order is None:
         return [str(value) for value in node.get("source_block_ids") or []]
 
-    pack_level = _node_pack_level(node, depths)
     nodes_by_id = {str(item.get("node_id") or ""): item for item in canonical_nodes}
 
     def is_descendant_of_current(other: dict[str, Any]) -> bool:
@@ -2466,9 +2485,6 @@ def _expanded_source_block_ids_for_cleaning_node(
                 boundary_orders.append(other_order)
             continue
         if is_descendant or is_ancestor_of_current(other):
-            continue
-        other_level = _node_pack_level(other, depths)
-        if other_level > pack_level:
             continue
         other_order = _source_start_order_for_node_after(
             other,
@@ -2751,7 +2767,7 @@ def _compile_cleanlatex_pilot_packs(
         )
         source_block_ids = expanded_source_block_ids or bound_source_block_ids
         span_expansion = {
-            "strategy": "canonical-node-to-next-sibling-or-ancestor-boundary",
+            "strategy": "canonical-structure-lock-mechanical-slice",
             "bound_source_block_ids": bound_source_block_ids,
             "expanded": source_block_ids != bound_source_block_ids,
             "expanded_source_block_count": len(source_block_ids),

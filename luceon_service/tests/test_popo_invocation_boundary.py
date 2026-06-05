@@ -691,6 +691,7 @@ def test_cleanlatex_pack_boundary_uses_unbound_chapter_intro_as_hard_stop():
     assert "b-7-3-body" in ids_73
     assert "b-8-intro-title" not in ids_73
     assert "b-8-1-title" not in ids_73
+    assert pack_73["source_span"]["span_expansion"]["strategy"] == "canonical-structure-lock-mechanical-slice"
     text_73 = "\n".join(str(block.get("raw_text") or "") for block in pack_73["content_blocks"])
     assert "Introduction to probability" not in text_73
     assert "IN THIS CHAPTER YOU WILL" not in text_73
