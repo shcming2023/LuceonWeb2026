@@ -729,6 +729,39 @@ try {
     assert.equal(parsed.removed_noise[0].text, '1 2');
   }
 
+  {
+    console.log('  [20] LLM JSON parser ignores trailing prose after the first complete object...');
+    const parsed = parseLooseJson([
+      '{',
+      '  "clean_markdown": "# Exercise\\n\\nContent",',
+      '  "kept_images": [],',
+      '  "removed_noise": [],',
+      '  "unresolved_items": [],',
+      '  "change_summary": [],',
+      '  "risk_flags": []',
+      '}',
+      'The corrected exercise is above.',
+    ].join('\n'));
+    assert.equal(parsed.clean_markdown, '# Exercise\n\nContent');
+  }
+
+  {
+    console.log('  [21] LLM JSON parser escapes literal control characters inside JSON strings...');
+    const parsed = parseLooseJson([
+      '{',
+      '  "clean_markdown": "# Section',
+      '',
+      'Line inside the same JSON string",',
+      '  "kept_images": [],',
+      '  "removed_noise": [],',
+      '  "unresolved_items": [],',
+      '  "change_summary": [],',
+      '  "risk_flags": []',
+      '}',
+    ].join('\n'));
+    assert.match(parsed.clean_markdown, /Line inside/);
+  }
+
   console.log('RawCode2CleanCode UAT runner smoke passed.');
 } finally {
   await rm(tmpRoot, { recursive: true, force: true });

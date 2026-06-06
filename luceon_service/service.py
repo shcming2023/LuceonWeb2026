@@ -2103,14 +2103,34 @@ def _mineru_asset_index_from_content_bytes(content_bytes: bytes | None) -> dict[
     if not isinstance(payload, list):
         return {"images": [], "tables": []}
 
+    def iter_content_items(value: Any, page_idx: int | None = None):
+        if isinstance(value, list):
+            for index, item in enumerate(value):
+                next_page_idx = index if page_idx is None else page_idx
+                yield from iter_content_items(item, next_page_idx)
+        elif isinstance(value, dict):
+            yield value, page_idx
+
+    def asset_path_for_item(item: dict[str, Any]) -> Any:
+        for key in ("img_path", "image_path", "path"):
+            if item.get(key):
+                return item.get(key)
+        content = item.get("content")
+        if isinstance(content, dict):
+            image_source = content.get("image_source")
+            if isinstance(image_source, dict) and image_source.get("path"):
+                return image_source.get("path")
+        return None
+
     assets = {"images": [], "tables": []}
-    for index, item in enumerate(payload):
+    for index, item_with_page in enumerate(iter_content_items(payload)):
+        item, inferred_page_idx = item_with_page
         if not isinstance(item, dict):
             continue
         item_type = str(item.get("type") or "").lower()
         if item_type not in {"image", "table"}:
             continue
-        raw_path = item.get("img_path") or item.get("image_path") or item.get("path")
+        raw_path = asset_path_for_item(item)
         asset_hash_name = _asset_hash_name_from_path(raw_path)
         if not asset_hash_name:
             continue
@@ -2119,6 +2139,8 @@ def _mineru_asset_index_from_content_bytes(content_bytes: bytes | None) -> dict[
             page = item.get("page")
         elif isinstance(item.get("page_idx"), int):
             page = int(item.get("page_idx")) + 1
+        elif isinstance(inferred_page_idx, int):
+            page = inferred_page_idx + 1
         asset = {
             "kind": "image" if item_type == "image" else "table",
             "asset_hash_name": asset_hash_name,
@@ -2770,6 +2792,14 @@ def _select_cleanlatex_pack_nodes(
         if kind == "section":
             selected.append(node)
         elif kind in {"past_paper", "glossary", "index"}:
+            selected.append(node)
+    if not selected:
+        for node in nodes:
+            kind = node.get("kind")
+            if kind in {"root", "unit"}:
+                continue
+            if not node.get("source_block_ids"):
+                continue
             selected.append(node)
     return selected
 

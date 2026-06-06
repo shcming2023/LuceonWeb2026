@@ -46,6 +46,7 @@ const CLEANER_MODES = new Set(['deterministic', 'llm-dry-run', 'llm']);
 const REQUIRED_LLM_MODEL = 'deepseek-v4-flash';
 const DEFAULT_LLM_MODEL = REQUIRED_LLM_MODEL;
 const DEFAULT_OPENAI_BASE = process.env.OPENAI_API_BASE || 'https://api.openai.com/v1';
+const DEFAULT_LLM_REQUEST_TIMEOUT_MS = 180000;
 const REVIEW_ITEMS_SCHEMA = 'luceon-cleancode-review-items/v1';
 const REVIEW_PATCH_CONTRACT_SCHEMA = 'luceon-cleancode-review-patch-contract/v1';
 
@@ -634,33 +635,118 @@ function stripJsonFences(text) {
 
 function parseLooseJson(text) {
   const stripped = stripJsonFences(text);
-  try {
-    return JSON.parse(stripped);
-  } catch (firstError) {
-    const start = stripped.indexOf('{');
-    const end = stripped.lastIndexOf('}');
-    if (start >= 0 && end > start) {
-      const sliced = stripped.slice(start, end + 1);
+  const candidates = [];
+  const balanced = extractFirstBalancedJsonObject(stripped);
+  if (balanced) candidates.push(balanced);
+  candidates.push(stripped);
+
+  const start = stripped.indexOf('{');
+  const end = stripped.lastIndexOf('}');
+  if (start >= 0 && end > start) candidates.push(stripped.slice(start, end + 1));
+
+  let firstError = null;
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch (error) {
+      if (!firstError) firstError = error;
       try {
-        return JSON.parse(sliced);
-      } catch (secondError) {
-        try {
-          return JSON.parse(repairLooseJsonText(sliced));
-        } catch {
-          throw secondError;
-        }
+        return JSON.parse(repairLooseJsonText(candidate));
+      } catch {
+        // Try the next candidate. The original error is reported if none work.
       }
     }
-    try {
-      return JSON.parse(repairLooseJsonText(stripped));
-    } catch {
-      throw firstError;
+  }
+
+  throw firstError || new Error('No JSON object found in model content');
+}
+
+function extractFirstBalancedJsonObject(text) {
+  const source = String(text || '');
+  const start = source.indexOf('{');
+  if (start < 0) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < source.length; index += 1) {
+    const char = source[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+    } else if (char === '{') {
+      depth += 1;
+    } else if (char === '}') {
+      depth -= 1;
+      if (depth === 0) return source.slice(start, index + 1);
     }
   }
+
+  return null;
+}
+
+function isRetryableLlmError(error) {
+  const message = String(error?.message || error || '');
+  return /timed out|terminated|ECONNRESET|ETIMEDOUT|fetch failed|JSON parse failed|Unterminated string|Bad control character|Unexpected non-whitespace|Expected ','|Expected '}'|Expected ']'/i.test(message);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function repairLooseJsonText(text) {
-  return removeInvalidParentheticalAfterStringValues(repairJsonStringEscapes(text));
+  return removeInvalidParentheticalAfterStringValues(escapeControlCharactersInJsonStrings(repairJsonStringEscapes(text)));
+}
+
+function escapeControlCharactersInJsonStrings(text) {
+  const source = String(text || '');
+  let output = '';
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (!inString) {
+      output += char;
+      if (char === '"') inString = true;
+      continue;
+    }
+
+    if (escaped) {
+      output += char;
+      escaped = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      output += char;
+      escaped = true;
+    } else if (char === '"') {
+      output += char;
+      inString = false;
+    } else if (char === '\n') {
+      output += '\\n';
+    } else if (char === '\r') {
+      output += '\\r';
+    } else if (char === '\t') {
+      output += '\\t';
+    } else {
+      const code = char.charCodeAt(0);
+      output += code < 0x20 ? `\\u${code.toString(16).padStart(4, '0')}` : char;
+    }
+  }
+
+  return output;
 }
 
 function removeInvalidParentheticalAfterStringValues(text) {
@@ -826,14 +912,28 @@ async function callLLMCleaner({ apiBase, model, prompt }) {
     ],
   };
 
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
+  const timeoutMs = Number(process.env.RAWCODE2CLEANCODE_LLM_TIMEOUT_MS || DEFAULT_LLM_REQUEST_TIMEOUT_MS);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_LLM_REQUEST_TIMEOUT_MS);
+  let response;
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(`LLM API request timed out after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   const responseText = await response.text();
   if (!response.ok) {
@@ -909,19 +1009,30 @@ async function runCleanerStage({
   let apiResponse = null;
 
   if (mode === 'llm') {
-    const llmResult = await callLLMCleaner({ apiBase, model, prompt });
     llmUsed = true;
-    apiResponse = llmResult.api_response;
-    if (mode === 'llm') {
-      audit.raw_api_response_path = join(auditDir, 'llm_raw_api_response.json');
-      audit.raw_model_content_path = join(auditDir, 'llm_raw_model_content.txt');
-      await writeJson(audit.raw_api_response_path, apiResponse);
-      await writeText(audit.raw_model_content_path, llmResult.content);
-    }
-    try {
-      rawResponse = llmResult.parsed_content || parseLooseJson(llmResult.content);
-    } catch (error) {
-      throw new Error(`LLM content JSON parse failed: ${error.message}; raw_model_content_path=${audit.raw_model_content_path}`);
+    const maxAttempts = 2;
+    const errors = [];
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        const llmResult = await callLLMCleaner({ apiBase, model, prompt });
+        apiResponse = llmResult.api_response;
+        audit.raw_api_response_path = join(auditDir, attempt === 1 ? 'llm_raw_api_response.json' : `llm_raw_api_response_attempt_${attempt}.json`);
+        audit.raw_model_content_path = join(auditDir, attempt === 1 ? 'llm_raw_model_content.txt' : `llm_raw_model_content_attempt_${attempt}.txt`);
+        await writeJson(audit.raw_api_response_path, apiResponse);
+        await writeText(audit.raw_model_content_path, llmResult.content);
+        rawResponse = llmResult.parsed_content || parseLooseJson(llmResult.content);
+        if (attempt > 1) {
+          audit.retry_attempts = attempt - 1;
+          audit.retry_errors = errors;
+        }
+        break;
+      } catch (error) {
+        errors.push(String(error?.message || error));
+        if (attempt >= maxAttempts || !isRetryableLlmError(error)) {
+          throw new Error(`LLM content JSON parse failed: ${errors.join(' | ')}; raw_model_content_path=${audit.raw_model_content_path}`);
+        }
+        await sleep(750 * attempt);
+      }
     }
   } else {
     rawResponse = deterministicSchemaCleaner({ precleanMarkdown, chapterTitle, imageMap, mode });
