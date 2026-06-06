@@ -645,18 +645,99 @@ function parseLooseJson(text) {
         return JSON.parse(sliced);
       } catch (secondError) {
         try {
-          return JSON.parse(repairJsonStringEscapes(sliced));
+          return JSON.parse(repairLooseJsonText(sliced));
         } catch {
           throw secondError;
         }
       }
     }
     try {
-      return JSON.parse(repairJsonStringEscapes(stripped));
+      return JSON.parse(repairLooseJsonText(stripped));
     } catch {
       throw firstError;
     }
   }
+}
+
+function repairLooseJsonText(text) {
+  return removeInvalidParentheticalAfterStringValues(repairJsonStringEscapes(text));
+}
+
+function removeInvalidParentheticalAfterStringValues(text) {
+  const source = String(text || '');
+  let output = '';
+  let index = 0;
+  let inString = false;
+  let escaped = false;
+  let lastSignificant = '';
+
+  while (index < source.length) {
+    const char = source[index];
+    output += char;
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+        let cursor = index + 1;
+        while (/\s/.test(source[cursor] || '')) cursor += 1;
+        if (lastSignificant === ':' && source[cursor] === '(') {
+          let depth = 0;
+          let end = cursor;
+          let parenInString = false;
+          let parenEscaped = false;
+          while (end < source.length) {
+            const next = source[end];
+            if (parenInString) {
+              if (parenEscaped) {
+                parenEscaped = false;
+              } else if (next === '\\') {
+                parenEscaped = true;
+              } else if (next === '"') {
+                parenInString = false;
+              }
+              end += 1;
+              continue;
+            }
+            if (next === '"') {
+              parenInString = true;
+              end += 1;
+              continue;
+            }
+            if (next === '(') depth += 1;
+            if (next === ')') {
+              depth -= 1;
+              if (depth === 0) {
+                end += 1;
+                break;
+              }
+            }
+            end += 1;
+          }
+          let after = end;
+          while (/\s/.test(source[after] || '')) after += 1;
+          if (depth === 0 && /[,}\]]/.test(source[after] || '')) {
+            index = end - 1;
+          }
+        }
+      }
+      index += 1;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      escaped = false;
+    } else if (!/\s/.test(char)) {
+      lastSignificant = char;
+    }
+    index += 1;
+  }
+
+  return output;
 }
 
 function repairJsonStringEscapes(text) {

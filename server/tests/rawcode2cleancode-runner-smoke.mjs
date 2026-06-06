@@ -708,6 +708,27 @@ try {
     assert.equal(qualityReport.checks.find((check) => check.id === 'reader_surface_duplicate_opening_headings_absent').status, 'NEEDS_REVIEW');
   }
 
+  {
+    console.log('  [19] LLM JSON parser removes explanatory parentheticals after string values...');
+    const parsed = parseLooseJson([
+      '{',
+      '  "clean_markdown": "# Exercise\\n\\nContent",',
+      '  "kept_images": [],',
+      '  "removed_noise": [',
+      '    {',
+      '      "text": "1 2" (in "1 2 x"),',
+      '      "reason": "OCR spacing correction",',
+      '      "confidence": "high"',
+      '    }',
+      '  ],',
+      '  "unresolved_items": [],',
+      '  "change_summary": [],',
+      '  "risk_flags": []',
+      '}',
+    ].join('\n'));
+    assert.equal(parsed.removed_noise[0].text, '1 2');
+  }
+
   console.log('RawCode2CleanCode UAT runner smoke passed.');
 } finally {
   await rm(tmpRoot, { recursive: true, force: true });
