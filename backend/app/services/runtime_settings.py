@@ -70,6 +70,46 @@ def default_runtime_config() -> dict[str, Any]:
             ],
             "last_backup": None,
         },
+        "models": {
+            "llm": {
+                "enabled": _env_bool("LUCEON_RAW_OUTLINE_LLM", True),
+                "provider": "deepseek",
+                "default_model": (
+                    os.getenv("LLM_DEFAULT_MODEL")
+                    or os.getenv("DEEPSEEK_DEFAULT_MODEL")
+                    or os.getenv("DEEPSEEK_FLASH_MODEL")
+                    or os.getenv("DEEPSEEK_MODEL")
+                    or "deepseek-v4-flash"
+                ),
+                "reasoning_model": (
+                    os.getenv("LLM_REASONING_MODEL")
+                    or os.getenv("DEEPSEEK_REASONING_MODEL")
+                    or "deepseek-v4-pro"
+                ),
+                "deepseek": {
+                    "base_url": os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+                    "api_key": os.getenv("DEEPSEEK_API_KEY", ""),
+                },
+                "outline_decision_max_tokens": int(os.getenv("DEEPSEEK_OUTLINE_DECISION_MAX_TOKENS", "16000") or "16000"),
+                "outline_global_max_candidates": int(os.getenv("DEEPSEEK_OUTLINE_GLOBAL_MAX_CANDIDATES", "500") or "500"),
+                "outline_max_risk_candidates": int(os.getenv("LUCEON_RAW_OUTLINE_LLM_MAX_RISK_CANDIDATES", "120") or "120"),
+            },
+            "vision": {
+                "enabled": _env_bool("LUCEON_RAW_OUTLINE_VISION", False),
+                "provider": "dashscope",
+                "model": os.getenv("VISION_MODEL") or os.getenv("DASHSCOPE_VISION_MODEL") or "qwen3.7-plus",
+                "dashscope": {
+                    "base_url": os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
+                    "api_key": os.getenv("DASHSCOPE_API_KEY", ""),
+                },
+                "outline_visual_max_candidates": int(os.getenv("LUCEON_RAW_OUTLINE_VISUAL_MAX_CANDIDATES", "40") or "40"),
+            },
+            "asr": {"model": os.getenv("ASR_MODEL") or os.getenv("DASHSCOPE_ASR_MODEL") or "fun-asr-flash-2026-06-15"},
+            "tts": {"model": os.getenv("TTS_MODEL") or os.getenv("DASHSCOPE_TTS_MODEL") or "qwen3-tts-instruct-flash-realtime"},
+            "image_generation": {
+                "model": os.getenv("IMAGE_GENERATION_MODEL") or os.getenv("DASHSCOPE_IMAGE_MODEL") or "qwen-image-2.0-pro"
+            },
+        },
     }
 
 
@@ -116,6 +156,8 @@ def save_runtime_config(payload: dict[str, Any]) -> dict[str, Any]:
     merged.get("minio", {}).pop("secret_key_configured", None)
     merged.get("gpu", {}).pop("api_key_configured", None)
     merged.get("gpu", {}).pop("ssh_password_configured", None)
+    merged.get("models", {}).get("llm", {}).get("deepseek", {}).pop("api_key_configured", None)
+    merged.get("models", {}).get("vision", {}).get("dashscope", {}).pop("api_key_configured", None)
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = CONFIG_PATH.with_suffix(".tmp")
     tmp_path.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -136,6 +178,19 @@ def sanitize_config(config: dict[str, Any]) -> dict[str, Any]:
     gpu["ssh_password_configured"] = bool(config.get("gpu", {}).get("ssh_password"))
     gpu["api_key"] = ""
     gpu["ssh_password"] = ""
+    models = safe.get("models", {})
+    llm = models.get("llm", {}) if isinstance(models.get("llm"), dict) else {}
+    deepseek = llm.get("deepseek", {}) if isinstance(llm.get("deepseek"), dict) else {}
+    deepseek["api_key_configured"] = bool(
+        config.get("models", {}).get("llm", {}).get("deepseek", {}).get("api_key")
+    )
+    deepseek["api_key"] = ""
+    vision = models.get("vision", {}) if isinstance(models.get("vision"), dict) else {}
+    dashscope = vision.get("dashscope", {}) if isinstance(vision.get("dashscope"), dict) else {}
+    dashscope["api_key_configured"] = bool(
+        config.get("models", {}).get("vision", {}).get("dashscope", {}).get("api_key")
+    )
+    dashscope["api_key"] = ""
     return safe
 
 
@@ -164,6 +219,11 @@ def pipeline_env() -> dict[str, str]:
     env = os.environ.copy()
     minio = config.get("minio", {})
     gpu = config.get("gpu", {})
+    models = config.get("models", {})
+    llm = models.get("llm", {}) if isinstance(models.get("llm"), dict) else {}
+    deepseek = llm.get("deepseek", {}) if isinstance(llm.get("deepseek"), dict) else {}
+    vision = models.get("vision", {}) if isinstance(models.get("vision"), dict) else {}
+    dashscope = vision.get("dashscope", {}) if isinstance(vision.get("dashscope"), dict) else {}
     if minio.get("endpoint"):
         env["MINIO_ENDPOINT"] = str(minio["endpoint"])
     if minio.get("public_endpoint"):
@@ -177,7 +237,67 @@ def pipeline_env() -> dict[str, str]:
         env["GPU_WRAPPER_URL"] = str(gpu["wrapper_url"])
     if gpu.get("api_key"):
         env["GPU_WRAPPER_API_KEY"] = str(gpu["api_key"])
+    env["LUCEON_RAW_OUTLINE_LLM"] = "1" if llm.get("enabled", True) else "0"
+    env["LUCEON_RAW_OUTLINE_VISION"] = "1" if vision.get("enabled") else "0"
+    env["LUCEON_RAW_OUTLINE_LLM_MAX_RISK_CANDIDATES"] = str(llm.get("outline_max_risk_candidates") or 120)
+    env["LUCEON_RAW_OUTLINE_VISUAL_MAX_CANDIDATES"] = str(vision.get("outline_visual_max_candidates") or 40)
+    env["DEEPSEEK_OUTLINE_DECISION_MAX_TOKENS"] = str(llm.get("outline_decision_max_tokens") or 16000)
+    env["DEEPSEEK_OUTLINE_GLOBAL_MAX_CANDIDATES"] = str(llm.get("outline_global_max_candidates") or 500)
+    if llm.get("default_model"):
+        env["LLM_DEFAULT_MODEL"] = str(llm["default_model"])
+        env["DEEPSEEK_DEFAULT_MODEL"] = str(llm["default_model"])
+        env["DEEPSEEK_FLASH_MODEL"] = str(llm["default_model"])
+        env["DEEPSEEK_MODEL"] = str(llm["default_model"])
+    if llm.get("reasoning_model"):
+        env["LLM_REASONING_MODEL"] = str(llm["reasoning_model"])
+        env["DEEPSEEK_REASONING_MODEL"] = str(llm["reasoning_model"])
+    if deepseek.get("base_url"):
+        env["DEEPSEEK_BASE_URL"] = str(deepseek["base_url"])
+    if deepseek.get("api_key"):
+        env["DEEPSEEK_API_KEY"] = str(deepseek["api_key"])
+    if vision.get("model"):
+        env["VISION_MODEL"] = str(vision["model"])
+        env["DASHSCOPE_VISION_MODEL"] = str(vision["model"])
+    if dashscope.get("base_url"):
+        env["DASHSCOPE_BASE_URL"] = str(dashscope["base_url"])
+    if dashscope.get("api_key"):
+        env["DASHSCOPE_API_KEY"] = str(dashscope["api_key"])
+    if models.get("asr", {}).get("model"):
+        env["ASR_MODEL"] = str(models["asr"]["model"])
+        env["DASHSCOPE_ASR_MODEL"] = str(models["asr"]["model"])
+    if models.get("tts", {}).get("model"):
+        env["TTS_MODEL"] = str(models["tts"]["model"])
+        env["DASHSCOPE_TTS_MODEL"] = str(models["tts"]["model"])
+    if models.get("image_generation", {}).get("model"):
+        env["IMAGE_GENERATION_MODEL"] = str(models["image_generation"]["model"])
+        env["DASHSCOPE_IMAGE_MODEL"] = str(models["image_generation"]["model"])
     return env
+
+
+def check_model_runtime() -> dict[str, Any]:
+    env = pipeline_env()
+    llm_enabled = env.get("LUCEON_RAW_OUTLINE_LLM", "1").lower() in {"1", "true", "yes", "on"}
+    vision_enabled = env.get("LUCEON_RAW_OUTLINE_VISION", "").lower() in {"1", "true", "yes", "on"}
+    return {
+        "llm": {
+            "enabled": llm_enabled,
+            "provider": "deepseek",
+            "model": env.get("LLM_DEFAULT_MODEL") or env.get("DEEPSEEK_MODEL") or "",
+            "reasoning_model": env.get("LLM_REASONING_MODEL") or env.get("DEEPSEEK_REASONING_MODEL") or "",
+            "api_key_configured": bool(env.get("DEEPSEEK_API_KEY", "").strip()),
+            "base_url": env.get("DEEPSEEK_BASE_URL", ""),
+        },
+        "vision": {
+            "enabled": vision_enabled,
+            "provider": "dashscope",
+            "model": env.get("VISION_MODEL") or env.get("DASHSCOPE_VISION_MODEL") or "",
+            "api_key_configured": bool(env.get("DASHSCOPE_API_KEY", "").strip()),
+            "base_url": env.get("DASHSCOPE_BASE_URL", ""),
+        },
+        "asr_model": env.get("ASR_MODEL") or env.get("DASHSCOPE_ASR_MODEL") or "",
+        "tts_model": env.get("TTS_MODEL") or env.get("DASHSCOPE_TTS_MODEL") or "",
+        "image_generation_model": env.get("IMAGE_GENERATION_MODEL") or env.get("DASHSCOPE_IMAGE_MODEL") or "",
+    }
 
 
 def check_minio_contract(create_missing: bool = False) -> dict[str, Any]:
@@ -463,13 +583,18 @@ def runtime_status() -> dict[str, Any]:
     minio = check_minio_contract(create_missing=False)
     gpu = check_gpu_runtime()
     backup = check_backup_targets()
+    models = check_model_runtime()
     blockers = []
     warnings = []
     if not minio.get("contract_ok"):
         blockers.append("minio_contract")
     if not gpu.get("wrapper_ok"):
         warnings.append("gpu_wrapper")
+    if models.get("llm", {}).get("enabled") and not models.get("llm", {}).get("api_key_configured"):
+        blockers.append("llm_model_key")
+    if models.get("vision", {}).get("enabled") and not models.get("vision", {}).get("api_key_configured"):
+        blockers.append("vision_model_key")
     if backup.get("ready_count", 0) <= 0:
         warnings.append("backup_target")
     status = "blocked" if blockers else "warning" if warnings else "ready"
-    return {"status": status, "blockers": blockers, "warnings": warnings, "minio": minio, "gpu": gpu, "backup": backup}
+    return {"status": status, "blockers": blockers, "warnings": warnings, "minio": minio, "gpu": gpu, "backup": backup, "models": models}

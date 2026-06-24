@@ -30,6 +30,7 @@ class RawToCleanPreflightError(RuntimeError):
 
 
 def raw_to_clean_preflight(material: Material, force: bool = False) -> dict[str, Any]:
+    run_env = pipeline_env()
     material_id = material.material_id or ""
     raw_run_id = resolve_raw_run_id(material)
     raw_prefix = resolve_raw_prefix(material, material_id, raw_run_id)
@@ -41,7 +42,8 @@ def raw_to_clean_preflight(material: Material, force: bool = False) -> dict[str,
         "skill_available": CLEAN_SCRIPT.exists(),
         "raw_exists": bool(raw_prefix and prefix_exists(RAW_BUCKET, raw_prefix)),
         "clean_exists": bool(clean_prefix and prefix_exists(CLEAN_BUCKET, clean_prefix)),
-        "deepseek_available": bool(os.getenv("DEEPSEEK_API_KEY", "").strip()),
+        "deepseek_available": bool(run_env.get("DEEPSEEK_API_KEY", "").strip()),
+        "llm_model": run_env.get("LLM_DEFAULT_MODEL") or run_env.get("DEEPSEEK_MODEL") or "",
     }
     blockers = []
     if not checks["has_material_id"]:
@@ -50,6 +52,8 @@ def raw_to_clean_preflight(material: Material, force: bool = False) -> dict[str,
         blockers.append("missing_raw_asset")
     if not checks["skill_available"]:
         blockers.append("missing_skill_script")
+    if not checks["deepseek_available"]:
+        blockers.append("missing_deepseek_api_key")
     if checks["clean_exists"] and not force:
         blockers.append("clean_already_exists")
     return {

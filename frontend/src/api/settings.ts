@@ -56,6 +56,35 @@ export interface RuntimeGpuConfig {
   ssh_password_configured?: boolean
 }
 
+export interface RuntimeProviderConfig {
+  base_url: string
+  api_key: string
+  api_key_configured?: boolean
+}
+
+export interface RuntimeModelsConfig {
+  llm: {
+    enabled: boolean
+    provider: string
+    default_model: string
+    reasoning_model: string
+    deepseek: RuntimeProviderConfig
+    outline_decision_max_tokens: number
+    outline_global_max_candidates: number
+    outline_max_risk_candidates: number
+  }
+  vision: {
+    enabled: boolean
+    provider: string
+    model: string
+    dashscope: RuntimeProviderConfig
+    outline_visual_max_candidates: number
+  }
+  asr: { model: string }
+  tts: { model: string }
+  image_generation: { model: string }
+}
+
 export interface BackupTarget {
   id: string
   label: string
@@ -81,6 +110,7 @@ export interface RuntimeBackupConfig {
 export interface RuntimeConfig {
   minio: RuntimeMinioConfig
   gpu: RuntimeGpuConfig
+  models: RuntimeModelsConfig
   backup: RuntimeBackupConfig
 }
 
@@ -122,6 +152,26 @@ export interface RuntimeStatus {
   warnings: string[]
   minio: MinioCheckResult
   gpu: GpuCheckResult
+  models: {
+    llm: {
+      enabled: boolean
+      provider: string
+      model: string
+      reasoning_model: string
+      api_key_configured: boolean
+      base_url: string
+    }
+    vision: {
+      enabled: boolean
+      provider: string
+      model: string
+      api_key_configured: boolean
+      base_url: string
+    }
+    asr_model: string
+    tts_model: string
+    image_generation_model: string
+  }
   backup: BackupCheckResult
 }
 

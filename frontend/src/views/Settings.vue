@@ -173,6 +173,116 @@
           </section>
         </el-tab-pane>
 
+        <el-tab-pane label="模型配置" name="models">
+          <section class="settings-panel">
+            <div class="panel-title">
+              <span>模型配置</span>
+              <el-tag :type="modelsReady ? 'success' : 'warning'">{{ modelsReady ? '可用' : '待配置' }}</el-tag>
+            </div>
+            <el-form :model="runtime.models" label-position="top" class="settings-form">
+              <div class="model-section">
+                <div class="model-section-title">
+                  <strong>目录重建 LLM</strong>
+                  <el-switch v-model="runtime.models.llm.enabled" active-text="启用" inactive-text="停用" />
+                </div>
+                <div class="form-grid">
+                  <el-form-item label="Provider">
+                    <el-input v-model="runtime.models.llm.provider" disabled />
+                  </el-form-item>
+                  <el-form-item label="默认模型">
+                    <el-input v-model="runtime.models.llm.default_model" placeholder="deepseek-v4-flash" />
+                  </el-form-item>
+                  <el-form-item label="推理模型">
+                    <el-input v-model="runtime.models.llm.reasoning_model" placeholder="deepseek-v4-pro" />
+                  </el-form-item>
+                  <el-form-item label="DeepSeek Base URL">
+                    <el-input v-model="runtime.models.llm.deepseek.base_url" placeholder="https://api.deepseek.com" />
+                  </el-form-item>
+                  <el-form-item label="DeepSeek API Key">
+                    <el-input v-model="runtime.models.llm.deepseek.api_key" type="password" show-password placeholder="留空表示沿用已保存值" />
+                  </el-form-item>
+                  <el-form-item label="目录候选上限">
+                    <el-input-number v-model="runtime.models.llm.outline_max_risk_candidates" :min="1" :max="1000" controls-position="right" />
+                  </el-form-item>
+                  <el-form-item label="全局候选上限">
+                    <el-input-number v-model="runtime.models.llm.outline_global_max_candidates" :min="1" :max="5000" controls-position="right" />
+                  </el-form-item>
+                  <el-form-item label="输出 Token 上限">
+                    <el-input-number v-model="runtime.models.llm.outline_decision_max_tokens" :min="1000" :max="64000" :step="1000" controls-position="right" />
+                  </el-form-item>
+                </div>
+              </div>
+
+              <div class="model-section">
+                <div class="model-section-title">
+                  <strong>目录视觉核实</strong>
+                  <el-switch v-model="runtime.models.vision.enabled" active-text="启用" inactive-text="停用" />
+                </div>
+                <div class="form-grid">
+                  <el-form-item label="Provider">
+                    <el-input v-model="runtime.models.vision.provider" disabled />
+                  </el-form-item>
+                  <el-form-item label="视觉模型">
+                    <el-input v-model="runtime.models.vision.model" placeholder="qwen3.7-plus" />
+                  </el-form-item>
+                  <el-form-item label="DashScope Base URL">
+                    <el-input v-model="runtime.models.vision.dashscope.base_url" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1" />
+                  </el-form-item>
+                  <el-form-item label="DashScope API Key">
+                    <el-input v-model="runtime.models.vision.dashscope.api_key" type="password" show-password placeholder="留空表示沿用已保存值" />
+                  </el-form-item>
+                  <el-form-item label="视觉候选上限">
+                    <el-input-number v-model="runtime.models.vision.outline_visual_max_candidates" :min="1" :max="1000" controls-position="right" />
+                  </el-form-item>
+                </div>
+              </div>
+
+              <div class="model-section">
+                <div class="model-section-title">
+                  <strong>预留模型</strong>
+                </div>
+                <div class="form-grid">
+                  <el-form-item label="ASR 模型">
+                    <el-input v-model="runtime.models.asr.model" placeholder="fun-asr-flash-2026-06-15" />
+                  </el-form-item>
+                  <el-form-item label="TTS 模型">
+                    <el-input v-model="runtime.models.tts.model" placeholder="qwen3-tts-instruct-flash-realtime" />
+                  </el-form-item>
+                  <el-form-item label="图片生成模型">
+                    <el-input v-model="runtime.models.image_generation.model" placeholder="qwen-image-2.0-pro" />
+                  </el-form-item>
+                </div>
+              </div>
+            </el-form>
+
+            <div class="probe-grid">
+              <div class="probe-row">
+                <span>LLM</span>
+                <el-tag :type="runtime.models.llm.enabled && !llmKeyReady ? 'danger' : 'success'">
+                  {{ runtime.models.llm.enabled ? (llmKeyReady ? 'OK' : '缺少 Key') : '停用' }}
+                </el-tag>
+              </div>
+              <div class="probe-row">
+                <span>Vision</span>
+                <el-tag :type="runtime.models.vision.enabled && !visionKeyReady ? 'danger' : 'success'">
+                  {{ runtime.models.vision.enabled ? (visionKeyReady ? 'OK' : '缺少 Key') : '停用' }}
+                </el-tag>
+              </div>
+            </div>
+
+            <div class="panel-actions">
+              <el-button :loading="loading.saving" @click="saveRuntime">
+                <el-icon><Check /></el-icon>
+                <span>保存</span>
+              </el-button>
+              <el-button :loading="loading.status" @click="refreshStatus">
+                <el-icon><RefreshRight /></el-icon>
+                <span>刷新状态</span>
+              </el-button>
+            </div>
+          </section>
+        </el-tab-pane>
+
         <el-tab-pane label="备份策略" name="backup">
           <section class="settings-panel">
             <div class="panel-title">
@@ -277,6 +387,34 @@ const defaultRuntime = (): RuntimeConfig => ({
     ssh_password: '',
     service_root: '/root/mineru-popo-service'
   },
+  models: {
+    llm: {
+      enabled: true,
+      provider: 'deepseek',
+      default_model: 'deepseek-v4-flash',
+      reasoning_model: 'deepseek-v4-pro',
+      deepseek: {
+        base_url: 'https://api.deepseek.com',
+        api_key: ''
+      },
+      outline_decision_max_tokens: 16000,
+      outline_global_max_candidates: 500,
+      outline_max_risk_candidates: 120
+    },
+    vision: {
+      enabled: false,
+      provider: 'dashscope',
+      model: 'qwen3.7-plus',
+      dashscope: {
+        base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        api_key: ''
+      },
+      outline_visual_max_candidates: 40
+    },
+    asr: { model: 'fun-asr-flash-2026-06-15' },
+    tts: { model: 'qwen3-tts-instruct-flash-realtime' },
+    image_generation: { model: 'qwen-image-2.0-pro' }
+  },
   backup: {
     enabled: false,
     mode: 'manifest',
@@ -318,6 +456,13 @@ const runtimeStatusText = computed(() => {
 
 const minioReady = computed(() => Boolean(minioCheck.value?.contract_ok || status.value?.minio.contract_ok))
 const gpuReady = computed(() => Boolean(gpuCheck.value?.wrapper_ok || status.value?.gpu.wrapper_ok))
+const llmKeyReady = computed(() => Boolean(runtime.value.models.llm.deepseek.api_key || runtime.value.models.llm.deepseek.api_key_configured || status.value?.models.llm.api_key_configured))
+const visionKeyReady = computed(() => Boolean(runtime.value.models.vision.dashscope.api_key || runtime.value.models.vision.dashscope.api_key_configured || status.value?.models.vision.api_key_configured))
+const modelsReady = computed(() => {
+  const llmOk = !runtime.value.models.llm.enabled || llmKeyReady.value
+  const visionOk = !runtime.value.models.vision.enabled || visionKeyReady.value
+  return llmOk && visionOk
+})
 const backupReady = computed(() => Boolean(status.value?.backup.ready_count || runtime.value.backup.targets.some(target => target.status === 'ready')))
 
 const bucketRows = computed(() => {
@@ -672,6 +817,23 @@ onMounted(async () => {
 
 .probe-row:last-child {
   border-right: none;
+}
+
+.model-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+}
+
+.model-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-primary);
 }
 
 .target-list {
