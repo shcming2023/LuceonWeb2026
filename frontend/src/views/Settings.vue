@@ -177,7 +177,7 @@
           <section class="settings-panel">
             <div class="panel-title">
               <span>模型配置</span>
-              <el-tag :type="modelsReady ? 'success' : 'warning'">{{ modelsReady ? '可用' : '待配置' }}</el-tag>
+              <el-tag :type="modelConnectivityTag">{{ modelConnectivityText }}</el-tag>
             </div>
             <el-form :model="runtime.models" label-position="top" class="settings-form">
               <div class="model-section">
@@ -258,16 +258,20 @@
             <div class="probe-grid">
               <div class="probe-row">
                 <span>LLM</span>
-                <el-tag :type="runtime.models.llm.enabled && !llmKeyReady ? 'danger' : 'success'">
-                  {{ runtime.models.llm.enabled ? (llmKeyReady ? 'OK' : '缺少 Key') : '停用' }}
+                <el-tag :type="modelProbeType(modelCheck?.checks.llm, runtime.models.llm.enabled && llmKeyReady)">
+                  {{ modelProbeText(modelCheck?.checks.llm, runtime.models.llm.enabled && llmKeyReady) }}
                 </el-tag>
               </div>
               <div class="probe-row">
                 <span>Vision</span>
-                <el-tag :type="runtime.models.vision.enabled && !visionKeyReady ? 'danger' : 'success'">
-                  {{ runtime.models.vision.enabled ? (visionKeyReady ? 'OK' : '缺少 Key') : '停用' }}
+                <el-tag :type="modelProbeType(modelCheck?.checks.vision, visionKeyReady)">
+                  {{ modelProbeText(modelCheck?.checks.vision, visionKeyReady) }}
                 </el-tag>
               </div>
+            </div>
+            <div v-if="modelCheck" class="model-test-detail">
+              <span>{{ modelProbeDetail(modelCheck.checks.llm) }}</span>
+              <span>{{ modelProbeDetail(modelCheck.checks.vision) }}</span>
             </div>
 
             <div class="panel-actions">
@@ -275,9 +279,9 @@
                 <el-icon><Check /></el-icon>
                 <span>保存</span>
               </el-button>
-              <el-button :loading="loading.status" @click="refreshStatus">
-                <el-icon><RefreshRight /></el-icon>
-                <span>刷新状态</span>
+              <el-button type="primary" :loading="loading.models" @click="checkModelsNow">
+                <el-icon><Connection /></el-icon>
+                <span>测试模型</span>
               </el-button>
             </div>
           </section>
@@ -357,6 +361,7 @@ import type {
   BackupRunResult,
   BackupTarget,
   GpuCheckResult,
+  ModelCheckResult,
   MinioCheckResult,
   RuntimeConfig,
   RuntimeStatus
@@ -431,6 +436,7 @@ const runtime = ref<RuntimeConfig>(defaultRuntime())
 const status = ref<RuntimeStatus | null>(null)
 const minioCheck = ref<MinioCheckResult | null>(null)
 const gpuCheck = ref<GpuCheckResult | null>(null)
+const modelCheck = ref<ModelCheckResult | null>(null)
 const backupRun = ref<BackupRunResult | null>(null)
 const loading = reactive({
   initial: false,
@@ -439,6 +445,7 @@ const loading = reactive({
   minio: false,
   ensure: false,
   gpu: false,
+  models: false,
   backup: false,
   backupRun: false
 })
@@ -462,6 +469,16 @@ const modelsReady = computed(() => {
   const llmOk = !runtime.value.models.llm.enabled || llmKeyReady.value
   const visionOk = !runtime.value.models.vision.enabled || visionKeyReady.value
   return llmOk && visionOk
+})
+const modelConnectivityText = computed(() => {
+  if (modelCheck.value?.checks.llm.ok && modelCheck.value?.checks.vision.ok) return '连通正常'
+  if (modelCheck.value && !modelCheck.value.ok) return '连通异常'
+  return modelsReady.value ? '配置完整' : '待配置'
+})
+const modelConnectivityTag = computed(() => {
+  if (modelCheck.value?.checks.llm.ok && modelCheck.value?.checks.vision.ok) return 'success'
+  if (modelCheck.value && !modelCheck.value.ok) return 'danger'
+  return modelsReady.value ? 'warning' : 'info'
 })
 const backupReady = computed(() => Boolean(status.value?.backup.ready_count || runtime.value.backup.targets.some(target => target.status === 'ready')))
 
@@ -562,6 +579,21 @@ const checkGpuNow = async () => {
   }
 }
 
+const checkModelsNow = async () => {
+  loading.models = true
+  try {
+    await saveRuntimeQuietly()
+    modelCheck.value = await settingsApi.checkModels()
+    const llmOk = Boolean(modelCheck.value.checks.llm.ok)
+    const visionOk = Boolean(modelCheck.value.checks.vision.ok)
+    ElMessage[llmOk && visionOk ? 'success' : 'warning'](llmOk && visionOk ? '模型连通正常' : '模型连通检查未全部通过')
+  } catch {
+    ElMessage.error('测试模型失败')
+  } finally {
+    loading.models = false
+  }
+}
+
 const checkBackupNow = async () => {
   loading.backup = true
   try {
@@ -615,6 +647,26 @@ const targetStatusType = (statusText?: string) => {
   if (statusText === 'ready') return 'success'
   if (statusText === 'disabled') return 'info'
   return 'warning'
+}
+
+const modelProbeType = (probe: ModelCheckResult['checks']['llm'] | undefined, configured: boolean) => {
+  if (probe?.ok) return 'success'
+  if (probe && !probe.skipped) return 'danger'
+  return configured ? 'warning' : 'info'
+}
+
+const modelProbeText = (probe: ModelCheckResult['checks']['llm'] | undefined, configured: boolean) => {
+  if (probe?.ok) return '连通正常'
+  if (probe?.skipped) return '跳过'
+  if (probe) return '连通异常'
+  return configured ? '待测试' : '未配置'
+}
+
+const modelProbeDetail = (probe: ModelCheckResult['checks']['llm']) => {
+  const latency = probe.latency_ms ? `${probe.latency_ms}ms` : ''
+  const status = probe.status_code ? `HTTP ${probe.status_code}` : ''
+  const error = probe.error ? ` · ${probe.error}` : ''
+  return `${probe.provider}/${probe.model || '-'} ${status} ${latency}${error}`.trim()
 }
 
 onMounted(async () => {
@@ -834,6 +886,15 @@ onMounted(async () => {
   justify-content: space-between;
   gap: 12px;
   color: var(--text-primary);
+}
+
+.model-test-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .target-list {

@@ -146,6 +146,24 @@ export interface BackupRunResult {
   targets: Array<{ id: string; path: string; manifest: string; copied: number }>
 }
 
+export interface ModelProbeResult {
+  provider: string
+  model: string
+  ok: boolean
+  skipped: boolean
+  status_code: number | null
+  latency_ms: number
+  error: string
+}
+
+export interface ModelCheckResult {
+  ok: boolean
+  checks: {
+    llm: ModelProbeResult
+    vision: ModelProbeResult
+  }
+}
+
 export interface RuntimeStatus {
   status: 'ready' | 'warning' | 'blocked' | string
   blockers: string[]
@@ -225,6 +243,11 @@ export const settingsApi = {
 
   checkGpu() {
     return api.post<GpuCheckResult>('/runtime/gpu/check')
+      .then(res => res.data)
+  },
+
+  checkModels() {
+    return api.post<ModelCheckResult>('/runtime/models/check')
       .then(res => res.data)
   },
 

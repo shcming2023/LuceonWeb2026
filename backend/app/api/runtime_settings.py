@@ -6,6 +6,7 @@ from app.services.runtime_settings import (
     check_backup_targets,
     check_gpu_runtime,
     check_minio_contract,
+    check_model_connectivity,
     load_runtime_config,
     run_manual_backup,
     runtime_status,
@@ -65,6 +66,15 @@ def check_gpu(user_id: str = Depends(get_user_id)):
         return check_gpu_runtime()
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"检查 GPU 服务失败: {exc}")
+
+
+@router.post("/runtime/models/check")
+def check_models(user_id: str = Depends(get_user_id)):
+    _ = user_id
+    try:
+        return check_model_connectivity()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"检查模型连通性失败: {exc}")
 
 
 @router.post("/runtime/backup/check")

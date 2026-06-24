@@ -300,6 +300,94 @@ def check_model_runtime() -> dict[str, Any]:
     }
 
 
+def _chat_completions_url(base_url: str) -> str:
+    base = str(base_url or "").rstrip("/")
+    if base.endswith("/chat/completions"):
+        return base
+    return f"{base}/chat/completions"
+
+
+def _probe_chat_model(provider: str, base_url: str, api_key: str, model: str) -> dict[str, Any]:
+    started = time.monotonic()
+    result = {
+        "provider": provider,
+        "model": model,
+        "ok": False,
+        "skipped": False,
+        "status_code": None,
+        "latency_ms": 0,
+        "error": "",
+    }
+    if not api_key:
+        result.update({"skipped": True, "error": "missing_api_key"})
+        return result
+    if not base_url:
+        result.update({"skipped": True, "error": "missing_base_url"})
+        return result
+    if not model:
+        result.update({"skipped": True, "error": "missing_model"})
+        return result
+    try:
+        response = httpx.post(
+            _chat_completions_url(base_url),
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": model,
+                "messages": [{"role": "user", "content": "Reply with OK."}],
+                "max_tokens": 8,
+                "temperature": 0,
+            },
+            timeout=20,
+        )
+        result["status_code"] = response.status_code
+        result["ok"] = 200 <= response.status_code < 300
+        if not result["ok"]:
+            result["error"] = _model_error_summary(response)
+    except Exception as exc:
+        result["error"] = str(exc)[:300]
+    finally:
+        result["latency_ms"] = int((time.monotonic() - started) * 1000)
+    return result
+
+
+def _model_error_summary(response: httpx.Response) -> str:
+    try:
+        data = response.json()
+    except Exception:
+        return response.text[:300]
+    if isinstance(data, dict):
+        error = data.get("error")
+        if isinstance(error, dict):
+            return str(error.get("message") or error.get("code") or error)[:300]
+        if error:
+            return str(error)[:300]
+        message = data.get("message")
+        if message:
+            return str(message)[:300]
+    return str(data)[:300]
+
+
+def check_model_connectivity() -> dict[str, Any]:
+    env = pipeline_env()
+    llm_model = env.get("LLM_DEFAULT_MODEL") or env.get("DEEPSEEK_MODEL") or ""
+    vision_model = env.get("VISION_MODEL") or env.get("DASHSCOPE_VISION_MODEL") or ""
+    checks = {
+        "llm": _probe_chat_model(
+            "deepseek",
+            env.get("DEEPSEEK_BASE_URL", ""),
+            env.get("DEEPSEEK_API_KEY", ""),
+            llm_model,
+        ),
+        "vision": _probe_chat_model(
+            "dashscope",
+            env.get("DASHSCOPE_BASE_URL", ""),
+            env.get("DASHSCOPE_API_KEY", ""),
+            vision_model,
+        ),
+    }
+    return {"ok": all(item.get("ok") or item.get("skipped") for item in checks.values()), "checks": checks}
+
+
 def check_minio_contract(create_missing: bool = False) -> dict[str, Any]:
     config = load_runtime_config(include_secrets=True)
     client = minio_client_from_config(config)
