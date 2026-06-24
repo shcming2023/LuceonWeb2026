@@ -607,6 +607,14 @@ def validate_outline_mechanical_qa(summary: dict[str, Any]) -> None:
         blockers.append(f"heading_parent_order:{heading_report.get('parent_order_violation_count')}")
     if heading_report.get("parent_level_violation_count"):
         blockers.append(f"heading_parent_level:{heading_report.get('parent_level_violation_count')}")
+    if heading_report.get("duplicate_same_parent_count"):
+        blockers.append(f"duplicate_same_parent_headings:{heading_report.get('duplicate_same_parent_count')}")
+    if heading_report.get("nested_numbered_major_heading_count"):
+        blockers.append(f"nested_numbered_major_headings:{heading_report.get('nested_numbered_major_heading_count')}")
+    final_outline_count = int(decision.get("final_outline_count") or decision.get("selected_count") or 0)
+    raw_unit_count = int(apply_report.get("unit_count") or chunk_report.get("unit_count") or 0)
+    if decision.get("decision_method") == "llm_global_candidate_outline" and final_outline_count and raw_unit_count > final_outline_count:
+        blockers.append(f"raw_units_exceed_final_outline:{raw_unit_count}>{final_outline_count}")
     candidate_types = candidates.get("candidate_type_counts") if isinstance(candidates.get("candidate_type_counts"), dict) else {}
     lesson_candidate_count = int(candidate_types.get("body_lesson_heading") or 0)
     max_heading_level = int(chunk_report.get("max_heading_level") or 0)
@@ -848,18 +856,61 @@ def heading_order_report(clean_md: Path) -> dict[str, Any]:
             return parse_chinese_number(chinese_chapter.group(1))
         return None
 
+    def normalized_heading_title(title: str) -> str:
+        normalized = re.sub(r"[^A-Za-z0-9\u4e00-\u9fff]+", " ", str(title or "")).strip().lower()
+        return re.sub(r"\s+", " ", normalized)
+
+    def bare_numbered_major_heading(title: str) -> bool:
+        return bool(re.match(r"^\d{1,2}\s+\S+", str(title or "").strip()))
+
+    def structural_container_title(title: str) -> bool:
+        return bool(
+            re.match(
+                r"^(Part|Chapter|Unit|Module|Section)\s+\S+|^第\s*[零〇一二两三四五六七八九十百千万0-9]+\s*[章节单元篇]",
+                str(title or "").strip(),
+                re.I,
+            )
+        )
+
     headings: list[dict[str, Any]] = []
     if clean_md.exists():
+        parent_stack: list[dict[str, Any]] = []
         for line_no, line in enumerate(clean_md.read_text(encoding="utf-8", errors="ignore").splitlines(), start=1):
             match = re.match(r"^(#{1,3})\s+(.+?)\s*$", line)
             if not match:
                 continue
-            headings.append({"line": line_no, "level": len(match.group(1)), "title": match.group(2)})
+            level = len(match.group(1))
+            title = match.group(2)
+            parent_stack = [item for item in parent_stack if int(item.get("level") or 0) < level]
+            parent_path = " > ".join(str(item.get("title") or "") for item in parent_stack)
+            heading = {
+                "line": line_no,
+                "level": level,
+                "title": title,
+                "normalized_title": normalized_heading_title(title),
+                "parent_path": parent_path,
+            }
+            headings.append(heading)
+            parent_stack.append(heading)
     seen_parent_numbers: dict[int, dict[str, Any]] = {}
     order_violations: list[dict[str, Any]] = []
     level_violations: list[dict[str, Any]] = []
+    duplicate_groups: dict[tuple[int, str, str], list[dict[str, Any]]] = {}
+    nested_numbered_by_parent: dict[str, list[dict[str, Any]]] = {}
     for heading in headings:
         title = str(heading.get("title") or "")
+        duplicate_key = (
+            int(heading.get("level") or 0),
+            str(heading.get("parent_path") or ""),
+            str(heading.get("normalized_title") or ""),
+        )
+        if duplicate_key[2]:
+            duplicate_groups.setdefault(duplicate_key, []).append(heading)
+        if bare_numbered_major_heading(title) and int(heading.get("level") or 0) > 1:
+            parent_path = str(heading.get("parent_path") or "")
+            parent_title = parent_path.split(" > ")[-1] if parent_path else ""
+            if parent_title and not structural_container_title(parent_title):
+                nested_numbered_by_parent.setdefault(parent_path, []).append(heading)
         parent_number = heading_parent_number(title)
         if heading.get("level") == 1 and parent_number is not None:
             seen_parent_numbers[parent_number] = heading
@@ -871,6 +922,34 @@ def heading_order_report(clean_md: Path) -> dict[str, Any]:
                 order_violations.append(heading)
             elif int(heading.get("level") or 9) <= int(parent_heading.get("level") or 1):
                 level_violations.append({"child": heading, "parent": parent_heading})
+    duplicate_same_parent = []
+    for (level, parent_path, _normalized), rows in duplicate_groups.items():
+        if len(rows) < 2:
+            continue
+        first_title = str(rows[0].get("title") or "")
+        if level != 1 and not re.search(r"\d", first_title):
+            continue
+        duplicate_same_parent.append(
+            {
+                "level": level,
+                "title": first_title,
+                "parent_path": parent_path,
+                "lines": [row.get("line") for row in rows[:10]],
+                "count": len(rows),
+            }
+        )
+    nested_numbered_major_headings = [
+        {
+            "parent_path": parent_path,
+            "count": len(rows),
+            "headings": [
+                {"line": row.get("line"), "level": row.get("level"), "title": row.get("title")}
+                for row in rows[:10]
+            ],
+        }
+        for parent_path, rows in nested_numbered_by_parent.items()
+        if len(rows) >= 3
+    ]
     return {
         "available": clean_md.exists(),
         "heading_count": len(headings),
@@ -878,6 +957,10 @@ def heading_order_report(clean_md: Path) -> dict[str, Any]:
         "parent_order_violations": order_violations[:20],
         "parent_level_violation_count": len(level_violations),
         "parent_level_violations": level_violations[:20],
+        "duplicate_same_parent_count": len(duplicate_same_parent),
+        "duplicate_same_parent_headings": duplicate_same_parent[:20],
+        "nested_numbered_major_heading_count": len(nested_numbered_major_headings),
+        "nested_numbered_major_headings": nested_numbered_major_headings[:20],
     }
 
 
@@ -919,6 +1002,7 @@ def outline_artifact_summary(body_final: Path) -> dict[str, Any]:
         "outline_apply_report": {
             "available": bool(apply_report),
             "method": apply_report.get("method"),
+            "unit_count": apply_report.get("unit_count"),
             "eligible_block_count": apply_report.get("eligible_block_count"),
             "assigned_block_count": apply_report.get("assigned_block_count"),
             "unassigned_block_count": apply_report.get("unassigned_block_count"),
