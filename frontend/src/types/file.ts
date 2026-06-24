@@ -21,6 +21,7 @@ export interface FileItem {
   start_at?: string
   finish_at?: string
   status: FileStatus
+  has_manifest?: boolean
   backend?: BackendType
   error_message?: string | null
   parse_stage?: string | null
@@ -29,6 +30,14 @@ export interface FileItem {
   last_heartbeat_at?: string | null
   mineru_task_id?: string | null
   mineru_task_status?: string | null
+  title?: string
+  input_filename?: string
+  review_stage?: 'parse' | 'raw' | 'clean' | string
+  review_status?: 'pending' | 'pass' | 'needs_fix' | 'reject' | string
+  review_tags?: string[]
+  review_note?: string
+  report_generated_at?: string | null
+  has_report?: boolean
 }
 
 // 导出格式类型

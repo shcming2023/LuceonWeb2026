@@ -18,7 +18,7 @@ const router = createRouter({
     {
       path: '/upload',
       name: 'Upload',
-      component: () => import('../views/Upload.vue')
+      redirect: '/files'
     },
     {
       path: '/files',
@@ -32,6 +32,33 @@ const router = createRouter({
       props: route => ({
         fileId: route.params.id,
         page: Number(route.query.page) || 1
+      })
+    },
+    {
+      path: '/review',
+      name: 'Review',
+      redirect: '/review/pdf'
+    },
+    {
+      path: '/review/pdf',
+      name: 'PdfParseReview',
+      component: () => import('../views/Review.vue'),
+      meta: { reviewMode: 'page' }
+    },
+    {
+      path: '/review/outline',
+      name: 'OutlineRebuildReview',
+      component: () => import('../views/Review.vue'),
+      meta: { reviewMode: 'outline' }
+    },
+    {
+      path: '/review/preview/:id',
+      name: 'ReviewPreview',
+      redirect: route => ({
+        path: route.query.outline === '1' ? '/review/outline' : '/review/pdf',
+        query: {
+          asset_id: String(route.params.id)
+        }
       })
     },
     {

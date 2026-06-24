@@ -8,3 +8,4 @@ SQLAlchemy==2.0.41
 redis
 httpx==0.28.1
 pytest==8.4.0
+PyMuPDF==1.26.1

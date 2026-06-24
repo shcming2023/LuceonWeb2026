@@ -1,6 +1,6 @@
-# MinerU 文档解析系统后端
+# LuceonWeb2026 后端
 
-基于 FastAPI 的后端服务，支持文档上传、解析、导出等功能。
+基于 FastAPI 的 Luceon 溯源审查与生产后端，支持文档上传、解析、审查、导出，以及 PDF -> MinerU -> MinerU-Popo -> Raw -> Clean 阶段状态管理。
 
 ## 启动方式
 

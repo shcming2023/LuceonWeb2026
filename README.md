@@ -1,8 +1,8 @@
-# MinerU Web
+# LuceonWeb2026
 
 Language: English | [中文](README.zh-CN.md)
 
-MinerU Web is a web application for document parsing and result review. It provides file upload, asynchronous parsing, original file preview, Markdown preview, PDF source tracing, Popo-enhanced result comparison, and Markdown export. The current version targets MinerU 3.3.1. The business backend now calls the official MinerU HTTP service instead of depending on MinerU internal Python APIs.
+LuceonWeb2026 is a Luceon review and production workbench for the PDF -> MinerU -> MinerU-Popo -> Raw -> Clean pipeline. It is adapted from MinerU Web and keeps the document upload, parsing, original file preview, Markdown preview, PDF source tracing, Popo comparison, and export foundations. The current parser integration targets MinerU 3.3.1 through the official MinerU HTTP service instead of depending on MinerU internal Python APIs.
 
 Current release: `v3.3.1`.
 
@@ -93,7 +93,7 @@ For Linux server deployment, macOS Apple Silicon setup, model downloads, MinerU 
 ## Project Structure
 
 ```text
-mineru-web/
+luceonweb2026/
 ├── backend/                  # FastAPI backend, worker, database models, and tests
 ├── frontend/                 # Vue 3 frontend
 ├── docs/

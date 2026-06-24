@@ -1,0 +1,96 @@
+import api from './index'
+import type { FileListResponse, DownloadUrlResponse } from './files'
+import type { MarkdownVariant, PopoStatus, SourceMap } from '@/types/file'
+
+export type ReviewMarkdownVariant = MarkdownVariant | 'popo_page'
+
+export interface ManifestImportPayload {
+  manifest_bucket: string
+  manifest_object: string
+  title?: string
+}
+
+export interface ReviewMetadataPayload {
+  review_status: string
+  review_tags: string[]
+  review_note: string
+}
+
+export const reviewApi = {
+  importManifest(payload: ManifestImportPayload) {
+    return api.post('/review/assets/from_manifest', payload).then(res => res.data)
+  },
+
+  importManifestBatch(payload: { manifest_bucket: string; manifest_objects: string[] }) {
+    return api.post('/review/assets/batch_from_manifest', payload).then(res => res.data)
+  },
+
+  syncMinio(payload: {
+    manifest_bucket: string
+    prefix: string
+    input_bucket?: string
+    input_prefix?: string
+    include_input_pdfs?: boolean
+    limit?: number
+  }) {
+    return api.post('/review/assets/sync_minio', payload).then(res => res.data)
+  },
+
+  getAssets(params: { page: number; page_size: number; search?: string; view?: string }) {
+    return api.get<FileListResponse>('/review/assets', { params }).then(res => res.data)
+  },
+
+  getAsset(assetId: string) {
+    return api.get(`/review/assets/${assetId}`).then(res => res.data)
+  },
+
+  updateMetadata(assetId: string, payload: ReviewMetadataPayload) {
+    return api.patch(`/review/assets/${assetId}/metadata`, payload).then(res => res.data)
+  },
+
+  generateReport(assetId: string) {
+    return api.post(`/review/assets/${assetId}/report`).then(res => res.data)
+  },
+
+  getReportUrl(assetId: string) {
+    return `/api/review/assets/${assetId}/report`
+  },
+
+  getParsedContent(assetId: string, variant: ReviewMarkdownVariant = 'markdown_page') {
+    return api.get<string>(`/review/assets/${assetId}/parsed_content`, {
+      params: { variant }
+    }).then(res => res.data)
+  },
+
+  getPopoStatus(assetId: string) {
+    return api.get<PopoStatus>(`/review/assets/${assetId}/popo/status`)
+      .then(res => res.data)
+  },
+
+  getSourceMap(assetId: string) {
+    return api.get<SourceMap>(`/review/assets/${assetId}/source_map`)
+      .then(res => res.data)
+  },
+
+  getOutlineReview(assetId: string) {
+    return api.get(`/review/assets/${assetId}/outline_review`)
+      .then(res => res.data)
+  },
+
+  getDownloadUrl(assetId: string) {
+    return api.get<DownloadUrlResponse>(`/review/assets/${assetId}/download_url`)
+      .then(res => res.data)
+  },
+
+  getPageImageUrl(assetId: string, page: number, width = 1200) {
+    const params = new URLSearchParams({
+      page: String(page),
+      width: String(width)
+    })
+    return `/api/review/assets/${assetId}/page_image?${params.toString()}`
+  },
+
+  getContentUrl(assetId: string) {
+    return `/api/review/assets/${assetId}/content`
+  }
+}

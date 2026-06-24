@@ -1,0 +1,77 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+    image: luceon-review-frontend:local
+    ports:
+      - "${LUCEON_REVIEW_WEB_PORT:-28081}:80"
+    environment:
+      - TZ=Asia/Shanghai
+    depends_on:
+      - backend
+    networks:
+      - luceon-review-net
+
+  backend:
+    build:
+      context: ./backend
+    image: luceon-review-backend:local
+    ports:
+      - "${LUCEON_REVIEW_API_PORT:-28080}:8000"
+    environment:
+      - TZ=Asia/Shanghai
+      - REDIS_HOST=redis
+      - DATABASE_URL=sqlite:////data/mineru.db
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT:?set MINIO_ENDPOINT}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:?set MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:?set MINIO_SECRET_KEY}
+      - MINIO_BUCKET=${MINIO_BUCKET:-mineru-files}
+      - MINIO_MDS_BUCKET=${MINIO_MDS_BUCKET:-mds}
+      - MINERU_API_URL=${MINERU_API_URL:-http://host.docker.internal:8083}
+      - GPU_WRAPPER_URL=${GPU_WRAPPER_URL:-${MINERU_API_URL:-http://host.docker.internal:8083}}
+      - GPU_WRAPPER_API_KEY=${GPU_WRAPPER_API_KEY:-}
+      - LUCEON_PIPELINE_SCRIPT=/app/scripts/luceon_pdf_pipeline.py
+      - LUCEON_PIPELINE_WORKDIR=/app/scripts
+      - LUCEON_RUNTIME_CONFIG=/data/runtime_config.json
+      - LUCEON_BACKUP_ROOT=/backups
+      - LUCEON_PIPELINE_WORK_ROOT=/data/pipeline-work
+      - LUCEON_POPO_RAW_SKILL=/skills/pdf-clean-markdown-rebuild
+      - LUCEON_RAW_CLEAN_SKILL=/skills/eduassets-raw-cleaner
+      - LUCEON_RAW_OUTLINE_LLM=${LUCEON_RAW_OUTLINE_LLM:-1}
+      - LUCEON_RAW_OUTLINE_VISION=${LUCEON_RAW_OUTLINE_VISION:-0}
+      - LUCEON_RAW_OUTLINE_LLM_MAX_RISK_CANDIDATES=${LUCEON_RAW_OUTLINE_LLM_MAX_RISK_CANDIDATES:-120}
+      - LUCEON_RAW_OUTLINE_VISUAL_MAX_CANDIDATES=${LUCEON_RAW_OUTLINE_VISUAL_MAX_CANDIDATES:-40}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-chat}
+      - DEEPSEEK_OUTLINE_DECISION_MAX_TOKENS=${DEEPSEEK_OUTLINE_DECISION_MAX_TOKENS:-16000}
+      - DEEPSEEK_OUTLINE_GLOBAL_MAX_CANDIDATES=${DEEPSEEK_OUTLINE_GLOBAL_MAX_CANDIDATES:-500}
+      - HY_VISION_API_KEY=${HY_VISION_API_KEY:-}
+      - HY_VISION_BASE_URL=${HY_VISION_BASE_URL:-https://tokenhub.tencentmaas.com/v1}
+      - HY_VISION_MODEL=${HY_VISION_MODEL:-hy-vision-2.0-instruct}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
+      - DASHSCOPE_BASE_URL=${DASHSCOPE_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      - DASHSCOPE_VISION_MODEL=${DASHSCOPE_VISION_MODEL:-}
+      - VISION_MODEL=${VISION_MODEL:-${DASHSCOPE_VISION_MODEL:-qwen3.7-plus}}
+    volumes:
+      - ./runtime/backend:/data
+      - ./runtime/backups:/backups
+      - /Users/concm/.codex/skills/pdf-clean-markdown-rebuild:/skills/pdf-clean-markdown-rebuild:ro
+      - /Users/concm/.codex/skills/eduassets-raw-cleaner:/skills/eduassets-raw-cleaner:ro
+    depends_on:
+      - redis
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - luceon-review-net
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly no
+    networks:
+      - luceon-review-net
+
+networks:
+  luceon-review-net:
+    name: luceon-review-net
+    driver: bridge

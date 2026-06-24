@@ -49,6 +49,11 @@ export const filesApi = {
       .then(res => res.data)
   },
 
+  getFile(fileId: string) {
+    return api.get(`/files/${fileId}`)
+      .then(res => res.data)
+  },
+
   /**
    * 上传文件
    */

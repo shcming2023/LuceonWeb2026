@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { HomeFilled, Upload, Document, Setting, SwitchButton, User } from '@element-plus/icons-vue'
+import { Document, Files, HomeFilled, Setting, SwitchButton, User, View } from '@element-plus/icons-vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ref, computed } from 'vue'
 import { logoutUser, useCurrentUser } from '@/utils/user'
@@ -10,16 +10,24 @@ const route = useRoute()
 const menuItems = [
   { icon: HomeFilled, path: '/', tooltip: '首页', label: '首页' },
   { icon: Document, path: '/files', tooltip: '文件管理', label: '文件' },
-  { icon: Upload, path: '/upload', tooltip: '上传', label: '上传' }
+  { icon: View, path: '/review/pdf', tooltip: 'PDF解析审查', label: 'PDF审查' },
+  { icon: Files, path: '/review/outline', tooltip: '目录重建审查', label: '目录审查' },
+  { icon: Setting, path: '/settings', tooltip: '运行设置', label: '设置' }
 ]
 
 const activeMenu = computed(() => {
   const path = route.path
   if (path === '/') return '/'
+  if (path.startsWith('/review/preview')) {
+    return route.query.outline === '1' ? '/review/outline' : '/review/pdf'
+  }
+  if (path.startsWith('/review/outline')) return '/review/outline'
+  if (path.startsWith('/review/pdf') || path === '/review') return '/review/pdf'
+  if (path.startsWith('/settings')) return '/settings'
+  if (path.startsWith('/files')) return '/files'
   return menuItems.find(item => path === item.path)?.path || path
 })
 
-const isSettingsPage = computed(() => route.path === '/settings')
 const isAuthPage = computed(() => route.meta.public === true)
 const currentUser = useCurrentUser()
 
@@ -48,7 +56,7 @@ const handleLogout = async () => {
         <div class="logo-wrapper">
           <img src="/logo.png" alt="logo" class="logo" />
           <transition name="fade">
-            <span v-show="sidebarHover" class="logo-text">MinerU</span>
+            <span v-show="sidebarHover" class="logo-text">Luceon</span>
           </transition>
         </div>
       </div>
@@ -81,31 +89,6 @@ const handleLogout = async () => {
           </transition>
         </div>
 
-        <div 
-          class="nav-item settings-item" 
-          :class="{ active: isSettingsPage }" 
-          @click="router.push('/settings')"
-        >
-          <div class="nav-icon-wrapper">
-            <el-icon :size="20"><Setting /></el-icon>
-          </div>
-          <transition name="fade">
-            <span v-show="sidebarHover" class="nav-label">设置</span>
-          </transition>
-        </div>
-        
-        <a 
-          href="https://github.com/lpdswing/Mineru-Web" 
-          target="_blank" 
-          rel="noopener noreferrer" 
-          class="github-link"
-        >
-          <img src="/github-logo.svg" alt="GitHub" width="20" height="20" />
-          <transition name="fade">
-            <span v-show="sidebarHover" class="nav-label">GitHub</span>
-          </transition>
-        </a>
-
         <div class="nav-item logout-item" @click="handleLogout">
           <div class="nav-icon-wrapper">
             <el-icon :size="20"><SwitchButton /></el-icon>
@@ -118,7 +101,7 @@ const handleLogout = async () => {
         <div class="version-badge">
           <span class="version-dot"></span>
           <transition name="fade">
-            <span v-show="sidebarHover" class="version-text">v3.3.1</span>
+            <span v-show="sidebarHover" class="version-text">2026</span>
           </transition>
         </div>
       </div>
@@ -126,7 +109,7 @@ const handleLogout = async () => {
 
     <!-- 主内容区 -->
     <div class="main-area">
-      <template v-if="route.name === 'FilePreview'">
+      <template v-if="route.name === 'FilePreview' || route.name === 'ReviewPreview'">
         <router-view />
       </template>
       <template v-else>

@@ -50,6 +50,7 @@ wheels/
 .coverage
 htmlcov/
 .env
+.env.*
 venv/
 .venv/
 env/
@@ -59,6 +60,7 @@ magic-pdf.json
 mineru.json
 models2.0/
 output/
+runtime/
 graphify-out/
 .codex/
 .superpowers/

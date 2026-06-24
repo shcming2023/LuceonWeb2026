@@ -63,7 +63,7 @@
       <!-- 顶部工具栏 -->
       <header class="preview-header">
         <div class="header-left">
-          <span class="current-file-name">{{ currentFile?.filename || '未选择文件' }}</span>
+          <span class="current-file-name">{{ currentFile?.input_filename || currentFile?.filename || '未选择文件' }}</span>
         </div>
         <div class="header-center">
           <div class="view-toggle">
@@ -94,6 +94,10 @@
           </div>
         </div>
         <div class="header-right">
+          <el-button v-if="isReviewMode" @click="openReviewDrawer">
+            <el-icon><EditPen /></el-icon>
+            <span>审查记录</span>
+          </el-button>
           <el-dropdown @command="handleExport">
             <el-button type="primary">
               <el-icon><Download /></el-icon>
@@ -173,9 +177,9 @@
           <div class="panel-content">
             <div v-if="isPdf(currentFile?.filename)" class="pdf-review-bar">
               <div class="pdf-review-title">
-                <span>{{ markdownVariant === 'compare' ? 'OCR / Popo 对照' : 'Markdown 预览' }}</span>
+                <span>{{ markdownVariant === 'compare' ? 'OCR / Popo 对照' : markdownVariant === 'outline' ? '目录审查' : 'Markdown 预览' }}</span>
                 <small>
-                  {{ markdownVariant === 'compare' ? '原始 OCR 结果 / Popo 增强结果' : `Page ${activeSourcePage} / ${pageSections.length || 0}` }}
+                  {{ markdownVariant === 'compare' ? '原始 OCR 结果 / Popo 增强结果' : markdownVariant === 'outline' ? `目录单元 ${directoryUnits.length}` : `Page ${activeSourcePage} / ${pageSections.length || 0}` }}
                 </small>
               </div>
               <div class="pdf-review-actions">
@@ -222,6 +226,119 @@
             <el-empty v-else-if="markdownLoadError" :description="markdownLoadError" :image-size="100">
               <el-button type="primary" @click="fetchParsedContent">重试</el-button>
             </el-empty>
+            <div v-else-if="markdownVariant === 'outline'" class="outline-review">
+              <div class="outline-summary">
+                <div class="outline-metric">
+                  <span>PDF 目录线索</span>
+                  <strong>{{ outlineReview?.summary?.pdf_outline_count || 0 }}</strong>
+                </div>
+                <div class="outline-metric">
+                  <span>目录单元</span>
+                  <strong>{{ outlineReview?.summary?.directory_unit_count || 0 }}</strong>
+                </div>
+                <div class="outline-metric">
+                  <span>Raw 可审</span>
+                  <strong>{{ outlineReview?.summary?.raw_markdown_available ? '是' : '否' }}</strong>
+                </div>
+                <div class="outline-metric">
+                  <span>Clean 可审</span>
+                  <strong>{{ outlineReview?.summary?.clean_markdown_available ? '是' : '否' }}</strong>
+                </div>
+              </div>
+              <div v-if="outlineReview?.summary?.findings?.length" class="outline-findings">
+                <el-tag v-for="finding in outlineReview.summary.findings" :key="finding" type="warning">
+                  {{ finding }}
+                </el-tag>
+              </div>
+              <div class="directory-review-layout">
+                <section class="directory-tree-panel">
+                  <header>
+                    <span>目录单元</span>
+                    <small>按 Raw 标题切分，点击后联动左侧 PDF</small>
+                  </header>
+                  <div v-if="directoryUnits.length" class="directory-unit-list">
+                    <button
+                      v-for="unit in directoryUnits"
+                      :key="unit.id"
+                      type="button"
+                      class="directory-unit"
+                      :class="{ active: selectedOutlineUnit?.id === unit.id }"
+                      :style="{ paddingLeft: `${Math.min(unit.level || 1, 5) * 10}px` }"
+                      @click="selectOutlineUnit(unit)"
+                    >
+                      <span>{{ unit.title }}</span>
+                      <small>{{ pageRangeLabel(unit) }}</small>
+                      <em :class="`status-${unit.clean_status || 'pending'}`">{{ outlineUnitStatusLabel(unit) }}</em>
+                    </button>
+                  </div>
+                  <el-empty v-else description="Raw 目录单元暂不可用" :image-size="80" />
+                </section>
+
+                <section class="directory-detail-panel">
+                  <template v-if="selectedOutlineUnit">
+                    <header class="directory-detail-header">
+                      <div>
+                        <span>{{ selectedOutlineUnit.title }}</span>
+                        <small>{{ selectedOutlineUnit.path_label }}</small>
+                      </div>
+                      <button
+                        v-if="selectedOutlineUnit.page_start"
+                        type="button"
+                        class="outline-jump-btn"
+                        @click="handleOutlinePageClick(selectedOutlineUnit.page_start)"
+                      >
+                        PDF {{ pageRangeLabel(selectedOutlineUnit) }}
+                      </button>
+                    </header>
+                    <div class="directory-evidence-strip">
+                      <span>Raw {{ selectedOutlineUnit.raw_char_count || 0 }} 字符</span>
+                      <span>Clean {{ selectedOutlineUnit.clean_char_count || 0 }} 字符</span>
+                      <span>{{ outlineUnitStatusLabel(selectedOutlineUnit) }}</span>
+                    </div>
+                    <div class="directory-code-columns">
+                      <article class="directory-code-pane">
+                        <header>
+                          <span>Raw 代码</span>
+                          <small>{{ stageObjectLabel(outlineReview?.stage_refs?.raw_markdown) }}</small>
+                        </header>
+                        <pre>{{ selectedOutlineUnit.raw_text || '该目录节点暂无 Raw 内容' }}</pre>
+                      </article>
+                      <article class="directory-code-pane">
+                        <header>
+                          <span>Clean 代码</span>
+                          <small>{{ stageObjectLabel(outlineReview?.stage_refs?.clean_markdown) }}</small>
+                        </header>
+                        <pre>{{ selectedOutlineUnit.clean_text || 'Clean 阶段暂未产出或未匹配该目录节点' }}</pre>
+                      </article>
+                    </div>
+                  </template>
+                  <el-empty v-else description="请选择目录单元" :image-size="80" />
+                </section>
+              </div>
+              <section class="pdf-outline-panel">
+                <header>
+                  <span>PDF 目录线索</span>
+                  <small>用于核对原书目录页是否被 Popo2Raw 正确继承</small>
+                </header>
+                <div v-if="outlineReview?.pdf_outline?.length" class="pdf-outline-list">
+                  <button
+                    v-for="(item, index) in outlineReview.pdf_outline"
+                    :key="`pdf-${index}`"
+                    type="button"
+                    class="pdf-outline-item"
+                    @click="item.page && handleOutlinePageClick(item.page)"
+                  >
+                    <span>{{ item.title }}</span>
+                    <small v-if="item.page">P{{ item.page }}</small>
+                  </button>
+                </div>
+                <el-empty v-else description="未识别到 PDF 目录线索" :image-size="80" />
+              </section>
+              <section v-if="outlineReview?.stage_refs" class="stage-ref-panel">
+                <span>Raw: {{ stageObjectLabel(outlineReview.stage_refs.raw_markdown || outlineReview.stage_refs.raw_manifest) }}</span>
+                <span>Clean: {{ stageObjectLabel(outlineReview.stage_refs.clean_markdown || outlineReview.stage_refs.clean_manifest) }}</span>
+              </section>
+            </div>
             <div v-else-if="markdownVariant === 'compare'" class="markdown-compare">
               <section class="compare-column">
                 <div class="compare-header">
@@ -308,6 +425,53 @@
         </div>
       </div>
     </main>
+    <el-drawer
+      v-if="isReviewMode"
+      v-model="reviewDrawerVisible"
+      title="审查记录"
+      size="360px"
+      append-to-body
+    >
+      <div class="review-drawer">
+        <el-form label-position="top">
+          <el-form-item label="审查状态">
+            <el-segmented v-model="reviewForm.review_status" :options="reviewStatusOptions" />
+          </el-form-item>
+          <el-form-item label="审查标签">
+            <el-select
+              v-model="reviewForm.review_tags"
+              multiple
+              filterable
+              allow-create
+              default-first-option
+              placeholder="输入后回车新增标签"
+            >
+              <el-option v-for="tag in commonReviewTags" :key="tag" :label="tag" :value="tag" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="审查备注">
+            <el-input
+              v-model="reviewForm.review_note"
+              type="textarea"
+              :rows="8"
+              placeholder="记录缺页、表格错位、图片缺失、Popo 需复核等问题"
+            />
+          </el-form-item>
+        </el-form>
+        <div class="review-drawer-actions">
+          <el-button type="primary" :loading="savingReview" @click="saveReviewMetadata">保存</el-button>
+          <el-button :loading="generatingReport" @click="generateReviewReport">生成报告</el-button>
+          <el-button :disabled="!currentFile?.has_report" @click="downloadReviewReport">下载报告</el-button>
+        </div>
+        <el-alert
+          v-if="currentFile?.report_generated_at"
+          type="success"
+          :closable="false"
+          show-icon
+          :title="`报告已生成：${currentFile.report_generated_at}`"
+        />
+      </div>
+    </el-drawer>
   </div>
 </template>
 
@@ -325,12 +489,13 @@ import mk from 'markdown-it-katex'
 import 'katex/dist/katex.min.css'
 import mammoth from 'mammoth'
 import * as XLSX from 'xlsx'
-import api from '@/api'
 import { filesApi } from '@/api/files'
+import { reviewApi } from '@/api/review'
 import PdfSourceViewer from '@/components/PdfSourceViewer.vue'
 import {
   ExportFormatNames,
   type ExportFormat,
+  type FileItem,
   type MarkdownVariant,
   type PopoStatus,
   type PopoStatusValue,
@@ -353,14 +518,7 @@ import {
 
 const route = useRoute()
 const md = MarkdownIt({ html: true, linkify: true, typographer: true }).use(mk)
-
-interface FileItem {
-  id: string
-  filename: string
-  size: number
-  uploadTime: string
-  status: string
-}
+const isReviewMode = computed(() => route.name === 'ReviewPreview')
 
 interface MarkdownPageSection {
   page: number
@@ -380,12 +538,46 @@ interface MarkdownTraceSection extends MarkdownPageSection {
   traceBlocks: MarkdownTraceBlock[]
 }
 
+interface StageObjectRef {
+  bucket?: string
+  object?: string
+}
+
+interface DirectoryUnit {
+  id: string
+  index: number
+  title: string
+  level: number
+  path?: string[]
+  path_label?: string
+  page?: number
+  page_start?: number
+  page_end?: number
+  raw_text?: string
+  clean_text?: string
+  raw_char_count?: number
+  clean_char_count?: number
+  raw_truncated?: boolean
+  clean_truncated?: boolean
+  clean_status?: 'matched' | 'missing' | 'pending' | string
+  heading_match?: boolean
+}
+
+interface OutlineReviewPayload {
+  summary?: Record<string, any>
+  stage_refs?: Record<string, StageObjectRef>
+  pdf_outline?: any[]
+  raw_outline?: any[]
+  clean_outline?: any[]
+  directory_units?: DirectoryUnit[]
+}
+
 interface PdfSourceViewerRef {
   scrollToPage: (pageNumber: number) => Promise<void> | void
   scrollToBlock: (pageNumber: number, blockId: string) => Promise<void> | void
 }
 
-type MarkdownViewVariant = MarkdownVariant | 'compare'
+type MarkdownViewVariant = MarkdownVariant | 'compare' | 'outline'
 
 const sidebarCollapsed = ref(false)
 const allFiles = ref<FileItem[]>([])
@@ -394,6 +586,21 @@ const sidebarPageSize = ref(10)
 const sidebarTotal = ref(0)
 const fileSearch = ref('')
 const currentFile = ref<FileItem | null>(null)
+const reviewDrawerVisible = ref(false)
+const savingReview = ref(false)
+const generatingReport = ref(false)
+const reviewForm = ref({
+  review_status: 'pending',
+  review_tags: [] as string[],
+  review_note: ''
+})
+const reviewStatusOptions = [
+  { label: '待审查', value: 'pending' },
+  { label: '通过', value: 'pass' },
+  { label: '需修正', value: 'needs_fix' },
+  { label: '退回', value: 'reject' }
+]
+const commonReviewTags = ['表格需复核', '图片需复核', 'OCR 噪声', '缺页风险', '目录错位', '可入库']
 const isReady = ref(false)
 const pdfViewerRef = ref<PdfSourceViewerRef | null>(null)
 const markdownScrollRef = ref<HTMLElement | null>(null)
@@ -409,27 +616,42 @@ let sourceMapRequestSeq = 0
 // 获取侧边栏文件列表
 const fetchSidebarFiles = async () => {
   try {
-    const res = await api.get('/files', {
-      params: { page: sidebarPage.value, page_size: sidebarPageSize.value, search: fileSearch.value }
-    })
-    allFiles.value = res.data.files
-    sidebarTotal.value = res.data.total
+    const res = isReviewMode.value
+      ? await reviewApi.getAssets({ page: sidebarPage.value, page_size: sidebarPageSize.value, search: fileSearch.value })
+      : await filesApi.getFiles({ page: sidebarPage.value, page_size: sidebarPageSize.value, search: fileSearch.value })
+    allFiles.value = res.files
+    sidebarTotal.value = res.total
   } catch (e) {
-    ElMessage.error('获取文件列表失败')
+    ElMessage.error(isReviewMode.value ? '获取审查列表失败' : '获取文件列表失败')
     allFiles.value = []
     sidebarTotal.value = 0
+  }
+}
+
+const getPreviewApi = () => {
+  return isReviewMode.value ? reviewApi : filesApi
+}
+
+const syncReviewForm = () => {
+  reviewForm.value = {
+    review_status: currentFile.value?.review_status || 'pending',
+    review_tags: [...(currentFile.value?.review_tags || [])],
+    review_note: currentFile.value?.review_note || ''
   }
 }
 
 // 根据ID获取单个文件信息
 const loadFileById = async (fileId: string) => {
   try {
-    const res = await api.get(`/files/${fileId}`)
-    if (res.data) {
-      currentFile.value = res.data
+    const data = isReviewMode.value
+      ? await reviewApi.getAsset(fileId)
+      : await filesApi.getFile(fileId)
+    if (data) {
+      currentFile.value = data
+      syncReviewForm()
     }
   } catch (e) {
-    ElMessage.error('获取文件信息失败')
+    ElMessage.error(isReviewMode.value ? '获取审查资产失败' : '获取文件信息失败')
   }
 }
 
@@ -465,6 +687,7 @@ onMounted(async () => {
   // 如果没有指定文件，选中第一个
   if (!currentFile.value && allFiles.value.length > 0) {
     currentFile.value = allFiles.value[0]
+    syncReviewForm()
   }
 
   if (currentFile.value) {
@@ -485,10 +708,13 @@ const filteredFiles = computed(() => allFiles.value)
 
 const selectFile = (file: FileItem) => {
   currentFile.value = file
+  syncReviewForm()
   page.value = 1
   markdownVariant.value = preferredMarkdownVariant(file)
   popoStatus.value = null
   parsedContent.value = ''
+  outlineReview.value = null
+  selectedOutlineUnitId.value = ''
   markdownLoadError.value = ''
   originLoadError.value = ''
   loading.value = false
@@ -503,6 +729,53 @@ const selectFile = (file: FileItem) => {
   }
 }
 
+const openReviewDrawer = () => {
+  syncReviewForm()
+  reviewDrawerVisible.value = true
+}
+
+const saveReviewMetadata = async () => {
+  if (!currentFile.value || !isReviewMode.value) return
+  savingReview.value = true
+  try {
+    const updated = await reviewApi.updateMetadata(currentFile.value.id, reviewForm.value)
+    currentFile.value = updated
+    syncReviewForm()
+    await fetchSidebarFiles()
+    ElMessage.success('审查记录已保存')
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || '保存审查记录失败')
+  } finally {
+    savingReview.value = false
+  }
+}
+
+const generateReviewReport = async () => {
+  if (!currentFile.value || !isReviewMode.value) return
+  generatingReport.value = true
+  try {
+    const res = await reviewApi.generateReport(currentFile.value.id)
+    currentFile.value = res.asset
+    syncReviewForm()
+    await fetchSidebarFiles()
+    ElMessage.success('审查报告已生成')
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || '生成审查报告失败')
+  } finally {
+    generatingReport.value = false
+  }
+}
+
+const downloadReviewReport = () => {
+  if (!currentFile.value || !isReviewMode.value) return
+  const link = document.createElement('a')
+  link.href = reviewApi.getReportUrl(currentFile.value.id)
+  link.download = `${currentFile.value.title || currentFile.value.filename}-review-report.md`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+
 const showOrigin = ref(true)
 const isImage = (name?: string) => name ? /\.(png|jpe?g|gif|bmp|webp)$/i.test(name) : false
 const isText = (name?: string) => name ? /\.(txt|md|json|log)$/i.test(name) : false
@@ -511,6 +784,9 @@ const isExcel = (name?: string) => name ? /\.(xls|xlsx)$/i.test(name) : false
 const isOffice = (name?: string) => name ? /\.(doc|docx|xls|xlsx)$/i.test(name) : false
 const isPdf = (name?: string) => name ? /\.pdf$/i.test(name) : false
 const preferredMarkdownVariant = (file: FileItem): MarkdownViewVariant => {
+  if (isReviewMode.value && route.query.outline === '1' && file.has_manifest !== false) return 'outline'
+  if (isReviewMode.value && file.has_manifest === false) return 'popo'
+  if (isReviewMode.value && isPdf(file.filename)) return 'popo'
   return isPdf(file.filename) ? 'markdown_page' : 'markdown'
 }
 
@@ -525,15 +801,20 @@ const popoStatus = ref<PopoStatus | null>(null)
 const compareMarkdownContent = ref('')
 const comparePopoContent = ref('')
 const comparePopoStatus = ref<PopoStatus | null>(null)
+const outlineReview = ref<OutlineReviewPayload | null>(null)
+const selectedOutlineUnitId = ref('')
 const markdownVariantNames: Record<MarkdownViewVariant, string> = {
   markdown: '原始 Markdown',
   markdown_page: '按页 Markdown',
   popo: 'Popo 增强',
-  compare: '对比'
+  compare: '对比',
+  outline: '目录审查'
 }
-const pdfMarkdownVariantNames: Record<'markdown_page' | 'compare', string> = {
+const pdfMarkdownVariantNames: Record<'markdown_page' | 'popo' | 'compare' | 'outline', string> = {
   markdown_page: '溯源阅读',
-  compare: 'OCR-Popo 对照'
+  popo: 'Popo 文本',
+  compare: 'OCR-Popo 对照',
+  outline: '目录审查'
 }
 const popoStatusNames: Record<PopoStatusValue, string> = {
   not_available: 'Popo 结果暂不可用',
@@ -555,6 +836,28 @@ const comparePopoStatusLabel = computed(() => {
   if (!comparePopoStatus.value) return '未加载'
   return popoStatusNames[comparePopoStatus.value.status]
 })
+const directoryUnits = computed<DirectoryUnit[]>(() => outlineReview.value?.directory_units || [])
+const selectedOutlineUnit = computed<DirectoryUnit | null>(() => {
+  if (!directoryUnits.value.length) return null
+  return directoryUnits.value.find((unit) => unit.id === selectedOutlineUnitId.value) || directoryUnits.value[0]
+})
+const pageRangeLabel = (unit: DirectoryUnit) => {
+  const start = unit.page_start || unit.page
+  const end = unit.page_end
+  if (!start) return '无页码'
+  if (end && end > start) return `P${start}-${end}`
+  return `P${start}`
+}
+const outlineUnitStatusLabel = (unit: DirectoryUnit) => {
+  if (unit.clean_status === 'matched') return 'Clean 已匹配'
+  if (unit.clean_status === 'missing') return 'Clean 缺失'
+  return '待 Clean'
+}
+const stageObjectLabel = (ref?: StageObjectRef | null) => {
+  if (!ref?.object) return '未接入'
+  const name = ref.object.split('/').filter(Boolean).pop()
+  return name || ref.object
+}
 const sourceBlockTotal = computed(() => {
   return sourceMap.value.pages.reduce((total, item) => total + item.blocks.length, 0)
 })
@@ -775,6 +1078,15 @@ const isLatestMarkdownRequest = (seq: number, fileId: string, variant: MarkdownV
 
 const fetchParsedContent = async () => {
   if (!currentFile.value) return
+  if (isReviewMode.value && currentFile.value.has_manifest === false) {
+    parsedContent.value = ''
+    markdownLoadError.value = '该 input PDF 尚未产出 manifest，暂不可溯源审查'
+    return
+  }
+  if (markdownVariant.value === 'outline') {
+    await fetchOutlineReview()
+    return
+  }
   if (markdownVariant.value === 'compare') {
     await fetchCompareContent()
     return
@@ -785,7 +1097,7 @@ const fetchParsedContent = async () => {
   loading.value = true
   markdownLoadError.value = ''
   try {
-    const data = await filesApi.getParsedContent(fileId, variant)
+    const data = await getPreviewApi().getParsedContent(fileId, variant)
     if (!isLatestMarkdownRequest(seq, fileId, variant)) return
     parsedContent.value = data || ''
     popoStatus.value = null
@@ -794,6 +1106,19 @@ const fetchParsedContent = async () => {
     parsedContent.value = ''
     if (variant === 'popo') {
       await fetchPopoStatus(fileId, seq, variant)
+    } else if (isReviewMode.value) {
+      try {
+        const fallback = await getPreviewApi().getParsedContent(fileId, 'popo')
+        if (!isLatestMarkdownRequest(seq, fileId, variant)) return
+        parsedContent.value = fallback || ''
+        markdownVariant.value = 'popo'
+        popoStatus.value = null
+        markdownLoadError.value = ''
+        loading.value = false
+      } catch {
+        if (!isLatestMarkdownRequest(seq, fileId, variant)) return
+        markdownLoadError.value = '解析内容暂不可用或加载失败'
+      }
     } else {
       markdownLoadError.value = '解析内容暂不可用或加载失败'
       ElMessage.error('获取解析内容失败')
@@ -803,6 +1128,46 @@ const fetchParsedContent = async () => {
       loading.value = false
     }
   }
+}
+
+const fetchOutlineReview = async () => {
+  if (!currentFile.value || !isReviewMode.value) return
+  const fileId = currentFile.value.id
+  const variant: MarkdownViewVariant = 'outline'
+  const seq = ++markdownRequestSeq
+  loading.value = true
+  markdownLoadError.value = ''
+  try {
+    const data = await reviewApi.getOutlineReview(fileId)
+    if (!isLatestMarkdownRequest(seq, fileId, variant)) return
+    outlineReview.value = data
+    const units = data?.directory_units || []
+    if (!units.some((unit: DirectoryUnit) => unit.id === selectedOutlineUnitId.value)) {
+      selectedOutlineUnitId.value = units[0]?.id || ''
+    }
+  } catch (e) {
+    if (!isLatestMarkdownRequest(seq, fileId, variant)) return
+    outlineReview.value = null
+    markdownLoadError.value = '目录审查数据暂不可用'
+  } finally {
+    if (isLatestMarkdownRequest(seq, fileId, variant)) {
+      loading.value = false
+    }
+  }
+}
+
+const selectOutlineUnit = async (unit: DirectoryUnit) => {
+  selectedOutlineUnitId.value = unit.id
+  const targetPage = unit.page_start || unit.page
+  if (targetPage) {
+    await handleOutlinePageClick(targetPage)
+  }
+}
+
+const handleOutlinePageClick = async (pageNumber: number) => {
+  activeSourcePage.value = pageNumber
+  currentPdfPage.value = pageNumber
+  await pdfViewerRef.value?.scrollToPage(pageNumber)
 }
 
 const fetchPopoStatus = async (
@@ -815,7 +1180,7 @@ const fetchPopoStatus = async (
     return
   }
   try {
-    const res = await filesApi.getPopoStatus(fileId)
+    const res = await getPreviewApi().getPopoStatus(fileId)
     if (!isLatestMarkdownRequest(seq, fileId, variant)) return
     popoStatus.value = res || { status: 'not_available', message: '' }
   } catch (e) {
@@ -825,7 +1190,7 @@ const fetchPopoStatus = async (
 }
 
 const fetchVariantContent = async (fileId: string, variant: MarkdownVariant) => {
-  return await filesApi.getParsedContent(fileId, variant)
+  return await getPreviewApi().getParsedContent(fileId, variant)
 }
 
 const fetchCompareContent = async () => {
@@ -838,6 +1203,7 @@ const fetchCompareContent = async () => {
   compareMarkdownContent.value = ''
   comparePopoContent.value = ''
   comparePopoStatus.value = null
+  outlineReview.value = null
   try {
     const [markdownResult, popoResult] = await Promise.allSettled([
       fetchVariantContent(fileId, 'markdown'),
@@ -850,7 +1216,7 @@ const fetchCompareContent = async () => {
       comparePopoContent.value = popoResult.value
     } else {
       try {
-        const statusRes = await filesApi.getPopoStatus(fileId)
+        const statusRes = await getPreviewApi().getPopoStatus(fileId)
         if (!isLatestMarkdownRequest(seq, fileId, variant)) return
         comparePopoStatus.value = statusRes || { status: 'not_available', message: '' }
       } catch (e) {
@@ -883,6 +1249,21 @@ watch(viewMode, (newMode) => {
 
 const handleExport = async (format: ExportFormat) => {
   if (!currentFile.value) return
+  if (isReviewMode.value) {
+    try {
+      const res = await reviewApi.getDownloadUrl(currentFile.value.id)
+      const link = document.createElement('a')
+      link.href = res.url
+      link.download = currentFile.value.filename
+      link.target = '_blank'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    } catch {
+      ElMessage.error('下载源 PDF 失败')
+    }
+    return
+  }
   if (currentFile.value.status !== 'parsed') {
     ElMessage.warning('解析完成后才能导出')
     return
@@ -922,7 +1303,7 @@ const fetchFileUrl = async () => {
   loadingOrigin.value = true
   originLoadError.value = ''
   try {
-    const res = await filesApi.getDownloadUrl(currentFile.value.id)
+    const res = await getPreviewApi().getDownloadUrl(currentFile.value.id)
     fileUrl.value = res.url
   } catch (e) {
     fileUrl.value = ''
@@ -946,7 +1327,7 @@ const fetchSourceMap = async () => {
 
   sourceMapLoading.value = true
   try {
-    const data = await filesApi.getSourceMap(file.id)
+    const data = await getPreviewApi().getSourceMap(file.id)
     if (seq !== sourceMapRequestSeq || currentFile.value?.id !== file.id) return
     sourceMap.value = data || { pages: [] }
     if (!activeSourceBlockId.value) {
@@ -1010,7 +1391,7 @@ const reloadOriginPreview = async () => {
   currentPdfPage.value = 1
   if (isPdf(currentFile.value.filename)) {
     loadingOrigin.value = true
-    fileUrl.value = filesApi.getContentUrl(currentFile.value.id)
+    fileUrl.value = getPreviewApi().getContentUrl(currentFile.value.id)
     await fetchSourceMap()
     loadingOrigin.value = false
   } else {
@@ -1023,6 +1404,9 @@ const reloadOriginPreview = async () => {
 
 watch(currentFile, async (newFile) => {
   if (!newFile) return
+  if (isReviewMode.value && newFile.has_manifest === false) {
+    viewMode.value = 'origin'
+  }
   fileUrl.value = ''
   textContent.value = ''
   officeContent.value = ''
@@ -1322,6 +1706,298 @@ const compareRenderedPopo = computed(() => md.render(comparePopoContent.value ||
   border-color: var(--border-light);
   background: var(--bg-primary);
   color: var(--primary-color);
+}
+
+.review-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.review-drawer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.outline-review {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.outline-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.outline-metric {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+}
+
+.outline-metric span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.outline-metric strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-primary);
+  font-size: 20px;
+}
+
+.outline-findings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.directory-review-layout {
+  min-height: 560px;
+  display: grid;
+  grid-template-columns: minmax(220px, 31%) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.directory-tree-panel,
+.directory-detail-panel,
+.pdf-outline-panel,
+.stage-ref-panel {
+  min-width: 0;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+}
+
+.directory-tree-panel,
+.directory-detail-panel {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.directory-tree-panel header,
+.pdf-outline-panel header {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.directory-tree-panel header span,
+.pdf-outline-panel header span,
+.directory-code-pane header span {
+  display: block;
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.directory-tree-panel header small,
+.pdf-outline-panel header small,
+.directory-code-pane header small,
+.directory-detail-header small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.directory-unit-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px;
+}
+
+.directory-unit {
+  width: 100%;
+  min-height: 40px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 8px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.directory-unit:hover,
+.directory-unit.active {
+  background: var(--bg-tertiary);
+}
+
+.directory-unit.active {
+  color: var(--primary-color);
+}
+
+.directory-unit span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.directory-unit small,
+.directory-unit em {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.directory-unit em {
+  grid-column: 1 / -1;
+}
+
+.directory-unit em.status-matched {
+  color: var(--success-color);
+}
+
+.directory-unit em.status-missing {
+  color: var(--warning-color);
+}
+
+.directory-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.directory-detail-header span {
+  display: block;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.outline-jump-btn {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.outline-jump-btn:hover {
+  color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.directory-evidence-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-secondary);
+}
+
+.directory-evidence-strip span,
+.stage-ref-panel span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.directory-code-columns {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--border-light);
+}
+
+.directory-code-pane {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+}
+
+.directory-code-pane header {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.directory-code-pane pre {
+  flex: 1;
+  min-height: 380px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pdf-outline-list {
+  max-height: 180px;
+  overflow: auto;
+  padding: 6px;
+}
+
+.pdf-outline-item {
+  width: 100%;
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.pdf-outline-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.pdf-outline-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.pdf-outline-item small {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.stage-ref-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 10px;
+  background: var(--bg-secondary);
 }
 
 .source-trace-chip {
@@ -1806,6 +2482,15 @@ const compareRenderedPopo = computed(() => md.render(comparePopoContent.value ||
 
   .compare-column {
     min-height: 360px;
+  }
+
+  .directory-review-layout,
+  .directory-code-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .directory-tree-panel {
+    max-height: 360px;
   }
 }
 

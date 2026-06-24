@@ -1,350 +1,611 @@
 <template>
   <div class="settings-root">
-    <div class="settings-container">
-      <!-- 页面头部 -->
+    <div class="settings-shell">
       <div class="page-header">
         <div class="header-icon">
-          <el-icon :size="24"><Setting /></el-icon>
+          <el-icon :size="22"><Setting /></el-icon>
         </div>
         <div class="header-text">
-          <h1 class="page-title">系统设置</h1>
-          <p class="page-subtitle">配置文档解析参数</p>
+          <h1 class="page-title">运行设置</h1>
+          <p class="page-subtitle">资产层、GPU 调度与备份</p>
         </div>
+        <el-button :loading="loading.status" @click="refreshStatus">
+          <el-icon><RefreshRight /></el-icon>
+          <span>刷新状态</span>
+        </el-button>
       </div>
 
-      <!-- 设置表单 -->
-      <div class="settings-card">
-        <el-form :model="settings" label-position="top" class="settings-form">
-          <!-- OCR设置组 -->
-          <div class="form-section">
-            <div class="section-title">
-              <el-icon><View /></el-icon>
-              <span>OCR 设置</span>
+      <el-tabs v-model="activeTab" class="settings-tabs">
+        <el-tab-pane label="系统状态" name="status">
+          <section class="settings-panel">
+            <div class="panel-title">
+              <span>运行总览</span>
+              <el-tag :type="runtimeTagType">{{ runtimeStatusText }}</el-tag>
             </div>
-            
-            <div class="form-grid">
-              <el-form-item label="强制开启OCR">
-                <div class="switch-wrapper">
-                  <el-switch
-                    v-model="settings.forceOcr"
-                    :disabled="!supportsParseMethod"
-                  />
-                  <span class="switch-label">{{ settings.forceOcr ? '已开启' : '已关闭' }}</span>
-                </div>
-                <div v-if="!supportsParseMethod" class="form-tip">
-                  <el-icon><InfoFilled /></el-icon>
-                  <span>仅 Pipeline / Hybrid 模式支持此选项</span>
-                </div>
-              </el-form-item>
-
-              <el-form-item label="OCR识别语言">
-                <el-select v-model="settings.ocrLanguage" class="full-width">
-                  <el-option label="中英日繁混合 (ch)" value="ch" />
-                  <el-option label="中英日繁混合+手写 (ch_server)" value="ch_server" />
-                  <el-option label="中英日繁混合+手写 (ch_lite)" value="ch_lite" />
-                  <el-option label="英语 (en)" value="en" />
-                  <el-option label="韩语 (korean)" value="korean" />
-                  <el-option label="日语 (japan)" value="japan" />
-                  <el-option label="繁体中文 (chinese_cht)" value="chinese_cht" />
-                  <el-option label="泰米尔语 (ta)" value="ta" />
-                  <el-option label="泰卢固语 (te)" value="te" />
-                  <el-option label="格鲁吉亚语 (ka)" value="ka" />
-                  <el-option label="拉丁语 (latin)" value="latin" />
-                  <el-option label="阿拉伯语 (arabic)" value="arabic" />
-                  <el-option label="东斯拉夫语 (east_slavic)" value="east_slavic" />
-                  <el-option label="西里尔语 (cyrillic)" value="cyrillic" />
-                  <el-option label="天城文 (devanagari)" value="devanagari" />
-                </el-select>
-              </el-form-item>
+            <div class="status-grid">
+              <div class="status-cell">
+                <span class="status-label">MinIO 合约</span>
+                <strong>{{ status?.minio.contract_ok ? '正常' : '待处理' }}</strong>
+                <small>{{ status?.minio.endpoint || runtime.minio.endpoint || '-' }}</small>
+              </div>
+              <div class="status-cell">
+                <span class="status-label">GPU Wrapper</span>
+                <strong>{{ status?.gpu.wrapper_ok ? '可用' : '不可用' }}</strong>
+                <small>{{ status?.gpu.wrapper_url || runtime.gpu.wrapper_url || '-' }}</small>
+              </div>
+              <div class="status-cell">
+                <span class="status-label">Staged API</span>
+                <strong>{{ status?.gpu.staged_api_ok ? '可用' : '待确认' }}</strong>
+                <small>{{ status?.gpu.ssh_status || 'ssh skipped' }}</small>
+              </div>
+              <div class="status-cell">
+                <span class="status-label">备份目标</span>
+                <strong>{{ status?.backup.ready_count ?? 0 }} 个可写</strong>
+                <small>{{ lastBackupText }}</small>
+              </div>
             </div>
-          </div>
-
-          <!-- 识别功能组 -->
-          <div class="form-section">
-            <div class="section-title">
-              <el-icon><Document /></el-icon>
-              <span>识别功能</span>
+            <div v-if="status?.blockers.length || status?.warnings.length" class="issue-list">
+              <el-tag v-for="item in status.blockers" :key="`b-${item}`" type="danger">{{ item }}</el-tag>
+              <el-tag v-for="item in status.warnings" :key="`w-${item}`" type="warning">{{ item }}</el-tag>
             </div>
-            
-            <div class="form-grid">
-              <el-form-item label="公式识别">
-                <div class="switch-wrapper">
-                  <el-switch v-model="settings.formulaRecognition" />
-                  <span class="switch-label">{{ settings.formulaRecognition ? '已开启' : '已关闭' }}</span>
-                </div>
-              </el-form-item>
+          </section>
+        </el-tab-pane>
 
-              <el-form-item label="表格识别">
-                <div class="switch-wrapper">
-                  <el-switch v-model="settings.tableRecognition" />
-                  <span class="switch-label">{{ settings.tableRecognition ? '已开启' : '已关闭' }}</span>
-                </div>
-              </el-form-item>
+        <el-tab-pane label="MinIO 资产" name="minio">
+          <section class="settings-panel">
+            <div class="panel-title">
+              <span>MinIO</span>
+              <el-tag :type="minioReady ? 'success' : 'warning'">{{ minioReady ? '合约正常' : '需要检查' }}</el-tag>
             </div>
-          </div>
+            <el-form :model="runtime.minio" label-position="top" class="settings-form">
+              <div class="form-grid">
+                <el-form-item label="Endpoint">
+                  <el-input v-model="runtime.minio.endpoint" placeholder="127.0.0.1:9000" />
+                </el-form-item>
+                <el-form-item label="Public Endpoint">
+                  <el-input v-model="runtime.minio.public_endpoint" placeholder="http://公网或内网地址:9000" />
+                </el-form-item>
+                <el-form-item label="Access Key">
+                  <el-input v-model="runtime.minio.access_key" placeholder="留空表示沿用已保存值" />
+                </el-form-item>
+                <el-form-item label="Secret Key">
+                  <el-input v-model="runtime.minio.secret_key" type="password" show-password placeholder="留空表示沿用已保存值" />
+                </el-form-item>
+                <el-form-item label="Region">
+                  <el-input v-model="runtime.minio.region" />
+                </el-form-item>
+                <el-form-item label="HTTPS">
+                  <el-switch v-model="runtime.minio.secure" />
+                </el-form-item>
+              </div>
+            </el-form>
 
-          <!-- 引擎设置组 -->
-          <div class="form-section">
-            <div class="section-title">
-              <el-icon><Cpu /></el-icon>
-              <span>后端引擎</span>
+            <div class="bucket-table">
+              <div class="table-row table-head">
+                <span>篮子</span>
+                <span>角色</span>
+                <span>状态</span>
+              </div>
+              <div v-for="bucket in bucketRows" :key="bucket.bucket" class="table-row">
+                <span>{{ bucket.bucket }}</span>
+                <span>{{ bucket.role }}</span>
+                <el-tag :type="bucket.exists ? 'success' : 'danger'">{{ bucket.exists ? '存在' : '缺失' }}</el-tag>
+              </div>
             </div>
-            
-            <el-form-item label="选择引擎">
-              <el-select v-model="settings.backend" class="full-width">
-                <el-option label="Pipeline" value="pipeline" />
-                <el-option label="VLM Engine" value="vlm-engine" />
-                <el-option label="VLM HTTP Client" value="vlm-http-client" />
-                <el-option label="Hybrid Engine" value="hybrid-engine" />
-                <el-option label="Hybrid HTTP Client" value="hybrid-http-client" />
-              </el-select>
-            </el-form-item>
-          </div>
 
-          <div class="form-section">
-            <div class="section-title">
-              <el-icon><Connection /></el-icon>
-              <span>解析服务状态</span>
-              <el-button
-                class="section-action"
-                type="primary"
-                link
-                :loading="healthLoading"
-                @click="loadMineruHealth"
-              >
-                刷新
+            <div class="panel-actions">
+              <el-button :loading="loading.saving" @click="saveRuntime">
+                <el-icon><Check /></el-icon>
+                <span>保存</span>
+              </el-button>
+              <el-button :loading="loading.minio" @click="checkMinioNow">
+                <el-icon><Connection /></el-icon>
+                <span>检查 MinIO</span>
+              </el-button>
+              <el-button type="primary" :loading="loading.ensure" @click="ensureBuckets">
+                <el-icon><FolderChecked /></el-icon>
+                <span>维护篮子</span>
               </el-button>
             </div>
+          </section>
+        </el-tab-pane>
 
-            <div v-if="healthLoading && !mineruHealth" class="loading-state">
-              <el-icon class="is-loading"><RefreshRight /></el-icon>
-              <span>正在检查解析服务...</span>
+        <el-tab-pane label="GPU 算力" name="gpu">
+          <section class="settings-panel">
+            <div class="panel-title">
+              <span>GPU Wrapper</span>
+              <el-tag :type="gpuReady ? 'success' : 'warning'">{{ gpuReady ? '可用' : '待确认' }}</el-tag>
             </div>
-            <div v-else-if="mineruHealth" class="health-grid">
-              <div class="health-row">
-                <span class="health-label">服务地址</span>
-                <span class="health-value">{{ mineruHealth.base_url || '-' }}</span>
+            <el-form :model="runtime.gpu" label-position="top" class="settings-form">
+              <div class="form-grid">
+                <el-form-item label="Wrapper URL">
+                  <el-input v-model="runtime.gpu.wrapper_url" placeholder="http://gpu-host:18080" />
+                </el-form-item>
+                <el-form-item label="API Key">
+                  <el-input v-model="runtime.gpu.api_key" type="password" show-password placeholder="留空表示沿用已保存值" />
+                </el-form-item>
+                <el-form-item label="SSH Host">
+                  <el-input v-model="runtime.gpu.ssh_host" placeholder="113.31.105.253" />
+                </el-form-item>
+                <el-form-item label="SSH Port">
+                  <el-input-number v-model="runtime.gpu.ssh_port" :min="1" :max="65535" controls-position="right" />
+                </el-form-item>
+                <el-form-item label="SSH User">
+                  <el-input v-model="runtime.gpu.ssh_user" />
+                </el-form-item>
+                <el-form-item label="SSH Key Path">
+                  <el-input v-model="runtime.gpu.ssh_key_path" placeholder="~/.ssh/id_ed25519" />
+                </el-form-item>
+                <el-form-item label="SSH Password">
+                  <el-input v-model="runtime.gpu.ssh_password" type="password" show-password placeholder="留空表示沿用已保存值" />
+                </el-form-item>
+                <el-form-item label="Service Root">
+                  <el-input v-model="runtime.gpu.service_root" />
+                </el-form-item>
               </div>
-              <div class="health-row">
-                <span class="health-label">状态</span>
-                <el-tag :type="mineruHealth.available ? 'success' : 'danger'">
-                  {{ mineruHealth.available ? '可用' : '不可用' }}
-                </el-tag>
-              </div>
-              <div v-if="mineruHealth.version" class="health-row">
-                <span class="health-label">MinerU 版本</span>
-                <span class="health-value">{{ mineruHealth.version }}</span>
-              </div>
-              <div v-if="mineruHealth.error" class="health-row">
-                <span class="health-label">错误</span>
-                <span class="health-value error">{{ mineruHealth.error }}</span>
-              </div>
-            </div>
-          </div>
+            </el-form>
 
-          <!-- 操作按钮 -->
-          <div class="form-actions">
-            <el-button @click="resetSettings" size="large" :disabled="savingSettings">
-              <el-icon><RefreshRight /></el-icon>
-              <span>重置</span>
-            </el-button>
-            <el-button type="primary" @click="saveSettings" size="large" :loading="savingSettings">
-              <el-icon><Check /></el-icon>
-              <span>保存设置</span>
-            </el-button>
-          </div>
-        </el-form>
-      </div>
+            <div v-if="gpuCheck" class="probe-grid">
+              <div class="probe-row">
+                <span>Wrapper Health</span>
+                <el-tag :type="gpuCheck.wrapper_ok ? 'success' : 'danger'">{{ gpuCheck.wrapper_ok ? 'OK' : 'FAIL' }}</el-tag>
+              </div>
+              <div class="probe-row">
+                <span>Staged API</span>
+                <el-tag :type="gpuCheck.staged_api_ok ? 'success' : 'warning'">{{ gpuCheck.staged_api_ok ? 'OK' : 'CHECK' }}</el-tag>
+              </div>
+              <div class="probe-row">
+                <span>SSH</span>
+                <el-tag :type="gpuCheck.ssh_ok ? 'success' : gpuCheck.ssh_status === 'skipped' ? 'info' : 'warning'">{{ gpuCheck.ssh_status }}</el-tag>
+              </div>
+            </div>
+
+            <div class="panel-actions">
+              <el-button :loading="loading.saving" @click="saveRuntime">
+                <el-icon><Check /></el-icon>
+                <span>保存</span>
+              </el-button>
+              <el-button type="primary" :loading="loading.gpu" @click="checkGpuNow">
+                <el-icon><Monitor /></el-icon>
+                <span>检查 GPU</span>
+              </el-button>
+            </div>
+          </section>
+        </el-tab-pane>
+
+        <el-tab-pane label="备份策略" name="backup">
+          <section class="settings-panel">
+            <div class="panel-title">
+              <span>资产备份</span>
+              <el-tag :type="backupReady ? 'success' : 'warning'">{{ backupReady ? '目标可写' : '待检查' }}</el-tag>
+            </div>
+            <el-form :model="runtime.backup" label-position="top" class="settings-form">
+              <div class="form-grid">
+                <el-form-item label="启用备份">
+                  <el-switch v-model="runtime.backup.enabled" />
+                </el-form-item>
+                <el-form-item label="备份模式">
+                  <el-segmented v-model="runtime.backup.mode" :options="backupModes" />
+                </el-form-item>
+                <el-form-item label="定时策略">
+                  <el-switch v-model="runtime.backup.schedule_enabled" />
+                </el-form-item>
+                <el-form-item label="间隔小时">
+                  <el-input-number v-model="runtime.backup.interval_hours" :min="1" :max="720" controls-position="right" />
+                </el-form-item>
+                <el-form-item label="包含辅助对象">
+                  <el-switch v-model="runtime.backup.include_auxiliary" />
+                </el-form-item>
+                <el-form-item label="对象上限">
+                  <el-input-number v-model="runtime.backup.max_objects" :min="100" :max="500000" :step="1000" controls-position="right" />
+                </el-form-item>
+              </div>
+            </el-form>
+
+            <div class="target-list">
+              <div v-for="target in runtime.backup.targets" :key="target.id" class="target-row">
+                <el-switch v-model="target.enabled" />
+                <span class="target-label">{{ target.label }}</span>
+                <el-input v-model="target.path" placeholder="/Volumes/.../LuceonBackup" />
+                <el-tag :type="targetStatusType(target.status)">{{ target.status || 'unknown' }}</el-tag>
+              </div>
+            </div>
+
+            <div v-if="backupRun" class="backup-result">
+              <span>最近手动备份</span>
+              <strong>{{ backupRun.object_count }} 个对象</strong>
+              <small>{{ backupRun.targets.map(target => target.path).join(' / ') || '-' }}</small>
+            </div>
+
+            <div class="panel-actions">
+              <el-button :loading="loading.saving" @click="saveRuntime">
+                <el-icon><Check /></el-icon>
+                <span>保存</span>
+              </el-button>
+              <el-button :loading="loading.backup" @click="checkBackupNow">
+                <el-icon><FolderChecked /></el-icon>
+                <span>检查路径</span>
+              </el-button>
+              <el-button type="primary" :loading="loading.backupRun" @click="runBackupNow">
+                <el-icon><Upload /></el-icon>
+                <span>手动备份</span>
+              </el-button>
+            </div>
+          </section>
+        </el-tab-pane>
+      </el-tabs>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Setting, View, Document, Cpu, InfoFilled, RefreshRight, Check, Connection } from '@element-plus/icons-vue'
+import { Check, Connection, FolderChecked, Monitor, RefreshRight, Setting, Upload } from '@element-plus/icons-vue'
 import { settingsApi } from '@/api/settings'
-import type { MineruBackend, MineruHealthResponse } from '@/api/settings'
+import type {
+  BackupRunResult,
+  BackupTarget,
+  GpuCheckResult,
+  MinioCheckResult,
+  RuntimeConfig,
+  RuntimeStatus
+} from '@/api/settings'
 
-interface Settings {
-  forceOcr: boolean
-  ocrLanguage: string
-  formulaRecognition: boolean
-  tableRecognition: boolean
-  version: string
-  backend: MineruBackend
-}
+const backupModes = [
+  { label: '清单', value: 'manifest' },
+  { label: '复制', value: 'copy' }
+]
 
-const defaultSettings: Settings = {
-  forceOcr: false,
-  ocrLanguage: 'ch',
-  formulaRecognition: true,
-  tableRecognition: true,
-  version: '',
-  backend: 'pipeline'
-}
-
-const settings = ref<Settings>({ ...defaultSettings })
-const mineruHealth = ref<MineruHealthResponse | null>(null)
-const savingSettings = ref(false)
-const healthLoading = ref(false)
-const supportsParseMethod = computed(() => {
-  return settings.value.backend === 'pipeline' || settings.value.backend.startsWith('hybrid-')
+const defaultRuntime = (): RuntimeConfig => ({
+  minio: {
+    endpoint: '',
+    public_endpoint: '',
+    secure: false,
+    access_key: '',
+    secret_key: '',
+    region: 'us-east-1',
+    contract_buckets: ['eduassets-input', 'eduassets-mineru', 'eduassets-minerupopo', 'eduassets-raw', 'eduassets-clean', 'eduassets-parsed']
+  },
+  gpu: {
+    wrapper_url: '',
+    api_key: '',
+    ssh_host: '',
+    ssh_port: 23,
+    ssh_user: 'root',
+    ssh_key_path: '',
+    ssh_password: '',
+    service_root: '/root/mineru-popo-service'
+  },
+  backup: {
+    enabled: false,
+    mode: 'manifest',
+    schedule_enabled: false,
+    interval_hours: 24,
+    include_auxiliary: false,
+    max_objects: 50000,
+    targets: []
+  }
 })
 
-const loadSettings = async () => {
-  try {
-    const data = await settingsApi.getSettings()
-    settings.value = {
-      forceOcr: data.force_ocr,
-      ocrLanguage: data.ocr_lang,
-      formulaRecognition: data.formula_recognition,
-      tableRecognition: data.table_recognition,
-      version: data.version || '',
-      backend: data.backend || 'pipeline'
-    }
-  } catch (error) {
-    ElMessage.error('加载设置失败')
-  }
-}
+const activeTab = ref('status')
+const runtime = ref<RuntimeConfig>(defaultRuntime())
+const status = ref<RuntimeStatus | null>(null)
+const minioCheck = ref<MinioCheckResult | null>(null)
+const gpuCheck = ref<GpuCheckResult | null>(null)
+const backupRun = ref<BackupRunResult | null>(null)
+const loading = reactive({
+  initial: false,
+  saving: false,
+  status: false,
+  minio: false,
+  ensure: false,
+  gpu: false,
+  backup: false,
+  backupRun: false
+})
 
-const saveSettings = async () => {
-  savingSettings.value = true
+const runtimeTagType = computed(() => {
+  if (status.value?.status === 'ready') return 'success'
+  if (status.value?.status === 'blocked') return 'danger'
+  return 'warning'
+})
+
+const runtimeStatusText = computed(() => {
+  if (!status.value) return '未检查'
+  return status.value.status === 'ready' ? '就绪' : status.value.status === 'blocked' ? '阻断' : '警告'
+})
+
+const minioReady = computed(() => Boolean(minioCheck.value?.contract_ok || status.value?.minio.contract_ok))
+const gpuReady = computed(() => Boolean(gpuCheck.value?.wrapper_ok || status.value?.gpu.wrapper_ok))
+const backupReady = computed(() => Boolean(status.value?.backup.ready_count || runtime.value.backup.targets.some(target => target.status === 'ready')))
+
+const bucketRows = computed(() => {
+  if (minioCheck.value?.buckets?.length) return minioCheck.value.buckets
+  return runtime.value.minio.contract_buckets.map(bucket => ({
+    bucket,
+    role: bucketRole(bucket),
+    exists: false,
+    created: false
+  }))
+})
+
+const lastBackupText = computed(() => {
+  const last = runtime.value.backup.last_backup
+  if (!last || typeof last !== 'object') return '未记录'
+  const createdAt = (last as Record<string, unknown>).created_at
+  return typeof createdAt === 'string' ? createdAt : '已记录'
+})
+
+const loadRuntime = async () => {
+  loading.initial = true
   try {
-    await settingsApi.updateSettings({
-      force_ocr: settings.value.forceOcr,
-      ocr_lang: settings.value.ocrLanguage,
-      formula_recognition: settings.value.formulaRecognition,
-      table_recognition: settings.value.tableRecognition,
-      version: settings.value.version,
-      backend: settings.value.backend
-    })
-    ElMessage.success('设置已保存')
-  } catch (error) {
-    ElMessage.error('保存设置失败')
+    runtime.value = await settingsApi.getRuntimeSettings()
+  } catch {
+    ElMessage.error('加载运行设置失败')
   } finally {
-    savingSettings.value = false
+    loading.initial = false
   }
 }
 
-const resetSettings = () => {
-  settings.value = { ...defaultSettings }
-  ElMessage.info('设置已重置')
-}
-
-const loadMineruHealth = async () => {
-  healthLoading.value = true
+const refreshStatus = async () => {
+  loading.status = true
   try {
-    mineruHealth.value = await settingsApi.getMineruHealth()
-  } catch (error) {
-    mineruHealth.value = {
-      available: false,
-      base_url: '',
-      error: '无法获取 MinerU API 状态'
-    }
+    status.value = await settingsApi.getRuntimeStatus()
+    minioCheck.value = status.value.minio
+    gpuCheck.value = status.value.gpu
+    applyBackupCheck(status.value.backup.targets)
+  } catch {
+    ElMessage.error('刷新运行状态失败')
   } finally {
-    healthLoading.value = false
+    loading.status = false
   }
 }
 
-onMounted(() => {
-  loadSettings()
-  loadMineruHealth()
+const saveRuntime = async () => {
+  loading.saving = true
+  try {
+    runtime.value = await settingsApi.updateRuntimeSettings(runtime.value)
+    ElMessage.success('运行设置已保存')
+  } catch {
+    ElMessage.error('保存运行设置失败')
+  } finally {
+    loading.saving = false
+  }
+}
+
+const saveRuntimeQuietly = async () => {
+  runtime.value = await settingsApi.updateRuntimeSettings(runtime.value)
+}
+
+const checkMinioNow = async () => {
+  loading.minio = true
+  try {
+    await saveRuntimeQuietly()
+    minioCheck.value = await settingsApi.checkMinio()
+    ElMessage[minioCheck.value.contract_ok ? 'success' : 'warning'](minioCheck.value.contract_ok ? 'MinIO 合约正常' : 'MinIO 合约需要处理')
+  } catch {
+    ElMessage.error('检查 MinIO 失败')
+  } finally {
+    loading.minio = false
+  }
+}
+
+const ensureBuckets = async () => {
+  loading.ensure = true
+  try {
+    await saveRuntimeQuietly()
+    minioCheck.value = await settingsApi.ensureMinioBuckets()
+    ElMessage[minioCheck.value.contract_ok ? 'success' : 'warning'](minioCheck.value.contract_ok ? '篮子合约已维护' : '仍有篮子不可用')
+  } catch {
+    ElMessage.error('维护篮子失败')
+  } finally {
+    loading.ensure = false
+  }
+}
+
+const checkGpuNow = async () => {
+  loading.gpu = true
+  try {
+    await saveRuntimeQuietly()
+    gpuCheck.value = await settingsApi.checkGpu()
+    ElMessage[gpuCheck.value.wrapper_ok ? 'success' : 'warning'](gpuCheck.value.wrapper_ok ? 'GPU Wrapper 可用' : 'GPU Wrapper 不可用')
+  } catch {
+    ElMessage.error('检查 GPU 失败')
+  } finally {
+    loading.gpu = false
+  }
+}
+
+const checkBackupNow = async () => {
+  loading.backup = true
+  try {
+    await saveRuntimeQuietly()
+    const result = await settingsApi.checkBackupTargets()
+    applyBackupCheck(result.targets)
+    ElMessage[result.ready_count > 0 ? 'success' : 'warning'](result.ready_count > 0 ? '备份路径可用' : '没有可写备份路径')
+  } catch {
+    ElMessage.error('检查备份路径失败')
+  } finally {
+    loading.backup = false
+  }
+}
+
+const runBackupNow = async () => {
+  loading.backupRun = true
+  try {
+    await saveRuntimeQuietly()
+    backupRun.value = await settingsApi.runBackup()
+    await loadRuntime()
+    ElMessage.success('手动备份已完成')
+  } catch {
+    ElMessage.error('手动备份失败')
+  } finally {
+    loading.backupRun = false
+  }
+}
+
+const applyBackupCheck = (targets: BackupTarget[]) => {
+  const byId = new Map(targets.map(target => [target.id, target]))
+  runtime.value.backup.targets = runtime.value.backup.targets.map(target => ({
+    ...target,
+    ...byId.get(target.id),
+    path: byId.get(target.id)?.path ?? target.path
+  }))
+}
+
+const bucketRole = (bucket: string) => {
+  const roles: Record<string, string> = {
+    'eduassets-input': 'source_pdf',
+    'eduassets-mineru': 'mineru_official',
+    'eduassets-minerupopo': 'popo_official',
+    'eduassets-raw': 'raw_master',
+    'eduassets-clean': 'clean_candidate',
+    'eduassets-parsed': 'archive_optional'
+  }
+  return roles[bucket] || 'unknown'
+}
+
+const targetStatusType = (statusText?: string) => {
+  if (statusText === 'ready') return 'success'
+  if (statusText === 'disabled') return 'info'
+  return 'warning'
+}
+
+onMounted(async () => {
+  await loadRuntime()
+  await refreshStatus()
 })
 </script>
 
 <style scoped>
 .settings-root {
   width: 100%;
-  display: flex;
-  justify-content: center;
-  padding: 20px;
-  animation: fadeIn 0.3s ease;
   height: 100%;
   overflow: auto;
+  padding: 24px;
 }
 
-.settings-container {
+.settings-shell {
   width: 100%;
-  max-width: 560px;
+  max-width: 1180px;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
 }
 
 .page-header {
   display: flex;
   align-items: center;
   gap: 14px;
+  min-height: 52px;
 }
 
 .header-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-lg);
-  background: var(--primary-gradient);
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--primary-color);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  box-shadow: var(--shadow-sm);
   flex-shrink: 0;
 }
 
 .header-text {
+  min-width: 0;
   flex: 1;
 }
 
 .page-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--text-primary);
   margin: 0 0 4px;
+  font-size: 24px;
+  line-height: 1.2;
+  color: var(--text-primary);
 }
 
 .page-subtitle {
-  font-size: 14px;
-  color: var(--text-muted);
   margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
 }
 
-.settings-card {
+.settings-tabs {
   background: var(--bg-primary);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-md);
-  padding: 24px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 0 20px 20px;
+  box-shadow: var(--shadow-sm);
 }
 
-.settings-form {
+.settings-panel {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 18px;
+  min-height: 360px;
 }
 
-.form-section {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.section-title {
+.panel-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 600;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 4px;
   color: var(--text-primary);
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border-light);
+  font-size: 16px;
+  font-weight: 700;
 }
 
-.section-action {
-  margin-left: auto;
-}
-
-.form-grid {
+.status-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.status-cell {
+  min-width: 0;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-right: 1px solid var(--border-light);
+}
+
+.status-cell:last-child {
+  border-right: none;
+}
+
+.status-label,
+.table-head,
+.probe-row span,
+.target-label,
+.backup-result span {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.status-cell strong,
+.backup-result strong {
+  color: var(--text-primary);
+  font-size: 18px;
+}
+
+.status-cell small,
+.backup-result small {
+  color: var(--text-secondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.issue-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .settings-form :deep(.el-form-item) {
@@ -352,101 +613,154 @@ onMounted(() => {
 }
 
 .settings-form :deep(.el-form-item__label) {
-  font-weight: 500;
   color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
   padding-bottom: 6px;
-  font-size: 13px;
 }
 
-.full-width {
-  width: 100%;
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
 }
 
-.switch-wrapper {
-  display: flex;
+.bucket-table {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.table-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 180px 96px;
   align-items: center;
   gap: 12px;
-}
-
-.switch-label {
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.form-tip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.loading-state {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--text-muted);
-  min-height: 28px;
-}
-
-.health-grid {
-  display: grid;
-  gap: 10px;
-  padding: 2px 0;
-}
-
-.health-row {
-  display: grid;
-  grid-template-columns: 88px minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-  min-height: 28px;
-}
-
-.health-label {
-  color: var(--text-muted);
-  font-size: 13px;
-}
-
-.health-value {
+  min-height: 44px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border-light);
   color: var(--text-secondary);
   font-size: 13px;
-  overflow-wrap: anywhere;
 }
 
-.health-value.error {
-  color: var(--danger-color);
+.table-row:last-child {
+  border-bottom: none;
 }
 
-.form-actions {
+.table-head {
+  background: var(--bg-secondary);
+  font-weight: 700;
+}
+
+.probe-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.probe-row {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 14px;
+  border-right: 1px solid var(--border-light);
+}
+
+.probe-row:last-child {
+  border-right: none;
+}
+
+.target-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.target-row {
+  display: grid;
+  grid-template-columns: 52px 120px minmax(0, 1fr) 96px;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.target-row:last-child {
+  border-bottom: none;
+}
+
+.backup-result {
+  display: grid;
+  grid-template-columns: 120px 140px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+}
+
+.panel-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-light);
+  gap: 10px;
+  padding-top: 2px;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 920px) {
   .settings-root {
-    padding: 20px 16px;
+    padding: 16px;
   }
-  
-  .settings-card {
-    padding: 24px 20px;
+
+  .page-header {
+    flex-wrap: wrap;
   }
-  
-  .form-grid {
+
+  .status-grid,
+  .form-grid,
+  .probe-grid {
     grid-template-columns: 1fr;
   }
-  
-  .form-actions {
-    flex-direction: column;
+
+  .status-cell,
+  .probe-row {
+    border-right: none;
+    border-bottom: 1px solid var(--border-light);
   }
-  
-  .form-actions .el-button {
-    width: 100%;
+
+  .status-cell:last-child,
+  .probe-row:last-child {
+    border-bottom: none;
+  }
+
+  .table-row {
+    grid-template-columns: minmax(0, 1fr) 120px 80px;
+  }
+
+  .target-row {
+    grid-template-columns: 52px 92px minmax(0, 1fr);
+  }
+
+  .target-row .el-tag {
+    grid-column: 2 / 4;
+    width: fit-content;
+  }
+
+  .backup-result {
+    grid-template-columns: 1fr;
+    padding: 12px 14px;
+  }
+
+  .panel-actions {
+    justify-content: stretch;
+    flex-wrap: wrap;
   }
 }
 </style>
