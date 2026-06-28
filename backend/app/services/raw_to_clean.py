@@ -179,6 +179,12 @@ def execute_raw_to_clean(material: Material, run_id: int, force: bool, event_cal
     event_callback("materialize", "Raw 资产已下载到本地工作目录", {"work_dir": str(work_dir), "raw_prefix": raw_prefix})
 
     event_callback("clean", "开始调用 eduassets-raw-cleaner 的 clean_raw_sample.py")
+    run_env = pipeline_env()
+    if not run_env.get("LUCEON_CLEAN_MEDIA_VISION_CACHE"):
+        safe_raw_id = re.sub(r"[^A-Za-z0-9._-]+", "_", f"{material_id}-{raw_run_id}".strip("-")) or "raw"
+        cache_dir = WORK_ROOT / "media-vision-cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        run_env["LUCEON_CLEAN_MEDIA_VISION_CACHE"] = str(cache_dir / f"{safe_raw_id}.json")
     completed = subprocess.run(
         [
             "python3",
@@ -195,7 +201,7 @@ def execute_raw_to_clean(material: Material, run_id: int, force: bool, event_cal
             "review",
         ],
         cwd=str(SKILL_ROOT),
-        env=pipeline_env(),
+        env=run_env,
         text=True,
         capture_output=True,
         timeout=None,

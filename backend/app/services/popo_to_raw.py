@@ -3,6 +3,7 @@ import mimetypes
 import os
 import re
 import shutil
+import struct
 import subprocess
 import threading
 from datetime import datetime
@@ -164,6 +165,7 @@ def publish_popo_to_raw_dry_run(db: Session, user_id: str, material: Material, d
     if not preflight["ready"]:
         raise PopoToRawPreflightError(preflight)
 
+    build_image_semantics(body_final)
     outline_summary = outline_artifact_summary(body_final)
     validate_outline_mechanical_qa(outline_summary)
     mineru_run_id = str(summary.get("mineru_run_id") or resolve_mineru_run_id(material))
@@ -469,6 +471,7 @@ def execute_popo_to_raw(material: Material, run_id: int, publish: bool, force: b
         raise RuntimeError((completed.stderr or completed.stdout or f"bootstrap exited {completed.returncode}")[-4000:])
     event_callback("bootstrap", "目录重建草稿已生成", {"stdout_tail": (completed.stdout or "")[-2000:]})
 
+    build_image_semantics(body_final)
     outline_summary = outline_artifact_summary(body_final)
     emit_outline_stage_events(event_callback, outline_summary)
     validate_outline_mechanical_qa(outline_summary)
@@ -964,12 +967,217 @@ def heading_order_report(clean_md: Path) -> dict[str, Any]:
     }
 
 
+def read_local_jsonl(path: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    try:
+        with path.open(encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                parsed = json.loads(line)
+                if isinstance(parsed, dict):
+                    rows.append(parsed)
+    except Exception:
+        return []
+    return rows
+
+
+def image_dimensions(path: Path) -> dict[str, int]:
+    try:
+        from PIL import Image
+
+        with Image.open(path) as image:
+            width, height = image.size
+        return {"width": int(width), "height": int(height)}
+    except Exception:
+        pass
+    try:
+        data = path.read_bytes()
+        if data.startswith(b"\x89PNG\r\n\x1a\n") and len(data) >= 24:
+            width, height = struct.unpack(">II", data[16:24])
+            return {"width": int(width), "height": int(height)}
+        if data[:6] in {b"GIF87a", b"GIF89a"} and len(data) >= 10:
+            width, height = struct.unpack("<HH", data[6:10])
+            return {"width": int(width), "height": int(height)}
+        if data.startswith(b"\xff\xd8"):
+            index = 2
+            while index + 9 < len(data):
+                if data[index] != 0xFF:
+                    index += 1
+                    continue
+                marker = data[index + 1]
+                index += 2
+                if marker in {0xD8, 0xD9}:
+                    continue
+                if index + 2 > len(data):
+                    break
+                segment_length = int.from_bytes(data[index:index + 2], "big")
+                if segment_length < 2:
+                    break
+                if marker in {0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF} and index + 7 <= len(data):
+                    height = int.from_bytes(data[index + 3:index + 5], "big")
+                    width = int.from_bytes(data[index + 5:index + 7], "big")
+                    return {"width": int(width), "height": int(height)}
+                index += segment_length
+    except Exception:
+        return {}
+    return {}
+
+
+def unit_heading_paths(units: list[dict[str, Any]]) -> dict[str, list[str]]:
+    stack: list[dict[str, Any]] = []
+    paths: dict[str, list[str]] = {}
+    for unit in sorted(units, key=lambda row: int(row.get("order") or 0)):
+        level = int(unit.get("level") or 1)
+        title = str(unit.get("title") or "").strip()
+        unit_id = str(unit.get("unit_id") or "").strip()
+        while stack and int(stack[-1].get("level") or 1) >= level:
+            stack.pop()
+        if title:
+            stack.append({"level": level, "title": title})
+        if unit_id:
+            paths[unit_id] = [str(row.get("title") or "") for row in stack if str(row.get("title") or "").strip()]
+    return paths
+
+
+def compact_context(texts: list[str], limit: int = 420) -> str:
+    parts = []
+    seen: set[str] = set()
+    for text in texts:
+        normalized = re.sub(r"\s+", " ", str(text or "")).strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        parts.append(normalized)
+    context = " ".join(parts)
+    return context[:limit].rstrip()
+
+
+def caption_candidate(row: dict[str, Any], before: list[dict[str, Any]], after: list[dict[str, Any]]) -> str:
+    own = str(row.get("text_preview") or "").strip()
+    if own:
+        return re.sub(r"\s+", " ", own)[:240]
+    candidates = before[-2:] + after[:2]
+    for candidate in candidates:
+        text = re.sub(r"\s+", " ", str(candidate.get("text_preview") or "")).strip()
+        if not text:
+            continue
+        if text.startswith(("▲", "△", "Fig.", "Figure", "Photo", "Image")) or len(text) <= 120:
+            return text[:240]
+    return ""
+
+
+def image_role_hint(row: dict[str, Any], caption: str, context: str) -> str:
+    text = f"{caption} {context}".lower()
+    bbox = row.get("bbox") if isinstance(row.get("bbox"), list) else []
+    if any(token in text for token in ["before you read", "skim", "circle", "complete", "answer", "question"]):
+        return "exercise_related"
+    if any(token in text for token in ["chart", "graph", "table", "diagram", "map", "timeline"]):
+        return "content_visual"
+    if caption:
+        return "captioned_image"
+    if len(bbox) == 4:
+        try:
+            width = abs(float(bbox[2]) - float(bbox[0]))
+            height = abs(float(bbox[3]) - float(bbox[1]))
+            if width < 80 or height < 80:
+                return "small_decoration_or_icon"
+        except Exception:
+            pass
+    return "uncaptioned_image"
+
+
+def build_image_semantics(body_final: Path) -> dict[str, Any]:
+    units = read_local_jsonl(body_final / "raw_units.jsonl")
+    assignments = read_local_jsonl(body_final / "raw_block_assignments.jsonl")
+    heading_paths = unit_heading_paths(units)
+    units_by_id = {str(unit.get("unit_id") or ""): unit for unit in units if str(unit.get("unit_id") or "")}
+    source_refs = set(read_local_json(body_final / "image_closure_report.json").get("source_refs_not_in_markdown") or [])
+    images: list[dict[str, Any]] = []
+    by_unit_page: dict[tuple[str, int], list[dict[str, Any]]] = {}
+    for assignment in assignments:
+        unit_id = str(assignment.get("unit_id") or "")
+        page_idx = int(assignment.get("page_idx") or -1)
+        by_unit_page.setdefault((unit_id, page_idx), []).append(assignment)
+    for rows in by_unit_page.values():
+        rows.sort(key=lambda row: int(row.get("source_order") or 0))
+
+    seen: set[tuple[str, str]] = set()
+    for assignment in assignments:
+        image_ref = str(assignment.get("image_ref") or "").strip()
+        if not image_ref:
+            continue
+        block_ref = str(assignment.get("block_ref") or "").strip()
+        key = (image_ref, block_ref)
+        if key in seen:
+            continue
+        seen.add(key)
+        unit_id = str(assignment.get("unit_id") or "")
+        page_idx = int(assignment.get("page_idx") or -1)
+        source_order = int(assignment.get("source_order") or 0)
+        local_rows = by_unit_page.get((unit_id, page_idx), [])
+        before = [row for row in local_rows if int(row.get("source_order") or 0) < source_order][-3:]
+        after = [row for row in local_rows if int(row.get("source_order") or 0) > source_order][:3]
+        caption = caption_candidate(assignment, before, after)
+        context = compact_context(
+            [str(row.get("text_preview") or "") for row in before]
+            + [str(assignment.get("text_preview") or "")]
+            + [str(row.get("text_preview") or "") for row in after]
+        )
+        unit = units_by_id.get(unit_id, {})
+        image_path = body_final / image_ref
+        images.append(
+            {
+                "image_ref": image_ref,
+                "block_ref": block_ref,
+                "page_idx": page_idx,
+                "source_order": source_order,
+                "bbox": assignment.get("bbox") if isinstance(assignment.get("bbox"), list) else [],
+                "unit_id": unit_id,
+                "unit_order": assignment.get("unit_order"),
+                "unit_level": assignment.get("unit_level"),
+                "unit_title": assignment.get("unit_title"),
+                "heading_path": heading_paths.get(unit_id, []),
+                "unit_page_start": unit.get("page_start"),
+                "unit_page_end": unit.get("page_end"),
+                "caption": caption,
+                "local_context": context,
+                "role_hint": image_role_hint(assignment, caption, context),
+                "dimensions": image_dimensions(image_path),
+                "copied": image_path.exists(),
+                "source_ref_not_in_markdown": image_ref in source_refs,
+                "neighbor_block_refs": {
+                    "before": [row.get("block_ref") for row in before if row.get("block_ref")],
+                    "after": [row.get("block_ref") for row in after if row.get("block_ref")],
+                },
+            }
+        )
+    report = {
+        "schema": "luceon-raw-image-semantics/v1",
+        "image_count": len(images),
+        "with_caption_count": sum(1 for image in images if image.get("caption")),
+        "with_context_count": sum(1 for image in images if image.get("local_context")),
+        "with_dimensions_count": sum(1 for image in images if image.get("dimensions")),
+        "role_hint_counts": {},
+        "images": images,
+    }
+    role_counts: dict[str, int] = {}
+    for image in images:
+        role = str(image.get("role_hint") or "unknown")
+        role_counts[role] = role_counts.get(role, 0) + 1
+    report["role_hint_counts"] = role_counts
+    (body_final / "image_semantics.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return report
+
+
 def outline_artifact_summary(body_final: Path) -> dict[str, Any]:
     summary = read_local_json(body_final / "outline_candidates_summary.json")
     decision = read_local_json(body_final / "outline_decision.json")
     visual = read_local_json(body_final / "visual_decisions.json")
     apply_report = read_local_json(body_final / "outline_apply_report.json")
     image_closure = read_local_json(body_final / "image_closure_report.json")
+    image_semantics = read_local_json(body_final / "image_semantics.json")
     chunk_boundary = read_local_json(body_final / "chunk_boundary_report.json")
     heading_order = heading_order_report(body_final / "clean.md")
     return {
@@ -1017,6 +1225,14 @@ def outline_artifact_summary(body_final: Path) -> dict[str, Any]:
             "missing_image_count": image_closure.get("missing_image_count"),
             "markdown_refs_not_copied_count": len(image_closure.get("markdown_refs_not_copied") or []),
         },
+        "image_semantics": {
+            "available": bool(image_semantics),
+            "image_count": image_semantics.get("image_count"),
+            "with_caption_count": image_semantics.get("with_caption_count"),
+            "with_context_count": image_semantics.get("with_context_count"),
+            "with_dimensions_count": image_semantics.get("with_dimensions_count"),
+            "role_hint_counts": image_semantics.get("role_hint_counts") or {},
+        },
         "chunk_boundary_report": {
             "available": bool(chunk_boundary),
             "unit_count": chunk_boundary.get("unit_count"),
@@ -1048,6 +1264,7 @@ def enrich_raw_manifest(body_final: Path, material: Material, raw_prefix: str, m
         "unassigned_blocks.jsonl",
         "outline_apply_report.json",
         "image_closure_report.json",
+        "image_semantics.json",
         "chunk_boundary_report.json",
     ]:
         key = name.replace(".", "_").replace("-", "_")
@@ -1112,6 +1329,7 @@ def ensure_raw_deliverables(local_dir: Path) -> None:
             "unassigned_blocks.jsonl",
             "outline_apply_report.json",
             "image_closure_report.json",
+            "image_semantics.json",
             "chunk_boundary_report.json",
         ]
         if not (local_dir / name).exists()
