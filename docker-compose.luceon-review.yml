@@ -1,8 +1,11 @@
+name: ${COMPOSE_PROJECT_NAME:-luceonweb2026-review}
+
 services:
   frontend:
     build:
       context: ./frontend
-    image: luceon-review-frontend:local
+    image: ${LUCEON_REVIEW_FRONTEND_IMAGE:-luceonweb2026-review-frontend:local}
+    restart: unless-stopped
     ports:
       - "${LUCEON_REVIEW_WEB_PORT:-28081}:80"
     environment:
@@ -15,7 +18,8 @@ services:
   backend:
     build:
       context: ./backend
-    image: luceon-review-backend:local
+    image: ${LUCEON_REVIEW_BACKEND_IMAGE:-luceonweb2026-review-backend:local}
+    restart: unless-stopped
     ports:
       - "${LUCEON_REVIEW_API_PORT:-28080}:8000"
     environment:
@@ -35,6 +39,7 @@ services:
       - LUCEON_RUNTIME_CONFIG=/data/runtime_config.json
       - LUCEON_BACKUP_ROOT=/backups
       - LUCEON_PIPELINE_WORK_ROOT=/data/pipeline-work
+      - CHROME_BIN=${CHROME_BIN:-/usr/bin/chromium}
       - LUCEON_POPO_RAW_SKILL=/skills/pdf-clean-markdown-rebuild
       - LUCEON_RAW_CLEAN_SKILL=/skills/eduassets-raw-cleaner
       - LUCEON_RAW_OUTLINE_LLM=${LUCEON_RAW_OUTLINE_LLM:-1}
@@ -73,11 +78,12 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     command: redis-server --appendonly no
     networks:
       - luceon-review-net
 
 networks:
   luceon-review-net:
-    name: luceon-review-net
+    name: ${LUCEON_REVIEW_NETWORK:-luceonweb2026-review-net}
     driver: bridge

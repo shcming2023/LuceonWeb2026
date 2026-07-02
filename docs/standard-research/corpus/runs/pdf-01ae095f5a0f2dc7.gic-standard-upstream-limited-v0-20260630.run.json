@@ -1,0 +1,141 @@
+{
+  "schema": "luceon-standard-research-run/v1",
+  "run_id": "pdf-01ae095f5a0f2dc7.gic-standard-upstream-limited-v0-20260630",
+  "material_id": "pdf-01ae095f5a0f2dc7",
+  "title": "Grammar in Context Baisic (Seventh).pdf",
+  "profile": "grammar_workbook",
+  "stage": "clean2standard",
+  "role": "third_non_grammar_friends_workbook_upstream_limited_standard_pressure",
+  "status": "pass_with_promotion_review",
+  "verdict": "standard_gates_pass_profile_clean_review_not_promoted",
+  "created_at": "2026-06-30",
+  "standard_output": "runtime/backend/pipeline-work/audits/gic-standard-upstream-limited-v0-rerun-20260630/standard-final",
+  "clean_input": "runtime/backend/pipeline-work/audits/gic-clean-v3-20260630/clean-final",
+  "raw_input": "runtime/backend/pipeline-work/audits/gic-clean-v3-20260630/clean-final/raw_input",
+  "source_pdf": "runtime/backend/pipeline-work/audits/source-pdfs/pdf-01ae095f5a0f2dc7-grammar-in-context-basic-seventh.pdf",
+  "upstream_limits": [
+    "clean_input_status_review",
+    "clean_media_review_threshold_open",
+    "clean_llm_structure_revert_threshold_open"
+  ],
+  "acceptance": {
+    "status": "pass",
+    "quality_score": 100,
+    "outline_lock": "pass",
+    "source_fidelity": "pass",
+    "correction_evidence": "pass",
+    "context_integrity": "pass",
+    "media_integrity": "pass",
+    "formula_table_integrity": "pass",
+    "visible_artifacts": "pass",
+    "layout_sanity": "pass",
+    "profile_coverage": "pass",
+    "image_relation_integrity": "pass",
+    "image_visual_confirmation": "pass",
+    "review_outcomes": "pass",
+    "print_render": "pass",
+    "source_evidence": "pass",
+    "auditability": "pass",
+    "review_threshold": "pass"
+  },
+  "summary": {
+    "block_count": 6409,
+    "outline_count": 93,
+    "pdf_page_count": 308,
+    "pdf_bytes": 15352705,
+    "image_refs": 138,
+    "missing_images": 0,
+    "issue_candidate_count": 138,
+    "issue_candidate_unresolved_blocking_count": 0,
+    "visual_review_packet_count": 377,
+    "review_outcome_count": 377,
+    "review_outcome_open_blocking_count": 0,
+    "review_outcome_closed_count": 377,
+    "correction_count": 4
+  },
+  "workbook_profile": {
+    "status": "review",
+    "regression_verdict": "standard_gates_pass_but_profile_relation_review",
+    "basic_print_blockers": [
+      "exercise_relation_contract_not_pass"
+    ],
+    "exercise_relation_contract": {
+      "status": "review",
+      "metrics": {
+        "question_groups": 40,
+        "questions": 2177,
+        "grouped_questions": 411,
+        "ungrouped_questions": 1766,
+        "options": 77,
+        "parented_options": 77,
+        "orphan_options": 0,
+        "answer_blanks": 632,
+        "parented_answer_blanks": 585,
+        "orphan_answer_blanks": 47,
+        "table_questions": 207,
+        "parented_table_questions": 102,
+        "orphan_table_questions": 105,
+        "figure_relation_candidates": 138,
+        "parented_figure_relation_candidates": 114,
+        "orphan_figure_relation_candidates": 24
+      },
+      "review_reasons": [
+        "real_profile_gaps_present"
+      ]
+    },
+    "image_relation_contract": {
+      "status": "review",
+      "review_reasons": [
+        "image_review_outcomes_open"
+      ]
+    }
+  },
+  "issue_candidate_disposition": {
+    "count": 138,
+    "unresolved_blocking_count": 0,
+    "classification_counts": {
+      "visual_outcome_covered": 125,
+      "helper_icon_artifact": 13
+    },
+    "disposition_counts": {
+      "covered_by_visual_outcome": 125,
+      "helper_icon_compact_rendering": 13
+    }
+  },
+  "review_outcomes": {
+    "count": 377,
+    "closed_count": 377,
+    "open_blocking_count": 0,
+    "decision_counts": {
+      "accepted_by_rule": 377
+    },
+    "packet_type_counts": {
+      "table_visual_review": 244,
+      "formula_visual_review": 8,
+      "image_source_visual_confirmation": 125
+    }
+  },
+  "reports": {
+    "acceptance_report": "runtime/backend/pipeline-work/audits/gic-standard-upstream-limited-v0-rerun-20260630/standard-final/standard_acceptance_report.json",
+    "workbook_profile_report": "runtime/backend/pipeline-work/audits/gic-standard-upstream-limited-v0-rerun-20260630/standard-final/workbook_profile_report.json",
+    "workbook_relation_audit": "runtime/backend/pipeline-work/audits/gic-standard-upstream-limited-v0-rerun-20260630/standard-final/workbook_relation_audit.json",
+    "visual_outcome_review": "runtime/backend/pipeline-work/audits/gic-standard-upstream-limited-v0-rerun-20260630/standard-final/visual_outcome_review.json",
+    "review_outcomes": "runtime/backend/pipeline-work/audits/gic-standard-upstream-limited-v0-rerun-20260630/standard-final/standard_review_outcomes.json",
+    "print_qa_report": "runtime/backend/pipeline-work/audits/gic-standard-upstream-limited-v0-rerun-20260630/standard-final/print_qa_report.json",
+    "standard_pdf": "runtime/backend/pipeline-work/audits/gic-standard-upstream-limited-v0-rerun-20260630/standard-final/standard.pdf",
+    "basic_print_closure_report": "runtime/backend/pipeline-work/audits/gic-standard-upstream-limited-v0-rerun-20260630/standard-final/basic_print_closure_report.json",
+    "correction_log": "runtime/backend/pipeline-work/audits/gic-standard-upstream-limited-v0-rerun-20260630/standard-final/correction_log.json",
+    "visual_source_crops": "runtime/backend/pipeline-work/audits/gic-standard-upstream-limited-v0-rerun-20260630/standard-final/visual_source_crops/",
+    "image_source_crops": "runtime/backend/pipeline-work/audits/gic-standard-upstream-limited-v0-rerun-20260630/standard-final/source_crops/"
+  },
+  "decision": [
+    "GIC now passes Standard gates and has 377/377 visual/review outcomes closed as accepted_by_rule.",
+    "It is a non-Grammar-Friends grammar_workbook Standard gate candidate, but not an accepted golden.",
+    "Promotion is blocked by upstream Clean review status and workbook exercise relation contract review."
+  ],
+  "promotion_candidate": false,
+  "promotion_blockers": [
+    "input_clean_status_review",
+    "workbook_profile.exercise_relation_contract_not_pass"
+  ]
+}

@@ -1,0 +1,77 @@
+{
+  "schema": "luceon-standard-research-run/v1",
+  "material_id": "pdf-aadfa33fb0485c1a",
+  "nickname": "Math 8A",
+  "title": "中学生世界 八上 数学 上册.pdf",
+  "profile": "math_textbook",
+  "run_label": "math-native-exact-closure-v0-20260701",
+  "standard_output": "runtime/backend/pipeline-work/audits/math-profile-native-exact-closure-rerun-20260701/standard-final",
+  "base_standard_output": "runtime/backend/pipeline-work/audits/math-profile-assignment-bbox-containment-rerun-20260701/standard-final",
+  "clean_input": "runtime/backend/pipeline-work/raw2clean/run-42-pdf-aadfa33fb0485c1a-job-20260610083901-844ae522da/clean-final",
+  "raw_input": "runtime/backend/pipeline-work/raw2clean/run-42-pdf-aadfa33fb0485c1a-job-20260610083901-844ae522da/raw_input",
+  "requested_profile": "auto",
+  "selected_profile": "math_textbook",
+  "source_pdf": "runtime/backend/pipeline-work/popo2raw/run-25-pdf-aadfa33fb0485c1a-job-20260610083901-844ae522da/rebuild_input/pdf-aadfa33fb0485c1a_origin.pdf",
+  "acceptance": {
+    "status": "review",
+    "quality_score": 86,
+    "profile_coverage": "review",
+    "context_integrity": "review",
+    "formula_table_integrity": "review",
+    "review_outcomes": "review",
+    "source_evidence": "pass",
+    "print_render": "pass",
+    "remaining_review_gates": [
+      "profile_coverage",
+      "context_integrity",
+      "formula_table_integrity",
+      "review_outcomes"
+    ]
+  },
+  "summary": {
+    "visual_review_packet_count": 1157,
+    "review_outcome_count": 1157,
+    "review_outcome_open_blocking_count": 557,
+    "review_outcome_closed_count": 600,
+    "closed_accepted_by_rule_count": 600,
+    "pdf_page_count": 64,
+    "formula_visual_review_count": 1153,
+    "table_visual_review_count": 4,
+    "open_formula_visual_review_count": 557,
+    "open_table_visual_review_count": 0,
+    "formula_needs_layout_fix_count": 398,
+    "formula_needs_page_bbox_count": 159,
+    "table_closed_accepted_by_rule_count": 4,
+    "visual_source_crop_count": 998,
+    "visual_source_crop_required_count": 1157,
+    "visual_source_crop_needs_page_bbox_count": 159,
+    "native_exact_closure_candidate_count": 600,
+    "native_exact_newly_closed_count": 600,
+    "native_exact_formula_closed_count": 596,
+    "native_exact_table_closed_count": 4,
+    "raw_assignment_semantic_equivalent_not_closed_count": 191,
+    "near_equivalent_manual_review_count": 48,
+    "remaining_bbox_stop_boundary_count": 159,
+    "math_profile_selector_closed": true,
+    "math_profile_contract_ready": false
+  },
+  "closure": {
+    "status": "partial_closure_review_remaining",
+    "report": "runtime/backend/pipeline-work/audits/math-profile-native-exact-closure-rerun-20260701/standard-final/math_native_exact_content_closure_report.json",
+    "table_formula_outcome_audit": "runtime/backend/pipeline-work/audits/math-profile-native-exact-closure-rerun-20260701/standard-final/table_formula_outcome_audit.json",
+    "formula_source_mismatch_audit": "runtime/backend/pipeline-work/audits/math-profile-native-exact-closure-rerun-20260701/standard-final/formula_source_mismatch_audit.json",
+    "decision_boundary": "Only native Raw content exact normalized matches are closed. Raw-assignment exact/containment evidence remains review-only."
+  },
+  "math_visual_contract": {
+    "status": "review",
+    "open_formula_visual_review_outcomes": 557,
+    "open_table_visual_review_outcomes": 0,
+    "basic_print_blocker": "math_profile_contract_not_pass"
+  },
+  "verdict": "math_native_exact_content_closure_partial_pass_math_still_review",
+  "notes": [
+    "This run closes 600 native Raw content exact-match formula/table outcomes as accepted_by_rule.",
+    "It does not close raw_assignment exact or containment matches.",
+    "Math 8A remains blocked/review because 557 formula visual outcomes remain open."
+  ]
+}

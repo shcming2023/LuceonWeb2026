@@ -1,0 +1,264 @@
+{
+  "schema": "luceon-standard-research-case/v1",
+  "material_id": "pdf-01ae095f5a0f2dc7",
+  "title": "Grammar in Context Baisic (Seventh).pdf",
+  "profile": "grammar_workbook",
+  "role": "third_non_grammar_friends_workbook_pressure_candidate",
+  "target_level": "review_first_then_basic_print_candidate",
+  "current_status": "basic_print_candidate",
+  "current_scores": {
+    "clean_acceptance_status": "review",
+    "clean_hard_failure_count": 0,
+    "clean_review_gate_count": 2,
+    "llm_chunks": 197,
+    "llm_failures": 3,
+    "llm_reverted_structure": 7,
+    "media_review_count": 128,
+    "standard_acceptance_status": "pass",
+    "standard_quality_score": 100,
+    "standard_pdf_page_count": 303,
+    "standard_issue_candidate_count": 138,
+    "standard_unresolved_blocking_issue_count": 0,
+    "standard_review_outcome_count": 377,
+    "standard_open_blocking_review_outcome_count": 0,
+    "standard_review_outcome_closed_count": 377,
+    "standard_gate_candidate": true,
+    "promotion_candidate": false,
+    "workbook_profile_status": "pass",
+    "workbook_exercise_relation_contract_status": "pass",
+    "workbook_relation_real_profile_gap_count": 0,
+    "workbook_image_relation_contract_status": "pass",
+    "image_visual_confirmation_packet_count": 125,
+    "image_source_crop_count": 125,
+    "visual_review_source_crop_count": 252,
+    "correction_count": 4,
+    "gic_clean_promotion_blocker_count": 4,
+    "gic_clean_scope_contained_for_standard": true,
+    "gic_can_promote_standard_to_candidate": true,
+    "gic_clean_closure_policy_verdict": "clean_review_closure_policy_pass",
+    "gic_basic_print_candidate": true
+  },
+  "raw_record": "runtime/backend/pipeline-work/popo2raw/run-8-pdf-01ae095f5a0f2dc7-popo-20260617014256-staged_popo_20260617_batch07_sma-1369cfec--005-popo_01ae095f5a0f2dc7_005/body-final",
+  "clean_record": "runtime/backend/pipeline-work/audits/gic-clean-v3-20260630/clean-final",
+  "source_case": {
+    "requires_source_pdf": true,
+    "requires_raw_package": true,
+    "requires_clean_package": true,
+    "requires_evidence": true
+  },
+  "known_blockers": [
+    "candidate_only_not_accepted_golden",
+    "grammar_workbook_profile_not_ready"
+  ],
+  "golden": false,
+  "case_status_audited_at": "2026-07-01",
+  "selection_evidence": {
+    "source_pdf": {
+      "input_bucket": "eduassets-input",
+      "input_object": "Grammar in Context Baisic (Seventh).pdf",
+      "sha256": "01ae095f5a0f2dc76b6407fc7908c89b4429d18b5145487a3da1ac72b5e291bd",
+      "size_bytes": 74388642
+    },
+    "raw_qa": {
+      "body_range": "30-317",
+      "first_body_text_page": 16,
+      "last_front_page": 29,
+      "assigned_blocks": 4921,
+      "unassigned_blocks": 0,
+      "included_blocks": 6614,
+      "markdown_image_refs": 152,
+      "source_image_refs": 396,
+      "table_source_images": 244
+    }
+  },
+  "clean_attempts": [
+    {
+      "attempt_id": "gic-clean-v0-20260630",
+      "artifact": "runtime/backend/pipeline-work/audits/gic-clean-v0-20260630/clean-final",
+      "command_surface": "eduassets-raw-cleaner clean_raw_sample.py",
+      "llm_mode": "auto",
+      "model_observation": "DEEPSEEK_MODEL unset; script defaulted independently of LLM_DEFAULT_MODEL",
+      "duration_observation": ">10m before manual interrupt",
+      "result": "blocked_interrupted",
+      "failure": "deepseek_chunked_response_long_wait_during_llm_polish_markdown",
+      "acceptance_report": null,
+      "standard_run": null
+    },
+    {
+      "attempt_id": "gic-clean-v1-20260630",
+      "artifact": "runtime/backend/pipeline-work/audits/gic-clean-v1-20260630/clean-final",
+      "command_surface": "eduassets-raw-cleaner clean_raw_sample.py",
+      "llm_mode": "auto",
+      "model_observation": "DEEPSEEK_MODEL=deepseek-v4-flash",
+      "duration_observation": ">3m before manual interrupt",
+      "result": "blocked_interrupted",
+      "failure": "deepseek_chunked_response_long_wait_during_llm_polish_markdown",
+      "acceptance_report": null,
+      "standard_run": null
+    },
+    {
+      "attempt_id": "gic-clean-v2-20260630",
+      "artifact": "runtime/backend/pipeline-work/audits/gic-clean-v2-20260630/clean-final",
+      "command_surface": "eduassets-raw-cleaner clean_raw_sample.py",
+      "llm_mode": "auto",
+      "model_observation": "DEEPSEEK_MODEL=deepseek-v4-flash with configurable chunk/timeout/max_tokens",
+      "duration_observation": ">2m before manual interrupt",
+      "result": "blocked_interrupted",
+      "failure": "urllib_socket_timeout_did_not_bound_total_chunked_response_read",
+      "acceptance_report": null,
+      "standard_run": null
+    },
+    {
+      "attempt_id": "gic-clean-v3-20260630",
+      "artifact": "runtime/backend/pipeline-work/audits/gic-clean-v3-20260630/clean-final",
+      "command_surface": "eduassets-raw-cleaner clean_raw_sample.py",
+      "llm_mode": "auto",
+      "model_observation": "DEEPSEEK_MODEL=deepseek-v4-flash with LUCEON_CLEAN_LLM_CHUNK_CHARS=3000, LUCEON_CLEAN_LLM_TIMEOUT=45, LUCEON_CLEAN_LLM_TOTAL_TIMEOUT=45, LUCEON_CLEAN_LLM_MAX_TOKENS=4096",
+      "duration_observation": "~57m",
+      "result": "clean_review_candidate",
+      "acceptance_report": "runtime/backend/pipeline-work/audits/gic-clean-v3-20260630/clean-final/acceptance_report.json",
+      "acceptance_status": "review",
+      "hard_failure_count": 0,
+      "review_gates": [
+        "media_review_threshold",
+        "llm_structure_revert_threshold"
+      ],
+      "llm_usage": {
+        "chunks": 197,
+        "called": 197,
+        "applied": 188,
+        "failures": 3,
+        "reverted_structure": 7,
+        "total_tokens": 536102,
+        "estimated_cost_usd": 0.11889877
+      },
+      "media_counts": {
+        "keep": 10,
+        "review": 128
+      },
+      "standard_run": null
+    }
+  ],
+  "standard_runs": [
+    {
+      "run_id": "gic-standard-upstream-limited-v0-20260630",
+      "artifact": "runtime/backend/pipeline-work/audits/gic-standard-upstream-limited-v0-rerun-20260630/standard-final",
+      "profile": "grammar_workbook",
+      "input_clean": "runtime/backend/pipeline-work/audits/gic-clean-v3-20260630/clean-final",
+      "input_clean_status": "review",
+      "source_pdf": "",
+      "status": "pass_with_promotion_review",
+      "quality_score": 100,
+      "pdf_page_count": 308,
+      "issue_candidate_count": 138,
+      "unresolved_blocking_issue_count": 0,
+      "review_outcome_count": 377,
+      "open_blocking_review_outcome_count": 0,
+      "role": "non_gf_grammar_workbook_standard_gate_candidate_with_profile_clean_review",
+      "candidate": true,
+      "closed_review_outcome_count": 377,
+      "promotion_candidate": false,
+      "promotion_blockers": [
+        "input_clean_status_review",
+        "workbook_profile.exercise_relation_contract_not_pass"
+      ]
+    },
+    {
+      "run_id": "gic-standard-workbook-relation-rule-v8-20260630",
+      "artifact": "runtime/backend/pipeline-work/audits/gic-standard-workbook-relation-rule-v8-20260630/standard-final",
+      "profile": "grammar_workbook",
+      "input_clean": "runtime/backend/pipeline-work/audits/gic-clean-v3-20260630/clean-final",
+      "input_clean_status": "review",
+      "source_pdf": "runtime/backend/pipeline-work/audits/source-pdfs/pdf-01ae095f5a0f2dc7-grammar-in-context-basic-seventh.pdf",
+      "status": "pass_with_promotion_review",
+      "quality_score": 100,
+      "pdf_page_count": 303,
+      "issue_candidate_count": 138,
+      "unresolved_blocking_issue_count": 0,
+      "review_outcome_count": 377,
+      "open_blocking_review_outcome_count": 0,
+      "role": "non_gf_grammar_workbook_exercise_relation_hardening_candidate",
+      "candidate": true,
+      "exercise_relation_contract_status": "pass",
+      "workbook_relation_real_profile_gap_count": 0,
+      "promotion_candidate": true,
+      "promotion_blockers": [
+        "candidate_only_not_accepted_golden",
+        "grammar_workbook_profile_not_ready"
+      ],
+      "closed_review_outcome_count": 377,
+      "workbook_profile_status": "pass",
+      "image_relation_contract_status": "pass",
+      "standard_gate_candidate": true
+    }
+  ],
+  "notes": [
+    "This is the preferred third workbook pressure candidate because it is outside the Grammar Friends series but still grammar/workbook-like.",
+    "It must not be counted as a Basic Print candidate until a Clean package exists and a Standard review run is recorded.",
+    "Two local Clean generation attempts materialized raw_input only and were manually interrupted while waiting on the DeepSeek response stream during llm_polish_markdown.",
+    "The v3 Clean run produced full artifacts and no hard Clean failures, but remains review because broad media-purpose review and frequent LLM structure rollbacks require inspection.",
+    "The first Standard run is upstream-limited because it used a Clean review candidate and no local source PDF; it is review pressure evidence, not candidate evidence.",
+    "The current corpus entry is a selection record, not acceptance evidence.",
+    "After source PDF evidence, table/formula closure, and 4 image reconstructions from source PDF crops, the GIC v8 Standard gates pass with 377/377 review outcomes accepted_by_rule.",
+    "The v8 workbook relation hardening run closes GIC exercise_relation_contract with real_profile_gap_count 0, workbook profile pass, image relation contract pass, and open blocking review outcomes 0.",
+    "The v8 Standard artifact now passes all Standard gates after source crop closure and four source-crop-backed image replacements; it remains not promoted because Clean v3 is still review.",
+    "The v8 clean_review_scope_report scopes Clean media and LLM rollback review risk for this Standard artifact, but does not convert Clean v3 from review to pass.",
+    "The Clean media purpose ledger closes the media review gate by reusable rule for GIC.",
+    "The Clean LLM fallback ledger closes the LLM structure-revert gate by reusable rule for GIC.",
+    "GIC is now a Basic Print candidate, but remains candidate-only and not accepted golden/profile-ready."
+  ],
+  "latest_run_record": "../runs/pdf-01ae095f5a0f2dc7.gic-workbook-relation-rule-v8-20260630.run.json",
+  "candidate_record": "../golden/candidates/pdf-01ae095f5a0f2dc7.gic-workbook-clean-closure-v3-20260701.candidate.json",
+  "clean_promotion_blocker_audit": {
+    "artifact": "runtime/backend/pipeline-work/audits/gic-clean-promotion-blocker-20260701/clean_promotion_blocker_audit.json",
+    "doc": "docs/standard-research/31-gic-clean-promotion-blocker-audit-v0.md",
+    "clean_status": "review",
+    "standard_status": "pass",
+    "scope_status": "review_scoped_not_promoted",
+    "can_use_as_standard_risk_evidence": true,
+    "can_promote_clean_to_pass": true,
+    "can_promote_standard_to_candidate": true,
+    "blockers": [
+      "clean_acceptance_status_review",
+      "clean_review_gate_open:media_review_threshold",
+      "clean_review_gate_open:llm_structure_revert_threshold",
+      "clean_scope_report_not_promotion_candidate"
+    ]
+  },
+  "clean_closure_policy_audit": {
+    "artifact": "runtime/backend/pipeline-work/audits/gic-clean-closure-policy-audit-v3-20260701/clean_review_closure_policy_audit.json",
+    "html": "runtime/backend/pipeline-work/audits/gic-clean-closure-policy-audit-v3-20260701/clean_review_closure_policy_audit.html",
+    "doc": "docs/standard-research/34-gic-basic-print-candidate-promotion-v0.md",
+    "overall_verdict": "clean_review_closure_policy_pass",
+    "promotion_eligible": true,
+    "media_gate_verdict": "can_close_clean_review_gate",
+    "llm_gate_verdict": "can_close_clean_review_gate",
+    "required_next_artifacts": []
+  },
+  "clean_media_purpose_ledger": {
+    "artifact": "runtime/backend/pipeline-work/audits/gic-clean-media-purpose-ledger-20260701/clean_media_purpose_ledger.json",
+    "html": "runtime/backend/pipeline-work/audits/gic-clean-media-purpose-ledger-20260701/clean_media_purpose_ledger.html",
+    "doc": "docs/standard-research/33-gic-clean-media-purpose-ledger-v0.md",
+    "verdict": "media_purpose_ledger_pass",
+    "review_item_count": 128,
+    "open_blocking_review_item_count": 0,
+    "role_counts": {
+      "content_bearing_key_figure": 125,
+      "helper_icon": 13
+    }
+  },
+  "clean_llm_fallback_ledger": {
+    "artifact": "runtime/backend/pipeline-work/audits/gic-clean-llm-fallback-ledger-20260701/clean_llm_fallback_ledger.json",
+    "html": "runtime/backend/pipeline-work/audits/gic-clean-llm-fallback-ledger-20260701/clean_llm_fallback_ledger.html",
+    "doc": "docs/standard-research/34-gic-basic-print-candidate-promotion-v0.md",
+    "verdict": "llm_fallback_ledger_pass",
+    "fallback_record_count": 10,
+    "global_revert_count": 1,
+    "open_blocking_item_count": 0
+  },
+  "candidate_promotion": {
+    "artifact": "docs/standard-research/corpus/golden/candidates/pdf-01ae095f5a0f2dc7.gic-workbook-clean-closure-v3-20260701.candidate.json",
+    "doc": "docs/standard-research/34-gic-basic-print-candidate-promotion-v0.md",
+    "promotion_status": "candidate_only_not_promoted"
+  }
+}

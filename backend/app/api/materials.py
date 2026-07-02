@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.material import Material, PipelineEvent, PipelineRun
+from app.services.clean_to_standard import CleanToStandardPreflightError, clean_to_standard_preflight, start_clean_to_standard_run
 from app.services.material_inventory import (
     INPUT_BUCKET,
     PipelinePreflightError,
@@ -61,6 +62,11 @@ class RawToCleanStartRequest(BaseModel):
     force: bool = False
 
 
+class CleanToStandardStartRequest(BaseModel):
+    publish: bool = True
+    force: bool = False
+
+
 def _material_or_404(material_pk: int, user_id: str, db: Session) -> Material:
     material = db.query(Material).filter(Material.id == material_pk, Material.user_id == user_id).first()
     if not material:
@@ -98,6 +104,8 @@ def list_materials(
         query = query.filter(Material.raw_manifest_object.isnot(None))
     elif stage == "clean":
         query = query.filter(Material.clean_manifest_object.isnot(None))
+    elif stage == "standard":
+        query = query.filter(Material.standard_manifest_object.isnot(None))
     elif stage:
         query = query.filter(Material.stage_status == stage)
 
@@ -335,6 +343,39 @@ def start_raw_to_clean(
     except Exception as exc:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"启动 Raw→Clean 失败: {exc}")
+    return run.to_dict()
+
+
+@router.post("/materials/{material_pk}/clean2standard/preflight")
+def preflight_clean_to_standard(
+    material_pk: int,
+    force: bool = Query(False),
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    material = _material_or_404(material_pk, user_id, db)
+    try:
+        return clean_to_standard_preflight(material, force=force)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Clean→Standard 预检失败: {exc}")
+
+
+@router.post("/materials/{material_pk}/clean2standard/start")
+def start_clean_to_standard(
+    material_pk: int,
+    payload: CleanToStandardStartRequest,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    material = _material_or_404(material_pk, user_id, db)
+    try:
+        run = start_clean_to_standard_run(db, user_id, material, publish=payload.publish, force=payload.force)
+    except CleanToStandardPreflightError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail={"message": "Clean→Standard 预检未通过", "preflight": exc.preflight})
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"启动 Clean→Standard 失败: {exc}")
     return run.to_dict()
 
 

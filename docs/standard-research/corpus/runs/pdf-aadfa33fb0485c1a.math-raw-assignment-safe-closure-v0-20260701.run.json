@@ -1,0 +1,77 @@
+{
+  "schema": "luceon-standard-research-run/v1",
+  "material_id": "pdf-aadfa33fb0485c1a",
+  "nickname": "Math 8A",
+  "title": "中学生世界 八上 数学 上册.pdf",
+  "profile": "math_textbook",
+  "run_label": "math-raw-assignment-safe-closure-v0-20260701",
+  "standard_output": "runtime/backend/pipeline-work/audits/math-profile-raw-assignment-safe-closure-rerun-20260701/standard-final",
+  "base_standard_output": "runtime/backend/pipeline-work/audits/math-profile-native-exact-closure-rerun-20260701/standard-final",
+  "clean_input": "runtime/backend/pipeline-work/raw2clean/run-42-pdf-aadfa33fb0485c1a-job-20260610083901-844ae522da/clean-final",
+  "raw_input": "runtime/backend/pipeline-work/raw2clean/run-42-pdf-aadfa33fb0485c1a-job-20260610083901-844ae522da/raw_input",
+  "requested_profile": "auto",
+  "selected_profile": "math_textbook",
+  "source_pdf": "runtime/backend/pipeline-work/popo2raw/run-25-pdf-aadfa33fb0485c1a-job-20260610083901-844ae522da/rebuild_input/pdf-aadfa33fb0485c1a_origin.pdf",
+  "acceptance": {
+    "status": "review",
+    "quality_score": 86,
+    "profile_coverage": "review",
+    "context_integrity": "review",
+    "formula_table_integrity": "review",
+    "review_outcomes": "review",
+    "source_evidence": "pass",
+    "print_render": "pass",
+    "remaining_review_gates": [
+      "profile_coverage",
+      "context_integrity",
+      "formula_table_integrity",
+      "review_outcomes"
+    ]
+  },
+  "summary": {
+    "visual_review_packet_count": 1157,
+    "review_outcome_count": 1157,
+    "review_outcome_open_blocking_count": 369,
+    "review_outcome_closed_count": 788,
+    "closed_accepted_by_rule_count": 788,
+    "pdf_page_count": 64,
+    "formula_visual_review_count": 1153,
+    "table_visual_review_count": 4,
+    "open_formula_visual_review_count": 369,
+    "open_table_visual_review_count": 0,
+    "formula_needs_layout_fix_count": 210,
+    "formula_needs_page_bbox_count": 159,
+    "native_exact_newly_closed_count": 600,
+    "raw_assignment_exact_safe_candidate_count": 188,
+    "raw_assignment_exact_safe_newly_closed_count": 188,
+    "raw_assignment_exact_digit_spacing_review_count": 3,
+    "remaining_near_equivalent_manual_review_count": 48,
+    "remaining_semantic_mismatch_manual_review_count": 159,
+    "visual_source_crop_count": 998,
+    "visual_source_crop_required_count": 1157,
+    "visual_source_crop_needs_page_bbox_count": 159,
+    "math_profile_selector_closed": true,
+    "math_profile_contract_ready": false
+  },
+  "closure": {
+    "status": "partial_closure_review_remaining",
+    "risk_audit": "runtime/backend/pipeline-work/audits/math8a-raw-assignment-exact-semantic-closure-audit-20260701/math_raw_assignment_exact_closure_risk_audit.json",
+    "risk_audit_html": "runtime/backend/pipeline-work/audits/math8a-raw-assignment-exact-semantic-closure-audit-20260701/math_raw_assignment_exact_closure_risk_audit.html",
+    "contact_sheet": "runtime/backend/pipeline-work/audits/math8a-raw-assignment-exact-semantic-closure-audit-20260701/raw_assignment_exact_semantic_contact_sheet.png",
+    "closure_report": "runtime/backend/pipeline-work/audits/math-profile-raw-assignment-safe-closure-rerun-20260701/standard-final/math_raw_assignment_exact_safe_closure_report.json",
+    "formula_source_mismatch_audit": "runtime/backend/pipeline-work/audits/math-profile-raw-assignment-safe-closure-rerun-20260701/standard-final/formula_source_mismatch_audit.json",
+    "decision_boundary": "Close only risk-audited safe raw_assignment.located_exact surface matches. Digit-spacing and broader raw-assignment/containment evidence remain review."
+  },
+  "math_visual_contract": {
+    "status": "review",
+    "open_formula_visual_review_outcomes": 369,
+    "open_table_visual_review_outcomes": 0,
+    "basic_print_blocker": "math_profile_contract_not_pass"
+  },
+  "verdict": "math_raw_assignment_exact_safe_closure_partial_pass_math_still_review",
+  "notes": [
+    "This run closes 188 audited safe raw_assignment.located_exact formula outcomes.",
+    "Three digit-spacing records remain review and are not accepted by rule.",
+    "Math 8A remains blocked/review because 369 formula visual outcomes remain open."
+  ]
+}

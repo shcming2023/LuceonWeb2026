@@ -1,0 +1,66 @@
+{
+  "schema": "luceon-standard-research-case/v1",
+  "material_id": "pdf-8ada74dfc6d2d66c",
+  "title": "Grammar Friends 4 (Students Book) (Flannigan E.) (Z-Library).pdf",
+  "profile": "grammar_workbook",
+  "role": "grammar_workbook_second_sample",
+  "target_level": "basic_print_candidate",
+  "current_status": "basic_print_candidate",
+  "current_scores": {
+    "latest_standard_quality_score": 100,
+    "cross_sample_reconstruction_unique_case_count": 5,
+    "cross_sample_reconstruction_blank_pattern_unique_count": 2,
+    "cross_sample_reconstruction_grammar_paradigm_unique_count": 3,
+    "grammar_paradigm_rebuild_audit_record_count": 3,
+    "grammar_paradigm_rebuild_audit_reflowed_count": 3,
+    "grammar_paradigm_rebuild_audit_collapsed_fragments_removed_count": 3
+  },
+  "latest_run_record": "../runs/pdf-8ada74dfc6d2d66c.gf4-workbook-second-sample-v3-20260630.run.json",
+  "candidate_record": "../golden/candidates/pdf-8ada74dfc6d2d66c.gf4-workbook-second-sample-v3-20260630.candidate.json",
+  "source_case": {
+    "requires_source_pdf": true,
+    "requires_raw_package": true,
+    "requires_clean_package": true,
+    "requires_evidence": true
+  },
+  "known_blockers": [],
+  "golden": false,
+  "case_status_audited_at": "2026-06-30",
+  "superseded_records": [
+    {
+      "record": "../runs/pdf-8ada74dfc6d2d66c.gf4-workbook-second-sample-v2-20260630.run.json",
+      "superseded_by": "../runs/pdf-8ada74dfc6d2d66c.gf4-workbook-second-sample-v3-20260630.run.json",
+      "reason": "V2 exposed three grammar paradigm table reconstruction blockers; V3 validates the rendering rule and closes them."
+    }
+  ],
+  "notes": [
+    "GF4 is the second grammar_workbook sample used to test whether GF6-derived workbook profile rules generalize.",
+    "This case is a Basic Print candidate, not an accepted golden.",
+    "The v2 run showed workbook profile and image relation contracts passing after profile rule hardening.",
+    "The v3 run validates grammar paradigm table rendering for the three Review 5 layout failures.",
+    "The remaining b-01544 source-fidelity mismatch is accepted only as an explicit source typo correction with evidence in correction_log.json."
+  ],
+  "blank_reconstruction_cross_sample_audit": {
+    "artifact": "runtime/backend/pipeline-work/audits/standard-blank-reconstruction-cross-sample-20260701/blank_reconstruction_cross_sample_audit.json",
+    "html_artifact": "runtime/backend/pipeline-work/audits/standard-blank-reconstruction-cross-sample-20260701/blank_reconstruction_cross_sample_audit.html",
+    "unique_reconstruction_case_count": 5,
+    "unique_verdict_counts": {
+      "blank_pattern_reconstructable": 2,
+      "non_blank_grammar_paradigm_table_reconstruction": 3
+    },
+    "compiler_readiness": "not_ready_blank_rules_apply_only_to_g7plus_paired_vocabulary_blockers",
+    "decision_boundary": "Blank-box patterns are a narrow paired-vocabulary candidate subrule, not a generic reconstruction solution."
+  },
+  "grammar_paradigm_table_rebuild_audit": {
+    "artifact": "runtime/backend/pipeline-work/audits/gf4-grammar-paradigm-table-rebuild-audit-20260701/grammar_paradigm_table_rebuild_audit.json",
+    "html_artifact": "runtime/backend/pipeline-work/audits/gf4-grammar-paradigm-table-rebuild-audit-20260701/grammar_paradigm_table_rebuild_audit.html",
+    "record_count": 3,
+    "reflowed_count": 3,
+    "collapsed_fragments_removed_count": 3,
+    "v3_decision_counts_for_v2_failures": {
+      "accepted": 3
+    },
+    "compiler_readiness": "validated_for_gf4_failure_mode_not_broad_table_rebuild",
+    "decision_boundary": "Validates GF4 grammar paradigm table failure mode only; does not generalize to blank-box reconstruction or broad table rebuild."
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "schema": "luceon-standard-research-case/v1",
+  "material_id": "pdf-ff4c7f59964ad54f",
+  "title": "Grammar Friends 6 (Students Book) (Flannigan E.) (Z-Library).pdf",
+  "profile": "grammar_workbook",
+  "role": "grammar_workbook_basic_print_candidate",
+  "target_level": "basic_print_candidate",
+  "current_status": "basic_print_candidate",
+  "current_scores": {
+    "published_standard": 85,
+    "latest_standard_quality_score": 100
+  },
+  "latest_run_record": "../runs/pdf-ff4c7f59964ad54f.gf6-workbook-regression-v1-20260629.run.json",
+  "candidate_record": "../golden/candidates/pdf-ff4c7f59964ad54f.gf6-workbook-regression-v1-20260629.candidate.json",
+  "source_case": {
+    "requires_source_pdf": true,
+    "requires_raw_package": true,
+    "requires_clean_package": true,
+    "requires_evidence": true
+  },
+  "known_blockers": [],
+  "golden": false,
+  "case_status_audited_at": "2026-06-30",
+  "superseded_records": [
+    {
+      "record": "../runs/pdf-ff4c7f59964ad54f.gf6-rerun-20260629.run.json",
+      "superseded_by": "../runs/pdf-ff4c7f59964ad54f.gf6-workbook-regression-v1-20260629.run.json",
+      "reason": "Initial Standard rerun remains a negative regression baseline."
+    },
+    {
+      "record": "../runs/pdf-ff4c7f59964ad54f.gf6-profile-v0-20260629.run.json",
+      "superseded_by": "../runs/pdf-ff4c7f59964ad54f.gf6-workbook-regression-v1-20260629.run.json",
+      "reason": "Profile V0 review blockers were resolved by later workbook regression run."
+    },
+    {
+      "record": "../runs/pdf-ff4c7f59964ad54f.gf6-image-relation-v0-20260629.run.json",
+      "superseded_by": "../runs/pdf-ff4c7f59964ad54f.gf6-workbook-regression-v1-20260629.run.json",
+      "reason": "Image relation review queue was closed by later visual outcome closure."
+    },
+    {
+      "record": "../runs/pdf-ff4c7f59964ad54f.gf6-visual-confirmation-v0-20260629.run.json",
+      "superseded_by": "../runs/pdf-ff4c7f59964ad54f.gf6-workbook-regression-v1-20260629.run.json",
+      "reason": "Visual confirmation V0 narrowed the queue but intentionally remained review."
+    }
+  ],
+  "notes": [
+    "GF6 is a workbook Basic Print candidate, not an accepted golden.",
+    "Old blocker labels describe the pre-closure negative regression stage and are preserved only in superseded records.",
+    "accepted_by_rule closures are deterministic evidence closures, not manual visual final approval."
+  ]
+}

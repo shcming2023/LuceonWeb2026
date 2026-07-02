@@ -152,7 +152,7 @@
       </div>
     </section>
 
-    <section v-else class="outline-workbench">
+    <section v-else-if="reviewMode === 'outline'" class="outline-workbench">
       <div class="trace-toolbar outline-toolbar">
         <el-input v-model="search" clearable :placeholder="searchPlaceholder" @keyup.enter="loadAssets">
           <template #prefix>
@@ -234,6 +234,7 @@
                 :key="unit.id"
                 class="outline-unit"
                 :class="{ active: unit.id === activeOutlineUnitId }"
+                :data-unit-id="unit.id"
                 :style="{ paddingLeft: `${Math.min(unit.level || 1, 6) * 10 + 8}px` }"
                 type="button"
                 @click="selectOutlineUnit(unit.id)"
@@ -349,6 +350,147 @@
       </div>
     </section>
 
+    <section v-else class="standard-workbench">
+      <div class="trace-toolbar outline-toolbar">
+        <el-input v-model="search" clearable :placeholder="searchPlaceholder" @keyup.enter="loadAssets">
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+        <el-select
+          v-model="selectedAssetId"
+          filterable
+          placeholder="选择已生成 Standard 的材料"
+          class="asset-select"
+          @change="handleSelectedAssetChange"
+        >
+          <el-option
+            v-for="row in assets"
+            :key="row.id"
+            :label="displayFilename(row)"
+            :value="row.id"
+          />
+        </el-select>
+        <el-button :loading="loading" @click="loadAssets">
+          <el-icon><Refresh /></el-icon>
+          <span>刷新</span>
+        </el-button>
+        <el-pagination
+          v-model:current-page="page"
+          v-model:page-size="pageSize"
+          small
+          :total="total"
+          :page-sizes="[10, 20, 50]"
+          layout="total, sizes, prev, pager, next"
+          class="trace-pagination"
+        />
+      </div>
+
+      <div class="selected-asset-strip outline-strip">
+        <strong>{{ selectedAsset ? displayFilename(selectedAsset) : '请选择材料' }}</strong>
+        <span>{{ selectedAsset?.material_id || selectedAsset?.run_id || '' }}</span>
+        <el-tag v-if="selectedAsset" size="small" type="success">Standard</el-tag>
+        <el-tag v-if="selectedAsset?.standard_quality_score !== null && selectedAsset?.standard_quality_score !== undefined" size="small" type="primary">
+          {{ selectedAsset.standard_quality_score }}分
+        </el-tag>
+        <el-tag v-if="selectedAsset" size="small" :type="statusMeta(selectedAsset.review_status).type">
+          {{ statusMeta(selectedAsset.review_status).label }}
+        </el-tag>
+      </div>
+      <div v-if="selectedAsset" class="review-decision-bar outline-decision-bar">
+        <el-select v-model="reviewStatusDraft" size="small" class="review-status-select">
+          <el-option label="待审查" value="pending" />
+          <el-option label="通过" value="pass" />
+          <el-option label="需修正" value="needs_fix" />
+          <el-option label="退回" value="reject" />
+        </el-select>
+        <el-input
+          v-model="reviewNoteDraft"
+          size="small"
+          clearable
+          placeholder="审查备注"
+          class="review-note-input"
+          @keyup.enter="saveReviewMetadata"
+        />
+        <el-button size="small" type="primary" :loading="reviewSaving" @click="saveReviewMetadata">保存结论</el-button>
+      </div>
+
+      <div class="standard-grid">
+        <article class="standard-panel standard-pdf-panel">
+          <header>
+            <strong>源 PDF</strong>
+            <el-tag v-if="selectedAsset" size="small" type="primary">P{{ activeSourcePage }}</el-tag>
+          </header>
+          <PdfSourceViewer
+            v-if="fileUrl"
+            :url="fileUrl"
+            :source-map="sourceMap"
+            :active-page="activeSourcePage"
+            :active-block-id="activeSourceBlockId"
+            @page-change="handlePdfPageChange"
+            @block-select="handlePdfBlockSelect"
+          />
+          <el-empty v-else description="暂无 PDF 可预览" />
+        </article>
+
+        <aside class="standard-panel directory-panel">
+          <header>
+            <strong>目录</strong>
+            <el-tag size="small" type="warning">{{ outlineUnits.length }}</el-tag>
+          </header>
+          <div ref="standardOutlineScrollRef" class="outline-scroll">
+            <el-skeleton v-if="outlineLoading" :rows="14" animated />
+            <el-empty v-else-if="outlineError" :description="outlineError" />
+            <template v-else-if="outlineUnits.length">
+              <button
+                v-for="unit in outlineUnits"
+                :key="unit.id"
+                class="outline-unit"
+                :class="{ active: unit.id === activeOutlineUnitId }"
+                :data-unit-id="unit.id"
+                :style="{ paddingLeft: `${Math.min(unit.level || 1, 6) * 10 + 8}px` }"
+                type="button"
+                @click="selectOutlineUnit(unit.id)"
+              >
+                <span class="outline-unit-title">{{ unit.title || '未命名目录' }}</span>
+                <small>
+                  <span v-if="outlineUnitPageNumber(unit)">P{{ outlineUnitPageNumber(unit) }}</span>
+                  <span>{{ cleanStatusMeta(unit.clean_status).label }}</span>
+                </small>
+              </button>
+            </template>
+            <el-empty v-else description="暂无可审查目录" />
+          </div>
+        </aside>
+
+        <article class="standard-panel standard-html-panel">
+          <header>
+            <strong>Standard HTML</strong>
+            <div class="panel-header-actions">
+              <el-tag v-if="selectedOutlineUnitPage" size="small">PDF P{{ selectedOutlineUnitPage }}</el-tag>
+              <el-button v-if="standardHtmlUrl" link size="small" type="primary" @click="openStandardHtml">新窗口</el-button>
+            </div>
+          </header>
+          <div class="unit-meta">
+            <strong>{{ selectedOutlineUnit?.path_label || selectedOutlineUnit?.title || '未选择目录' }}</strong>
+            <span>最终标准输出物渲染</span>
+          </div>
+          <div class="standard-frame-wrap">
+            <el-skeleton v-if="outlineLoading" :rows="14" animated />
+            <iframe
+              v-else-if="standardHtmlUrl"
+              ref="standardFrameRef"
+              class="standard-frame"
+              :src="standardHtmlUrl"
+              title="Standard HTML Preview"
+              @load="handleStandardFrameLoad"
+            ></iframe>
+            <el-empty v-else description="暂无 Standard HTML" />
+          </div>
+        </article>
+      </div>
+    </section>
+
     <el-dialog
       v-model="pdfEvidenceVisible"
       class="pdf-evidence-dialog"
@@ -418,22 +560,38 @@ md.renderer.rules.image = (tokens: any, idx: number, options: any, env: any, sel
     ? defaultImageRenderer(tokens, idx, options, env, self)
     : self.renderToken(tokens, idx, options)
 }
-type ReviewMode = 'page' | 'outline'
+type ReviewMode = 'page' | 'outline' | 'standard'
 type PopoViewMode = 'page' | 'tree'
 type ReviewAssetStage = 'mineru' | 'popo' | 'raw' | 'clean'
-const reviewMode = computed<ReviewMode>(() => route.meta.reviewMode === 'outline' ? 'outline' : 'page')
+const reviewMode = computed<ReviewMode>(() => {
+  if (route.meta.reviewMode === 'outline') return 'outline'
+  if (route.meta.reviewMode === 'standard') return 'standard'
+  return 'page'
+})
 const routeAssetId = computed(() => {
   const value = route.query.asset_id || route.query.asset
   if (Array.isArray(value)) return value[0] || ''
   return value ? String(value) : ''
 })
-const pageTitle = computed(() => reviewMode.value === 'outline' ? '目录重建审查' : 'PDF解析审查')
-const pageDescription = computed(() => reviewMode.value === 'outline'
-  ? '根据重建目录联动 Raw 与 Clean，按需打开 PDF 页图证据，审查目录完整性、切分准确性和清洗继承。'
-  : '基于 PDF 页面审查 MinerU 与 MinerU-Popo 输出，保留原仓库的页面溯源与对照视角。')
-const searchPlaceholder = computed(() => reviewMode.value === 'outline'
-  ? '搜索已到 Raw/Clean 的 material_id / 文件名'
-  : '搜索已完成 MinerU+MinerU-Popo 的 material_id / manifest')
+const pageTitle = computed(() => {
+  if (reviewMode.value === 'outline') return '目录重建审查'
+  if (reviewMode.value === 'standard') return '标准输出物审查'
+  return 'PDF解析审查'
+})
+const pageDescription = computed(() => {
+  if (reviewMode.value === 'outline') {
+    return '根据重建目录联动 Raw 与 Clean，按需打开 PDF 页图证据，审查目录完整性、切分准确性和清洗继承。'
+  }
+  if (reviewMode.value === 'standard') {
+    return '左侧对照源 PDF，中间定位目录结构，右侧审查 Standard HTML 渲染结果，核对最终标准输出物与原文的一致性。'
+  }
+  return '基于 PDF 页面审查 MinerU 与 MinerU-Popo 输出，保留原仓库的页面溯源与对照视角。'
+})
+const searchPlaceholder = computed(() => {
+  if (reviewMode.value === 'outline') return '搜索已到 Raw/Clean 的 material_id / 文件名'
+  if (reviewMode.value === 'standard') return '搜索已生成 Standard 的 material_id / 文件名'
+  return '搜索已完成 MinerU 的 material_id / manifest'
+})
 const assets = ref<any[]>([])
 const total = ref(0)
 const page = ref(1)
@@ -455,6 +613,8 @@ const mineruScrollRef = ref<HTMLElement | null>(null)
 const popoScrollRef = ref<HTMLElement | null>(null)
 const rawOutlineScrollRef = ref<HTMLElement | null>(null)
 const cleanOutlineScrollRef = ref<HTMLElement | null>(null)
+const standardOutlineScrollRef = ref<HTMLElement | null>(null)
+const standardFrameRef = ref<HTMLIFrameElement | null>(null)
 const popoViewMode = ref<PopoViewMode>('page')
 const reviewStatusDraft = ref('pending')
 const reviewNoteDraft = ref('')
@@ -466,6 +626,11 @@ const pdfEvidenceLoading = ref(false)
 const pdfEvidenceError = ref('')
 let contentLoadSeq = 0
 let outlineLoadSeq = 0
+let standardScrollTimer: number | undefined
+let pdfStandardSyncTimer: number | undefined
+let standardFrameCleanup: (() => void) | null = null
+let suppressNextStandardSync = false
+let suppressPdfToStandardSync = false
 
 interface MarkdownPageSection {
   page: number
@@ -518,6 +683,23 @@ interface OutlineReviewData {
   raw_text?: Array<{ title?: string; page?: number; level?: number; text?: string }>
   clean_text?: Array<{ title?: string; page?: number; level?: number; text?: string }>
   stage_refs?: Record<string, { bucket?: string; object?: string }>
+  standard_navigation?: {
+    available?: boolean
+    outline?: Array<{
+      block_id?: string
+      title?: string
+      level?: number
+      path?: string[]
+      line_start?: number
+      heading_path?: string[]
+    }>
+    blocks?: Array<{
+      block_id?: string
+      type?: string
+      line_start?: number
+      heading_path?: string[]
+    }>
+  }
   debug_artifacts?: {
     outline_candidates_summary?: Record<string, any>
     outline_candidates_preview?: any[]
@@ -569,6 +751,57 @@ const selectedOutlineUnit = computed(() => {
   return outlineUnits.value.find(unit => unit.id === activeOutlineUnitId.value) || outlineUnits.value[0] || null
 })
 const selectedOutlineUnitPage = computed(() => outlineUnitPageNumber(selectedOutlineUnit.value))
+const standardHtmlUrl = computed(() => {
+  const assetId = selectedAssetId.value
+  if (!assetId || reviewMode.value !== 'standard') return ''
+  return `/api/review/assets/${assetId}/artifact?stage=standard&path=standard.html`
+})
+const standardOutlineTargets = computed(() => outlineData.value?.standard_navigation?.outline || [])
+const standardTargetByUnitId = computed(() => {
+  const targets = standardOutlineTargets.value
+  const byPath = new Map<string, any>()
+  const byTitle = new Map<string, any>()
+  for (const target of targets) {
+    const pathKey = standardPathKey(target.path || target.heading_path || [])
+    if (pathKey && !byPath.has(pathKey)) byPath.set(pathKey, target)
+    const titleKey = standardTitleKey(target.title || '', target.level)
+    if (titleKey && !byTitle.has(titleKey)) byTitle.set(titleKey, target)
+  }
+  const map = new Map<string, any>()
+  for (const unit of outlineUnits.value) {
+    const target =
+      byPath.get(standardPathKey(unit.path || [])) ||
+      byPath.get(standardPathKey(unit.path_label ? unit.path_label.split(' > ') : [])) ||
+      byTitle.get(standardTitleKey(unit.title || '', unit.level))
+    if (target?.block_id) map.set(unit.id, target)
+  }
+  return map
+})
+const unitIdByStandardBlockId = computed(() => {
+  const map = new Map<string, string>()
+  for (const [unitId, target] of standardTargetByUnitId.value.entries()) {
+    if (target?.block_id) map.set(String(target.block_id), unitId)
+  }
+  return map
+})
+const outlineUnitForPdfPage = (pageNumber: number) => {
+  const page = Math.max(1, Number(pageNumber) || 1)
+  const candidates = outlineUnits.value
+    .map((unit, index) => ({
+      unit,
+      index,
+      start: outlineUnitPageNumber(unit, 0),
+      end: Number(unit.page_end || unit.page || unit.page_start || 0)
+    }))
+    .filter(row => row.start > 0 && row.start <= page)
+
+  if (!candidates.length) return outlineUnits.value[0] || null
+
+  const containing = candidates.filter(row => !row.end || row.end >= page)
+  const pool = containing.length ? containing : candidates
+  return pool
+    .sort((a, b) => (b.start - a.start) || (b.index - a.index))[0]?.unit || null
+}
 const pdfEvidencePageCandidates = computed(() => {
   const anchor = Math.max(1, pdfEvidenceAnchorPage.value || pdfEvidencePage.value || 1)
   const pages = [anchor - 1, anchor, anchor + 1].filter(pageNumber => pageNumber > 0)
@@ -613,7 +846,7 @@ const saveReviewMetadata = async () => {
 }
 
 const reviewScrollLockClass = 'luceon-review-scroll-lock'
-const reviewWheelTargetSelector = '.pdf-source-scroll, .markdown-scroll, .outline-scroll, .code-scroll'
+const reviewWheelTargetSelector = '.pdf-source-scroll, .markdown-scroll, .outline-scroll, .code-scroll, .standard-frame-wrap'
 let reviewScrollResetTimer: number | undefined
 
 const resetReviewPageScroll = () => {
@@ -701,6 +934,7 @@ const renderReviewMarkdown = (markdown: string, stage: ReviewAssetStage) => {
 const assetMatchesReviewMode = (row: any) => {
   if (!row) return false
   if (reviewMode.value === 'outline') return Boolean(row.has_raw || row.has_clean || row.has_raw_dry_run)
+  if (reviewMode.value === 'standard') return Boolean(row.has_standard)
   return Boolean(row.has_manifest && !['raw', 'clean'].includes(row.review_stage))
 }
 
@@ -723,6 +957,7 @@ const stageMeta = (stage = 'parse') => {
     raw_done: { label: 'Raw', type: 'warning' },
     clean_stale: { label: 'Clean 失效', type: 'warning' },
     clean_done: { label: 'Clean', type: 'success' },
+    standard_done: { label: 'Standard', type: 'success' },
     raw: { label: 'Raw', type: 'warning' },
     clean: { label: 'Clean', type: 'success' }
   }
@@ -736,6 +971,107 @@ const cleanStatusMeta = (status = 'pending') => {
     pending: { label: '待 Clean', type: 'info' }
   }
   return map[status] || map.pending
+}
+
+const standardPathKey = (path: unknown) => {
+  const rows = Array.isArray(path) ? path : []
+  return rows.map(item => String(item || '').trim().toLowerCase()).filter(Boolean).join(' > ')
+}
+
+const standardTitleKey = (title: string, level?: number) => {
+  const normalized = String(title || '').trim().toLowerCase()
+  return normalized ? `${Number(level || 0)}:${normalized}` : ''
+}
+
+const standardFrameDocument = () => {
+  try {
+    return standardFrameRef.value?.contentDocument || standardFrameRef.value?.contentWindow?.document || null
+  } catch {
+    return null
+  }
+}
+
+const scrollStandardToUnit = (unitId: string) => {
+  const target = standardTargetByUnitId.value.get(unitId)
+  const doc = standardFrameDocument()
+  if (!target?.block_id || !doc) return
+  const element = doc.getElementById(String(target.block_id))
+  if (!element) return
+  suppressNextStandardSync = true
+  element.scrollIntoView({ block: 'start', behavior: 'auto' })
+  window.setTimeout(() => {
+    suppressNextStandardSync = false
+  }, 180)
+}
+
+const scrollStandardDirectoryToUnit = async (unitId: string) => {
+  await nextTick()
+  const fallback = document.querySelector<HTMLElement>('.standard-grid .directory-panel .outline-scroll')
+  scrollOutlinePaneToUnit(standardOutlineScrollRef.value || fallback, unitId)
+}
+
+const setSuppressPdfToStandardSync = () => {
+  suppressPdfToStandardSync = true
+  window.setTimeout(() => {
+    suppressPdfToStandardSync = false
+  }, 240)
+}
+
+const activeStandardBlockId = () => {
+  const doc = standardFrameDocument()
+  if (!doc) return ''
+  const win = standardFrameRef.value?.contentWindow
+  const scrollY = win?.scrollY ?? doc.documentElement.scrollTop ?? doc.body.scrollTop ?? 0
+  const candidates = Array.from(doc.querySelectorAll<HTMLElement>('[id]'))
+    .filter(element => unitIdByStandardBlockId.value.has(element.id))
+    .sort((a, b) => a.offsetTop - b.offsetTop)
+  let active = candidates[0]?.id || ''
+  for (const element of candidates) {
+    if (element.offsetTop <= scrollY + 96) active = element.id
+    else break
+  }
+  return active
+}
+
+const syncFromStandardScroll = async () => {
+  if (suppressNextStandardSync || reviewMode.value !== 'standard') return
+  const blockId = activeStandardBlockId()
+  const unitId = blockId ? unitIdByStandardBlockId.value.get(blockId) : ''
+  if (!unitId || unitId === activeOutlineUnitId.value) return
+  activeOutlineUnitId.value = unitId
+  syncOutlineUnitPage(selectedOutlineUnit.value)
+  await scrollStandardDirectoryToUnit(unitId)
+}
+
+const scheduleStandardScrollSync = () => {
+  if (standardScrollTimer) window.clearTimeout(standardScrollTimer)
+  standardScrollTimer = window.setTimeout(syncFromStandardScroll, 120)
+}
+
+const cleanupStandardFrameListener = () => {
+  if (standardFrameCleanup) {
+    standardFrameCleanup()
+    standardFrameCleanup = null
+  }
+  if (standardScrollTimer) {
+    window.clearTimeout(standardScrollTimer)
+    standardScrollTimer = undefined
+  }
+  if (pdfStandardSyncTimer) {
+    window.clearTimeout(pdfStandardSyncTimer)
+    pdfStandardSyncTimer = undefined
+  }
+}
+
+const handleStandardFrameLoad = () => {
+  cleanupStandardFrameListener()
+  const win = standardFrameRef.value?.contentWindow
+  if (!win) return
+  win.addEventListener('scroll', scheduleStandardScrollSync, { passive: true })
+  standardFrameCleanup = () => win.removeEventListener('scroll', scheduleStandardScrollSync)
+  if (activeOutlineUnitId.value) {
+    void nextTick(() => scrollStandardToUnit(activeOutlineUnitId.value))
+  }
 }
 
 const loadAssets = async () => {
@@ -769,8 +1105,10 @@ const loadAssets = async () => {
       selectedAssetId.value = nextSelected.id
       if (reviewMode.value === 'page') {
         void loadSelectedContent(nextSelected.id)
-      } else {
+      } else if (reviewMode.value === 'outline') {
         void loadSelectedOutline(nextSelected.id)
+      } else {
+        void loadSelectedStandard(nextSelected.id)
       }
     } else {
       clearSelectedContent()
@@ -783,6 +1121,7 @@ const loadAssets = async () => {
 }
 
 const clearSelectedContent = () => {
+  cleanupStandardFrameListener()
   selectedAssetId.value = ''
   mineruContent.value = ''
   popoContent.value = ''
@@ -805,8 +1144,10 @@ const selectAsset = (row: any) => {
   selectedAssetId.value = row.id
   if (reviewMode.value === 'page') {
     void loadSelectedContent(row.id)
-  } else {
+  } else if (reviewMode.value === 'outline') {
     void loadSelectedOutline(row.id)
+  } else {
+    void loadSelectedStandard(row.id)
   }
 }
 
@@ -888,8 +1229,40 @@ const loadSelectedOutline = async (assetId: string) => {
   }
 }
 
+const loadSelectedStandard = async (assetId: string) => {
+  cleanupStandardFrameListener()
+  const seq = ++outlineLoadSeq
+  outlineLoading.value = true
+  outlineError.value = ''
+  outlineData.value = null
+  activeOutlineUnitId.value = ''
+  fileUrl.value = reviewApi.getContentUrl(assetId)
+  sourceMap.value = { pages: [] }
+  activeSourcePage.value = 1
+  activeSourceBlockId.value = ''
+  const [outlineResult, sourceMapResult] = await Promise.allSettled([
+    reviewApi.getOutlineReview(assetId),
+    reviewApi.getSourceMap(assetId)
+  ])
+  if (seq !== outlineLoadSeq || selectedAssetId.value !== assetId) return
+  if (sourceMapResult.status === 'fulfilled') {
+    sourceMap.value = sourceMapResult.value || { pages: [] }
+    activeSourceBlockId.value = sourceMap.value.pages[0]?.blocks[0]?.id || ''
+  }
+  if (outlineResult.status === 'fulfilled') {
+    outlineData.value = outlineResult.value
+    await nextTick()
+    activeOutlineUnitId.value = outlineUnits.value[0]?.id || ''
+    syncOutlineUnitPage(selectedOutlineUnit.value)
+  } else {
+    outlineError.value = outlineResult.reason?.response?.data?.detail || '标准审查目录数据不可用'
+  }
+  outlineLoading.value = false
+}
+
 const syncOutlineUnitPage = (unit: OutlineUnit | null) => {
   const pageNumber = outlineUnitPageNumber(unit, 1)
+  setSuppressPdfToStandardSync()
   activeSourcePage.value = pageNumber
   activeSourceBlockId.value = ''
 }
@@ -934,7 +1307,7 @@ const scrollOutlinePaneToUnit = (container: HTMLElement | null, unitId: string) 
   const containerRect = container.getBoundingClientRect()
   const targetRect = target.getBoundingClientRect()
   container.scrollTo({
-    top: Math.max(0, container.scrollTop + targetRect.top - containerRect.top - 8),
+    top: Math.max(0, container.scrollTop + targetRect.top - containerRect.top - (container.clientHeight / 2) + (target.clientHeight / 2)),
     behavior: 'auto'
   })
 }
@@ -945,6 +1318,14 @@ const selectOutlineUnit = async (unitId: string) => {
   syncOutlineUnitPage(selectedOutlineUnit.value)
   scrollOutlinePaneToUnit(rawOutlineScrollRef.value, unitId)
   scrollOutlinePaneToUnit(cleanOutlineScrollRef.value, unitId)
+  await scrollStandardDirectoryToUnit(unitId)
+  if (reviewMode.value === 'standard') {
+    scrollStandardToUnit(unitId)
+  }
+}
+
+const openStandardHtml = () => {
+  if (standardHtmlUrl.value) window.open(standardHtmlUrl.value, '_blank')
 }
 
 const parseMarkdownPages = (content: string): MarkdownPageSection[] => {
@@ -996,6 +1377,26 @@ const setPopoViewMode = async (mode: PopoViewMode) => {
   }
 }
 
+const syncStandardFromPdfPage = async (pageNumber: number) => {
+  if (suppressPdfToStandardSync || reviewMode.value !== 'standard') return
+  const unit = outlineUnitForPdfPage(pageNumber)
+  if (!unit?.id) return
+  if (activeOutlineUnitId.value !== unit.id) {
+    activeOutlineUnitId.value = unit.id
+  }
+  await scrollStandardDirectoryToUnit(unit.id)
+  scrollStandardToUnit(unit.id)
+}
+
+const schedulePdfToStandardSync = (pageNumber: number) => {
+  if (reviewMode.value !== 'standard') return
+  if (pdfStandardSyncTimer) window.clearTimeout(pdfStandardSyncTimer)
+  pdfStandardSyncTimer = window.setTimeout(() => {
+    pdfStandardSyncTimer = undefined
+    void syncStandardFromPdfPage(pageNumber)
+  }, 180)
+}
+
 const handlePdfPageChange = (pageNumber: number) => {
   const pageChanged = activeSourcePage.value !== pageNumber
   activeSourcePage.value = pageNumber
@@ -1003,12 +1404,14 @@ const handlePdfPageChange = (pageNumber: number) => {
     activeSourceBlockId.value = sourceMap.value.pages.find(page => page.page === pageNumber)?.blocks[0]?.id || ''
   }
   scrollMarkdownToPage(pageNumber)
+  schedulePdfToStandardSync(pageNumber)
 }
 
 const handlePdfBlockSelect = (pageNumber: number, blockId: string) => {
   activeSourcePage.value = pageNumber
   activeSourceBlockId.value = blockId
   scrollMarkdownToPage(pageNumber)
+  schedulePdfToStandardSync(pageNumber)
 }
 
 watch([page, pageSize], loadAssets)
@@ -1027,7 +1430,10 @@ onMounted(() => {
   lockReviewPageScroll()
   void loadAssets()
 })
-onBeforeUnmount(unlockReviewPageScroll)
+onBeforeUnmount(() => {
+  cleanupStandardFrameListener()
+  unlockReviewPageScroll()
+})
 </script>
 
 <style scoped>
@@ -1212,6 +1618,77 @@ onBeforeUnmount(unlockReviewPageScroll)
   background: var(--bg-primary);
 }
 
+.standard-workbench {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.standard-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns:
+    minmax(360px, 1.05fr)
+    minmax(240px, 0.62fr)
+    minmax(420px, 1.25fr);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.standard-panel {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+}
+
+.standard-panel + .standard-panel {
+  border-left: 1px solid var(--border-light);
+}
+
+.standard-panel header {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-secondary);
+}
+
+.standard-panel header strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.standard-pdf-panel :deep(.pdf-source-viewer) {
+  flex: 1;
+  min-height: 0;
+}
+
+.standard-frame-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: #fff;
+}
+
+.standard-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
+
 .outline-panel {
   min-width: 0;
   min-height: 0;
@@ -1287,6 +1764,7 @@ onBeforeUnmount(unlockReviewPageScroll)
   border-color: color-mix(in srgb, var(--primary-color) 28%, var(--border-light));
   background: var(--primary-tint);
   color: var(--primary-color);
+  box-shadow: inset 3px 0 0 var(--primary-color), 0 0 0 1px color-mix(in srgb, var(--primary-color) 18%, transparent);
 }
 
 .outline-unit-title {

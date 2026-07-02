@@ -2,6 +2,7 @@ import json
 import mimetypes
 import os
 import hashlib
+import re
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -11,12 +12,14 @@ from urllib.parse import quote
 import fitz
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse, Response, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models.final_review import FinalReviewAnnotation, FinalReviewSession
 from app.models.material import Material
 from app.models.review_asset import ReviewAsset
+from app.services import final_review as final_review_service
 from app.services.luceon_review import (
     ObjectRef,
     clean_path,
@@ -61,6 +64,34 @@ class ReviewMetadataRequest(BaseModel):
     review_status: str = "pending"
     review_tags: list[str] = []
     review_note: str = ""
+
+
+class FinalReviewSessionRequest(BaseModel):
+    asset_id: int
+    reuse_open: bool = True
+
+
+class FinalReviewAnnotationRequest(BaseModel):
+    issue_type: str
+    severity: str = "major"
+    status: str = "draft"
+    human_note: str = ""
+    anchors: dict[str, Any] = Field(default_factory=dict)
+    evidence: dict[str, Any] = Field(default_factory=dict)
+
+
+class FinalReviewAnnotationPatchRequest(BaseModel):
+    issue_type: str | None = None
+    severity: str | None = None
+    status: str | None = None
+    human_note: str | None = None
+    anchors: dict[str, Any] | None = None
+    evidence: dict[str, Any] | None = None
+
+
+class FinalReviewDecisionRequest(BaseModel):
+    decision: str
+    reviewer_note: str = ""
 
 
 REVIEW_STATUSES = {"pending", "pass", "needs_fix", "reject"}
@@ -266,6 +297,8 @@ def _manifest_ref_from_material(material: Material | None, stage: str) -> Object
         return _ref(material.raw_manifest_bucket, material.raw_manifest_object)
     if stage == "clean":
         return _ref(material.clean_manifest_bucket, material.clean_manifest_object)
+    if stage == "standard":
+        return _ref(material.standard_manifest_bucket, material.standard_manifest_object)
     return None
 
 
@@ -330,7 +363,9 @@ def _stage_markdown_ref(manifest_ref: ObjectRef | None, manifest: dict[str, Any]
         return None
     keys = (
         "clean_md",
+        "standard_md",
         "clean_markdown",
+        "standard_markdown",
         "markdown",
         "markdown_file",
         "raw_markdown",
@@ -347,6 +382,7 @@ def _stage_markdown_ref(manifest_ref: ObjectRef | None, manifest: dict[str, Any]
     candidates.extend(
         [
             _same_prefix_ref(manifest_ref, "clean.md"),
+            _same_prefix_ref(manifest_ref, "standard.md"),
             _same_prefix_ref(manifest_ref, "raw.md"),
             _same_prefix_ref(manifest_ref, "body.md"),
             _same_prefix_ref(manifest_ref, "full.md"),
@@ -670,6 +706,8 @@ def _asset_dict_with_material(asset: ReviewAsset, db: Session) -> dict[str, Any]
     row["material_stage"] = material.stage_status if material else asset.review_stage or "parse"
     row["has_raw"] = bool(material and material.raw_manifest_bucket and material.raw_manifest_object)
     row["has_clean"] = bool(material and material.clean_manifest_bucket and material.clean_manifest_object)
+    row["has_standard"] = bool(material and material.standard_manifest_bucket and material.standard_manifest_object)
+    row["standard_quality_score"] = material.standard_quality_score if material else None
     row["has_raw_dry_run"] = bool(dry_run)
     row["raw_dry_run_id"] = str(dry_run.id) if dry_run else ""
     row["raw_manifest"] = {
@@ -680,7 +718,61 @@ def _asset_dict_with_material(asset: ReviewAsset, db: Session) -> dict[str, Any]
         "bucket": material.clean_manifest_bucket if material else "",
         "object": material.clean_manifest_object if material else "",
     }
+    row["standard_manifest"] = {
+        "bucket": material.standard_manifest_bucket if material else "",
+        "object": material.standard_manifest_object if material else "",
+    }
     return row
+
+
+def _standard_navigation_for_material(material: Material | None) -> dict[str, Any]:
+    standard_manifest_ref = _manifest_ref_from_material(material, "standard")
+    standard_manifest = _read_json_optional(standard_manifest_ref)
+    document_ref = None
+    if isinstance(standard_manifest, dict):
+        objects = standard_manifest.get("objects") if isinstance(standard_manifest.get("objects"), dict) else {}
+        document_ref = _ref_from_stage_manifest_value(objects.get("standard_document_json"), standard_manifest_ref) if standard_manifest_ref else None
+        document_ref = document_ref or (_ref_from_stage_manifest_value(objects.get("standard_document"), standard_manifest_ref) if standard_manifest_ref else None)
+    document_ref = document_ref or _same_prefix_ref(standard_manifest_ref, "standard_document.json")
+    document = _read_json_optional(document_ref)
+    if not isinstance(document, dict):
+        return {"available": False, "outline": [], "blocks": []}
+
+    blocks = document.get("blocks") if isinstance(document.get("blocks"), list) else []
+    outline_rows = []
+    block_rows = []
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        block_id = str(block.get("id") or "")
+        markdown = str(block.get("markdown") or "")
+        heading_match = re.match(r"^(#{1,6})\s+(.+?)\s*$", markdown)
+        row = {
+            "block_id": block_id,
+            "type": block.get("type") or "",
+            "subtype": block.get("subtype") or "",
+            "line_start": block.get("line_start"),
+            "line_end": block.get("line_end"),
+            "heading_path": block.get("heading_path") if isinstance(block.get("heading_path"), list) else [],
+        }
+        block_rows.append(row)
+        if heading_match:
+            title = heading_match.group(2).strip()
+            outline_rows.append(
+                {
+                    **row,
+                    "title": title,
+                    "level": len(heading_match.group(1)),
+                    "path": row["heading_path"],
+                }
+            )
+    return {
+        "available": True,
+        "manifest": _ref_dict(standard_manifest_ref),
+        "document": _ref_dict(document_ref),
+        "outline": outline_rows,
+        "blocks": block_rows,
+    }
 
 
 def _save_resolved_asset(resolved, user_id: str, db: Session, overwrite_title: bool = True) -> ReviewAsset:
@@ -936,7 +1028,7 @@ def list_review_assets(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     search: str = Query("", description="按标题、material_id 或 manifest 搜索"),
-    view: str = Query("", description="审查视角：page 或 outline"),
+    view: str = Query("", description="审查视角：page、outline 或 standard"),
     user_id: str = Depends(get_user_id),
     db: Session = Depends(get_db),
 ):
@@ -949,7 +1041,7 @@ def list_review_assets(
             | (ReviewAsset.material_id.like(like))
             | (ReviewAsset.manifest_object.like(like))
         )
-    if view in {"page", "outline"}:
+    if view in {"page", "outline", "standard"}:
         rows = [_asset_dict_with_material(asset, db) for asset in query.order_by(ReviewAsset.created_at.desc()).all()]
         if view == "page":
             rows = [
@@ -957,8 +1049,10 @@ def list_review_assets(
                 for row in rows
                 if row.get("has_manifest") and row.get("review_stage") not in {"raw", "clean"}
             ]
-        else:
+        elif view == "outline":
             rows = [row for row in rows if row.get("has_raw") or row.get("has_clean") or row.get("has_raw_dry_run")]
+        else:
+            rows = [row for row in rows if row.get("has_standard")]
         total = len(rows)
         start = (page - 1) * page_size
         return {
@@ -974,6 +1068,286 @@ def list_review_assets(
         "page": page,
         "page_size": page_size,
         "files": [_asset_dict_with_material(asset, db) for asset in assets],
+    }
+
+
+def _final_review_archive_or_error(session: FinalReviewSession, db: Session) -> dict[str, Any]:
+    try:
+        return final_review_service.export_session_artifacts(session, db)
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+def _final_review_asset_material(session: FinalReviewSession, user_id: str, db: Session) -> tuple[ReviewAsset, Material]:
+    asset = _asset_or_404(session.review_asset_id, user_id, db)
+    material = final_review_service.require_standard_material(asset, db)
+    return asset, material
+
+
+def _validate_annotation_values(issue_type: str, severity: str, status: str) -> None:
+    if issue_type not in final_review_service.ISSUE_TYPES:
+        raise HTTPException(status_code=400, detail="不支持的终审问题类型")
+    if severity not in final_review_service.SEVERITIES:
+        raise HTTPException(status_code=400, detail="不支持的严重程度")
+    if status not in final_review_service.ANNOTATION_STATUSES:
+        raise HTTPException(status_code=400, detail="不支持的批注状态")
+
+
+@router.get("/review/final/assets")
+def list_final_review_assets(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    search: str = Query("", description="按标题、material_id 或 manifest 搜索"),
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    query = db.query(ReviewAsset).filter(ReviewAsset.user_id == user_id)
+    if search:
+        like = f"%{search}%"
+        query = query.filter(
+            (ReviewAsset.title.like(like))
+            | (ReviewAsset.input_filename.like(like))
+            | (ReviewAsset.material_id.like(like))
+            | (ReviewAsset.manifest_object.like(like))
+        )
+    rows = [_asset_dict_with_material(asset, db) for asset in query.order_by(ReviewAsset.created_at.desc()).all()]
+    rows = [row for row in rows if row.get("has_standard")]
+    total = len(rows)
+    start = (page - 1) * page_size
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "files": rows[start : start + page_size],
+        "issue_types": sorted(final_review_service.ISSUE_TYPES),
+        "severities": sorted(final_review_service.SEVERITIES),
+        "statuses": sorted(final_review_service.ANNOTATION_STATUSES),
+    }
+
+
+@router.post("/review/final/sessions")
+def create_final_review_session(
+    payload: FinalReviewSessionRequest,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    asset = _asset_or_404(payload.asset_id, user_id, db)
+    material = final_review_service.require_standard_material(asset, db)
+    if payload.reuse_open:
+        existing = (
+            db.query(FinalReviewSession)
+            .filter(
+                FinalReviewSession.user_id == user_id,
+                FinalReviewSession.review_asset_id == asset.id,
+                FinalReviewSession.standard_run_id == (material.standard_run_id or ""),
+                FinalReviewSession.status == "open",
+            )
+            .order_by(FinalReviewSession.id.desc())
+            .first()
+        )
+        if existing:
+            return final_review_service.session_to_dict(existing, db)
+
+    session = FinalReviewSession(
+        user_id=user_id,
+        review_asset_id=asset.id,
+        material_id=material.material_id or asset.material_id or "",
+        standard_run_id=material.standard_run_id or "",
+        status="open",
+        summary_json=final_review_service.json_dumps(
+            {
+                "title": asset.title,
+                "filename": asset.display_filename(),
+                "standard_quality_score": material.standard_quality_score,
+                "created_from": "standard",
+            }
+        ),
+    )
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return final_review_service.session_to_dict(session, db)
+
+
+@router.get("/review/final/sessions/{session_id}")
+def get_final_review_session(
+    session_id: int,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    session = final_review_service.session_or_404(session_id, user_id, db)
+    return final_review_service.session_to_dict(session, db)
+
+
+@router.post("/review/final/sessions/{session_id}/annotations")
+def create_final_review_annotation(
+    session_id: int,
+    payload: FinalReviewAnnotationRequest,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    session = final_review_service.session_or_404(session_id, user_id, db)
+    _final_review_asset_material(session, user_id, db)
+    status = payload.status if payload.status in {"draft", "submitted"} else payload.status
+    _validate_annotation_values(payload.issue_type, payload.severity, status)
+    if status not in {"draft", "submitted"}:
+        raise HTTPException(status_code=400, detail="新建批注只能保存为草稿或提交")
+    annotation = FinalReviewAnnotation(
+        session_id=session.id,
+        user_id=user_id,
+        issue_type=payload.issue_type,
+        severity=payload.severity,
+        status=status,
+        human_note=payload.human_note.strip(),
+        anchors_json=final_review_service.json_dumps(payload.anchors),
+        evidence_json=final_review_service.json_dumps(payload.evidence),
+    )
+    db.add(annotation)
+    db.commit()
+    db.refresh(annotation)
+    return annotation.to_dict()
+
+
+@router.patch("/review/final/annotations/{annotation_id}")
+def patch_final_review_annotation(
+    annotation_id: int,
+    payload: FinalReviewAnnotationPatchRequest,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    annotation = final_review_service.annotation_or_404(annotation_id, user_id, db)
+    session = final_review_service.session_or_404(annotation.session_id, user_id, db)
+    _final_review_asset_material(session, user_id, db)
+    if annotation.status in {"project_accepted", "project_rejected", "resolved"}:
+        raise HTTPException(status_code=400, detail="该批注已进入项目结论，不能继续编辑")
+    issue_type = payload.issue_type if payload.issue_type is not None else annotation.issue_type
+    severity = payload.severity if payload.severity is not None else annotation.severity
+    status = payload.status if payload.status is not None else annotation.status
+    _validate_annotation_values(issue_type, severity, status)
+    annotation.issue_type = issue_type
+    annotation.severity = severity
+    annotation.status = status
+    if payload.human_note is not None:
+        annotation.human_note = payload.human_note.strip()
+    if payload.anchors is not None:
+        annotation.anchors_json = final_review_service.json_dumps(payload.anchors)
+    if payload.evidence is not None:
+        annotation.evidence_json = final_review_service.json_dumps(payload.evidence)
+    db.commit()
+    db.refresh(annotation)
+    return annotation.to_dict()
+
+
+@router.delete("/review/final/annotations/{annotation_id}")
+def delete_final_review_annotation(
+    annotation_id: int,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    annotation = final_review_service.annotation_or_404(annotation_id, user_id, db)
+    if annotation.status != "draft":
+        raise HTTPException(status_code=400, detail="只有草稿批注可以删除")
+    db.delete(annotation)
+    db.commit()
+    return {"status": "deleted", "annotation_id": str(annotation_id)}
+
+
+@router.post("/review/final/sessions/{session_id}/submit")
+def submit_final_review_session(
+    session_id: int,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    session = final_review_service.session_or_404(session_id, user_id, db)
+    _final_review_asset_material(session, user_id, db)
+    annotations = final_review_service.annotations_for_session(session.id, db)
+    for annotation in annotations:
+        if annotation.status == "draft":
+            annotation.status = "submitted"
+    session.status = "submitted"
+    session.submitted_at = datetime.utcnow()
+    db.commit()
+    db.refresh(session)
+    return {
+        "session": final_review_service.session_to_dict(session, db),
+        "archive": _final_review_archive_or_error(session, db),
+    }
+
+
+@router.post("/review/final/annotations/{annotation_id}/verify")
+def verify_final_review_annotation(
+    annotation_id: int,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    annotation = final_review_service.annotation_or_404(annotation_id, user_id, db)
+    session = final_review_service.session_or_404(annotation.session_id, user_id, db)
+    asset, material = _final_review_asset_material(session, user_id, db)
+    verification = final_review_service.verify_annotation(annotation, asset, material, db)
+    db.commit()
+    db.refresh(verification)
+    db.refresh(annotation)
+    return {
+        "annotation": annotation.to_dict(),
+        "verification": verification.to_dict(),
+        "archive": _final_review_archive_or_error(session, db),
+    }
+
+
+@router.post("/review/final/sessions/{session_id}/verify")
+def verify_final_review_session(
+    session_id: int,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    session = final_review_service.session_or_404(session_id, user_id, db)
+    asset, material = _final_review_asset_material(session, user_id, db)
+    annotations = [row for row in final_review_service.annotations_for_session(session.id, db) if row.status != "draft"]
+    verifications = [final_review_service.verify_annotation(annotation, asset, material, db) for annotation in annotations]
+    db.commit()
+    for verification in verifications:
+        db.refresh(verification)
+    db.refresh(session)
+    return {
+        "session": final_review_service.session_to_dict(session, db),
+        "verified_count": len(verifications),
+        "archive": _final_review_archive_or_error(session, db),
+    }
+
+
+@router.patch("/review/final/annotations/{annotation_id}/decision")
+def decide_final_review_annotation(
+    annotation_id: int,
+    payload: FinalReviewDecisionRequest,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    annotation = final_review_service.annotation_or_404(annotation_id, user_id, db)
+    session = final_review_service.session_or_404(annotation.session_id, user_id, db)
+    _final_review_asset_material(session, user_id, db)
+    decision = final_review_service.add_decision(annotation, payload.decision, payload.reviewer_note, user_id, db)
+    db.commit()
+    db.refresh(annotation)
+    db.refresh(decision)
+    return {
+        "annotation": annotation.to_dict(),
+        "decision": decision.to_dict(),
+        "archive": _final_review_archive_or_error(session, db),
+    }
+
+
+@router.get("/review/final/sessions/{session_id}/export")
+def export_final_review_session(
+    session_id: int,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    session = final_review_service.session_or_404(session_id, user_id, db)
+    _final_review_asset_material(session, user_id, db)
+    archive = final_review_service.export_session_artifacts(session, db)
+    return {
+        "session": final_review_service.session_to_dict(session, db),
+        "archive": archive,
     }
 
 
@@ -1149,7 +1523,7 @@ def _artifact_base_refs(asset: ReviewAsset, stage: str, db: Session) -> list[Obj
                 _manifest_ref_for_asset(asset),
             ]
         )
-    elif normalized_stage in {"raw", "clean"}:
+    elif normalized_stage in {"raw", "clean", "standard"}:
         material = _material_for_asset(asset, db)
         manifest_ref = _manifest_ref_from_material(material, normalized_stage)
         manifest = _read_json_optional(manifest_ref)
@@ -1164,10 +1538,31 @@ def _artifact_base_refs(asset: ReviewAsset, stage: str, db: Session) -> list[Obj
     return [ref for ref in refs if ref]
 
 
+def _rewrite_standard_html_artifact(content: bytes, asset_id: int, stage: str) -> bytes:
+    if stage.lower().strip() != "standard":
+        return content
+    try:
+        html_text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        return content
+
+    def replace_attr(match: re.Match[str]) -> str:
+        attr = match.group(1)
+        quote_char = match.group(2)
+        raw_path = match.group(3).strip()
+        if not raw_path or raw_path.startswith(("#", "/", "http://", "https://", "data:", "blob:", "mailto:")):
+            return match.group(0)
+        proxied = f"/api/review/assets/{asset_id}/artifact?stage=standard&path={quote(clean_path(raw_path))}"
+        return f"{attr}={quote_char}{proxied}{quote_char}"
+
+    rewritten = re.sub(r'\b(src|href)=(["\'])(?!#|/|https?://|data:|blob:|mailto:)([^"\']+)\2', replace_attr, html_text)
+    return rewritten.encode("utf-8")
+
+
 @router.get("/review/assets/{asset_id}/artifact")
 def review_asset_artifact(
     asset_id: int,
-    stage: str = Query("mineru", description="资源阶段：mineru、popo、raw 或 clean"),
+    stage: str = Query("mineru", description="资源阶段：mineru、popo、raw、clean 或 standard"),
     path: str = Query(..., description="相对资源路径，如 images/a.jpg"),
     user_id: str = Depends(get_user_id),
     db: Session = Depends(get_db),
@@ -1201,6 +1596,8 @@ def review_asset_artifact(
         if object_exists(base_ref.bucket, object_name):
             content = read_object(base_ref.bucket, object_name)
             media_type = mimetypes.guess_type(object_name)[0] or "application/octet-stream"
+            if media_type == "text/html":
+                content = _rewrite_standard_html_artifact(content, asset_id, stage)
             return StreamingResponse(iter([content]), media_type=media_type)
     raise HTTPException(status_code=404, detail="资源文件不存在")
 
@@ -1359,7 +1756,7 @@ def review_asset_outline_review(
             "image_closure_report": _ref_dict(_same_prefix_ref(raw_manifest_ref, "image_closure_report.json")),
         }
 
-    return build_outline_review(
+    result = build_outline_review(
         source_map,
         document_tree,
         raw_manifest=raw_manifest,
@@ -1389,6 +1786,8 @@ def review_asset_outline_review(
             "raw_dry_run_id": str(dry_run.id) if dry_run else "",
         },
     )
+    result["standard_navigation"] = _standard_navigation_for_material(material)
+    return result
 
 
 @router.get("/review/assets/{asset_id}/popo/status")

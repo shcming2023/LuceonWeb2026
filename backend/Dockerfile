@@ -6,6 +6,7 @@ RUN apt-get update && \
         fonts-noto-core \
         fonts-noto-cjk \
         fontconfig \
+        chromium \
         libgl1 \
         libglib2.0-0 && \
     fc-cache -fv && \

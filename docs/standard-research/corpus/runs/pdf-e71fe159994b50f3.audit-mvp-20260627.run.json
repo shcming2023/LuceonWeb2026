@@ -1,0 +1,23 @@
+{
+  "schema": "luceon-standard-research-run/v1",
+  "material_id": "pdf-e71fe159994b50f3",
+  "title": "Reading Explorer 1 Students Book.pdf",
+  "run_label": "audit-mvp-20260627",
+  "path": "runtime/backend/pipeline-work/audits/re1-clean-master-20260627/standard-final-mvp",
+  "quality_score": 97,
+  "acceptance_status": "review",
+  "verdict": "review",
+  "golden": false,
+  "superseded_by": "pdf-e71fe159994b50f3.re1-review-outcome-v0-20260629.run.json",
+  "current_role": "historical_review_evidence_only",
+  "evidence_summary": {
+    "source_pdf_available": true,
+    "pdf_page_count": 141,
+    "issue_candidate_count": 0,
+    "visual_review_packet_count": 15
+  },
+  "known_blockers": [
+    "unclosed_table_visual_review_packets",
+    "visible_artifact_leak_hits_need_closure"
+  ]
+}

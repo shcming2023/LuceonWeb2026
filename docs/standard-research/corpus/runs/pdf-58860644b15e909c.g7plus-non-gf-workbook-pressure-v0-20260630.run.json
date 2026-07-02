@@ -1,0 +1,1395 @@
+{
+  "schema": "luceon-standard-research-run/v1",
+  "material_id": "pdf-58860644b15e909c",
+  "nickname": "G7+",
+  "title": "(7)G7+.pdf",
+  "profile": "exercise_workbook",
+  "run_label": "g7plus-non-gf-workbook-pressure-v0-20260630",
+  "standard_output": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final",
+  "clean_input": "runtime/backend/pipeline-work/raw2clean/run-32-pdf-58860644b15e909c-popo-20260618020631-staged_popo_20260618_batch13-97b1f8e5--002-popo_58860644b15e909c_002/clean-final",
+  "raw_input": "runtime/backend/pipeline-work/raw2clean/run-32-pdf-58860644b15e909c-popo-20260618020631-staged_popo_20260618_batch13-97b1f8e5--002-popo_58860644b15e909c_002/raw_input",
+  "source_pdf": "",
+  "local_source_pdf_evidence": {
+    "path": "runtime/backend/pipeline-work/popo2raw/run-29-pdf-58860644b15e909c-popo-20260618020631-staged_popo_20260618_batch13-97b1f8e5--002-popo_58860644b15e909c_002/rebuild_input/pdf-58860644b15e909c_origin.pdf",
+    "pages": 740,
+    "size_bytes": 234093495,
+    "sha256": "ebe143e8d8424cdbb2cd78b96c2257f314d26d590541834075936bb39fcbc803",
+    "raw_manifest_source_sha256": "58860644b15e909ccb03bb8ec32af14dc523ee418216080c4c4e17cc5e5ad84d",
+    "lineage_status": "local_origin_pdf_available_but_hash_differs_from_raw_manifest_source_object"
+  },
+  "acceptance": {
+    "status": "review",
+    "quality_score": 94,
+    "profile_coverage": "pass",
+    "context_integrity": "pass",
+    "formula_table_integrity": "review",
+    "image_relation_integrity": "pass",
+    "image_visual_confirmation": "pass",
+    "review_outcomes": "review",
+    "source_evidence": "review",
+    "review_threshold": "pass",
+    "remaining_review_gates": [
+      "formula_table_integrity",
+      "review_outcomes",
+      "source_evidence"
+    ]
+  },
+  "summary": {
+    "block_count": 13920,
+    "outline_count": 127,
+    "image_refs": 2664,
+    "missing_images": 0,
+    "issue_candidate_count": 2661,
+    "issue_candidate_unresolved_blocking_count": 0,
+    "visual_review_packet_count": 2863,
+    "review_outcome_count": 4340,
+    "review_outcome_open_blocking_count": 190,
+    "review_outcome_closed_count": 4150,
+    "pdf_page_count": 747,
+    "correction_count": 276,
+    "image_source_crop_count": 1477,
+    "image_review_outcome_accepted_by_rule_count": 1477,
+    "image_review_outcome_needs_reconstruction_count": 0,
+    "visual_source_crop_count": 2676,
+    "visual_source_crop_required_count": 2860,
+    "visual_source_crop_missing_page_bbox_count": 184,
+    "table_formula_review_outcome_accepted_by_rule_count": 2669,
+    "table_formula_review_outcome_needs_page_bbox_count": 184,
+    "table_formula_review_outcome_needs_reconstruction_count": 1,
+    "table_formula_review_outcome_accepted_count": 1,
+    "table_formula_review_outcome_needs_layout_fix_count": 5,
+    "table_formula_review_outcome_non_blocking_count": 3,
+    "paired_vocabulary_formal_compiler_stub_status": "review_pdf_stub_not_visual_regression",
+    "paired_vocabulary_formal_compiler_stub_output": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-paired-vocab-compiler-rerun-20260701/standard-final-no-pdf-stub-v2",
+    "paired_vocabulary_formal_compiler_stub_quality_score": 85,
+    "paired_vocabulary_formal_compiler_stub_group_count": 9,
+    "paired_vocabulary_formal_compiler_stub_table_count": 10,
+    "paired_vocabulary_formal_compiler_stub_real_profile_gap_count": 560,
+    "paired_vocabulary_formal_compiler_stub_orphan_table_question_count": 36,
+    "paired_vocabulary_formal_compiler_source_confirmed_table_count": 9,
+    "paired_vocabulary_formal_compiler_compiler_only_table_ids": [
+      "b-09582"
+    ],
+    "paired_vocabulary_formal_compiler_source_only_table_ids": [],
+    "paired_vocabulary_formal_compiler_delta_source_confirmation": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-paired-vocab-compiler-rerun-20260701/standard-final-no-pdf-stub-v2/paired_vocabulary_compiler_delta_source_confirmation.json",
+    "paired_vocabulary_formal_compiler_reconstruction_blocker_ids": [
+      "b-03276",
+      "b-09582"
+    ],
+    "paired_vocabulary_blank_box_reconstruction_audit": "runtime/backend/pipeline-work/audits/g7plus-paired-vocab-blank-preservation-rerun-20260701/standard-final/paired_vocabulary_blank_box_reconstruction_audit.json",
+    "paired_vocabulary_blank_box_source_confirmed_table_count": 10,
+    "paired_vocabulary_blank_box_compiler_table_count": 10,
+    "paired_vocabulary_blank_box_blocker_count": 0,
+    "paired_vocabulary_blank_box_blocker_ids": [],
+    "paired_vocabulary_blank_box_preserved_blocker_ids": [
+      "b-03276",
+      "b-09582"
+    ],
+    "paired_vocabulary_blank_box_preserved_blank_count": 6,
+    "paired_vocabulary_blank_box_real_pdf_render_ok": true,
+    "paired_vocabulary_blank_box_real_pdf_page_count": 736,
+    "paired_vocabulary_blank_box_subrule_closed": true,
+    "exercise_relation_delta_audit": "runtime/backend/pipeline-work/audits/g7plus-relation-delta-audit-20260701/workbook_relation_delta_audit.json",
+    "exercise_relation_delta_removed_real_profile_gap_count": 1251,
+    "exercise_relation_delta_added_real_profile_gap_count": 0,
+    "exercise_relation_delta_current_real_profile_gap_count": 560,
+    "exercise_relation_delta_removed_table_gap_count": 40,
+    "exercise_relation_delta_removed_table_high_risk_count": 26,
+    "exercise_relation_delta_paired_vocabulary_removed_table_gap_count": 9,
+    "exercise_relation_delta_profile_contract_candidate_status": "not_ready_high_risk_relation_delta_needs_rule_split",
+    "exercise_table_attachment_contract_audit": "runtime/backend/pipeline-work/audits/g7plus-table-attachment-contract-audit-20260701/workbook_table_attachment_contract_audit.json",
+    "exercise_table_attachment_contract_ready_paired_vocabulary_count": 9,
+    "exercise_table_attachment_contract_candidate_spot_audit_count": 2,
+    "exercise_table_attachment_contract_visual_review_candidate_count": 3,
+    "exercise_table_attachment_contract_not_proven_stable_count": 15,
+    "exercise_table_attachment_contract_high_risk_review_count": 55,
+    "exercise_table_attachment_can_add_broad_rule": false,
+    "exercise_table_attachment_spot_audit": "runtime/backend/pipeline-work/audits/g7plus-table-attachment-spot-audit-20260701/workbook_table_attachment_spot_audit.json",
+    "exercise_table_attachment_spot_audit_candidate_count": 2,
+    "exercise_table_attachment_spot_audit_contract_ready_count": 2,
+    "exercise_table_attachment_spot_audit_contract_families": [
+      "example_step_data_table_keep_with_explanation",
+      "single_table_vocabulary_review"
+    ],
+    "exercise_table_attachment_can_add_non_paired_spot_contracts": true,
+    "exercise_table_attachment_visual_review_audit": "runtime/backend/pipeline-work/audits/g7plus-table-attachment-visual-review-audit-20260701/workbook_table_attachment_visual_review_audit.json",
+    "exercise_table_attachment_visual_review_candidate_count": 3,
+    "exercise_table_attachment_visual_review_contract_ready_count": 3,
+    "exercise_table_attachment_visual_review_contract_families": [
+      "example_relative_frequency_question_table_explanation",
+      "example_statistics_question_table_explanation"
+    ],
+    "exercise_table_attachment_can_add_broad_question_like_rule": false,
+    "paired_vocabulary_blank_reconstruction_prototype": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-paired-vocab-compiler-rerun-20260701/standard-final-no-pdf-stub-v2/paired_vocabulary_blank_reconstruction_prototype/paired_vocabulary_blank_reconstruction_prototype_report.json",
+    "paired_vocabulary_blank_reconstruction_prototype_record_count": 2,
+    "paired_vocabulary_blank_reconstruction_prototype_reconstructable_count": 2,
+    "paired_vocabulary_blank_reconstruction_prototype_blank_count": 6,
+    "paired_vocabulary_blank_reconstruction_prototype_compiler_readiness": "not_ready_requires_cross_sample_audit_and_real_pdf_visual_regression",
+    "blank_reconstruction_cross_sample_audit": "runtime/backend/pipeline-work/audits/standard-blank-reconstruction-cross-sample-20260701/blank_reconstruction_cross_sample_audit.json",
+    "blank_reconstruction_unique_case_count": 5,
+    "blank_reconstruction_blank_pattern_unique_count": 2,
+    "blank_reconstruction_grammar_paradigm_unique_count": 3,
+    "blank_reconstruction_compiler_readiness": "not_ready_blank_rules_apply_only_to_g7plus_paired_vocabulary_blockers",
+    "exercise_table_attachment_stable_gap_audit": "runtime/backend/pipeline-work/audits/g7plus-table-attachment-stable-gap-audit-20260701/workbook_table_attachment_stable_gap_audit.json",
+    "exercise_table_attachment_stable_gap_count": 15,
+    "exercise_table_attachment_stable_gap_contract_candidate_requires_rerun_count": 9,
+    "exercise_table_attachment_stable_gap_keep_review_count": 6,
+    "exercise_table_attachment_stable_gap_contract_families": [
+      "example_bar_diagram_table_model",
+      "example_frequency_table_explanation",
+      "example_pattern_or_rate_table",
+      "example_statistics_summary_table",
+      "exercise_scatter_plot_data_table",
+      "paired_or_adjacent_sample_tables",
+      "single_table_vocabulary_review",
+      "unclassified_question_like_table",
+      "unclassified_stable_table_gap"
+    ],
+    "exercise_table_attachment_can_close_stable_gaps": false,
+    "exercise_table_attachment_can_add_contract_without_rerun": false,
+    "exercise_table_attachment_stable_rule_rerun": "runtime/backend/pipeline-work/audits/g7plus-table-attachment-stable-rule-rerun-20260701/standard-final",
+    "exercise_table_attachment_stable_rule_report": "runtime/backend/pipeline-work/audits/g7plus-table-attachment-stable-rule-rerun-20260701/standard-final/workbook_table_attachment_report.json",
+    "exercise_table_attachment_stable_rule_delta_audit": "runtime/backend/pipeline-work/audits/g7plus-table-attachment-stable-rule-delta-20260701/workbook_relation_delta_audit.json",
+    "exercise_table_attachment_stable_rule_group_count": 9,
+    "exercise_table_attachment_stable_rule_patched_table_count": 9,
+    "exercise_table_attachment_stable_rule_family_counts": {
+      "example_pattern_or_rate_table": 2,
+      "example_bar_diagram_table_model": 1,
+      "single_table_vocabulary_review": 1,
+      "example_frequency_table_explanation": 1,
+      "exercise_scatter_plot_data_table": 2,
+      "example_statistics_summary_table": 2
+    },
+    "exercise_table_attachment_stable_rule_acceptance_status": "review",
+    "exercise_table_attachment_stable_rule_quality_score": 85,
+    "exercise_table_attachment_stable_rule_base_real_profile_gap_count": 560,
+    "exercise_table_attachment_stable_rule_current_real_profile_gap_count": 551,
+    "exercise_table_attachment_stable_rule_removed_real_profile_gap_count": 9,
+    "exercise_table_attachment_stable_rule_added_real_profile_gap_count": 0,
+    "exercise_table_attachment_stable_rule_current_orphan_table_question_count": 27,
+    "exercise_table_attachment_stable_rule_can_promote_exercise_workbook_profile": false,
+    "exercise_virtual_question_group_rerun": "runtime/backend/pipeline-work/audits/g7plus-virtual-question-group-rerun-20260701/standard-final",
+    "exercise_virtual_question_group_report": "runtime/backend/pipeline-work/audits/g7plus-virtual-question-group-rerun-20260701/standard-final/workbook_virtual_question_group_report.json",
+    "exercise_virtual_question_group_delta_audit": "runtime/backend/pipeline-work/audits/g7plus-virtual-question-group-delta-20260701/workbook_relation_delta_audit.json",
+    "exercise_virtual_question_group_effects_audit": "runtime/backend/pipeline-work/audits/g7plus-virtual-question-group-effects-audit-20260701/workbook_virtual_group_effects_audit.json",
+    "exercise_virtual_question_group_count": 163,
+    "exercise_virtual_grouped_question_count": 570,
+    "exercise_virtual_group_starter_counts": {
+      "instruction_paragraph": 674,
+      "section_label": 445,
+      "colon_label": 4
+    },
+    "exercise_virtual_group_stop_counts": {
+      "long_paragraph_reset": 448,
+      "hard_section_reset": 127
+    },
+    "exercise_virtual_group_acceptance_status": "review",
+    "exercise_virtual_group_quality_score": 85,
+    "exercise_virtual_group_base_real_profile_gap_count": 551,
+    "exercise_virtual_group_current_real_profile_gap_count": 61,
+    "exercise_virtual_group_removed_real_profile_gap_count": 490,
+    "exercise_virtual_group_added_real_profile_gap_count": 0,
+    "exercise_virtual_group_current_ungrouped_question_count": 30,
+    "exercise_virtual_group_current_orphan_table_question_count": 27,
+    "exercise_virtual_group_absorbed_prior_explanation_artifact_count": 80,
+    "exercise_virtual_group_requires_classifier_boundary_followup": true,
+    "exercise_virtual_group_can_promote_exercise_workbook_profile": false,
+    "exercise_question_continuation_rerun": "runtime/backend/pipeline-work/audits/g7plus-question-continuation-rerun-20260701/standard-final",
+    "exercise_question_continuation_report": "runtime/backend/pipeline-work/audits/g7plus-question-continuation-rerun-20260701/standard-final/workbook_question_continuation_report.json",
+    "exercise_question_continuation_delta_audit": "runtime/backend/pipeline-work/audits/g7plus-question-continuation-delta-20260701/workbook_relation_delta_audit.json",
+    "exercise_remaining_relation_gap_audit_v2": "runtime/backend/pipeline-work/audits/g7plus-remaining-relation-gap-audit-v2-20260701/workbook_remaining_relation_gap_audit.json",
+    "exercise_question_continuation_group_count": 7,
+    "exercise_question_continuation_grouped_question_count": 29,
+    "exercise_question_continuation_trigger_counts": {
+      "question_run_continuation": 5,
+      "short_option_interrupted_question_run": 1,
+      "three_act_question_continuation": 10,
+      "image_interrupted_question_run": 6
+    },
+    "exercise_question_continuation_acceptance_status": "review",
+    "exercise_question_continuation_quality_score": 85,
+    "exercise_question_continuation_base_real_profile_gap_count": 61,
+    "exercise_question_continuation_current_real_profile_gap_count": 36,
+    "exercise_question_continuation_removed_real_profile_gap_count": 25,
+    "exercise_question_continuation_added_real_profile_gap_count": 0,
+    "exercise_question_continuation_current_real_question_gap_count": 0,
+    "exercise_question_continuation_current_real_table_gap_count": 35,
+    "exercise_question_continuation_current_real_figure_gap_count": 1,
+    "exercise_question_continuation_remaining_contract_candidate_count": 18,
+    "exercise_question_continuation_remaining_keep_review_count": 18,
+    "exercise_question_continuation_can_promote_exercise_workbook_profile": false,
+    "exercise_remaining_relation_source_context_audit": "runtime/backend/pipeline-work/audits/g7plus-remaining-relation-source-context-audit-20260701/workbook_remaining_relation_source_context_audit.json",
+    "exercise_remaining_relation_source_context_html": "runtime/backend/pipeline-work/audits/g7plus-remaining-relation-source-context-audit-20260701/workbook_remaining_relation_source_context_audit.html",
+    "exercise_remaining_relation_source_context_record_count": 36,
+    "exercise_remaining_relation_source_context_has_bbox_count": 36,
+    "exercise_remaining_relation_source_context_crop_file_count": 72,
+    "exercise_remaining_relation_source_context_contract_review_count": 18,
+    "exercise_remaining_relation_source_context_keep_review_count": 18,
+    "exercise_remaining_relation_source_context_can_close_gaps": false,
+    "exercise_remaining_relation_source_context_can_promote_exercise_workbook_profile": false,
+    "exercise_contract_family_decision_audit": "runtime/backend/pipeline-work/audits/g7plus-contract-family-decision-audit-20260701/workbook_contract_family_decision_audit.json",
+    "exercise_contract_family_decision_html": "runtime/backend/pipeline-work/audits/g7plus-contract-family-decision-audit-20260701/workbook_contract_family_decision_audit.html",
+    "exercise_contract_family_decision_record_count": 18,
+    "exercise_contract_family_math_heavy_boundary_count": 18,
+    "exercise_contract_family_generic_exercise_workbook_rerun_recommended": false,
+    "exercise_contract_family_can_add_generic_exercise_workbook_table_rule": false
+  },
+  "issue_candidate_disposition": {
+    "count": 2661,
+    "unresolved_blocking_count": 0,
+    "disposition_counts": {
+      "helper_icon_compact_rendering": 1184,
+      "covered_by_visual_outcome": 1477
+    },
+    "classification_counts": {
+      "helper_icon_artifact": 1184,
+      "visual_outcome_covered": 1477
+    }
+  },
+  "review_outcomes": {
+    "count": 4340,
+    "closed_count": 4178,
+    "open_blocking_count": 162,
+    "decision_counts": {
+      "accepted_by_rule": 4174,
+      "needs_page_bbox": 148,
+      "non_blocking": 3,
+      "needs_layout_fix": 13,
+      "needs_reconstruction": 1,
+      "accepted": 1
+    },
+    "packet_type_counts": {
+      "formula_visual_review": 2655,
+      "table_visual_review": 208,
+      "image_source_visual_confirmation": 1477
+    },
+    "source_locator_counts": {
+      "formula_visual_review_has_page_bbox": 2507,
+      "formula_visual_review_missing_page_bbox": 148,
+      "table_visual_review_has_page_bbox": 208,
+      "table_visual_review_missing_page_bbox": 0,
+      "image_source_visual_confirmation_has_page_bbox": 1477,
+      "image_source_visual_confirmation_missing_page_bbox": 0
+    },
+    "packet_type_summary": {
+      "formula_visual_review": {
+        "count": 2655,
+        "closed_count": 2496,
+        "open_blocking_count": 159,
+        "decision_counts": {
+          "accepted_by_rule": 2493,
+          "needs_page_bbox": 148,
+          "non_blocking": 3,
+          "needs_layout_fix": 11
+        }
+      },
+      "table_visual_review": {
+        "count": 208,
+        "closed_count": 205,
+        "open_blocking_count": 3,
+        "decision_counts": {
+          "accepted_by_rule": 204,
+          "needs_layout_fix": 2,
+          "needs_reconstruction": 1,
+          "accepted": 1
+        }
+      },
+      "image_source_visual_confirmation": {
+        "count": 1477,
+        "closed_count": 1477,
+        "open_blocking_count": 0,
+        "decision_counts": {
+          "accepted_by_rule": 1477
+        }
+      }
+    }
+  },
+  "workbook_profile": {
+    "status": "review",
+    "regression_verdict": "expected_negative_regression_review",
+    "basic_print_blockers": [
+      "exercise_relation_contract_not_pass",
+      "table_visual_review_outcomes_open"
+    ],
+    "exercise_relation_contract": {
+      "status": "pass",
+      "metrics": {
+        "question_groups": 84,
+        "questions": 1857,
+        "grouped_questions": 132,
+        "ungrouped_questions": 1725,
+        "options": 371,
+        "parented_options": 304,
+        "orphan_options": 67,
+        "answer_blanks": 44,
+        "parented_answer_blanks": 24,
+        "orphan_answer_blanks": 20,
+        "table_questions": 207,
+        "parented_table_questions": 123,
+        "orphan_table_questions": 84,
+        "figure_relation_candidates": 2661,
+        "parented_figure_relation_candidates": 1412,
+        "orphan_figure_relation_candidates": 1249
+      },
+      "relation_audit": {
+        "count": 3059,
+        "real_profile_gap_count": 1811,
+        "review_item_count": 0,
+        "kind_counts": {
+          "ungrouped_question": 1725,
+          "orphan_figure_relation_candidate": 1249,
+          "orphan_table_question": 84,
+          "unparented_explanation_table": 1
+        },
+        "disposition_counts": {
+          "real_profile_gap": 1811,
+          "helper_icon_artifact": 764,
+          "explanation_artifact": 484
+        }
+      },
+      "review_reasons": [
+        "real_profile_gaps_present"
+      ]
+    },
+    "image_relation_contract": {
+      "status": "review",
+      "image_relation_count": 2661,
+      "category_counts": {
+        "helper_icon": 1184,
+        "exercise_key_figure": 995,
+        "explanation_key_figure": 482
+      },
+      "action_counts": {
+        "compress_keep_near": 1184,
+        "keep_with_exercise": 995,
+        "keep_with_explanation": 482
+      },
+      "source_visual_check_count": 1477,
+      "image_visual_confirmation_packet_count": 1477,
+      "ready_for_source_crop_count": 0,
+      "source_crop_count": 1477,
+      "excluded_category_counts": {
+        "helper_icon": 1184
+      },
+      "open_image_review_outcome_count": 0,
+      "open_table_review_outcome_count": 3,
+      "blockers": [],
+      "review_reasons": []
+    }
+  },
+  "print_render": {
+    "pdf_ok": true,
+    "pdf_page_count": 747,
+    "pdf_bytes": 64136385,
+    "pdf_message": "ok"
+  },
+  "media_ref_refresh": {
+    "script": "backend/scripts/refresh_standard_print_pdf.py",
+    "report": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/standard_media_ref_refresh_report.json",
+    "image_refs_after_html_img_scan": 2664,
+    "missing_images": 0,
+    "note": "Standard media collection now includes HTML table img refs and raw_input fallback for clean-package-missing embedded table images."
+  },
+  "formula_bbox_candidate_audit": {
+    "script": "backend/scripts/audit_standard_formula_bbox_candidates.py",
+    "report": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/formula_bbox_candidate_audit.json",
+    "policy": "audit_only_math_normalized_location_candidates_do_not_close_outcomes",
+    "formula_needs_page_bbox_count": 661,
+    "source_location_candidate_count": 469,
+    "same_unit_source_location_candidate_count": 443,
+    "global_only_source_location_candidate_count": 26,
+    "ambiguous_count": 15,
+    "no_match_count": 167,
+    "non_formula_image_alt_or_empty_count": 3,
+    "too_short_for_location_rule_count": 7,
+    "raw_assignment_matched_count": 13013,
+    "source_order_policy": "content_list_index_plus_one_with_type_page_bbox_cross_check",
+    "interpretation": "Math-normalized matching plus raw_block_assignments unit evidence can locate 443 formula outcomes as same-unit source-location candidates and 26 as global-only candidates, but this remains audit-only and is not sufficient for automatic accepted_by_rule closure.",
+    "current_formula_needs_page_bbox_count": 149,
+    "current_bucket_counts": {
+      "no_math_normalized_raw_match": 144,
+      "too_short_for_location_rule": 2,
+      "ambiguous_math_normalized_match": 1,
+      "ambiguous_short_global_match_needs_manual": 2
+    },
+    "current_candidate_count": 0,
+    "current_interpretation": "After deterministic formula/context source-location backfill, remaining formula needs_page_bbox outcomes have no deterministic source-location candidate; remaining buckets are no-match, ambiguous, or too-short.",
+    "normalization_update": "Formula location keys now preserve semantic LaTeX command tokens that affect source disambiguation."
+  },
+  "clean_scope": {
+    "status": "clean_pass_no_scope_needed",
+    "report": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/clean_review_scope_report.json",
+    "promotion_candidate": false,
+    "review_gates": []
+  },
+  "source_crop_attempt": {
+    "status": "completed_image_and_visual_review_source_crop_generation_with_later_formula_backfill",
+    "initial_exit_code": 130,
+    "image_source_crops_generated": 1477,
+    "image_source_crops_required": 1477,
+    "visual_source_crops_generated": 2711,
+    "visual_source_crops_required": 2860,
+    "visual_source_crops_missing_page_bbox": 149,
+    "image_fast_script": "backend/scripts/generate_standard_image_source_crops_fast.py",
+    "visual_fast_script": "backend/scripts/generate_standard_visual_source_crops_fast.py",
+    "image_rendered_page_count": 451,
+    "image_elapsed_seconds": 1730.75,
+    "visual_rendered_page_count": 454,
+    "visual_elapsed_seconds": 1509.274,
+    "visual_resume_elapsed_seconds": 0.013,
+    "table_formula_audit_script": "backend/scripts/audit_standard_table_formula_outcomes.py",
+    "table_formula_closure_script": "backend/scripts/close_standard_table_formula_outcomes_from_audit.py",
+    "table_formula_closed_from_audit": 2665,
+    "bbox_backfill_script": "backend/scripts/backfill_standard_visual_bbox_from_raw.py",
+    "bbox_backfilled_for_manual_review": 2,
+    "interpretation": "source crop evidence is available for all image outcomes, all table outcomes, and deterministic formula/context source-location outcomes including 3 short option-formula matches; 38 formula outcomes remain manual layout/source review with crops, 149 formula outcomes still need page/bbox, and 1 table outcome needs reconstruction.",
+    "manual_table_review_accepted": 1,
+    "manual_table_review_needs_reconstruction": 1,
+    "initial_visual_source_crops_generated": 2200,
+    "initial_visual_source_crops_missing_page_bbox": 663,
+    "formula_semantic_key_closed_count": 374,
+    "remaining_formula_manual_review_count": 38,
+    "formula_semantic_equivalent_closed_count": 4,
+    "source_crop_status_counts": {
+      "reused": 2643,
+      "needs_page_bbox": 149,
+      "not_required_image_only_formula_reclassified": 3,
+      "created": 68
+    }
+  },
+  "blocker_audit": "docs/standard-research/26-g7plus-exercise-workbook-blocker-audit-v0.md",
+  "verdict": "review_pressure_sample_not_candidate",
+  "notes": [
+    "This is a non-Grammar-Friends workbook pressure run, not a Basic Print candidate.",
+    "Standard artifact generation and current PDF render succeeded, but acceptance remains review.",
+    "The run exposes exercise_workbook/math-heavy blockers: ungrouped questions, orphan tables, remaining table/formula page-bbox evidence gaps, one table reconstruction need, and source lineage evidence.",
+    "A local source PDF exists and all image crops were generated, but its hash differs from the raw manifest source object; this remains a promotion risk.",
+    "Do not use this run to promote grammar_workbook or profile-ready status.",
+    "2026-07-01 workbook relation gap pattern audit classifies 1725 ungrouped questions into 1030 runs; 740 question gaps have clear section/instruction group starters, 981 require manual/state-machine boundary work, and 84 orphan table questions remain table grouping/profile blockers.",
+    "2026-07-01 grouping state-machine simulation: conservative starter-run covers 752 gaps; persistent virtual grouping covers 1805/1811 but is high-risk and not compiler-ready.",
+    "2026-07-01 guarded grouping simulation covers 1674/1811 relation gaps and leaves 137; it avoids long-paragraph/table-group-only risk but does not solve table attachment.",
+    "Table attachment policy simulation generated workbook_table_attachment_policy_simulation.json/html; it is dry-run evidence only and keeps G7+ in review.",
+    "Paired vocabulary layout audit generated workbook_paired_vocabulary_table_layout_audit.json/html; no gates were closed.",
+    "Paired vocabulary source confirmation is review evidence only: 8 source layouts confirmed, 1 known reconstruction blocker remains, no acceptance status changed.",
+    "Paired vocabulary renderer contract audit added hard stops for source-confirmed grouping, horizontal/word-bank layout, and blank-box preservation; the later real PDF rerun closes only the blank-box preservation subrule.",
+    "Paired vocabulary renderer prototype generated HTML/report/screenshot; it is visually promising but not integrated into Standard compiler or acceptance.",
+    "Paired vocabulary compiler-adjacent patch generated patched document/html/preview; it is not a main Standard rerun or gate closure."
+  ],
+  "visual_source_crop_generation": {
+    "report": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/visual_source_crop_audit.json",
+    "visual_source_crops_generated": 2711,
+    "visual_source_crops_required": 2860,
+    "visual_source_crops_missing_page_bbox": 149,
+    "source_crop_status_counts": {
+      "reused": 2643,
+      "needs_page_bbox": 149,
+      "not_required_image_only_formula_reclassified": 3,
+      "created": 68
+    },
+    "visual_fast_script": "backend/scripts/generate_standard_visual_source_crops_fast.py",
+    "not_required_count": 3,
+    "not_required_rule": "image_only_formula_packet_covered_by_image_visual_confirmation",
+    "interpretation": "source crop evidence is available for all image outcomes, all table outcomes, and deterministic formula/context source-location outcomes including 3 short option-formula matches; 149 formula outcomes still need page/bbox, 38 formula outcomes have crops but remain manual layout/source review, and one table outcome needs reconstruction."
+  },
+  "formula_bbox_candidate_backfill": {
+    "script": "backend/scripts/backfill_standard_formula_bbox_candidates.py",
+    "report": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/formula_bbox_backfill_report.json",
+    "mode": "apply",
+    "policy": "same_unit_formula_bbox_backfill_is_source_location_evidence_not_closure",
+    "status_counts": {
+      "backfilled": 12
+    },
+    "interpretation": "A refined formula-token audit/backfill located 12 additional same-unit formula source bboxes. These are source-location evidence only; after crop generation they remain open as needs_layout_fix/manual review, not accepted_by_rule.",
+    "latest_precision_token_backfill_count": 12
+  },
+  "latest_interpretation": "G7+ remains an exercise_workbook review pressure run. Guarded grouping simulation reduces risk compared with persistent grouping but still leaves 137 real profile gaps, including 84 table gaps; Standard Basic Print remains not release-ready.",
+  "formula_source_mismatch_audit": {
+    "script": "backend/scripts/audit_standard_formula_source_mismatches.py",
+    "report": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/formula_source_mismatch_audit.json",
+    "count": 11,
+    "bucket_counts": {
+      "near_equivalent_needs_manual_review": 4,
+      "deterministic_formula_semantic_equivalent": 5,
+      "semantic_mismatch_needs_manual_review": 2
+    },
+    "manual_review_count": 6,
+    "deterministic_formula_semantic_equivalent_count": 5,
+    "interpretation": "After containment bbox backfill, 11 formula layout/source-review outcomes remain: 5 deterministic semantic-key matches blocked by short-procedure source-location policy, 4 near-equivalent manual-review items, and 2 semantic mismatches."
+  },
+  "source_evidence_summary": {
+    "visual_source_crops_generated": 2676,
+    "visual_source_crops_required": 2860,
+    "visual_source_crops_missing_page_bbox": 184,
+    "table_formula_closed_as_accepted_by_rule": 2669,
+    "formula_semantic_key_closed_count": 374,
+    "remaining_formula_manual_review_count": 3,
+    "interpretation": "source crop evidence is available for all image outcomes and all table outcomes; remaining blockers are 172 formula page/bbox gaps, 15 formula manual layout/source-review items with crops, two table layout-review items, one table reconstruction, relation gaps, and source lineage.",
+    "image_only_formula_non_blocking_count": 3,
+    "formula_semantic_equivalent_closed_count": 4,
+    "table_source_candidate_backfill_count": 2
+  },
+  "formula_bbox_global_backfill": {
+    "script": "backend/scripts/backfill_standard_formula_bbox_candidates.py",
+    "report": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/formula_bbox_global_backfill_report.json",
+    "mode": "apply",
+    "candidate_bucket": "source_location_candidate_math_exact_unique_global",
+    "status_counts": {
+      "backfilled": 26
+    },
+    "interpretation": "26 global-only formula source-location candidates were backfilled as manual-review evidence and source crops were generated; semantic-key closure closed 26, but this does not prove exercise grouping correctness."
+  },
+  "remaining_bbox_blocker_audit": {
+    "script": "backend/scripts/audit_standard_remaining_bbox_blockers.py",
+    "report": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/remaining_bbox_blocker_audit.json",
+    "count": 149,
+    "packet_type_counts": {
+      "formula_visual_review": 149
+    },
+    "bucket_counts": {
+      "no_math_normalized_raw_match": 144,
+      "too_short_for_location_rule": 2,
+      "ambiguous_math_normalized_match": 1,
+      "ambiguous_short_global_match_needs_manual": 2
+    },
+    "recommended_action_counts": {
+      "raw_text_sequence_or_context_window_locator_required": 144,
+      "manual_source_crop_or_context_window_locator_required": 2,
+      "manual_select_source_candidate_or_add_disambiguation_rule": 1,
+      "manual_review_short_global_candidate": 2
+    },
+    "interpretation": "Remaining needs_page_bbox blockers are formula-only after deterministic source-location rules; no remaining formula item has a deterministic source-location candidate. The next safe work is stricter context-window design, manual disambiguation, or formula reconstruction policy, not broad closure."
+  },
+  "raw_context_bbox_candidate_audit": {
+    "script": "backend/scripts/audit_standard_raw_context_bbox_candidates.py",
+    "report": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/raw_context_bbox_candidate_audit.json",
+    "count": 144,
+    "bucket_counts": {
+      "no_context_candidate": 103,
+      "context_window_candidate_weak": 40,
+      "context_window_candidate_review": 1
+    },
+    "target_action": "raw_text_sequence_or_context_window_locator_required",
+    "interpretation": "After deterministic context backfill, remaining raw context-window audit covers 144 no-match formula/text blockers: 1 review candidate, 40 weak candidates, and 103 no-candidate items; this remains audit-only evidence.",
+    "review_candidate_count": 1,
+    "weak_candidate_count": 40,
+    "no_candidate_count": 103
+  },
+  "raw_context_bbox_backfill": {
+    "script": "backend/scripts/backfill_standard_raw_context_bbox_candidates.py",
+    "report": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/raw_context_bbox_backfill_report.json",
+    "mode": "apply",
+    "candidate_bucket": "context_window_candidate_high_confidence",
+    "status_counts": {
+      "backfilled": 5
+    },
+    "source_match_rule": "raw_context_window.high_confidence_for_manual_review",
+    "interpretation": "5 high-confidence context-window candidates were backfilled as manual-review source evidence and source crops generated; outcomes remain open as needs_layout_fix/manual review."
+  },
+  "image_only_formula_reclassification": {
+    "script": "backend/scripts/close_image_only_formula_outcomes.py",
+    "report": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/image_only_formula_reclassification_report.json",
+    "mode": "apply",
+    "status_counts": {
+      "closed_non_blocking": 3
+    },
+    "policy": "close_only_image_only_formula_packets_with_closed_image_visual_confirmation",
+    "interpretation": "Only image-only formula_visual_review packets with a closed accepted_by_rule image_source_visual_confirmation outcome were closed non_blocking."
+  },
+  "formula_semantic_equivalent_closure": {
+    "script": "backend/scripts/close_standard_formula_semantic_equivalent_outcomes.py",
+    "report": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/formula_semantic_equivalent_closure_report.json",
+    "mode": "dry_run",
+    "candidate_count": 0,
+    "newly_closed": 0,
+    "cumulative_closed_by_reviewer": 32,
+    "policy": "close_only_deterministic_formula_semantic_equivalent_with_allowed_source_rule_and_crop",
+    "allowed_source_rules": [
+      "raw_content_list.formula_semantic_key_match",
+      "raw_content_list.math_normalized_duplicate_same_unit_ordinal_for_manual_review",
+      "raw_content_list.math_normalized_unique_same_unit_for_manual_review",
+      "raw_context_window.compact_exact_same_unit_for_manual_review",
+      "raw_context_window.high_confidence_for_manual_review",
+      "raw_context_window.short_option_formula_exact_same_unit_for_manual_review"
+    ],
+    "interpretation": "Current dry-run has 0 closable candidates. Five deterministic semantic-key matches are intentionally skipped because short-procedure source-location evidence is not an allowed closure rule."
+  },
+  "table_source_candidate_backfill": {
+    "script": "backend/scripts/backfill_standard_table_source_candidates.py",
+    "report": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/table_source_candidate_backfill_report.json",
+    "mode": "apply",
+    "candidate_count": 2,
+    "status_counts": {
+      "backfilled": 2
+    },
+    "policy": "backfill_raw_table_body_compact_match_for_manual_review_only",
+    "interpretation": "2 table_visual_review needs_page_bbox outcomes were matched to Raw table-body compact source candidates, source crops were generated, and outcomes remain needs_layout_fix/manual review rather than accepted_by_rule."
+  },
+  "acceptance_summary": {
+    "latest_standard_quality_score": 94,
+    "standard_review_outcome_count": 4340,
+    "standard_open_blocking_review_outcome_count": 165,
+    "standard_review_outcome_closed_count": 4175,
+    "visual_source_crop_count": 2711,
+    "visual_source_crop_required_count": 2860,
+    "visual_source_crop_missing_page_bbox_count": 149,
+    "table_formula_review_outcome_accepted_by_rule_count": 2694,
+    "table_formula_review_outcome_needs_page_bbox_count": 149,
+    "table_formula_review_outcome_needs_reconstruction_count": 1,
+    "table_formula_review_outcome_accepted_count": 1,
+    "formula_review_outcome_needs_layout_fix_count": 13,
+    "formula_review_outcome_needs_page_bbox_count": 149,
+    "table_formula_review_outcome_needs_layout_fix_count": 15,
+    "remaining_bbox_blocker_count": 149,
+    "remaining_bbox_no_match_count": 144,
+    "remaining_bbox_ambiguous_count": 3,
+    "remaining_bbox_too_short_count": 2,
+    "formula_precise_token_bbox_backfill_count": 12,
+    "table_visual_review_needs_layout_fix_count": 2,
+    "table_visual_review_needs_page_bbox_count": 0,
+    "formula_ordinal_bbox_backfill_count": 5,
+    "raw_context_bbox_candidate_count": 144,
+    "raw_context_review_candidate_count": 1,
+    "raw_context_weak_candidate_count": 40,
+    "raw_context_no_candidate_count": 103,
+    "raw_context_exact_bbox_backfill_count": 10,
+    "raw_context_short_procedure_bbox_backfill_count": 5,
+    "raw_context_short_option_formula_bbox_backfill_count": 3,
+    "formula_semantic_equivalent_closed_count": 25,
+    "formula_source_mismatch_manual_review_count": 13
+  },
+  "formula_bbox_precision_token_backfill": {
+    "script": "backend/scripts/backfill_standard_formula_bbox_candidates.py",
+    "report": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/formula_bbox_precision_token_backfill_report.json",
+    "mode": "apply",
+    "policy": "refined_formula_token_bbox_backfill_is_source_location_evidence_not_closure",
+    "status_counts": {
+      "backfilled": 12
+    },
+    "normalization_update": "preserve semantic formula tokens such as sqrt, pi, ge/le, approx, and stackrel?= for source-location disambiguation",
+    "interpretation": "12 additional same-unit formula source bboxes were located after preserving semantic formula tokens and generated source crops; outcomes remain needs_layout_fix/manual review, not accepted_by_rule."
+  },
+  "formula_bbox_ordinal_backfill": {
+    "script": "backend/scripts/backfill_standard_formula_ordinal_bbox_candidates.py",
+    "report": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/formula_bbox_ordinal_backfill_report.json",
+    "mode": "apply",
+    "policy": "duplicate_formula_same_unit_ordinal_backfill_is_source_location_evidence_not_closure",
+    "status_counts": {
+      "backfilled": 5
+    },
+    "candidate_count": 5,
+    "interpretation": "5 same-unit duplicate formula source bboxes were located by ordinal alignment between clean block order and Raw source_order. Generated crops remain needs_layout_fix/manual review, not accepted_by_rule."
+  },
+  "raw_context_exact_bbox_backfill": {
+    "script": "backend/scripts/backfill_standard_raw_context_exact_bbox_candidates.py",
+    "report": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/raw_context_exact_bbox_backfill_report.json",
+    "mode": "apply",
+    "policy": "raw_context_compact_exact_same_unit_backfill_is_source_location_evidence_not_closure",
+    "status_counts": {
+      "backfilled": 10
+    },
+    "candidate_count": 10,
+    "interpretation": "10 same-unit compact-exact Raw context windows were backfilled as source-location evidence and cropped; outcomes remain needs_layout_fix/manual review, not accepted_by_rule."
+  },
+  "raw_context_short_procedure_bbox_backfill": {
+    "script": "backend/scripts/backfill_standard_raw_context_short_procedure_bbox_candidates.py",
+    "report": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/raw_context_short_procedure_bbox_backfill_report.json",
+    "mode": "apply",
+    "policy": "raw_context_short_procedure_exact_same_unit_backfill_is_source_location_evidence_not_closure",
+    "status_counts": {
+      "backfilled": 5
+    },
+    "candidate_count": 5,
+    "interpretation": "5 unique short procedure Raw context matches were backfilled as source-location evidence and cropped; outcomes remain needs_layout_fix/manual review, not accepted_by_rule."
+  },
+  "raw_context_short_option_formula_bbox_backfill": {
+    "script": "backend/scripts/backfill_standard_raw_context_short_option_formula_bbox_candidates.py",
+    "report": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/raw_context_short_option_formula_bbox_backfill_report.json",
+    "mode": "apply",
+    "policy": "raw_context_short_option_formula_exact_same_unit_backfill_is_source_location_evidence_not_closure",
+    "status_counts": {
+      "backfilled": 3
+    },
+    "candidate_count": 3,
+    "interpretation": "3 unique short option-formula Raw context matches were backfilled as source-location evidence and cropped; outcomes remain needs_layout_fix/manual review, not accepted_by_rule."
+  },
+  "raw_context_rule_stop_audit": {
+    "script": "backend/scripts/audit_standard_raw_context_rule_stop.py",
+    "report": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/raw_context_rule_stop_audit.json",
+    "policy": "audit_only_no_backfill_no_closure_stop_rule_expansion_for_weak_or_missing_context",
+    "decision_boundary": "Remaining weak/no-candidate Raw context items must not be closed or backfilled by lowering similarity thresholds. Only new deterministic rules with exact source evidence may move items out of this audit.",
+    "count": 144,
+    "raw_context_bucket_counts": {
+      "no_context_candidate": 103,
+      "context_window_candidate_weak": 40,
+      "context_window_candidate_review": 1
+    },
+    "stop_bucket_counts": {
+      "no_candidate_requires_manual_or_source_reconstruction": 86,
+      "weak_false_positive_different_numbers": 34,
+      "no_candidate_near_mismatch_different_numbers": 17,
+      "weak_formula_spacing_or_tokenization_review": 1,
+      "weak_false_positive_or_context_gap": 5,
+      "review_candidate_token_overlap_only": 1
+    },
+    "interpretation": "Remaining weak/no-candidate Raw context items are not safe for threshold-based source backfill. Most are no-candidate/manual reconstruction or near false positives with different numbers/formulas; only deterministic future rules may move items out of review."
+  },
+  "raw_context_containment_backfill": {
+    "script": "backend/scripts/backfill_standard_raw_context_containment_bbox_candidates.py",
+    "report": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/raw_context_containment_bbox_backfill_report.json",
+    "mode": "apply",
+    "candidate_count": 1,
+    "status_counts": {
+      "backfilled": 1
+    },
+    "source_match_rule": "raw_context_window.compact_contained_same_unit_for_manual_review",
+    "interpretation": "This rule found exactly 1 unique same-unit page compact containment candidate and backfilled page/bbox for manual review only; it did not close any outcome."
+  },
+  "workbook_relation_gap_pattern_audit": {
+    "script": "backend/scripts/audit_standard_workbook_relation_gap_patterns.py",
+    "report": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/workbook_relation_gap_pattern_audit.json",
+    "policy": "audit_only_no_profile_mutation_no_closure",
+    "real_profile_gap_count": 1811,
+    "question_gap_count": 1725,
+    "question_run_count": 1030,
+    "question_run_bucket_counts": {
+      "front_matter_topic_list_artifact": 1,
+      "instruction_paragraph_should_start_group": 50,
+      "section_label_should_start_group": 307,
+      "unknown_or_manual_group_boundary": 671,
+      "colon_label_should_start_group": 1
+    },
+    "question_count_by_run_bucket": {
+      "front_matter_topic_list_artifact": 1,
+      "instruction_paragraph_should_start_group": 156,
+      "section_label_should_start_group": 584,
+      "unknown_or_manual_group_boundary": 981,
+      "colon_label_should_start_group": 3
+    },
+    "table_gap_count": 84,
+    "table_gap_bucket_counts": {
+      "table_after_instruction_should_attach": 8,
+      "table_manual_group_boundary": 66,
+      "table_may_be_exercise_or_explanation_needs_visual_review": 9,
+      "table_adjacent_to_question_should_attach": 1
+    },
+    "interpretation": "Relation gaps are dominated by exercise_workbook grouping/state-machine failures, not media/source-evidence plumbing. 740 question gaps sit behind clear section/instruction group starters, while 981 remain unknown/manual boundary cases often involving figures, answer blanks, or embedded question context. This is audit-only and does not promote G7+."
+  },
+  "workbook_grouping_state_machine_simulation": {
+    "script": "backend/scripts/audit_standard_workbook_grouping_state_machine_simulation.py",
+    "report": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/workbook_grouping_state_machine_simulation.json",
+    "policy": "dry_run_no_profile_mutation_no_gate_closure",
+    "candidate_rule_verdict": "audit_promising_but_not_ready_for_compiler",
+    "conservative_starter_run": {
+      "policy": "cover_only_runs_immediately_after_known_starter",
+      "covered_question_gap_count": 743,
+      "covered_table_gap_count": 9,
+      "covered_total_gap_count": 752,
+      "remaining_question_gap_count": 982,
+      "remaining_table_gap_count": 75,
+      "remaining_real_profile_gap_count": 1059,
+      "risk_note": "Conservative run coverage is safer but leaves most figure/answer/formula-interrupted runs unresolved."
+    },
+    "persistent_state_machine": {
+      "policy": "persistent_virtual_group_until_section_or_new_starter",
+      "risk_level": "high",
+      "virtual_group_count": 1403,
+      "starter_counts": {
+        "instruction_paragraph": 922,
+        "section_label": 445,
+        "colon_label": 36
+      },
+      "covered_question_gap_count": 1723,
+      "covered_table_gap_count": 82,
+      "covered_total_gap_count": 1805,
+      "remaining_question_gap_count": 2,
+      "remaining_table_gap_count": 2,
+      "risk_counts": {
+        "long_paragraph_inside_active_group": 448,
+        "table_attached_to_active_group_only": 82
+      },
+      "remaining_sample": [
+        {
+          "block_id": "b-00042",
+          "type": "question",
+          "subtype": "exercise_item",
+          "line_start": 83,
+          "heading_path": [],
+          "text": "1 Real Numbers 2 Solve Problems Using Equations and Inequalities 3 Analyze and Solve Linear Equations 4 Use Functions to Model Relationships 5 Investigate Bivariate Data 6 Analyze and Solve Systems of Linear Equations 7 Congruence and Similarity 8 Understand and Apply the Pythagorean Theorem 9 Solve"
+        },
+        {
+          "block_id": "b-01016",
+          "type": "question",
+          "subtype": "",
+          "line_start": 2087,
+          "heading_path": [
+            "Topic 1 Real Numbers",
+            "Lesson 1-3 Compare and Order Real Numbers"
+          ],
+          "text": "7. Compare and order the following numbers:"
+        },
+        {
+          "block_id": "b-01520",
+          "type": "table",
+          "subtype": "table_question",
+          "line_start": 3234,
+          "heading_path": [
+            "Topic 1 Real Numbers",
+            "Lesson 1-7 More Properties of Integer Exponents"
+          ],
+          "text": "<table><tr><td>Exponent Form</td><td>Simplified Form</td></tr><tr><td> $3^{4}$ </td><td>81</td></tr><tr><td> $3^{3}$ </td><td>27</td></tr><tr><td> $3^{2}$ </td><td>9</td></tr><tr><td> $3^{1}$ </td><td>3</td></tr><tr><td> $3^{0}$ </td><td>?</td></tr></table>"
+        },
+        {
+          "block_id": "b-04207",
+          "type": "table",
+          "subtype": "table_question",
+          "line_start": 9112,
+          "heading_path": [
+            "Topic 3 Analyze and Solve Linear Equations",
+            "Lesson 3-6 Connect Proportional Relationships and Slope"
+          ],
+          "text": "<table><tr><td>Vertical distance</td><td>9</td><td>18</td><td>27</td><td>45</td></tr><tr><td>Horizontal distance</td><td>12</td><td>24</td><td>36</td><td>60</td></tr><tr><td> $\\frac{\\text{vertical distance}}{\\text{horizontal distance}}$ </td><td> $\\frac{9}{12} = \\frac{3}{4}$ </td><td> $\\frac{18}{24}"
+        }
+      ],
+      "remaining_real_profile_gap_count": 6
+    },
+    "guarded_state_machine": {
+      "policy": "guarded_virtual_group_long_paragraph_reset_table_requires_question",
+      "risk_level": "medium",
+      "virtual_group_count": 1403,
+      "starter_counts": {
+        "instruction_paragraph": 922,
+        "section_label": 445,
+        "colon_label": 36
+      },
+      "covered_question_gap_count": 1674,
+      "covered_table_gap_count": 0,
+      "covered_total_gap_count": 1674,
+      "remaining_question_gap_count": 51,
+      "remaining_table_gap_count": 84,
+      "stop_counts": {
+        "long_paragraph_reset": 448,
+        "hard_section_reset": 127
+      },
+      "remaining_sample": [
+        {
+          "block_id": "b-00042",
+          "type": "question",
+          "subtype": "exercise_item",
+          "line_start": 83,
+          "heading_path": [],
+          "text": "1 Real Numbers 2 Solve Problems Using Equations and Inequalities 3 Analyze and Solve Linear Equations 4 Use Functions to Model Relationships 5 Investigate Bivariate Data 6 Analyze and Solve Systems of Linear Equations 7 Congruence and Similarity 8 Understand and Apply the Pythagorean Theorem 9 Solve"
+        },
+        {
+          "block_id": "b-01016",
+          "type": "question",
+          "subtype": "",
+          "line_start": 2087,
+          "heading_path": [
+            "Topic 1 Real Numbers",
+            "Lesson 1-3 Compare and Order Real Numbers"
+          ],
+          "text": "7. Compare and order the following numbers:"
+        },
+        {
+          "block_id": "b-01046",
+          "type": "question",
+          "subtype": "",
+          "line_start": 2149,
+          "heading_path": [
+            "Topic 1 Real Numbers",
+            "Lesson 1-3 Compare and Order Real Numbers"
+          ],
+          "text": "17. The area of a square poster is 31 square inches. Find the length of one side of the poster. Explain. 8.EE.1.2"
+        },
+        {
+          "block_id": "b-01337",
+          "type": "question",
+          "subtype": "",
+          "line_start": 2857,
+          "heading_path": [
+            "Topic 1 Real Numbers",
+            "Lesson 1-5 Solve Equations Using Square Roots and Cube Roots"
+          ],
+          "text": "1. Vocabulary How can you show that a number is a rational number? Lesson 1-2 8.NS.1.1"
+        },
+        {
+          "block_id": "b-01338",
+          "type": "question",
+          "subtype": "",
+          "line_start": 2859,
+          "heading_path": [
+            "Topic 1 Real Numbers",
+            "Lesson 1-5 Solve Equations Using Square Roots and Cube Roots"
+          ],
+          "text": "2. Which shows 0.23 as a fraction? Lesson 1-1 8.NS.1.1"
+        },
+        {
+          "block_id": "b-01342",
+          "type": "question",
+          "subtype": "",
+          "line_start": 2865,
+          "heading_path": [
+            "Topic 1 Real Numbers",
+            "Lesson 1-5 Solve Equations Using Square Roots and Cube Roots"
+          ],
+          "text": "3. Approximate $\\sqrt{8}$ to the nearest hundredth. Show your work. Lesson 1-3 8.NS.1.2"
+        },
+        {
+          "block_id": "b-01343",
+          "type": "question",
+          "subtype": "",
+          "line_start": 2867,
+          "heading_path": [
+            "Topic 1 Real Numbers",
+            "Lesson 1-5 Solve Equations Using Square Roots and Cube Roots"
+          ],
+          "text": "4. Solve the equation $m^{2}=14$. Lesson 1-5 8.EE.1.2"
+        },
+        {
+          "block_id": "b-01344",
+          "type": "question",
+          "subtype": "",
+          "line_start": 2869,
+          "heading_path": [
+            "Topic 1 Real Numbers",
+            "Lesson 1-5 Solve Equations Using Square Roots and Cube Roots"
+          ],
+          "text": "5. A fish tank is in the shape of a cube. Its volume is 125 ft³. What is the area of one face of the tank? Lessons 1-4 and 1-5 8.EE.1.2"
+        },
+        {
+          "block_id": "b-01345",
+          "type": "question",
+          "subtype": "",
+          "line_start": 2871,
+          "heading_path": [
+            "Topic 1 Real Numbers",
+            "Lesson 1-5 Solve Equations Using Square Roots and Cube Roots"
+          ],
+          "text": "6. Write 1.12 as a mixed number. Show your work. Lesson 1-1 8.NS.1.1"
+        },
+        {
+          "block_id": "b-01901",
+          "type": "question",
+          "subtype": "",
+          "line_start": 4019,
+          "heading_path": [
+            "Topic 1 Real Numbers",
+            "Topic 1 3-Act Mathematical Modeling"
+          ],
+          "text": "6. What information in this situation would be helpful to know? How would you use that information?"
+        },
+        {
+          "block_id": "b-01902",
+          "type": "question",
+          "subtype": "",
+          "line_start": 4021,
+          "heading_path": [
+            "Topic 1 Real Numbers",
+            "Topic 1 3-Act Mathematical Modeling"
+          ],
+          "text": "7. Use Appropriate Tools What tools can you use to get the information you need? Record the information as you find it."
+        },
+        {
+          "block_id": "b-01904",
+          "type": "question",
+          "subtype": "",
+          "line_start": 4025,
+          "heading_path": [
+            "Topic 1 Real Numbers",
+            "Topic 1 3-Act Mathematical Modeling"
+          ],
+          "text": "8. Model with Math Represent the situation using the mathematical content, concepts, and skills from this topic. Use your representation to answer the Main Question."
+        },
+        {
+          "block_id": "b-01905",
+          "type": "question",
+          "subtype": "",
+          "line_start": 4027,
+          "heading_path": [
+            "Topic 1 Real Numbers",
+            "Topic 1 3-Act Mathematical Modeling"
+          ],
+          "text": "9. What is your answer to the Main Question? Is it greater or less than your prediction? Explain why."
+        },
+        {
+          "block_id": "b-04053",
+          "type": "question",
+          "subtype": "",
+          "line_start": 8794,
+          "heading_path": [
+            "Topic 3 Analyze and Solve Linear Equations",
+            "Topic 3 3-Act Mathematical Modeling"
+          ],
+          "text": "6. What information in this situation would be helpful to know? How would you use that information?"
+        },
+        {
+          "block_id": "b-04055",
+          "type": "question",
+          "subtype": "",
+          "line_start": 8798,
+          "heading_path": [
+            "Topic 3 Analyze and Solve Linear Equations",
+            "Topic 3 3-Act Mathematical Modeling"
+          ],
+          "text": "7. Use Appropriate Tools What tools can you use to get the information you need? Record the information as you find it."
+        },
+        {
+          "block_id": "b-04056",
+          "type": "question",
+          "subtype": "",
+          "line_start": 8800,
+          "heading_path": [
+            "Topic 3 Analyze and Solve Linear Equations",
+            "Topic 3 3-Act Mathematical Modeling"
+          ],
+          "text": "8. Model with Math Represent the situation using the mathematical content, concepts, and skills from this topic. Use your representation to answer the Main Question."
+        },
+        {
+          "block_id": "b-04057",
+          "type": "question",
+          "subtype": "",
+          "line_start": 8802,
+          "heading_path": [
+            "Topic 3 Analyze and Solve Linear Equations",
+            "Topic 3 3-Act Mathematical Modeling"
+          ],
+          "text": "9. What is your answer to the Main Question? Is it earlier or later than your prediction? Explain why."
+        },
+        {
+          "block_id": "b-04882",
+          "type": "question",
+          "subtype": "",
+          "line_start": 10587,
+          "heading_path": [
+            "Topic 4 Use Functions to Model Relationships",
+            "Topic 4 enVision STEM Project"
+          ],
+          "text": "9. Write the equation for the graph of the line shown."
+        },
+        {
+          "block_id": "b-05183",
+          "type": "question",
+          "subtype": "",
+          "line_start": 11195,
+          "heading_path": [
+            "Topic 4 Use Functions to Model Relationships",
+            "Lesson 4-3 Compare Linear and Nonlinear Functions"
+          ],
+          "text": "4. Whose musical instrument costs more, Felipe's or Samantha's? Explain."
+        },
+        {
+          "block_id": "b-05184",
+          "type": "question",
+          "subtype": "",
+          "line_start": 11197,
+          "heading_path": [
+            "Topic 4 Use Functions to Model Relationships",
+            "Lesson 4-3 Compare Linear and Nonlinear Functions"
+          ],
+          "text": "5. Who will pay more each month? Explain."
+        }
+      ],
+      "remaining_real_profile_gap_count": 137
+    },
+    "interpretation": "Dry-run only. Conservative starter-run grouping covers 752 relation gaps and leaves 1059 real profile gaps. Persistent virtual grouping covers 1805/1811 gaps and leaves 6 real profile gaps, but has high risk signals. Guarded grouping resets on long paragraphs and requires table attachment to an active question; it covers 1674 gaps and leaves 137, reducing long-paragraph risk but leaving all 84 table gaps unresolved. This is promising profile-engineering evidence, not a compiler-ready pass rule."
+  },
+  "workbook_table_attachment_policy_simulation": {
+    "artifact": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/workbook_table_attachment_policy_simulation.json",
+    "html_artifact": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/workbook_table_attachment_policy_simulation.html",
+    "policy": "dry_run_no_profile_mutation_no_gate_closure",
+    "decision_boundary": "This simulation classifies orphan table-question gaps into generic attachment policy families. It does not attach tables, close relation gates, or change Standard acceptance status.",
+    "table_gap_count": 84,
+    "policy_bucket_counts": {
+      "auto_attach_instruction_table_candidate": 8,
+      "explanation_or_step_table_keep_review": 17,
+      "question_like_paragraph_table_needs_visual_review": 12,
+      "manual_review_or_compiler_boundary_gap": 38,
+      "paired_vocabulary_table_needs_layout_rule": 8,
+      "auto_attach_adjacent_question_candidate": 1
+    },
+    "risk_level_counts": {
+      "medium": 28,
+      "high": 55,
+      "low": 1
+    },
+    "table_shape_counts": {
+      "data_table": 31,
+      "blank_answer_table": 30,
+      "math_table": 12,
+      "vocabulary_or_definition_table": 11
+    },
+    "auto_attach_candidate_count": 9,
+    "needs_special_layout_rule_count": 8,
+    "needs_visual_or_manual_review_count": 75,
+    "guarded_grouping_remaining_table_gap_count": 84,
+    "candidate_rule_verdict": "table_policy_requires_visual_review_before_compiler_rule",
+    "interpretation": "The table policy is not compiler-ready because most orphan table gaps require visual/manual review or a separate paired-table layout rule."
+  },
+  "latest_table_attachment_policy_interpretation": "84 orphan table gaps remain unresolved: 9 auto-attach candidates, 8 special paired-layout candidates, and 75 visual/manual review cases. This is dry-run evidence only and does not change acceptance.",
+  "workbook_paired_vocabulary_table_layout_audit": {
+    "artifact": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/workbook_paired_vocabulary_table_layout_audit.json",
+    "html_artifact": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/workbook_paired_vocabulary_table_layout_audit.html",
+    "policy": "audit_only_no_profile_mutation_no_gate_closure",
+    "decision_boundary": "This report narrows paired/vocabulary table gaps into layout-rule candidates. It does not attach tables, alter grouping, close gates, or change Basic Print status.",
+    "paired_vocabulary_record_count": 8,
+    "layout_bucket_counts": {
+      "two_table_vocabulary_definition_pair": 1,
+      "word_bank_paragraphs_plus_definition_table": 7
+    },
+    "readiness_counts": {
+      "candidate_needs_horizontal_pair_renderer": 1,
+      "candidate_needs_word_bank_grouping_and_table_renderer": 7
+    },
+    "compiler_candidate_count": 8,
+    "manual_review_count": 0,
+    "candidate_rule_verdict": "layout_subrules_identified_but_need_visual_confirmation_before_compiler",
+    "interpretation": "Two stable vocabulary table layout subrules are visible in G7+, but they remain candidates pending source visual confirmation and must not be counted as closed relation gaps."
+  },
+  "latest_paired_vocabulary_table_interpretation": "8 paired/vocabulary table records split into 1 two-table pair and 7 word-bank-plus-definition tables; layout subrules are identified but need source visual confirmation before compiler work.",
+  "paired_vocabulary_source_confirmation": {
+    "artifact": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/paired_vocabulary_source_confirmation.json",
+    "html_artifact": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/paired_vocabulary_source_confirmation.html",
+    "contact_sheet": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/paired_vocabulary_source_context_contact_sheet.png",
+    "context_crop_dir": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/paired_vocabulary_source_context_crops",
+    "record_count": 8,
+    "layout_bucket_counts": {
+      "two_table_vocabulary_definition_pair": 1,
+      "word_bank_paragraphs_plus_definition_table": 7
+    },
+    "source_context_crop_ready_count": 8,
+    "manual_visual_inspection": {
+      "inspected_by": "codex",
+      "inspection_basis": "paired_vocabulary_source_context_contact_sheet.png plus generated expanded source context crops",
+      "source_layout_confirmed_count": 8,
+      "two_table_vocabulary_definition_pair_confirmed_count": 1,
+      "word_bank_plus_definition_table_confirmed_count": 7,
+      "known_content_reconstruction_blocker_count": 1,
+      "known_content_reconstruction_blocker_block_ids": [
+        "b-03276"
+      ],
+      "decision_boundary": "This visual inspection confirms source layout shapes only. It does not close relation gaps or table reconstruction outcomes."
+    },
+    "candidate_rule_verdict": "source_layout_confirmed_but_compiler_requires_reconstruction_safe_rule_design",
+    "promotion_boundary": "source layout is confirmed for this subset, but relation gaps remain open until compiler/profile rules preserve grouping, layout, and reconstruction-sensitive answer blanks"
+  },
+  "latest_paired_vocabulary_source_confirmation_interpretation": "8 paired/vocabulary source layouts are confirmed by expanded source context crops. The original b-03276 reconstruction blocker is superseded by the later real PDF blank-preservation rerun, but this does not close the broader G7+ profile gaps.",
+  "paired_vocabulary_renderer_contract_audit": {
+    "artifact": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/paired_vocabulary_renderer_contract_audit.json",
+    "html_artifact": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/paired_vocabulary_renderer_contract_audit.html",
+    "policy": "contract_audit_only_no_compiler_mutation_no_gate_closure",
+    "decision_boundary": "This audit defines a candidate renderer/profile contract for paired vocabulary workbook tables. It does not implement the renderer, attach tables, close relation gaps, or change acceptance status.",
+    "record_count": 8,
+    "source_layout_confirmed_count": 8,
+    "layout_bucket_counts": {
+      "two_table_vocabulary_definition_pair": 1,
+      "word_bank_paragraphs_plus_definition_table": 7
+    },
+    "current_render_gap_counts": {
+      "two_table_pair_not_rendered_as_horizontal_pair_group": 1,
+      "word_bank_and_definition_table_not_rendered_as_single_group": 7,
+      "empty_example_cells_need_printable_answer_space": 7,
+      "inline_underscore_blanks_need_preserved_blank_width": 3
+    },
+    "known_reconstruction_blocker_count": 1,
+    "known_reconstruction_blocker_block_ids": [
+      "b-03276"
+    ],
+    "gate_implications": {
+      "can_reduce_relation_gap_count_after_implementation": 8,
+      "cannot_close_existing_reconstruction_blockers_without_blank_preservation": 1,
+      "must_remain_review_until_visual_regression_passes": true
+    },
+    "candidate_rule_verdict": "contract_ready_for_compiler_prototype_but_not_gate_closure",
+    "promotion_boundary": "ready for compiler prototype only; no relation gap or reconstruction outcome may close until rendered HTML/PDF and source visual regression pass"
+  },
+  "latest_paired_vocabulary_renderer_contract_interpretation": "Contract is ready for compiler prototype: 8 source-confirmed records, but current Standard render lacks paired/grouped vocabulary layout and blank preservation; no gates closed.",
+  "paired_vocabulary_renderer_prototype": {
+    "artifact": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/paired_vocabulary_renderer_prototype_report.json",
+    "html_artifact": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/paired_vocabulary_renderer_prototype.html",
+    "screenshot": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/paired_vocabulary_renderer_prototype_screenshot.png",
+    "policy": "prototype_only_no_standard_mutation_no_gate_closure",
+    "decision_boundary": "This prototype renders only source-confirmed paired vocabulary candidates into a review artifact. It does not mutate standard.html, close workbook relation gaps, or change acceptance status.",
+    "record_count": 8,
+    "rendered_two_table_pair_count": 1,
+    "rendered_word_bank_table_count": 7,
+    "prototype_answer_space_count": 24,
+    "prototype_inline_blank_count": 13,
+    "reconstruction_blocker_retained_count": 1,
+    "manual_visual_sanity": {
+      "inspected_by": "codex",
+      "inspection_basis": "paired_vocabulary_renderer_prototype_screenshot.png",
+      "prototype_layout_visible": true,
+      "two_table_pair_visible": true,
+      "word_bank_table_groups_visible": true,
+      "answer_spaces_visible": true,
+      "math_autowrap_regression_fixed": true,
+      "reconstruction_blocker_retained_block_ids": [
+        "b-03276"
+      ],
+      "remaining_issue": "Prototype adds printable example-cell answer spaces but does not reconstruct source blank boxes missing inside b-03276 definition text; gate closure must wait for reconstruction-safe implementation."
+    },
+    "candidate_rule_verdict": "prototype_render_ready_for_visual_regression_not_gate_closure",
+    "promotion_boundary": "prototype is visually promising but cannot close relation/reconstruction gates until integrated into compiler and rerun with rendered HTML/PDF regression checks"
+  },
+  "latest_paired_vocabulary_renderer_prototype_interpretation": "Prototype renders 8 source-confirmed paired vocabulary records and visible answer spaces. The b-03276 reconstruction blocker is superseded for blank preservation by the later real PDF rerun; no profile gates closed.",
+  "paired_vocabulary_compiler_patch": {
+    "artifact": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/paired_vocabulary_compiler_patch/paired_vocabulary_compiler_patch_report.json",
+    "patched_document": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/paired_vocabulary_compiler_patch/patched_standard_document.json",
+    "patched_html": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/paired_vocabulary_compiler_patch/patched_standard.html",
+    "preview_html": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/paired_vocabulary_compiler_patch/patched_groups_preview.html",
+    "preview_screenshot": "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-pressure-v0-rerun-20260630/standard-final/paired_vocabulary_compiler_patch/patched_groups_preview_screenshot.png",
+    "policy": "compiler_adjacent_artifact_only_no_main_standard_mutation_no_gate_closure",
+    "decision_boundary": "This patch applies source-confirmed paired vocabulary grouping/rendering into isolated artifacts. It does not overwrite standard_document.json, standard.html, standard.pdf, or acceptance reports.",
+    "group_count": 8,
+    "patched_table_count": 9,
+    "removed_orphan_table_gap_count": 9,
+    "remaining_original_orphan_table_gap_count": 75,
+    "projected_real_profile_gap_count_after_patch": 1802,
+    "reconstruction_blocker_retained_count": 1,
+    "scope_integrity": {
+      "patched_group_count": 8,
+      "patched_html_answer_space_count": 24,
+      "patched_html_group_section_count": 8,
+      "main_standard_document_mutated": false,
+      "main_standard_acceptance_mutated": false,
+      "scope_note": "Answer-space rendering is limited to paired vocabulary group tables; non-target tables remain outside the patch scope."
+    },
+    "manual_visual_sanity": {
+      "inspected_by": "codex",
+      "inspection_basis": "patched_groups_preview_screenshot.png",
+      "two_table_pair_group_visible": true,
+      "word_bank_table_groups_visible": true,
+      "answer_spaces_visible": true,
+      "source_crop_paths_visible": true,
+      "remaining_reconstruction_blocker_block_ids": [
+        "b-03276"
+      ],
+      "decision_boundary": "Preview supports compiler integration for the paired vocabulary subset, but no gate closes until main Standard rerun and PDF visual regression pass."
+    },
+    "candidate_rule_verdict": "compiler_patch_artifact_ready_for_pdf_visual_regression_not_gate_closure",
+    "promotion_boundary": "compiler-adjacent artifact only; integrate into main compiler only after full rerun confirms relation delta and PDF visual regression without broad table side effects"
+  },
+  "latest_paired_vocabulary_compiler_patch_interpretation": "Compiler-adjacent patch groups 8 source-confirmed records covering 9 orphan table gaps; projected real profile gaps 1811 -> 1802. The b-03276 reconstruction blocker is superseded for blank preservation by the later real PDF rerun; no profile gate closed.",
+  "validation_notes": [
+    {
+      "date": "2026-07-01",
+      "topic": "paired_vocabulary_formal_compiler_stub_v2",
+      "status": "historical_review_not_gate_closure_superseded_for_blank_preservation",
+      "evidence": [
+        "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-paired-vocab-compiler-rerun-20260701/standard-final-no-pdf-stub-v2/paired_vocabulary_report.json",
+        "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-paired-vocab-compiler-rerun-20260701/standard-final-no-pdf-stub-v2/paired_vocabulary_compiler_evidence_audit.json",
+        "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-paired-vocab-compiler-rerun-20260701/standard-final-no-pdf-stub-v2/paired_vocabulary_compiler_delta_source_confirmation.json"
+      ],
+      "conclusion": "Generic compiler grouping now covers b-11020 and finds b-09582, but the completed run used a stubbed PDF renderer. Source crop review confirms b-09582 layout and shows missing inline blank boxes. This note is superseded for the narrow blank-preservation subrule by the later real PDF rerun; broader G7+ blockers remain."
+    },
+    {
+      "date": "2026-07-01",
+      "topic": "paired_vocabulary_blank_box_reconstruction_hard_stop",
+      "status": "historical_hard_stop_superseded_by_real_pdf_rerun",
+      "evidence": [
+        "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-paired-vocab-compiler-rerun-20260701/standard-final-no-pdf-stub-v2/paired_vocabulary_blank_box_reconstruction_audit.json",
+        "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-paired-vocab-compiler-rerun-20260701/standard-final-no-pdf-stub-v2/paired_vocabulary_blank_box_reconstruction_audit.html"
+      ],
+      "conclusion": "The paired-vocabulary compiler and source-confirmed table sets match at 10/10, but source visual evidence showed missing inline blank boxes in b-03276 and b-09582. This historical hard stop is superseded by the later real PDF blank-preservation rerun for the narrow paired-vocabulary subrule; exercise_workbook is still not promoted."
+    },
+    {
+      "date": "2026-07-01",
+      "topic": "paired_vocabulary_blank_reconstruction_prototype",
+      "status": "historical_isolated_prototype_superseded_for_blank_preservation",
+      "evidence": [
+        "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-paired-vocab-compiler-rerun-20260701/standard-final-no-pdf-stub-v2/paired_vocabulary_blank_reconstruction_prototype/paired_vocabulary_blank_reconstruction_prototype_report.json",
+        "runtime/backend/pipeline-work/audits/g7plus-non-gf-workbook-paired-vocab-compiler-rerun-20260701/standard-final-no-pdf-stub-v2/paired_vocabulary_blank_reconstruction_prototype/paired_vocabulary_blank_reconstruction_prototype.html"
+      ],
+      "conclusion": "The two known G7+ paired-vocabulary blank-box blockers were reconstructable by a small conservative text-pattern surface, yielding 6 visible blanks. The later cross-sample audit kept this as a narrow subrule, and the later real PDF rerun closes only that subrule."
+    },
+    {
+      "date": "2026-07-01",
+      "topic": "blank_reconstruction_cross_sample_audit",
+      "status": "audit_only_not_compiler_ready",
+      "evidence": [
+        "runtime/backend/pipeline-work/audits/standard-blank-reconstruction-cross-sample-20260701/blank_reconstruction_cross_sample_audit.json",
+        "runtime/backend/pipeline-work/audits/standard-blank-reconstruction-cross-sample-20260701/blank_reconstruction_cross_sample_audit.html",
+        "docs/standard-research/27-blank-reconstruction-cross-sample-audit-v0.md"
+      ],
+      "conclusion": "Cross-sample audit split reconstruction cases into 2 G7+ blank-pattern cases and 3 GF4 grammar-paradigm table rebuild cases. Blank-box rules must not be treated as generic table reconstruction or profile closure."
+    },
+    {
+      "date": "2026-07-01",
+      "topic": "paired_vocabulary_blank_preservation_real_pdf_rerun",
+      "status": "subrule_closed_not_profile_promotion",
+      "evidence": [
+        "runtime/backend/pipeline-work/audits/g7plus-paired-vocab-blank-preservation-rerun-20260701/standard-final/standard_acceptance_report.json",
+        "runtime/backend/pipeline-work/audits/g7plus-paired-vocab-blank-preservation-rerun-20260701/standard-final/print_qa_report.json",
+        "runtime/backend/pipeline-work/audits/g7plus-paired-vocab-blank-preservation-rerun-20260701/standard-final/paired_vocabulary_blank_box_reconstruction_audit.json",
+        "docs/standard-research/36-g7plus-paired-vocabulary-blank-preservation-v0.md"
+      ],
+      "conclusion": "The real PDF rerun preserves 6 source blank spans across b-03276 and b-09582, matches compiler/source-confirmed table ids at 10/10, and renders a 736-page PDF. This closes only the paired-vocabulary blank-box subrule; exercise_workbook remains review pressure because broader grouping, formula, table, and source-lineage blockers remain."
+    },
+    {
+      "date": "2026-07-01",
+      "topic": "exercise_workbook_relation_delta_audit",
+      "status": "profile_engineering_evidence_not_gate_closure",
+      "evidence": [
+        "runtime/backend/pipeline-work/audits/g7plus-relation-delta-audit-20260701/workbook_relation_delta_audit.json",
+        "runtime/backend/pipeline-work/audits/g7plus-relation-delta-audit-20260701/workbook_relation_delta_audit.html",
+        "docs/standard-research/37-g7plus-exercise-relation-delta-audit-v0.md"
+      ],
+      "conclusion": "The paired-blank rerun removes 1251 real relation gaps with 0 added gaps, including 40 orphan-table gaps. However, 26 removed table gaps come from high-risk baseline buckets, so the delta must be split into explicit profile contracts before any compiler promotion or candidate status."
+    },
+    {
+      "date": "2026-07-01",
+      "topic": "exercise_workbook_table_attachment_contract_audit",
+      "status": "paired_vocabulary_contract_ready_broad_table_attachment_blocked",
+      "evidence": [
+        "runtime/backend/pipeline-work/audits/g7plus-table-attachment-contract-audit-20260701/workbook_table_attachment_contract_audit.json",
+        "runtime/backend/pipeline-work/audits/g7plus-table-attachment-contract-audit-20260701/workbook_table_attachment_contract_audit.html",
+        "docs/standard-research/38-g7plus-table-attachment-contract-audit-v0.md"
+      ],
+      "conclusion": "The contract split classifies 84 orphan-table gaps: 9 paired-vocabulary records are contract-ready, 2 non-paired low/medium records need source visual spot audit, 3 need visual review before contract, 15 remain not-proven stable gaps, and 55 are high-risk review-only. Broad table attachment remains blocked."
+    },
+    {
+      "date": "2026-07-01",
+      "topic": "exercise_workbook_table_attachment_source_context_spot_audit",
+      "status": "two_narrow_non_paired_contract_families_ready_broad_rule_blocked",
+      "evidence": [
+        "runtime/backend/pipeline-work/audits/g7plus-table-attachment-spot-audit-20260701/workbook_table_attachment_spot_audit.json",
+        "runtime/backend/pipeline-work/audits/g7plus-table-attachment-spot-audit-20260701/workbook_table_attachment_spot_audit.html",
+        "docs/standard-research/39-g7plus-table-attachment-spot-audit-v0.md"
+      ],
+      "conclusion": "Source-context spot audit accepts b-04401 as example_step_data_table_keep_with_explanation and b-08745 as single_table_vocabulary_review. These are narrow contract families only; broad table attachment and exercise_workbook promotion remain blocked."
+    },
+    {
+      "date": "2026-07-01",
+      "topic": "exercise_workbook_table_attachment_visual_review_contract_audit",
+      "status": "three_narrow_example_table_families_ready_broad_question_like_rule_blocked",
+      "evidence": [
+        "runtime/backend/pipeline-work/audits/g7plus-table-attachment-visual-review-audit-20260701/workbook_table_attachment_visual_review_audit.json",
+        "runtime/backend/pipeline-work/audits/g7plus-table-attachment-visual-review-audit-20260701/workbook_table_attachment_visual_review_audit.html",
+        "docs/standard-research/40-g7plus-table-attachment-visual-review-audit-v0.md"
+      ],
+      "conclusion": "Visual source-context review accepts b-06288 and b-06296 as example_relative_frequency_question_table_explanation and b-12383 as example_statistics_question_table_explanation. These are narrow example-table families only; broad question-like table attachment remains blocked."
+    },
+    {
+      "date": "2026-07-01",
+      "topic": "exercise_workbook_remaining_relation_source_context_audit",
+      "status": "review_evidence_ready_not_gate_closure",
+      "evidence": [
+        "runtime/backend/pipeline-work/audits/g7plus-remaining-relation-source-context-audit-20260701/workbook_remaining_relation_source_context_audit.json",
+        "runtime/backend/pipeline-work/audits/g7plus-remaining-relation-source-context-audit-20260701/workbook_remaining_relation_source_context_audit.html",
+        "docs/standard-research/45-g7plus-remaining-relation-source-context-audit-v0.md"
+      ],
+      "conclusion": "All 36 remaining table/figure relation gaps now have focused source-PDF context packets: 18 contract-review packets and 18 keep-review packets. This ends the evidence-plumbing portion for these gaps, but does not close gates or promote G7+."
+    },
+    {
+      "date": "2026-07-01",
+      "topic": "exercise_workbook_contract_family_decision_audit",
+      "status": "math_heavy_profile_boundary_not_gate_closure",
+      "evidence": [
+        "runtime/backend/pipeline-work/audits/g7plus-contract-family-decision-audit-20260701/workbook_contract_family_decision_audit.json",
+        "runtime/backend/pipeline-work/audits/g7plus-contract-family-decision-audit-20260701/workbook_contract_family_decision_audit.html",
+        "docs/standard-research/46-g7plus-contract-family-decision-audit-v0.md"
+      ],
+      "conclusion": "The 18 source-context contract-review packets are 18/18 math-heavy profile-boundary cases, so a generic exercise_workbook table rerun is not recommended. The next loop should define a math-heavy workbook/textbook relation contract with G7+ and Math 8A evidence."
+    }
+  ]
+}

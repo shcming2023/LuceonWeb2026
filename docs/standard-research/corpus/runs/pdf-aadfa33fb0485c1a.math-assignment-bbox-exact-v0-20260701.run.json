@@ -1,0 +1,75 @@
+{
+  "schema": "luceon-standard-research-run/v1",
+  "material_id": "pdf-aadfa33fb0485c1a",
+  "nickname": "Math 8A",
+  "title": "中学生世界 八上 数学 上册.pdf",
+  "profile": "math_textbook",
+  "run_label": "math-assignment-bbox-exact-v0-20260701",
+  "standard_output": "runtime/backend/pipeline-work/audits/math-profile-assignment-bbox-exact-rerun-20260701/standard-final",
+  "base_standard_output": "runtime/backend/pipeline-work/audits/math-profile-selector-v1-rerun-20260701/standard-final",
+  "clean_input": "runtime/backend/pipeline-work/raw2clean/run-42-pdf-aadfa33fb0485c1a-job-20260610083901-844ae522da/clean-final",
+  "raw_input": "runtime/backend/pipeline-work/raw2clean/run-42-pdf-aadfa33fb0485c1a-job-20260610083901-844ae522da/raw_input",
+  "requested_profile": "auto",
+  "selected_profile": "math_textbook",
+  "source_pdf": "runtime/backend/pipeline-work/popo2raw/run-25-pdf-aadfa33fb0485c1a-job-20260610083901-844ae522da/rebuild_input/pdf-aadfa33fb0485c1a_origin.pdf",
+  "acceptance": {
+    "status": "review",
+    "quality_score": 86,
+    "profile_coverage": "review",
+    "context_integrity": "review",
+    "formula_table_integrity": "review",
+    "review_outcomes": "review",
+    "source_evidence": "pass",
+    "print_render": "pass",
+    "remaining_review_gates": [
+      "profile_coverage",
+      "context_integrity",
+      "formula_table_integrity",
+      "review_outcomes"
+    ]
+  },
+  "summary": {
+    "visual_review_packet_count": 1157,
+    "review_outcome_count": 1157,
+    "review_outcome_open_blocking_count": 1157,
+    "review_outcome_closed_count": 0,
+    "pdf_page_count": 64,
+    "formula_visual_review_count": 1153,
+    "table_visual_review_count": 4,
+    "visual_source_crop_count": 882,
+    "visual_source_crop_required_count": 1157,
+    "visual_source_crop_needs_page_bbox_count": 275,
+    "assignment_missing_formula_packet_count": 557,
+    "assignment_located_exact_count": 282,
+    "assignment_located_containment_count": 116,
+    "assignment_ambiguous_count": 11,
+    "assignment_unlocated_count": 148,
+    "assignment_exact_bbox_applied_count": 282,
+    "math_profile_selector_closed": true,
+    "math_profile_contract_ready": false
+  },
+  "assignment_bbox_audit": {
+    "status": "partial_source_location_evidence",
+    "audit": "runtime/backend/pipeline-work/audits/math8a-formula-assignment-bbox-audit-20260701/math_formula_assignment_bbox_audit.json",
+    "audit_html": "runtime/backend/pipeline-work/audits/math8a-formula-assignment-bbox-audit-20260701/math_formula_assignment_bbox_audit.html",
+    "sample_contact_sheet": "runtime/backend/pipeline-work/audits/math8a-formula-assignment-bbox-audit-20260701/sample_crops/sample_contact_sheet.png",
+    "apply_report": "runtime/backend/pipeline-work/audits/math-profile-assignment-bbox-exact-rerun-20260701/standard-final/math_formula_assignment_bbox_apply_report.json",
+    "visual_source_crop_audit": "runtime/backend/pipeline-work/audits/math-profile-assignment-bbox-exact-rerun-20260701/standard-final/visual_source_crop_audit.json",
+    "allowed_statuses_applied": [
+      "located_exact"
+    ],
+    "decision_boundary": "Exact assignment matches may supply source page/bbox evidence only. They do not close formula visual outcomes and do not promote math_textbook."
+  },
+  "math_visual_contract": {
+    "status": "review",
+    "open_formula_visual_review_outcomes": 1153,
+    "open_table_visual_review_outcomes": 4,
+    "basic_print_blocker": "math_profile_contract_not_pass"
+  },
+  "verdict": "math_formula_assignment_exact_locator_partial_source_evidence_only",
+  "notes": [
+    "The exact assignment locator increases source-crop-ready formula/table packets from 600 to 882.",
+    "All 1157 formula/table visual outcomes remain open and blocking.",
+    "The containment and ambiguous buckets remain review inputs and are not accepted by rule."
+  ]
+}

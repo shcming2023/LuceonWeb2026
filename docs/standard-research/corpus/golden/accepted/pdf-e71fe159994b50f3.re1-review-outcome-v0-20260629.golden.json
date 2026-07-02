@@ -1,0 +1,39 @@
+{
+  "schema": "luceon-standard-basic-print-golden/v1",
+  "material_id": "pdf-e71fe159994b50f3",
+  "nickname": "Reading Explorer 1",
+  "golden_label": "re1-review-outcome-v0-20260629",
+  "quality_level": "basic_print",
+  "profile": "reading_textbook",
+  "accepted_at": "2026-06-29",
+  "standard_output": "runtime/backend/pipeline-work/audits/re1-review-outcome-v0-rerun-20260629/standard-final",
+  "run_record": "../../runs/pdf-e71fe159994b50f3.re1-review-outcome-v0-20260629.run.json",
+  "source_pdf": "runtime/backend/pipeline-work/popo2raw/run-9-pdf-e71fe159994b50f3-popo-20260617035249-staged_popo_20260617_batch08_sma-923a2fa1--003-popo_e71fe159994b50f3_003/rebuild_input/pdf-e71fe159994b50f3_origin.pdf",
+  "acceptance": {
+    "status": "pass",
+    "quality_score": 97,
+    "fail_gates": [],
+    "review_gates": []
+  },
+  "closure": {
+    "status": "basic_print_accepted",
+    "accepted_rule": "accepted_by_rule_table_exact_raw_match_source_bbox_source_crop",
+    "decision_counts": {
+      "accepted_by_rule": 15
+    },
+    "open_blocking_count": 0,
+    "visual_review_source_crop_count": 15
+  },
+  "evidence": {
+    "standard_acceptance_report": "standard_acceptance_report.json",
+    "standard_review_outcomes": "standard_review_outcomes.json",
+    "basic_print_closure_report": "basic_print_closure_report.json",
+    "review_outcomes_html": "review_outcomes.html",
+    "visual_source_crops": "visual_source_crops/"
+  },
+  "scope_notes": [
+    "Accepted as Basic Print, not polished publication.",
+    "Accepted table closure rule applies to simple reading-textbook text tables only.",
+    "GF6 remains a workbook negative regression comparator."
+  ]
+}

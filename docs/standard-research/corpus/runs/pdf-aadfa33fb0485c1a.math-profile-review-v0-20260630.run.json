@@ -1,0 +1,104 @@
+{
+  "schema": "luceon-standard-research-run/v1",
+  "material_id": "pdf-aadfa33fb0485c1a",
+  "nickname": "Math 8A",
+  "title": "中学生世界 八上 数学 上册.pdf",
+  "profile": "math_textbook",
+  "run_label": "math-profile-review-v0-20260630",
+  "standard_output": "runtime/backend/pipeline-work/audits/math-profile-review-v0-rerun-20260630/standard-final",
+  "clean_input": "runtime/backend/pipeline-work/raw2clean/run-42-pdf-aadfa33fb0485c1a-job-20260610083901-844ae522da/clean-final",
+  "raw_input": "runtime/backend/pipeline-work/raw2clean/run-42-pdf-aadfa33fb0485c1a-job-20260610083901-844ae522da/raw_input",
+  "requested_profile": "auto",
+  "selected_profile": "reading_textbook",
+  "source_pdf": "",
+  "local_source_pdf_evidence": {
+    "path": "runtime/backend/pipeline-work/popo2raw/run-25-pdf-aadfa33fb0485c1a-job-20260610083901-844ae522da/rebuild_input/pdf-aadfa33fb0485c1a_origin.pdf",
+    "size_bytes": 1658503,
+    "sha256": "b1de38dbdc1a53f4ca223775d48e2bfacec91935f12d756c045adb689ce894cc",
+    "lineage_status": "local_origin_pdf_available_same_hash_in_checked_popo2raw_runs_but_standard_manifest_source_pdf_empty"
+  },
+  "acceptance": {
+    "status": "review",
+    "quality_score": 86,
+    "context_integrity": "review",
+    "formula_table_integrity": "review",
+    "review_outcomes": "review",
+    "source_evidence": "review",
+    "print_render": "pass",
+    "remaining_review_gates": [
+      "context_integrity",
+      "formula_table_integrity",
+      "review_outcomes",
+      "source_evidence"
+    ]
+  },
+  "summary": {
+    "block_count": 1824,
+    "outline_count": 39,
+    "image_refs": 31,
+    "missing_images": 0,
+    "issue_candidate_count": 31,
+    "issue_candidate_unresolved_blocking_count": 31,
+    "visual_review_packet_count": 1157,
+    "review_outcome_count": 1157,
+    "review_outcome_open_blocking_count": 1157,
+    "review_outcome_closed_count": 0,
+    "pdf_page_count": 64,
+    "inline_math_delimiters": 3084,
+    "tables_preserved_from_clean": 4,
+    "correction_count": 0,
+    "visual_source_crop_count": 600,
+    "visual_source_crop_required_count": 1157,
+    "visual_source_crop_needs_page_bbox_count": 557,
+    "visual_source_crop_rendered_page_count": 67,
+    "raw_bbox_fallback_located_count": 0,
+    "raw_bbox_fallback_unlocated_count": 557,
+    "math_profile_contract_ready": false
+  },
+  "review_outcomes": {
+    "count": 1157,
+    "closed_count": 0,
+    "open_blocking_count": 1157,
+    "decision_counts": {
+      "pending": 1157
+    },
+    "packet_type_counts": {
+      "formula_visual_review": 1153,
+      "table_visual_review": 4
+    },
+    "source_crop_status_counts": {
+      "created": 600,
+      "needs_page_bbox": 557
+    }
+  },
+  "profile_selector": {
+    "status": "blocked",
+    "expected_profile": "math_textbook",
+    "selected_profile": "reading_textbook",
+    "reason": "Current standard_from_clean CLI/profile selector does not expose a math_textbook profile choice, so the math sample cannot be evaluated as a real math profile run."
+  },
+  "print_render": {
+    "pdf_ok": true,
+    "pdf_page_count": 64,
+    "pdf_bytes": 3663198,
+    "pdf_message": "ok"
+  },
+  "source_evidence_plumbing": {
+    "status": "partial_review_evidence_not_gate_closure",
+    "source_crop_audit": "runtime/backend/pipeline-work/audits/math-profile-review-v0-rerun-20260630/standard-final/visual_source_crop_audit.json",
+    "source_crop_audit_html": "runtime/backend/pipeline-work/audits/math-profile-review-v0-rerun-20260630/standard-final/visual_source_crop_audit.html",
+    "contact_sheet": "runtime/backend/pipeline-work/audits/math-profile-review-v0-rerun-20260630/standard-final/math_visual_source_crop_contact_sheet.png",
+    "bbox_fallback_audit": "runtime/backend/pipeline-work/audits/math-profile-review-v0-rerun-20260630/standard-final/visual_bbox_backfill_audit.json",
+    "source_crop_count": 600,
+    "needs_page_bbox_count": 557,
+    "raw_bbox_fallback_located_count": 0,
+    "decision_boundary": "Source crops are manual review evidence only; all formula/table outcomes remain open and math_textbook remains blocked."
+  },
+  "verdict": "math_profile_blocked_review",
+  "notes": [
+    "This run is current evidence that math_textbook is not ready for Basic Print evaluation.",
+    "The selected Standard profile is reading_textbook, so profile_coverage pass is not meaningful for math readiness.",
+    "The blocking review scope is formula/table evidence: 1153 formula visual packets and 4 table visual packets remain open.",
+    "A local source PDF exists and creates 600 source crops, but 557 visual outcomes still need page/bbox and Raw fallback locates 0 additional candidates."
+  ]
+}

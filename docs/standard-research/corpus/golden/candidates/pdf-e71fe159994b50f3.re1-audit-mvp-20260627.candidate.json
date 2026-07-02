@@ -1,0 +1,48 @@
+{
+  "schema": "luceon-standard-candidate-golden/v1",
+  "material_id": "pdf-e71fe159994b50f3",
+  "filename": "Reading Explorer 1 Students Book.pdf",
+  "run_label": "re1-clean-master-20260627-standard-final-mvp",
+  "artifact_dir": "runtime/backend/pipeline-work/audits/re1-clean-master-20260627/standard-final-mvp",
+  "candidate_status": "superseded_review_candidate",
+  "superseded_by": "pdf-e71fe159994b50f3.re1-review-outcome-v0-20260629.candidate.json",
+  "current_role": "historical_review_evidence_only",
+  "not_promoted_reason": "The run is review, not pass; table visual review remains unresolved and visible_artifacts was not yet reported in this older package.",
+  "status": "review",
+  "quality_score": 97,
+  "summary": {
+    "block_count": 2835,
+    "outline_count": 69,
+    "image_refs": 162,
+    "missing_images": 0,
+    "issue_candidate_count": 0,
+    "visual_review_packet_count": 15,
+    "pdf_page_count": 141,
+    "source_pdf_available": true
+  },
+  "gate_statuses": {
+    "outline_lock": "pass",
+    "source_fidelity": "pass",
+    "correction_evidence": "pass",
+    "context_integrity": "pass",
+    "media_integrity": "pass",
+    "formula_table_integrity": "review",
+    "layout_sanity": "pass",
+    "print_render": "pass",
+    "auditability": "pass",
+    "review_threshold": "pass"
+  },
+  "why_it_is_the_first_candidate": [
+    "It has complete source lineage and source PDF evidence.",
+    "It has readable PDF output with page count.",
+    "It has zero issue candidates and zero unknown blocks.",
+    "It demonstrates stable reading-textbook structure: question groups, questions, options, answer blanks, two-column passages, and keep-together blocks are all populated.",
+    "Its remaining review condition is narrow: table visual verification."
+  ],
+  "basic_print_visual_acceptance_lessons": [
+    "Candidate samples may be review-status while the project is still defining Basic Print.",
+    "A real golden sample must eventually include visible_artifacts reporting, source-backed table/formula checks, and page-level visual review notes.",
+    "RE1 is suitable as the first positive comparator for reading-textbook layout, not as a grammar-workbook profile sample."
+  ],
+  "profile": "reading_textbook"
+}

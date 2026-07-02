@@ -33,6 +33,7 @@ MINERU_BUCKET = "eduassets-mineru"
 POPO_BUCKET = "eduassets-minerupopo"
 RAW_BUCKET = "eduassets-raw"
 CLEAN_BUCKET = "eduassets-clean"
+STANDARD_BUCKET = "eduassets-standard"
 
 DEFAULT_PIPELINE_SCRIPT = str(Path(__file__).resolve().parents[2] / "scripts" / "luceon_pdf_pipeline.py")
 PIPELINE_SCRIPT = os.getenv("LUCEON_PIPELINE_SCRIPT", DEFAULT_PIPELINE_SCRIPT)
@@ -155,6 +156,10 @@ def merge_material_rows(db: Session, target: Material, duplicate: Material) -> M
         "clean_manifest_bucket",
         "clean_manifest_object",
         "clean_run_id",
+        "standard_manifest_bucket",
+        "standard_manifest_object",
+        "standard_run_id",
+        "standard_quality_score",
         "review_asset_id",
     ]
     for field in fields:
@@ -331,17 +336,21 @@ def sync_input_materials(db: Session, user_id: str, limit: int | None = None) ->
 def sync_mineru_materials(db: Session, user_id: str, limit: int | None = None) -> dict[str, int]:
     count = 0
     for manifest_object in list_two_level_manifests(MINERU_BUCKET, "mineru/", limit=limit):
-        material_id, run_id = infer_ids_from_manifest_path(manifest_object)
-        manifest = read_json_object(MINERU_BUCKET, manifest_object)
+        resolved = resolve_manifest(MINERU_BUCKET, manifest_object, check_fallbacks=False)
+        material_id = resolved.material_id
+        run_id = resolved.run_id
+        manifest = resolved.manifest
         source_pdf = manifest.get("source_pdf") if isinstance(manifest.get("source_pdf"), dict) else {}
         filename = str(source_pdf.get("filename") or material_id or Path(manifest_object).parent.name)
         input_object = clean_path(source_pdf.get("input_object"))
         input_ref = ObjectRef(str(source_pdf.get("input_bucket") or INPUT_BUCKET), input_object) if input_object else None
         material = upsert_material(db, user_id, filename, filename, material_id=material_id, input_ref=input_ref)
+        asset = ensure_resolved_review_asset(db, user_id, resolved)
         material.mineru_manifest_bucket = MINERU_BUCKET
         material.mineru_manifest_object = manifest_object
         material.mineru_run_id = run_id
         material.promote_stage("mineru_done")
+        material.review_asset_id = asset.id
         link_review_asset(db, material)
         count += 1
     return {"mineru": count}
@@ -397,14 +406,36 @@ def sync_downstream_stage(
             material.raw_manifest_bucket = bucket
             material.raw_manifest_object = manifest_object
             material.raw_run_id = run_id
-        else:
+        elif stage == "clean_done":
             material.clean_manifest_bucket = bucket
             material.clean_manifest_object = manifest_object
             material.clean_run_id = run_id
+        else:
+            material.standard_manifest_bucket = bucket
+            material.standard_manifest_object = manifest_object
+            material.standard_run_id = run_id
+            material.standard_quality_score = standard_quality_score_from_manifest(manifest)
         material.promote_stage(stage)
         link_review_asset(db, material)
         count += 1
     return {stage.replace("_done", ""): count}
+
+
+def standard_quality_score_from_manifest(manifest: dict[str, Any]) -> int | None:
+    score = manifest.get("quality_score")
+    if isinstance(score, dict):
+        score = score.get("score")
+    if not isinstance(score, int):
+        acceptance = manifest.get("acceptance") if isinstance(manifest.get("acceptance"), dict) else {}
+        score = acceptance.get("quality_score")
+        if isinstance(score, dict):
+            score = score.get("score")
+    if not isinstance(score, int):
+        quality = manifest.get("quality") if isinstance(manifest.get("quality"), dict) else {}
+        score = quality.get("score")
+    if isinstance(score, int) and 0 <= score <= 100:
+        return score
+    return None
 
 
 def sync_material_inventory(db: Session, user_id: str, limit: int | None = None) -> dict[str, Any]:
@@ -415,6 +446,7 @@ def sync_material_inventory(db: Session, user_id: str, limit: int | None = None)
         lambda: sync_popo_materials(db, user_id, limit),
         lambda: sync_downstream_stage(db, user_id, RAW_BUCKET, "raw/", "raw_done", limit),
         lambda: sync_downstream_stage(db, user_id, CLEAN_BUCKET, "clean/", "clean_done", limit),
+        lambda: sync_downstream_stage(db, user_id, STANDARD_BUCKET, "standard/", "standard_done", limit),
     ]
     for sync_step in sync_steps:
         partial = sync_step()
@@ -423,7 +455,7 @@ def sync_material_inventory(db: Session, user_id: str, limit: int | None = None)
     total = db.query(Material).filter(Material.user_id == user_id).count()
     stages = {
         stage: db.query(Material).filter(Material.user_id == user_id, Material.stage_status == stage).count()
-        for stage in ["input", "mineru_done", "popo_done", "raw_done", "clean_stale", "clean_done", "failed"]
+        for stage in ["input", "mineru_done", "popo_done", "raw_done", "clean_stale", "clean_done", "standard_done", "failed"]
     }
     return {"total": total, "scanned": summary, "stages": stages, "availability": material_availability(db, user_id)}
 
@@ -505,7 +537,7 @@ def pipeline_limit(limit: int) -> int:
 def pipeline_command(apply: bool, limit: int) -> list[str]:
     if apply:
         command = ["python3", PIPELINE_SCRIPT, "run-staged", "--limit", str(pipeline_limit(limit))]
-        command.extend(["--apply", "--wait"])
+        command.extend(["--skip-sha", "--input-status-only", "--apply", "--wait"])
     else:
         command = ["python3", PIPELINE_SCRIPT, "plan-next", "--limit", str(pipeline_limit(limit))]
         command.extend(["--skip-sha", "--input-status-only"])
@@ -638,7 +670,7 @@ def material_summary(db: Session, user_id: str) -> dict[str, Any]:
     total = db.query(Material).filter(Material.user_id == user_id).count()
     stages = {
         stage: db.query(Material).filter(Material.user_id == user_id, Material.stage_status == stage).count()
-        for stage in ["input", "mineru_done", "popo_done", "raw_done", "clean_stale", "clean_done", "failed"]
+        for stage in ["input", "mineru_done", "popo_done", "raw_done", "clean_stale", "clean_done", "standard_done", "failed"]
     }
     latest = latest_pipeline_run(db, user_id)
     return {
@@ -657,4 +689,5 @@ def material_availability(db: Session, user_id: str) -> dict[str, int]:
         "popo_done": sum(1 for row in rows if row.popo_manifest_object),
         "raw_done": sum(1 for row in rows if row.raw_manifest_object),
         "clean_done": sum(1 for row in rows if row.clean_manifest_object),
+        "standard_done": sum(1 for row in rows if row.standard_manifest_object),
     }

@@ -21,6 +21,7 @@ CONTRACT_BUCKETS = [
     "eduassets-minerupopo",
     "eduassets-raw",
     "eduassets-clean",
+    "eduassets-standard",
     "eduassets-parsed",
 ]
 SECRET_FIELDS = {"access_key", "secret_key", "api_key", "ssh_password"}
@@ -253,6 +254,7 @@ def pipeline_env() -> dict[str, str]:
         env["DEEPSEEK_REASONING_MODEL"] = str(llm["reasoning_model"])
     if deepseek.get("base_url"):
         env["DEEPSEEK_BASE_URL"] = str(deepseek["base_url"])
+        env["DEEPSEEK_API_BASE"] = _chat_completions_url(str(deepseek["base_url"]))
     if deepseek.get("api_key"):
         env["DEEPSEEK_API_KEY"] = str(deepseek["api_key"])
     if vision.get("model"):
@@ -427,6 +429,7 @@ def bucket_role(bucket: str) -> str:
         "eduassets-minerupopo": "popo_official",
         "eduassets-raw": "raw_master",
         "eduassets-clean": "clean_candidate",
+        "eduassets-standard": "standard_master",
         "eduassets-parsed": "archive_optional",
     }.get(bucket, "unknown")
 

@@ -1,0 +1,52 @@
+{
+  "schema": "luceon-standard-research-run/v1",
+  "material_id": "pdf-e71fe159994b50f3",
+  "nickname": "Reading Explorer 1",
+  "profile": "reading_textbook",
+  "run_label": "re1-review-outcome-v0-20260629",
+  "standard_output": "runtime/backend/pipeline-work/audits/re1-review-outcome-v0-rerun-20260629/standard-final",
+  "source_pdf": "runtime/backend/pipeline-work/popo2raw/run-9-pdf-e71fe159994b50f3-popo-20260617035249-staged_popo_20260617_batch08_sma-923a2fa1--003-popo_e71fe159994b50f3_003/rebuild_input/pdf-e71fe159994b50f3_origin.pdf",
+  "acceptance": {
+    "status": "pass",
+    "quality_score": 97,
+    "pdf_page_count": 141,
+    "visible_artifact_count": 0,
+    "review_outcomes": "pass",
+    "formula_table_integrity": "pass"
+  },
+  "closure": {
+    "status": "basic_print_accepted",
+    "basic_print_candidate": true,
+    "basic_print_accepted": true,
+    "fail_gates": [],
+    "review_gates": [],
+    "decision_counts": {
+      "accepted_by_rule": 15
+    },
+    "open_blocking_count": 0,
+    "visual_review_source_crop_count": 15
+  },
+  "clean_scope": {
+    "status": "clean_pass_no_scope_needed",
+    "report": "runtime/backend/pipeline-work/audits/re1-review-outcome-v0-rerun-20260629/standard-final/clean_review_scope_report.json",
+    "promotion_candidate": false,
+    "review_gates": []
+  },
+  "summary": {
+    "block_count": 2833,
+    "outline_count": 69,
+    "image_refs": 162,
+    "missing_images": 0,
+    "issue_candidate_count": 0,
+    "visual_review_packet_count": 15,
+    "review_outcome_closed_count": 15,
+    "review_outcome_open_blocking_count": 0
+  },
+  "verdict": "basic_print_golden",
+  "notes": [
+    "This is the first official Basic Print golden using the review_outcome layer.",
+    "The upstream Clean artifact is pass; clean_review_scope_report.json records clean_pass_no_scope_needed.",
+    "The 15 table visual packets were closed by exact normalized Raw table match plus generated source PDF crops.",
+    "The project accepted accepted_by_rule as sufficient for RE1 Basic Print table closure on 2026-06-29."
+  ]
+}

@@ -3,7 +3,9 @@ export type MaterialStage =
   | 'mineru_done'
   | 'popo_done'
   | 'raw_done'
+  | 'clean_stale'
   | 'clean_done'
+  | 'standard_done'
   | 'failed'
 
 export type PipelineRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'idle' | string
@@ -31,16 +33,20 @@ export interface MaterialItem {
   popo_manifest: ObjectRef
   raw_manifest: ObjectRef
   clean_manifest: ObjectRef
+  standard_manifest: ObjectRef
   mineru_available: boolean
   popo_available: boolean
   raw_available: boolean
   clean_available: boolean
+  standard_available: boolean
   raw_dry_run_available?: boolean
   mineru_run_id: string
   popo_run_id: string
   raw_run_id: string
   raw_dry_run_id?: string
   clean_run_id: string
+  standard_run_id: string
+  standard_quality_score: number | null
   review_asset_id: string
   ignored: boolean
   last_synced_at: string | null
@@ -146,6 +152,24 @@ export interface RawToCleanPreflightResponse {
   clean_bucket: string
   clean_prefix: string
   llm_mode: string
+  checks: Record<string, boolean>
+  blockers: string[]
+  checked_at: string
+}
+
+export interface CleanToStandardPreflightResponse {
+  ready: boolean
+  stage: string
+  material_pk: string
+  material_id: string
+  filename: string
+  clean_run_id: string
+  clean_bucket: string
+  clean_prefix: string
+  raw_bucket: string
+  raw_prefix: string
+  standard_bucket: string
+  standard_prefix: string
   checks: Record<string, boolean>
   blockers: string[]
   checked_at: string

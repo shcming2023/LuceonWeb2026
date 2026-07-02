@@ -16,6 +16,25 @@ export interface ReviewMetadataPayload {
   review_note: string
 }
 
+export interface FinalReviewSessionPayload {
+  asset_id: number
+  reuse_open?: boolean
+}
+
+export interface FinalReviewAnnotationPayload {
+  issue_type: string
+  severity: string
+  status?: string
+  human_note?: string
+  anchors?: Record<string, unknown>
+  evidence?: Record<string, unknown>
+}
+
+export interface FinalReviewDecisionPayload {
+  decision: string
+  reviewer_note?: string
+}
+
 export const reviewApi = {
   importManifest(payload: ManifestImportPayload) {
     return api.post('/review/assets/from_manifest', payload).then(res => res.data)
@@ -40,12 +59,60 @@ export const reviewApi = {
     return api.get<FileListResponse>('/review/assets', { params }).then(res => res.data)
   },
 
+  getFinalReviewAssets(params: { page: number; page_size: number; search?: string }) {
+    return api.get<FileListResponse & {
+      issue_types: string[]
+      severities: string[]
+      statuses: string[]
+    }>('/review/final/assets', { params }).then(res => res.data)
+  },
+
   getAsset(assetId: string) {
     return api.get(`/review/assets/${assetId}`).then(res => res.data)
   },
 
   updateMetadata(assetId: string, payload: ReviewMetadataPayload) {
     return api.patch(`/review/assets/${assetId}/metadata`, payload).then(res => res.data)
+  },
+
+  createFinalReviewSession(payload: FinalReviewSessionPayload) {
+    return api.post('/review/final/sessions', payload).then(res => res.data)
+  },
+
+  getFinalReviewSession(sessionId: string) {
+    return api.get(`/review/final/sessions/${sessionId}`).then(res => res.data)
+  },
+
+  createFinalReviewAnnotation(sessionId: string, payload: FinalReviewAnnotationPayload) {
+    return api.post(`/review/final/sessions/${sessionId}/annotations`, payload).then(res => res.data)
+  },
+
+  updateFinalReviewAnnotation(annotationId: string, payload: Partial<FinalReviewAnnotationPayload>) {
+    return api.patch(`/review/final/annotations/${annotationId}`, payload).then(res => res.data)
+  },
+
+  deleteFinalReviewAnnotation(annotationId: string) {
+    return api.delete(`/review/final/annotations/${annotationId}`).then(res => res.data)
+  },
+
+  submitFinalReviewSession(sessionId: string) {
+    return api.post(`/review/final/sessions/${sessionId}/submit`).then(res => res.data)
+  },
+
+  verifyFinalReviewAnnotation(annotationId: string) {
+    return api.post(`/review/final/annotations/${annotationId}/verify`).then(res => res.data)
+  },
+
+  verifyFinalReviewSession(sessionId: string) {
+    return api.post(`/review/final/sessions/${sessionId}/verify`).then(res => res.data)
+  },
+
+  decideFinalReviewAnnotation(annotationId: string, payload: FinalReviewDecisionPayload) {
+    return api.patch(`/review/final/annotations/${annotationId}/decision`, payload).then(res => res.data)
+  },
+
+  exportFinalReviewSession(sessionId: string) {
+    return api.get(`/review/final/sessions/${sessionId}/export`).then(res => res.data)
   },
 
   generateReport(assetId: string) {

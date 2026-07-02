@@ -1,0 +1,149 @@
+{
+  "schema": "luceon-standard-research-run/v1",
+  "material_id": "pdf-8ada74dfc6d2d66c",
+  "nickname": "Grammar Friends 4",
+  "profile": "grammar_workbook",
+  "run_label": "gf4-workbook-second-sample-v3-20260630",
+  "standard_output": "runtime/backend/pipeline-work/audits/gf4-workbook-second-sample-v3-rerun-20260630/standard-final",
+  "clean_input": "runtime/backend/pipeline-work/raw2clean/run-35-pdf-8ada74dfc6d2d66c-popo-20260616234840-staged_popo_20260617_batch06_sma-d552836a--003-popo_8ada74dfc6d2d66c_003/clean-final",
+  "raw_input": "runtime/backend/pipeline-work/raw2clean/run-35-pdf-8ada74dfc6d2d66c-popo-20260616234840-staged_popo_20260617_batch06_sma-d552836a--003-popo_8ada74dfc6d2d66c_003/raw_input",
+  "source_pdf": "runtime/backend/pipeline-work/popo2raw/run-34-pdf-8ada74dfc6d2d66c-popo-20260616234840-staged_popo_20260617_batch06_sma-d552836a--003-popo_8ada74dfc6d2d66c_003/rebuild_input/pdf-8ada74dfc6d2d66c_origin.pdf",
+  "acceptance": {
+    "status": "pass",
+    "quality_score": 100,
+    "profile_coverage": "pass",
+    "image_relation_integrity": "pass",
+    "image_visual_confirmation": "pass",
+    "review_outcomes": "pass",
+    "formula_table_integrity": "pass",
+    "correction_evidence": "pass",
+    "context_integrity": "pass",
+    "review_threshold": "pass",
+    "remaining_review_gates": []
+  },
+  "summary": {
+    "block_count": 1526,
+    "outline_count": 53,
+    "image_refs": 138,
+    "missing_images": 0,
+    "issue_candidate_count": 138,
+    "issue_candidate_unresolved_blocking_count": 0,
+    "visual_review_packet_count": 30,
+    "pdf_page_count": 99,
+    "correction_count": 1,
+    "blank_reconstruction_cross_sample_audit": "runtime/backend/pipeline-work/audits/standard-blank-reconstruction-cross-sample-20260701/blank_reconstruction_cross_sample_audit.json",
+    "blank_reconstruction_unique_case_count": 5,
+    "blank_reconstruction_blank_pattern_unique_count": 2,
+    "blank_reconstruction_grammar_paradigm_unique_count": 3,
+    "blank_reconstruction_compiler_readiness": "not_ready_blank_rules_apply_only_to_g7plus_paired_vocabulary_blockers",
+    "grammar_paradigm_table_rebuild_audit": "runtime/backend/pipeline-work/audits/gf4-grammar-paradigm-table-rebuild-audit-20260701/grammar_paradigm_table_rebuild_audit.json",
+    "grammar_paradigm_rebuild_audit_record_count": 3,
+    "grammar_paradigm_rebuild_audit_reflowed_count": 3,
+    "grammar_paradigm_rebuild_audit_collapsed_fragments_removed_count": 3,
+    "grammar_paradigm_rebuild_compiler_readiness": "validated_for_gf4_failure_mode_not_broad_table_rebuild"
+  },
+  "review_outcomes": {
+    "count": 133,
+    "closed_count": 133,
+    "open_blocking_count": 0,
+    "decision_counts": {
+      "accepted_by_rule": 130,
+      "accepted": 3
+    },
+    "open_blocking_by_packet_type": {}
+  },
+  "grammar_paradigm_table_rendering": {
+    "status": "validated_for_gf4_failure_mode",
+    "rule": "Header-driven grammar paradigm tables with one body row are rendered as aligned multi-row tables when every body cell splits into the same row count.",
+    "artifact": "docs/standard-research/17-grammar-paradigm-table-rendering-v0.md",
+    "html_collapsed_fragment_counts": {
+      "playingyou": 0,
+      "playedyou": 0,
+      "am.Yes": 0,
+      "have.Yes": 0,
+      "was.Yes": 0
+    },
+    "rendered_table_count": 3,
+    "manual_visual_review_pages": [
+      "manual_visual_review/standard-page-98.png",
+      "manual_visual_review/standard-page-99.png"
+    ]
+  },
+  "source_fidelity_correction": {
+    "status": "accepted_with_evidence",
+    "policy": "docs/standard-research/18-source-fidelity-correction-policy-v0.md",
+    "correction_log": "correction_log.json",
+    "correction_count": 1,
+    "items": [
+      {
+        "id": "gf4-b-01544-present-continuous-short-answer-source-typo",
+        "block_id": "b-01544",
+        "source_text": "Yes, they aren’t.",
+        "standard_text": "Yes, they are.",
+        "evidence": [
+          "visual_source_crops/0026-b-01544-image.png",
+          "manual_visual_review/standard-page-98.png",
+          "standard.pdf#page=98",
+          "docs/standard-research/18-source-fidelity-correction-policy-v0.md"
+        ]
+      }
+    ]
+  },
+  "workbook_profile": {
+    "status": "pass",
+    "regression_verdict": "workbook_profile_ready_for_basic_print_review",
+    "basic_print_blockers": [],
+    "exercise_relation_contract": "pass",
+    "image_relation_contract": "pass",
+    "relation_audit": {
+      "real_profile_gap_count": 0,
+      "review_item_count": 0
+    }
+  },
+  "closure": {
+    "status": "basic_print_candidate",
+    "acceptance_status": "pass",
+    "quality_score": 100,
+    "fail_gates": [],
+    "review_gates": [],
+    "open_blocking_count": 0
+  },
+  "clean_scope": {
+    "status": "clean_pass_no_scope_needed",
+    "report": "runtime/backend/pipeline-work/audits/gf4-workbook-second-sample-v3-rerun-20260630/standard-final/clean_review_scope_report.json",
+    "promotion_candidate": false,
+    "review_gates": []
+  },
+  "verdict": "basic_print_candidate_not_golden",
+  "notes": [
+    "V3 validates the grammar paradigm table rendering rule for the three GF4 Review 5 layout failures.",
+    "The upstream Clean artifact is pass; clean_review_scope_report.json records clean_pass_no_scope_needed.",
+    "All 133 review outcomes are closed: 130 accepted_by_rule and 3 manual accepted.",
+    "The b-01544 source PDF typo is accepted only because it is explicit and evidence-backed in correction_log.json.",
+    "GF4 is registered as a Basic Print candidate, not an accepted golden."
+  ],
+  "validation_notes": [
+    {
+      "date": "2026-07-01",
+      "topic": "blank_reconstruction_cross_sample_audit",
+      "status": "audit_only_not_compiler_ready",
+      "evidence": [
+        "runtime/backend/pipeline-work/audits/standard-blank-reconstruction-cross-sample-20260701/blank_reconstruction_cross_sample_audit.json",
+        "runtime/backend/pipeline-work/audits/standard-blank-reconstruction-cross-sample-20260701/blank_reconstruction_cross_sample_audit.html",
+        "docs/standard-research/27-blank-reconstruction-cross-sample-audit-v0.md"
+      ],
+      "conclusion": "Cross-sample audit split reconstruction cases into 2 G7+ blank-pattern cases and 3 GF4 grammar-paradigm table rebuild cases. Blank-box rules must not be treated as generic table reconstruction or profile closure."
+    },
+    {
+      "date": "2026-07-01",
+      "topic": "grammar_paradigm_table_rebuild_audit",
+      "status": "validated_for_gf4_failure_mode_not_broad_table_rebuild",
+      "evidence": [
+        "runtime/backend/pipeline-work/audits/gf4-grammar-paradigm-table-rebuild-audit-20260701/grammar_paradigm_table_rebuild_audit.json",
+        "runtime/backend/pipeline-work/audits/gf4-grammar-paradigm-table-rebuild-audit-20260701/grammar_paradigm_table_rebuild_audit.html",
+        "docs/standard-research/28-grammar-paradigm-table-rebuild-audit-v0.md"
+      ],
+      "conclusion": "GF4 V2 grammar-paradigm table reconstruction failures reflow under the profile-general renderer and are accepted in GF4 V3; this validates the GF4 failure mode but does not solve G7+ blank-box reconstruction."
+    }
+  ]
+}

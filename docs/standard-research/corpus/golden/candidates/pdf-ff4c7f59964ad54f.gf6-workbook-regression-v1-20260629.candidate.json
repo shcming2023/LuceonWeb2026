@@ -1,0 +1,56 @@
+{
+  "schema": "luceon-standard-candidate-golden/v1",
+  "material_id": "pdf-ff4c7f59964ad54f",
+  "nickname": "Grammar Friends 6",
+  "candidate_label": "gf6-workbook-regression-v1-20260629",
+  "candidate_level": "basic_print",
+  "profile": "grammar_workbook",
+  "candidate_recorded_at": "2026-06-30",
+  "standard_output": "runtime/backend/pipeline-work/audits/gf6-workbook-profile-regression-v1-rerun-20260629/standard-final",
+  "run_record": "../../runs/pdf-ff4c7f59964ad54f.gf6-workbook-regression-v1-20260629.run.json",
+  "source_pdf": "runtime/backend/pipeline-work/popo2raw/run-37-pdf-ff4c7f59964ad54f-popo-20260617014256-staged_popo_20260617_batch07_sma-1369cfec--002-popo_ff4c7f59964ad54f_002/rebuild_input/pdf-ff4c7f59964ad54f_origin.pdf",
+  "acceptance_status": "pass",
+  "quality_score": 100,
+  "closure_status": "basic_print_candidate",
+  "promotion_status": "candidate_only_not_promoted",
+  "accepted_rule": "workbook_issue_disposition_plus_review_outcome_closure_plus_page_spot_check",
+  "evidence": {
+    "standard_acceptance_report": "standard_acceptance_report.json",
+    "standard_quality_score": "standard_quality_score.json",
+    "standard_review_outcomes": "standard_review_outcomes.json",
+    "visual_outcome_review": "visual_outcome_review.json",
+    "image_outcome_rule_audit": "image_outcome_rule_audit.json",
+    "issue_candidate_disposition_audit": "issue_candidate_disposition_audit.json",
+    "basic_print_closure_report": "basic_print_closure_report.json",
+    "page_spot_check_report": "page_spot_check/page_spot_check_report.json",
+    "page_spot_check_html": "page_spot_check/page_spot_check.html",
+    "source_crops": "source_crops/",
+    "visual_source_crops": "visual_source_crops/"
+  },
+  "summary": {
+    "block_count": 1840,
+    "outline_count": 40,
+    "image_refs": 213,
+    "missing_images": 0,
+    "review_outcome_count": 197,
+    "review_outcome_closed_count": 197,
+    "review_outcome_open_blocking_count": 0,
+    "issue_candidate_count": 213,
+    "issue_candidate_unresolved_blocking_count": 0,
+    "issue_candidate_disposition_counts": {
+      "covered_by_visual_outcome": 170,
+      "helper_icon_compact_rendering": 43
+    },
+    "page_spot_check_status": "pass_with_notes",
+    "page_spot_check_blocking_findings": 0
+  },
+  "scope_notes": [
+    "Candidate only: do not treat GF6 as an accepted Basic Print golden until a separate promotion decision is made.",
+    "This candidate is useful as the first positive workbook-profile Basic Print candidate after GF6 had been a negative regression comparator.",
+    "The 213 missing_raw_image_semantics issue candidates are closed by disposition, not by suppressing the raw count.",
+    "accepted_by_rule means deterministic evidence closure, not human visual final approval.",
+    "The table-instruction page break noted in the page spot check is non-blocking for Basic Print but should be monitored in workbook pagination rules.",
+    "Blue handwritten/filled marks in the source PDF remain a Clean/source-fidelity policy question and are not part of this Standard image-relation closure.",
+    "No conclusion is made here about generalizing the GF6 workbook rules to other workbook samples."
+  ]
+}

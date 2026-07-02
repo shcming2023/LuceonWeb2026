@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Document, Files, HomeFilled, Setting, SwitchButton, User, View } from '@element-plus/icons-vue'
+import { Document, EditPen, Files, HomeFilled, Setting, SwitchButton, User, View } from '@element-plus/icons-vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ref, computed } from 'vue'
 import { logoutUser, useCurrentUser } from '@/utils/user'
@@ -12,6 +12,8 @@ const menuItems = [
   { icon: Document, path: '/files', tooltip: '文件管理', label: '文件' },
   { icon: View, path: '/review/pdf', tooltip: 'PDF解析审查', label: 'PDF审查' },
   { icon: Files, path: '/review/outline', tooltip: '目录重建审查', label: '目录审查' },
+  { icon: View, path: '/review/standard', tooltip: '标准输出物审查', label: '标准审查' },
+  { icon: EditPen, path: '/review/final', tooltip: 'Standard质量验收', label: '质检' },
   { icon: Setting, path: '/settings', tooltip: '运行设置', label: '设置' }
 ]
 
@@ -21,6 +23,8 @@ const activeMenu = computed(() => {
   if (path.startsWith('/review/preview')) {
     return route.query.outline === '1' ? '/review/outline' : '/review/pdf'
   }
+  if (path.startsWith('/review/final')) return '/review/final'
+  if (path.startsWith('/review/standard')) return '/review/standard'
   if (path.startsWith('/review/outline')) return '/review/outline'
   if (path.startsWith('/review/pdf') || path === '/review') return '/review/pdf'
   if (path.startsWith('/settings')) return '/settings'

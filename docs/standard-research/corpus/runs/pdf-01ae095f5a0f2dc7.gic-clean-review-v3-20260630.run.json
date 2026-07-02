@@ -1,0 +1,93 @@
+{
+  "schema": "luceon-standard-research-run/v1",
+  "run_id": "pdf-01ae095f5a0f2dc7.gic-clean-review-v3-20260630",
+  "material_id": "pdf-01ae095f5a0f2dc7",
+  "title": "Grammar in Context Baisic (Seventh).pdf",
+  "profile": "grammar_workbook",
+  "stage": "raw2clean",
+  "role": "third_non_grammar_friends_workbook_clean_review_candidate",
+  "status": "review",
+  "verdict": "clean_review_candidate_standard_not_started",
+  "created_at": "2026-06-30",
+  "source": {
+    "raw_artifact": "runtime/backend/pipeline-work/popo2raw/run-8-pdf-01ae095f5a0f2dc7-popo-20260617014256-staged_popo_20260617_batch07_sma-1369cfec--005-popo_01ae095f5a0f2dc7_005/body-final",
+    "input_bucket": "eduassets-input",
+    "input_object": "Grammar in Context Baisic (Seventh).pdf",
+    "sha256": "01ae095f5a0f2dc76b6407fc7908c89b4429d18b5145487a3da1ac72b5e291bd",
+    "size_bytes": 74388642
+  },
+  "clean_output": "runtime/backend/pipeline-work/audits/gic-clean-v3-20260630/clean-final",
+  "reports": {
+    "acceptance_report": "runtime/backend/pipeline-work/audits/gic-clean-v3-20260630/clean-final/acceptance_report.json",
+    "quality_report": "runtime/backend/pipeline-work/audits/gic-clean-v3-20260630/clean-final/quality_report.md",
+    "llm_usage": "runtime/backend/pipeline-work/audits/gic-clean-v3-20260630/clean-final/llm_usage.json",
+    "llm_progress": "runtime/backend/pipeline-work/audits/gic-clean-v3-20260630/clean-final/llm_progress.jsonl",
+    "media_report": "runtime/backend/pipeline-work/audits/gic-clean-v3-20260630/clean-final/media_report.json",
+    "review_items": "runtime/backend/pipeline-work/audits/gic-clean-v3-20260630/clean-final/review_items.json",
+    "review_html": "runtime/backend/pipeline-work/audits/gic-clean-v3-20260630/clean-final/review.html",
+    "clean_pdf": "runtime/backend/pipeline-work/audits/gic-clean-v3-20260630/clean-final/clean.pdf"
+  },
+  "clean_acceptance": {
+    "status": "review",
+    "hard_failure_count": 0,
+    "review_gate_count": 2,
+    "review_gates": [
+      "media_review_threshold",
+      "llm_structure_revert_threshold"
+    ],
+    "passing_gates": [
+      "heading_lock",
+      "teaching_structure_lock",
+      "media_conservative_retention",
+      "readability_improvement",
+      "auditable_loss",
+      "llm_usage_recorded"
+    ]
+  },
+  "summary": {
+    "clean_markdown_bytes": 443674,
+    "cleaning_units": 93,
+    "image_refs": 138,
+    "missing_images": 0,
+    "pdf_ok": true,
+    "review_items": 14,
+    "media_counts_after_policy": {
+      "keep": 10,
+      "review": 128
+    },
+    "fidelity_byte_ratio": 0.9845,
+    "teaching_structure_status": "pass",
+    "teaching_structure_violations": 0,
+    "loss_audit_status": "pass",
+    "forbidden_losses": 0
+  },
+  "llm_usage": {
+    "chunks": 197,
+    "called": 197,
+    "applied": 188,
+    "reverted_structure": 7,
+    "failures": 3,
+    "prompt_tokens": 192069,
+    "completion_tokens": 344033,
+    "total_tokens": 536102,
+    "prompt_cache_hit_tokens": 31488,
+    "prompt_cache_miss_tokens": 160581,
+    "estimated_cost_usd": 0.11889877
+  },
+  "implementation_note": {
+    "cleaner_changes": [
+      "DEEPSEEK_MODEL now falls back to LLM_DEFAULT_MODEL",
+      "LUCEON_CLEAN_LLM_CHUNK_CHARS configures markdown chunk size",
+      "LUCEON_CLEAN_LLM_TIMEOUT configures socket timeout",
+      "LUCEON_CLEAN_LLM_TOTAL_TIMEOUT bounds total response read time",
+      "LUCEON_CLEAN_LLM_MAX_TOKENS configures response token cap",
+      "LUCEON_CLEAN_LLM_PROGRESS writes per-chunk JSONL progress"
+    ],
+    "purpose": "general Clean LLM robustness; not a file/title/material_id special case"
+  },
+  "decision": [
+    "GIC is no longer blocked at Clean generation.",
+    "GIC is not a Clean pass and must not be promoted as a Basic Print candidate.",
+    "A Standard run, if executed next, must be labeled upstream-limited/review-only until Clean media and LLM rollback review gates are closed."
+  ]
+}

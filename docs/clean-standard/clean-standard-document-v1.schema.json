@@ -1,0 +1,597 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://luceon.local/schemas/clean-standard-document-v1.schema.json",
+  "title": "Luceon Clean Standard Document V1",
+  "type": "object",
+  "required": [
+    "schema",
+    "material_id",
+    "source",
+    "document",
+    "outline",
+    "blocks",
+    "relations",
+    "assets",
+    "source_map",
+    "contract"
+  ],
+  "properties": {
+    "schema": {
+      "const": "luceon-clean-standard-document/v1"
+    },
+    "material_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    },
+    "document": {
+      "$ref": "#/$defs/document"
+    },
+    "profile_candidates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/profileCandidate"
+      },
+      "default": []
+    },
+    "outline": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/outlineItem"
+      }
+    },
+    "blocks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/block"
+      }
+    },
+    "relations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/relation"
+      }
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/asset"
+      }
+    },
+    "source_map": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sourceRef"
+      }
+    },
+    "contract": {
+      "$ref": "#/$defs/contract"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "source": {
+      "type": "object",
+      "required": ["pipeline_stage", "input_refs"],
+      "properties": {
+        "pipeline_stage": {
+          "const": "clean"
+        },
+        "input_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/objectRef"
+          }
+        },
+        "raw_manifest_ref": {
+          "$ref": "#/$defs/objectRef"
+        },
+        "source_pdf_ref": {
+          "$ref": "#/$defs/objectRef"
+        }
+      },
+      "additionalProperties": false
+    },
+    "objectRef": {
+      "type": "object",
+      "required": ["kind", "uri"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["local_path", "minio_object", "external_uri", "unknown"]
+        },
+        "uri": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "document": {
+      "type": "object",
+      "required": ["title", "languages"],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "subtitle": {
+          "type": "string"
+        },
+        "languages": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "document_kind_hint": {
+          "type": "string",
+          "enum": ["textbook", "workbook", "mixed", "unknown"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "profileCandidate": {
+      "type": "object",
+      "required": ["profile", "confidence", "evidence"],
+      "properties": {
+        "profile": {
+          "type": "string",
+          "enum": [
+            "reading_textbook",
+            "grammar_workbook",
+            "exercise_workbook",
+            "math_textbook",
+            "math_heavy_workbook"
+          ]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/signal"
+          }
+        },
+        "review_flags": {
+          "$ref": "#/$defs/reviewFlags"
+        }
+      },
+      "additionalProperties": false
+    },
+    "signal": {
+      "type": "object",
+      "required": ["signal", "value"],
+      "properties": {
+        "signal": {
+          "type": "string"
+        },
+        "value": {},
+        "block_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "outlineItem": {
+      "type": "object",
+      "required": ["id", "title", "level", "block_id", "path"],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "level": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "block_id": {
+          "type": "string"
+        },
+        "path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "block": {
+      "type": "object",
+      "required": ["id", "type", "text", "markdown", "outline_path", "source_refs", "asset_refs", "review_flags", "blockers"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^b-[A-Za-z0-9._-]+$"
+        },
+        "type": {
+          "$ref": "#/$defs/blockType"
+        },
+        "subtype": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "markdown": {
+          "type": "string"
+        },
+        "outline_path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "source_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "asset_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "review_flags": {
+          "$ref": "#/$defs/reviewFlags"
+        },
+        "blockers": {
+          "$ref": "#/$defs/blockers"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "blockType": {
+      "type": "string",
+      "enum": [
+        "document_title",
+        "front_matter",
+        "unit",
+        "chapter",
+        "lesson",
+        "section",
+        "reading_passage",
+        "paragraph",
+        "explanation",
+        "key_concept",
+        "grammar_box",
+        "worked_example",
+        "example",
+        "exercise_group",
+        "question",
+        "option",
+        "answer_blank",
+        "word_bank",
+        "vocabulary_item",
+        "table",
+        "formula",
+        "figure",
+        "caption",
+        "diagram",
+        "note",
+        "sidebar",
+        "icon",
+        "answer_key",
+        "metadata"
+      ]
+    },
+    "relation": {
+      "type": "object",
+      "required": ["id", "type", "from", "to", "review_flags"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^r-[A-Za-z0-9._-]+$"
+        },
+        "type": {
+          "$ref": "#/$defs/relationType"
+        },
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "review_flags": {
+          "$ref": "#/$defs/reviewFlags"
+        },
+        "blockers": {
+          "$ref": "#/$defs/blockers"
+        }
+      },
+      "additionalProperties": false
+    },
+    "relationType": {
+      "type": "string",
+      "enum": [
+        "contains",
+        "continues",
+        "has_option",
+        "has_answer_blank",
+        "has_word_bank",
+        "has_table",
+        "has_formula",
+        "has_figure",
+        "has_caption",
+        "belongs_to_exercise",
+        "belongs_to_passage",
+        "explains",
+        "source_equivalent_to",
+        "needs_review_against",
+        "blocks_promotion"
+      ]
+    },
+    "asset": {
+      "type": "object",
+      "required": ["id", "kind", "path", "role", "review_flags"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^asset-[A-Za-z0-9._-]+$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["image", "pdf_crop", "table_crop", "formula_crop", "audio", "other"]
+        },
+        "path": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["educational", "diagram", "table_image", "formula_image", "helper_icon", "decorative", "unknown"]
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "review_flags": {
+          "$ref": "#/$defs/reviewFlags"
+        }
+      },
+      "additionalProperties": false
+    },
+    "sourceRef": {
+      "type": "object",
+      "required": ["id", "block_id", "stage", "match"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^src-[A-Za-z0-9._-]+$"
+        },
+        "block_id": {
+          "type": "string"
+        },
+        "stage": {
+          "type": "string",
+          "enum": ["raw", "mineru", "minerupopo", "pdf", "clean", "manual"]
+        },
+        "source_block_id": {
+          "type": "string"
+        },
+        "page_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "page_number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "bbox": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "number"
+          }
+        },
+        "source_text": {
+          "type": "string"
+        },
+        "source_image": {
+          "type": "string"
+        },
+        "match": {
+          "$ref": "#/$defs/match"
+        },
+        "review_flags": {
+          "$ref": "#/$defs/reviewFlags"
+        }
+      },
+      "additionalProperties": false
+    },
+    "match": {
+      "type": "object",
+      "required": ["method", "status"],
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": [
+            "exact_normalized_text",
+            "compact_text",
+            "semantic_key",
+            "raw_assignment_exact",
+            "raw_assignment_containment",
+            "image_ref",
+            "manual",
+            "unknown"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["matched", "candidate", "review", "missing", "rejected"]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "contract": {
+      "type": "object",
+      "required": ["status", "version", "required_artifacts", "blocker_count", "review_flag_count"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["pass", "review", "fail"]
+        },
+        "version": {
+          "const": "v1"
+        },
+        "required_artifacts": {
+          "type": "object",
+          "required": ["clean_md", "clean_standard_json", "images"],
+          "properties": {
+            "clean_md": {
+              "$ref": "#/$defs/gateStatus"
+            },
+            "clean_standard_json": {
+              "$ref": "#/$defs/gateStatus"
+            },
+            "manifest": {
+              "$ref": "#/$defs/gateStatus"
+            },
+            "media_report": {
+              "$ref": "#/$defs/gateStatus"
+            },
+            "structure_report": {
+              "$ref": "#/$defs/gateStatus"
+            },
+            "images": {
+              "$ref": "#/$defs/gateStatus"
+            },
+            "source_map": {
+              "$ref": "#/$defs/gateStatus"
+            }
+          },
+          "additionalProperties": false
+        },
+        "blocker_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "review_flag_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "review_flags": {
+          "$ref": "#/$defs/reviewFlags"
+        },
+        "blockers": {
+          "$ref": "#/$defs/blockers"
+        }
+      },
+      "additionalProperties": false
+    },
+    "gateStatus": {
+      "type": "string",
+      "enum": ["pass", "review", "fail", "not_applicable"]
+    },
+    "reviewFlags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "uncertain_block_type",
+          "uncertain_relation",
+          "missing_source_ref",
+          "missing_page_bbox",
+          "source_lineage_mismatch",
+          "source_crop_needed",
+          "source_crop_context_too_wide",
+          "manual_visual_review_needed",
+          "formula_visual_review_open",
+          "table_visual_review_open",
+          "image_visual_review_open",
+          "needs_reconstruction",
+          "decorative_media_decision",
+          "clean_review_scoped",
+          "math_heavy_boundary",
+          "candidate_only_not_accepted",
+          "accepted_golden_requires_promotion_record"
+        ]
+      },
+      "uniqueItems": true,
+      "default": []
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "hard_gate_failed",
+          "missing_required_artifact",
+          "missing_educational_media",
+          "outline_drift",
+          "source_fidelity_unverified",
+          "unresolved_blocking_review_outcomes",
+          "unresolved_relation_gaps",
+          "formula_page_bbox_gap",
+          "formula_containment_context_gap",
+          "digit_spacing_review",
+          "table_reconstruction_needed",
+          "math_profile_contract_missing",
+          "source_lineage_unresolved"
+        ]
+      },
+      "uniqueItems": true,
+      "default": []
+    }
+  }
+}

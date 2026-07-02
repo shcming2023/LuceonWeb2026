@@ -1,0 +1,43 @@
+{
+  "schema": "luceon-standard-research-case/v1",
+  "material_id": "pdf-e71fe159994b50f3",
+  "title": "Reading Explorer 1 Students Book.pdf",
+  "profile": "reading_textbook",
+  "role": "accepted_reading_textbook_golden",
+  "target_level": "basic_print",
+  "current_status": "basic_print_accepted",
+  "current_scores": {
+    "published_standard": 86,
+    "audit_mvp": 97,
+    "latest_standard_quality_score": 97
+  },
+  "latest_run_record": "../runs/pdf-e71fe159994b50f3.re1-review-outcome-v0-20260629.run.json",
+  "candidate_record": "../golden/candidates/pdf-e71fe159994b50f3.re1-review-outcome-v0-20260629.candidate.json",
+  "accepted_golden_record": "../golden/accepted/pdf-e71fe159994b50f3.re1-review-outcome-v0-20260629.golden.json",
+  "source_case": {
+    "requires_source_pdf": true,
+    "requires_raw_package": true,
+    "requires_clean_package": true,
+    "requires_evidence": true
+  },
+  "known_blockers": [],
+  "golden": true,
+  "case_status_audited_at": "2026-06-30",
+  "superseded_records": [
+    {
+      "record": "../runs/pdf-e71fe159994b50f3.audit-mvp-20260627.run.json",
+      "superseded_by": "../runs/pdf-e71fe159994b50f3.re1-review-outcome-v0-20260629.run.json",
+      "reason": "Older audit MVP remained review because table visual packets were not closed."
+    },
+    {
+      "record": "../golden/candidates/pdf-e71fe159994b50f3.re1-audit-mvp-20260627.candidate.json",
+      "superseded_by": "../golden/candidates/pdf-e71fe159994b50f3.re1-review-outcome-v0-20260629.candidate.json",
+      "reason": "Promoted candidate replaces the older review candidate."
+    }
+  ],
+  "notes": [
+    "RE1 is the first accepted Basic Print golden for the reading_textbook profile.",
+    "The accepted closure rule is exact normalized Raw table match plus source page/bbox plus source PDF crop.",
+    "Earlier review blockers remain historical evidence only and are not current case blockers."
+  ]
+}

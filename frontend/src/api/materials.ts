@@ -7,6 +7,7 @@ import type {
   MaterialUploadResponse,
   PipelinePreflightResponse,
   PopoToRawPreflightResponse,
+  CleanToStandardPreflightResponse,
   PipelineRun,
   RawToCleanPreflightResponse,
   PipelineStatusResponse
@@ -89,6 +90,22 @@ export const materialsApi = {
     return api
       .post<PipelineRun>(`/materials/${materialId}/raw2clean/start`, { publish, force }, { timeout: 120000 })
       .then(res => res.data)
+  },
+
+  preflightCleanToStandard(materialId: string, force = false) {
+    return api
+      .post<CleanToStandardPreflightResponse>(`/materials/${materialId}/clean2standard/preflight`, null, { params: { force }, timeout: 120000 })
+      .then(res => res.data)
+  },
+
+  startCleanToStandard(materialId: string, publish = true, force = false) {
+    return api
+      .post<PipelineRun>(`/materials/${materialId}/clean2standard/start`, { publish, force }, { timeout: 120000 })
+      .then(res => res.data)
+  },
+
+  getReviewTarget(materialId: string) {
+    return api.get<{ review_asset_id: string }>(`/materials/${materialId}/review_target`).then(res => res.data)
   },
 
   getDownloadUrl(materialId: string) {

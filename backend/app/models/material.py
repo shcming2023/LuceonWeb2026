@@ -14,6 +14,7 @@ STAGE_ORDER = {
     "raw_done": 40,
     "clean_stale": 45,
     "clean_done": 50,
+    "standard_done": 60,
     "failed": 5,
 }
 
@@ -54,6 +55,11 @@ class Material(Base):
     clean_manifest_object = Column(String(1024), nullable=True)
     clean_run_id = Column(String(128), nullable=True)
 
+    standard_manifest_bucket = Column(String(128), nullable=True)
+    standard_manifest_object = Column(String(1024), nullable=True)
+    standard_run_id = Column(String(128), nullable=True)
+    standard_quality_score = Column(Integer, nullable=True)
+
     review_asset_id = Column(Integer, nullable=True, index=True)
     ignored = Column(Boolean, nullable=False, default=False)
     last_synced_at = Column(DateTime, nullable=True)
@@ -91,14 +97,18 @@ class Material(Base):
             "popo_manifest": self._ref(self.popo_manifest_bucket, self.popo_manifest_object),
             "raw_manifest": self._ref(self.raw_manifest_bucket, self.raw_manifest_object),
             "clean_manifest": self._ref(self.clean_manifest_bucket, self.clean_manifest_object),
+            "standard_manifest": self._ref(self.standard_manifest_bucket, self.standard_manifest_object),
             "mineru_available": mineru_available,
             "popo_available": bool(self.popo_manifest_bucket and self.popo_manifest_object),
             "raw_available": bool(self.raw_manifest_bucket and self.raw_manifest_object),
             "clean_available": bool(self.clean_manifest_bucket and self.clean_manifest_object),
+            "standard_available": bool(self.standard_manifest_bucket and self.standard_manifest_object),
             "mineru_run_id": self.mineru_run_id or "",
             "popo_run_id": self.popo_run_id or "",
             "raw_run_id": self.raw_run_id or "",
             "clean_run_id": self.clean_run_id or "",
+            "standard_run_id": self.standard_run_id or "",
+            "standard_quality_score": self.standard_quality_score,
             "review_asset_id": str(self.review_asset_id) if self.review_asset_id else "",
             "ignored": bool(self.ignored),
             "last_synced_at": self.last_synced_at.isoformat() if self.last_synced_at else None,

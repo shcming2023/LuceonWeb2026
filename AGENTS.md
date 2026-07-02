@@ -64,6 +64,10 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
 
+## Standard Review
+
+When reviewing a `standard-final/` package, always evaluate it against `docs/standard-acceptance-gates.md`. Inspect the package reports and rendered HTML/PDF evidence before judging quality, and report status, hard gates, review findings, source-fidelity risks, and next iteration priorities.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.

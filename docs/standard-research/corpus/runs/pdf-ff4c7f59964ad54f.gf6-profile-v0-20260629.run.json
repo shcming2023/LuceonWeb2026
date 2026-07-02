@@ -1,0 +1,57 @@
+{
+  "schema": "luceon-standard-research-run/v1",
+  "material_id": "pdf-ff4c7f59964ad54f",
+  "filename": "Grammar Friends 6 (Students Book) (Flannigan E.) (Z-Library).pdf",
+  "run_label": "gf6-profile-v0-rerun-20260629",
+  "candidate_role": "grammar_workbook_negative_regression",
+  "output_dir": "runtime/backend/pipeline-work/audits/gf6-profile-v0-rerun-20260629/standard-final",
+  "status": "review",
+  "quality_score": 87,
+  "profile": "grammar_workbook",
+  "superseded_by": "pdf-ff4c7f59964ad54f.gf6-workbook-regression-v1-20260629.run.json",
+  "current_role": "historical_profile_review_evidence_only",
+  "summary": {
+    "block_count": 1840,
+    "outline_count": 40,
+    "image_refs": 213,
+    "missing_images": 0,
+    "issue_candidate_count": 213,
+    "visual_review_packet_count": 27,
+    "visible_artifact_count": 0,
+    "pdf_page_count": 144,
+    "source_pdf_available": true
+  },
+  "profile_coverage": {
+    "status": "review",
+    "question_groups": 146,
+    "questions": 711,
+    "answer_blanks": 157,
+    "table_questions": 26,
+    "figure_relation_candidates": 213,
+    "blockers": [],
+    "review_reasons": [
+      "figure_relations_need_visual_review"
+    ]
+  },
+  "gate_statuses": {
+    "outline_lock": "pass",
+    "source_fidelity": "pass",
+    "correction_evidence": "pass",
+    "context_integrity": "review",
+    "media_integrity": "pass",
+    "formula_table_integrity": "review",
+    "visible_artifacts": "pass",
+    "layout_sanity": "pass",
+    "profile_coverage": "review",
+    "print_render": "pass",
+    "source_evidence": "pass",
+    "auditability": "pass",
+    "review_threshold": "review"
+  },
+  "main_findings": [
+    "GF6 is now automatically classified as grammar_workbook.",
+    "Workbook relation metrics are no longer zero.",
+    "The remaining profile-specific review reason is unresolved figure relation review.",
+    "This run should be used as the grammar_workbook V0 negative regression baseline."
+  ]
+}

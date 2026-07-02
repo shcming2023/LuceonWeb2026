@@ -1,0 +1,216 @@
+{
+  "schema": "luceon-standard-research-run/v1",
+  "material_id": "pdf-8ada74dfc6d2d66c",
+  "nickname": "Grammar Friends 4",
+  "profile": "grammar_workbook",
+  "run_label": "gf4-workbook-second-sample-v2-20260630",
+  "standard_output": "runtime/backend/pipeline-work/audits/gf4-workbook-second-sample-v2-rerun-20260630/standard-final",
+  "clean_input": "runtime/backend/pipeline-work/raw2clean/run-35-pdf-8ada74dfc6d2d66c-popo-20260616234840-staged_popo_20260617_batch06_sma-d552836a--003-popo_8ada74dfc6d2d66c_003/clean-final",
+  "raw_input": "runtime/backend/pipeline-work/raw2clean/run-35-pdf-8ada74dfc6d2d66c-popo-20260616234840-staged_popo_20260617_batch06_sma-d552836a--003-popo_8ada74dfc6d2d66c_003/raw_input",
+  "source_pdf": "runtime/backend/pipeline-work/popo2raw/run-34-pdf-8ada74dfc6d2d66c-popo-20260616234840-staged_popo_20260617_batch06_sma-d552836a--003-popo_8ada74dfc6d2d66c_003/rebuild_input/pdf-8ada74dfc6d2d66c_origin.pdf",
+  "acceptance": {
+    "status": "review",
+    "quality_score": 97,
+    "profile_coverage": "pass",
+    "image_relation_integrity": "pass",
+    "image_visual_confirmation": "pass",
+    "review_outcomes": "review",
+    "formula_table_integrity": "review",
+    "context_integrity": "pass",
+    "review_threshold": "pass",
+    "remaining_review_gates": [
+      "review_outcomes",
+      "formula_table_integrity"
+    ]
+  },
+  "summary": {
+    "block_count": 1526,
+    "outline_count": 53,
+    "image_refs": 138,
+    "missing_images": 0,
+    "issue_candidate_count": 138,
+    "issue_candidate_unresolved_blocking_count": 0,
+    "visual_review_packet_count": 30,
+    "pdf_page_count": 99
+  },
+  "issue_candidate_disposition": {
+    "count": 138,
+    "unresolved_blocking_count": 0,
+    "disposition_counts": {
+      "covered_by_visual_outcome": 103,
+      "helper_icon_compact_rendering": 35
+    }
+  },
+  "review_outcomes": {
+    "count": 133,
+    "closed_count": 130,
+    "open_blocking_count": 3,
+    "decision_counts": {
+      "accepted_by_rule": 130,
+      "needs_reconstruction": 3
+    },
+    "open_blocking_by_packet_type": {
+      "table_visual_review": 3
+    },
+    "open_items": [
+      {
+        "outcome_id": "visual:table_visual_review:b-01544",
+        "block_subtype": "table_question",
+        "heading_path": [
+          "Review 5"
+        ],
+        "clean_lines": [
+          2650,
+          2650
+        ],
+        "source_page_number": 79,
+        "source_bbox": [
+          70,
+          541,
+          885,
+          648
+        ],
+        "source_match_rule": "raw_content_list.table_near_match_for_manual_review",
+        "source_match_score": 0.8553,
+        "visual_review_decision": "needs_reconstruction",
+        "next_action": "reconstruct_or_render_table_with_preserved_line_breaks"
+      },
+      {
+        "outcome_id": "visual:table_visual_review:b-01548",
+        "block_subtype": "table_question",
+        "heading_path": [
+          "Review 5"
+        ],
+        "clean_lines": [
+          2658,
+          2658
+        ],
+        "source_page_number": 80,
+        "source_bbox": [
+          37,
+          89,
+          890,
+          195
+        ],
+        "source_match_rule": "raw_content_list.text_cell_coverage_bbox_union_for_manual_review",
+        "source_match_score": 1.0,
+        "visual_review_decision": "needs_reconstruction",
+        "next_action": "reconstruct_or_render_table_with_preserved_line_breaks"
+      },
+      {
+        "outcome_id": "visual:table_visual_review:b-01550",
+        "block_subtype": "table_question",
+        "heading_path": [
+          "Review 5"
+        ],
+        "clean_lines": [
+          2662,
+          2662
+        ],
+        "source_page_number": 80,
+        "source_bbox": [
+          38,
+          283,
+          930,
+          388
+        ],
+        "source_match_rule": "raw_content_list.text_cell_coverage_bbox_union_for_manual_review",
+        "source_match_score": 1.0,
+        "visual_review_decision": "needs_reconstruction",
+        "next_action": "reconstruct_or_render_table_with_preserved_line_breaks"
+      }
+    ]
+  },
+  "workbook_profile": {
+    "status": "review",
+    "regression_verdict": "expected_negative_regression_review",
+    "basic_print_blockers": [
+      "table_visual_review_outcomes_open"
+    ],
+    "exercise_relation_contract": "pass",
+    "image_relation_contract": "pass",
+    "relation_audit": {
+      "count": 62,
+      "real_profile_gap_count": 0,
+      "review_item_count": 0,
+      "kind_counts": {
+        "orphan_figure_relation_candidate": 53,
+        "unparented_explanation_table": 5,
+        "ungrouped_question": 4
+      },
+      "disposition_counts": {
+        "explanation_artifact": 34,
+        "helper_icon_artifact": 28
+      }
+    },
+    "metrics": {
+      "question_groups": 139,
+      "questions": 611,
+      "grouped_questions": 607,
+      "ungrouped_questions": 4,
+      "fill_blank_questions": 352,
+      "options": 0,
+      "answer_blanks": 73,
+      "parented_answer_blanks": 73,
+      "orphan_answer_blanks": 0,
+      "table_questions": 25,
+      "parented_table_questions": 25,
+      "orphan_table_questions": 0,
+      "figure_relation_candidates": 138,
+      "parented_figure_relation_candidates": 85,
+      "orphan_figure_relation_candidates": 53
+    }
+  },
+  "image_relation": {
+    "image_relation_count": 138,
+    "category_counts": {
+      "explanation_key_figure": 18,
+      "helper_icon": 35,
+      "exercise_key_figure": 85
+    },
+    "action_counts": {
+      "keep_with_explanation": 18,
+      "compress_keep_near": 35,
+      "keep_with_exercise": 85
+    },
+    "source_visual_check_count": 103,
+    "image_visual_confirmation_packet_count": 103,
+    "source_crop_count": 103,
+    "open_image_review_outcome_count": 0,
+    "open_table_review_outcome_count": 3
+  },
+  "image_outcome_rule_audit": {
+    "count": 103,
+    "decision_counts": {
+      "accepted_by_rule": 103
+    },
+    "confidence_counts": {
+      "high": 96,
+      "medium": 7
+    }
+  },
+  "closure": {
+    "status": "review",
+    "acceptance_status": "review",
+    "quality_score": 97,
+    "fail_gates": [],
+    "review_gates": [
+      "formula_table_integrity",
+      "review_outcomes"
+    ],
+    "open_blocking_count": 3
+  },
+  "verdict": "profile_contract_pass_but_not_basic_print_candidate",
+  "superseded_by": "pdf-8ada74dfc6d2d66c.gf4-workbook-second-sample-v3-20260630.run.json",
+  "current_role": "historical_reconstruction_failure_evidence_only",
+  "notes": [
+    "GF4 validates that the GF6 workbook image outcome rule generalizes to a second Grammar Friends sample: 103 content-bearing images closed and 35 helper icons dispositioned.",
+    "The second sample exposed missing general grammar_workbook rules: Change/Rewrite instructions, grammar paradigm explanation tables, and numbered grammar equivalence lines.",
+    "After rule hardening, exercise_relation_contract passes with real_profile_gap_count 0.",
+    "Two table outcomes were closed by length-gated compact exact Raw table matching plus source PDF crops after Raw OCR spacing differences were confirmed.",
+    "Raw table near-match and Raw text-cell coverage bbox-union are used only as review evidence plumbing; they do not close outcomes as accepted_by_rule.",
+    "Manual visual review confirms the three Review 5 table_visual_review outcomes need reconstruction because Standard rendering collapses line-by-line grammar paradigms into run-together text.",
+    "This run is not a Basic Print candidate because three Review 5 table_visual_review outcomes remain open as needs_reconstruction.",
+    "No GF4 golden candidate is created from this run."
+  ]
+}

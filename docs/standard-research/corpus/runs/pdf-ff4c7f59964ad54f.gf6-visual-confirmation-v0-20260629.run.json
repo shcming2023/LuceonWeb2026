@@ -1,0 +1,89 @@
+{
+  "schema": "luceon-standard-research-run/v1",
+  "material_id": "pdf-ff4c7f59964ad54f",
+  "nickname": "Grammar Friends 6",
+  "profile": "grammar_workbook",
+  "run_label": "gf6-visual-confirmation-v0-fast-20260629",
+  "standard_output": "runtime/backend/pipeline-work/audits/gf6-visual-confirmation-v0-fast-rerun-20260629/standard-final",
+  "source_pdf": "runtime/backend/pipeline-work/popo2raw/run-37-pdf-ff4c7f59964ad54f-popo-20260617014256-staged_popo_20260617_batch07_sma-1369cfec--002-popo_ff4c7f59964ad54f_002/rebuild_input/pdf-ff4c7f59964ad54f_origin.pdf",
+  "acceptance": {
+    "status": "review",
+    "quality_score": 87,
+    "pdf_page_count": 144,
+    "visible_artifact_count": 0,
+    "profile_coverage": "pass",
+    "image_relation_integrity": "review",
+    "image_visual_confirmation": "review"
+  },
+  "summary": {
+    "block_count": 1840,
+    "outline_count": 40,
+    "image_refs": 213,
+    "missing_images": 0,
+    "issue_candidate_count": 213,
+    "visual_review_packet_count": 27,
+    "image_relation_count": 213,
+    "image_relation_source_visual_check_count": 170,
+    "image_visual_confirmation_packet_count": 170,
+    "image_visual_confirmation_ready_crop_count": 170,
+    "image_visual_confirmation_source_crop_count": 170
+  },
+  "image_relation": {
+    "category_counts": {
+      "exercise_key_figure": 162,
+      "explanation_key_figure": 8,
+      "helper_icon": 43
+    },
+    "action_counts": {
+      "keep_with_exercise": 162,
+      "keep_with_explanation": 8,
+      "compress_keep_near": 43
+    }
+  },
+  "image_visual_confirmation": {
+    "selection_policy": "content_bearing_workbook_images_only",
+    "category_counts": {
+      "exercise_key_figure": 162,
+      "explanation_key_figure": 8
+    },
+    "crop_status_counts": {
+      "ready_for_source_crop": 170
+    },
+    "main_standard_run_before_optional_artifact": {
+      "source_crop_generation": "skipped",
+      "source_crop_count": 0,
+      "source_crop_status_counts": {
+        "not_generated": 170
+      },
+      "source_crop_dir": ""
+    },
+    "source_crop_summary": {
+      "source_crop_generation": "generated",
+      "source_crop_count": 170,
+      "source_crop_status_counts": {
+        "reused": 170
+      },
+      "source_crop_dir": "source_crops/"
+    },
+    "optional_review_artifact": {
+      "command": "python3 backend/scripts/generate_standard_source_crops.py --standard-dir runtime/backend/pipeline-work/audits/gf6-visual-confirmation-v0-fast-rerun-20260629/standard-final",
+      "source_crop_generation": "generated",
+      "source_crop_count": 170,
+      "source_crop_status_counts": {
+        "reused": 170
+      },
+      "source_crop_dir": "source_crops/"
+    },
+    "excluded_category_counts": {
+      "helper_icon": 43
+    }
+  },
+  "verdict": "negative_regression_comparator",
+  "superseded_by": "pdf-ff4c7f59964ad54f.gf6-workbook-regression-v1-20260629.run.json",
+  "current_role": "historical_visual_confirmation_evidence_only",
+  "notes": [
+    "This run intentionally remains review.",
+    "It narrows the workbook image review queue from 213 images to 170 content-bearing figures.",
+    "Helper icons are excluded from source visual confirmation and should be handled by compact/nearby rendering."
+  ]
+}

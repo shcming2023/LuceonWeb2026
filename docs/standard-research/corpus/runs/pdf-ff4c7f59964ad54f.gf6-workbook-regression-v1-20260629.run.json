@@ -1,0 +1,211 @@
+{
+  "schema": "luceon-standard-research-run/v1",
+  "material_id": "pdf-ff4c7f59964ad54f",
+  "nickname": "Grammar Friends 6",
+  "profile": "grammar_workbook",
+  "run_label": "gf6-workbook-profile-regression-v1-20260629",
+  "standard_output": "runtime/backend/pipeline-work/audits/gf6-workbook-profile-regression-v1-rerun-20260629/standard-final",
+  "source_pdf": "runtime/backend/pipeline-work/popo2raw/run-37-pdf-ff4c7f59964ad54f-popo-20260617014256-staged_popo_20260617_batch07_sma-1369cfec--002-popo_ff4c7f59964ad54f_002/rebuild_input/pdf-ff4c7f59964ad54f_origin.pdf",
+  "acceptance": {
+    "status": "pass",
+    "quality_score": 100,
+    "profile_coverage": "pass",
+    "image_relation_integrity": "pass",
+    "image_visual_confirmation": "pass",
+    "review_outcomes": "pass",
+    "context_integrity": "pass",
+    "review_threshold": "pass",
+    "remaining_review_gates": []
+  },
+  "issue_candidate_disposition": {
+    "count": 213,
+    "unresolved_blocking_count": 0,
+    "real_context_gap_count": 0,
+    "disposition_counts": {
+      "covered_by_visual_outcome": 170,
+      "helper_icon_compact_rendering": 43
+    },
+    "classification_counts": {
+      "visual_outcome_covered": 170,
+      "helper_icon_artifact": 43
+    },
+    "gate_basis": "context_integrity and review_threshold are evaluated by unresolved_blocking_issue_count, not raw issue candidate count."
+  },
+  "review_outcomes": {
+    "count": 197,
+    "closed_count": 197,
+    "open_blocking_count": 0,
+    "decision_counts": {
+      "accepted_by_rule": 197
+    },
+    "packet_type_summary": {
+      "table_visual_review": {
+        "count": 26,
+        "closed_count": 26,
+        "open_blocking_count": 0,
+        "decision_counts": {
+          "accepted_by_rule": 26
+        }
+      },
+      "formula_visual_review": {
+        "count": 1,
+        "closed_count": 1,
+        "open_blocking_count": 0,
+        "decision_counts": {
+          "accepted_by_rule": 1
+        }
+      },
+      "image_source_visual_confirmation": {
+        "count": 170,
+        "closed_count": 170,
+        "open_blocking_count": 0,
+        "decision_counts": {
+          "accepted_by_rule": 170
+        }
+      }
+    }
+  },
+  "workbook_profile": {
+    "status": "pass",
+    "regression_verdict": "workbook_profile_ready_for_basic_print_review",
+    "basic_print_blockers": [],
+    "exercise_relation_review_reasons": [],
+    "exercise_relation_contract": "pass",
+    "relation_audit": {
+      "count": 42,
+      "real_profile_gap_count": 0,
+      "review_item_count": 0,
+      "kind_counts": {
+        "ungrouped_question": 1,
+        "unparented_explanation_table": 7,
+        "orphan_figure_relation_candidate": 34
+      },
+      "disposition_counts": {
+        "front_matter_artifact": 1,
+        "explanation_artifact": 21,
+        "helper_icon_artifact": 20
+      }
+    },
+    "metrics": {
+      "question_groups": 147,
+      "questions": 710,
+      "grouped_questions": 709,
+      "ungrouped_questions": 1,
+      "fill_blank_questions": 372,
+      "options": 0,
+      "answer_blanks": 157,
+      "parented_answer_blanks": 157,
+      "orphan_answer_blanks": 0,
+      "table_questions": 19,
+      "parented_table_questions": 19,
+      "orphan_table_questions": 0,
+      "figure_relation_candidates": 213,
+      "parented_figure_relation_candidates": 179,
+      "orphan_figure_relation_candidates": 34
+    }
+  },
+  "image_relation": {
+    "image_relation_count": 213,
+    "category_counts": {
+      "exercise_key_figure": 162,
+      "explanation_key_figure": 8,
+      "helper_icon": 43
+    },
+    "action_counts": {
+      "keep_with_exercise": 162,
+      "keep_with_explanation": 8,
+      "compress_keep_near": 43
+    },
+    "source_visual_check_count": 170,
+    "image_visual_confirmation_packet_count": 170,
+    "source_crop_count": 170,
+    "open_image_review_outcome_count": 0,
+    "open_table_review_outcome_count": 0
+  },
+  "image_outcome_rule_audit": {
+    "count": 170,
+    "decision_counts": {
+      "accepted_by_rule": 170
+    },
+    "confidence_counts": {
+      "high": 164,
+      "medium": 6
+    },
+    "rule": "raw_image_ref_source_crop_aspect_context"
+  },
+  "table_visual_closure": {
+    "visual_packet_count": 27,
+    "visual_source_crop_count": 27,
+    "source_crop_status_counts": {
+      "reused": 25,
+      "created": 2
+    },
+    "accepted_by_rule_count": 27,
+    "source_evidence_backfill": [
+      {
+        "outcome_id": "visual:formula_visual_review:b-00551",
+        "source_page_number": 30,
+        "source_bbox": [
+          127,
+          573,
+          487,
+          595
+        ]
+      },
+      {
+        "outcome_id": "visual:table_visual_review:b-01703",
+        "source_page_number": 87,
+        "source_bbox": [
+          79,
+          518,
+          886,
+          595
+        ]
+      }
+    ],
+    "open_table_formula_items": []
+  },
+  "page_spot_check": {
+    "status": "pass_with_notes",
+    "sample_count": 5,
+    "blocking_findings": 0,
+    "sample_verdicts": {
+      "explanation_key_figure_starter": "pass",
+      "exercise_key_figure_conversations": "pass",
+      "table_question_sentences": "pass_with_note",
+      "formula_review_tree_house": "pass",
+      "explanation_table_wish": "pass"
+    },
+    "review_notes": [
+      "Exercise 4 instruction appears at the bottom of Standard page 6 and its table begins at the top of Standard page 7; table header is retained and reading order is continuous, so this is non-blocking for Basic Print but should be monitored.",
+      "The source PDF contains blue handwritten/filled answer marks; whether to preserve those marks is a Clean/source-fidelity policy question, not an image-relation hard fail."
+    ]
+  },
+  "closure": {
+    "status": "basic_print_candidate",
+    "acceptance_status": "pass",
+    "quality_score": 100,
+    "fail_gates": [],
+    "review_gates": [],
+    "open_blocking_count": 0
+  },
+  "clean_scope": {
+    "status": "clean_pass_no_scope_needed",
+    "report": "runtime/backend/pipeline-work/audits/gf6-workbook-profile-regression-v1-rerun-20260629/standard-final/clean_review_scope_report.json",
+    "promotion_candidate": false,
+    "review_gates": []
+  },
+  "verdict": "basic_print_candidate",
+  "notes": [
+    "This run is registered as a Basic Print candidate, not an accepted golden.",
+    "The upstream Clean artifact is pass; clean_review_scope_report.json records clean_pass_no_scope_needed.",
+    "The exercise relation contract passes after relation audit separates front matter, explanation tables, and helper icons from real profile gaps.",
+    "The visual outcome layer is now fully closed: 197 of 197 outcomes accepted_by_rule.",
+    "The 213 missing_raw_image_semantics issue candidates are dispositioned: 170 covered by visual outcomes and 43 helper icons handled by compact rendering; unresolved blocking count is zero.",
+    "context_integrity and review_threshold now pass using unresolved_blocking_issue_count as the gate basis.",
+    "Helper icons use compact nearby rendering and remain excluded from source visual confirmation.",
+    "The image outcome rule audit closed 170 image outcomes by Raw image_ref plus source crop, aspect ratio, dimensions, and context evidence.",
+    "Table/formula closure generated 27 visual source crops and closed all table/formula visual outcomes by exact normalized Raw content_list match plus source PDF crop evidence.",
+    "Page-level spot check passed with notes; this does not promote GF6 to accepted golden or prove the workbook rules generalize to other samples."
+  ]
+}

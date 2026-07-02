@@ -60,7 +60,9 @@ magic-pdf.json
 mineru.json
 models2.0/
 output/
+tmp/
 runtime/
+graphify
 graphify-out/
 .codex/
 .superpowers/

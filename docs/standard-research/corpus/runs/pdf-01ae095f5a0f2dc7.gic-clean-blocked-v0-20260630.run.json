@@ -1,0 +1,74 @@
+{
+  "schema": "luceon-standard-research-run/v1",
+  "run_id": "pdf-01ae095f5a0f2dc7.gic-clean-blocked-v0-20260630",
+  "material_id": "pdf-01ae095f5a0f2dc7",
+  "title": "Grammar in Context Baisic (Seventh).pdf",
+  "profile": "grammar_workbook",
+  "stage": "raw2clean",
+  "role": "third_non_grammar_friends_workbook_pressure_candidate_clean_attempt",
+  "status": "blocked",
+  "verdict": "clean_generation_blocked_no_standard_run",
+  "created_at": "2026-06-30",
+  "source": {
+    "raw_artifact": "runtime/backend/pipeline-work/popo2raw/run-8-pdf-01ae095f5a0f2dc7-popo-20260617014256-staged_popo_20260617_batch07_sma-1369cfec--005-popo_01ae095f5a0f2dc7_005/body-final",
+    "input_bucket": "eduassets-input",
+    "input_object": "Grammar in Context Baisic (Seventh).pdf",
+    "sha256": "01ae095f5a0f2dc76b6407fc7908c89b4429d18b5145487a3da1ac72b5e291bd",
+    "size_bytes": 74388642
+  },
+  "raw_evidence": {
+    "body_range": "30-317",
+    "included_page_range": "16-317",
+    "assigned_blocks": 4921,
+    "unassigned_blocks": 0,
+    "included_blocks": 6614,
+    "source_image_refs": 396,
+    "markdown_image_refs": 152,
+    "table_source_images": 244,
+    "missing_images": 0
+  },
+  "attempts": [
+    {
+      "attempt_id": "gic-clean-v0-20260630",
+      "artifact": "runtime/backend/pipeline-work/audits/gic-clean-v0-20260630/clean-final",
+      "tool": "/Users/concm/.codex/skills/eduassets-raw-cleaner/scripts/clean_raw_sample.py",
+      "llm_mode": "auto",
+      "model_observation": "DEEPSEEK_MODEL unset; shell had LLM_DEFAULT_MODEL=deepseek-v4-flash but script reads DEEPSEEK_MODEL",
+      "duration_observation": ">10m before manual interrupt",
+      "result": "blocked_interrupted",
+      "failure": "deepseek_chunked_response_long_wait_during_llm_polish_markdown",
+      "produced": {
+        "raw_input_materialized": true,
+        "clean_markdown": false,
+        "acceptance_report": false,
+        "standard_final": false
+      }
+    },
+    {
+      "attempt_id": "gic-clean-v1-20260630",
+      "artifact": "runtime/backend/pipeline-work/audits/gic-clean-v1-20260630/clean-final",
+      "tool": "/Users/concm/.codex/skills/eduassets-raw-cleaner/scripts/clean_raw_sample.py",
+      "llm_mode": "auto",
+      "model_observation": "DEEPSEEK_MODEL=deepseek-v4-flash",
+      "duration_observation": ">3m before manual interrupt",
+      "result": "blocked_interrupted",
+      "failure": "deepseek_chunked_response_long_wait_during_llm_polish_markdown",
+      "produced": {
+        "raw_input_materialized": true,
+        "clean_markdown": false,
+        "acceptance_report": false,
+        "standard_final": false
+      }
+    }
+  ],
+  "acceptance": {
+    "clean_acceptance_report": null,
+    "standard_acceptance_report": null,
+    "basic_print_status": "not_evaluable"
+  },
+  "conclusion": [
+    "This run is evidence of a pipeline blocker, not evidence for or against grammar_workbook Basic Print quality.",
+    "Do not run Standard from Popo2Raw body-final for this case.",
+    "The next loop must fix or bypass the Clean LLM response-stream blocker before any Standard verdict can be made."
+  ]
+}

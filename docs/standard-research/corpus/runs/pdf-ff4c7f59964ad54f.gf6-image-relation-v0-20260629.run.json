@@ -1,0 +1,76 @@
+{
+  "schema": "luceon-standard-research-run/v1",
+  "material_id": "pdf-ff4c7f59964ad54f",
+  "filename": "Grammar Friends 6 (Students Book) (Flannigan E.) (Z-Library).pdf",
+  "run_label": "gf6-image-relation-v0-rerun-20260629",
+  "candidate_role": "grammar_workbook_image_relation_negative_regression",
+  "output_dir": "runtime/backend/pipeline-work/audits/gf6-image-relation-v0-rerun-20260629/standard-final",
+  "status": "review",
+  "quality_score": 87,
+  "profile": "grammar_workbook",
+  "superseded_by": "pdf-ff4c7f59964ad54f.gf6-workbook-regression-v1-20260629.run.json",
+  "current_role": "historical_image_relation_review_evidence_only",
+  "summary": {
+    "block_count": 1840,
+    "outline_count": 40,
+    "image_refs": 213,
+    "missing_images": 0,
+    "issue_candidate_count": 213,
+    "visual_review_packet_count": 27,
+    "visible_artifact_count": 0,
+    "pdf_page_count": 144,
+    "source_pdf_available": true,
+    "image_relation_count": 213,
+    "image_relation_source_visual_check_count": 170
+  },
+  "profile_coverage": {
+    "status": "pass",
+    "question_groups": 146,
+    "questions": 711,
+    "answer_blanks": 157,
+    "table_questions": 26,
+    "figure_relation_candidates": 213,
+    "blockers": [],
+    "review_reasons": []
+  },
+  "image_relation_integrity": {
+    "status": "review",
+    "category_counts": {
+      "explanation_key_figure": 8,
+      "helper_icon": 43,
+      "exercise_key_figure": 162
+    },
+    "action_counts": {
+      "keep_with_explanation": 8,
+      "compress_keep_near": 43,
+      "keep_with_exercise": 162
+    },
+    "source_visual_check_count": 170,
+    "blockers": [],
+    "review_reasons": [
+      "source_visual_check_required"
+    ]
+  },
+  "gate_statuses": {
+    "outline_lock": "pass",
+    "source_fidelity": "pass",
+    "correction_evidence": "pass",
+    "context_integrity": "review",
+    "media_integrity": "pass",
+    "formula_table_integrity": "review",
+    "visible_artifacts": "pass",
+    "layout_sanity": "pass",
+    "profile_coverage": "pass",
+    "image_relation_integrity": "review",
+    "print_render": "pass",
+    "source_evidence": "pass",
+    "auditability": "pass",
+    "review_threshold": "review"
+  },
+  "main_findings": [
+    "Workbook profile coverage is now separated from image relation review.",
+    "GF6 has 43 helper icons that can be compacted and kept near text.",
+    "GF6 has 162 exercise-key figures and 8 explanation-key figures that require source-PDF visual confirmation.",
+    "The next blocker is image relation verification, not generic workbook structure."
+  ]
+}

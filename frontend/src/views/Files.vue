@@ -28,7 +28,6 @@
       <div class="task-ticker-viewport">
         <div class="task-ticker-track">
           <span>{{ taskTickerText }}</span>
-          <span aria-hidden="true">{{ taskTickerText }}</span>
         </div>
       </div>
       <el-button
@@ -68,6 +67,7 @@
         <el-button size="small" @click="selectCurrentPage('clean-missing')">选本页待Clean</el-button>
         <el-button size="small" @click="selectCurrentPage('raw-existing')">选本页已有Raw</el-button>
       </div>
+      <span class="sort-hint">排序：当前任务、最近操作置顶；其余按最近同步时间倒序</span>
     </section>
 
     <section v-if="selectedRows.length || batchState.running" class="batch-bar">
@@ -137,12 +137,15 @@
         <el-table-column label="进度" min-width="300">
           <template #default="{ row }">
             <div class="pipeline-cell">
-              <el-tag class="pipeline-status" :type="stageMeta[row.stage_status]?.type || 'info'" effect="plain">
-                {{ stageMeta[row.stage_status]?.label || row.stage_status }}
+              <el-tag class="pipeline-status" :type="rowStageMeta(row).type" effect="plain">
+                {{ rowStageMeta(row).label }}
               </el-tag>
               <div class="stage-chain">
                 <span v-for="stage in artifactStages" :key="stage.key" :class="['stage-pill', { done: stage.done(row) }]">
                   {{ stage.label }}
+                </span>
+                <span v-if="standardQualityText(row)" class="stage-pill score done">
+                  {{ standardQualityText(row) }}
                 </span>
               </div>
             </div>
@@ -154,7 +157,7 @@
         <el-table-column prop="last_synced_at" label="同步时间" width="160">
           <template #default="{ row }">{{ formatDateTime(row.last_synced_at || row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="430" fixed="right">
+        <el-table-column label="操作" width="520" fixed="right">
           <template #default="{ row }">
             <div class="row-actions">
               <el-tooltip :content="reviewUnavailableReason(row, 'pdf')" :disabled="Boolean(pdfReviewRoute(row))" placement="top">
@@ -183,6 +186,21 @@
               >
                 {{ hasCleanAsset(row) ? '重建Clean' : '生成Clean' }}
               </el-button>
+              <el-button
+                v-if="canRunCleanToStandard(row)"
+                link
+                :type="hasStandardAsset(row) ? 'danger' : 'success'"
+                @click="startCleanToStandard(row, hasStandardAsset(row))"
+              >
+                {{ hasStandardAsset(row) ? '重建Standard' : '生成Standard' }}
+              </el-button>
+              <el-button v-if="hasStandardAsset(row)" link type="primary" @click="openStandardReview(row)">查看Standard</el-button>
+              <el-button v-if="hasStandardAsset(row)" link type="warning" @click="openFinalReview(row)">终审</el-button>
+              <el-tooltip v-else content="该材料还没有生成 Standard" placement="top">
+                <span>
+                  <el-button link type="info" disabled>未生成Standard</el-button>
+                </span>
+              </el-tooltip>
               <el-button link @click="previewPdf(row)" :disabled="!row.input_object">PDF</el-button>
               <el-button link @click="downloadPdf(row)" :disabled="!row.input_object">下载</el-button>
             </div>
@@ -244,6 +262,7 @@ import type {
   PipelineRun,
   PopoToRawPreflightResponse,
   RawToCleanPreflightResponse,
+  CleanToStandardPreflightResponse,
   PipelineStatusResponse
 } from '@/types/material'
 import { formatFileSize } from '@/utils/format'
@@ -310,7 +329,24 @@ const stageMeta: Record<string, { label: string; type: 'primary' | 'success' | '
   raw_done: { label: 'Raw', type: 'success' },
   clean_stale: { label: 'Clean 失效', type: 'warning' },
   clean_done: { label: 'Clean', type: 'success' },
+  standard_done: { label: 'Standard', type: 'success' },
   failed: { label: '失败', type: 'danger' }
+}
+
+function rowStageMeta(row: MaterialItem) {
+  if (pipeline.run?.mode === 'clean2standard' && row.pipeline_status === 'running' && hasCleanAsset(row)) {
+    return { label: hasStandardAsset(row) ? '重建 Standard 中' : '生成 Standard 中', type: 'primary' as const }
+  }
+  if (pipeline.run?.mode === 'clean2standard' && row.pipeline_status === 'queued' && hasCleanAsset(row)) {
+    return { label: 'Standard 排队中', type: 'primary' as const }
+  }
+  if (row.pipeline_status === 'running' && row.stage_status === 'clean_stale') {
+    return { label: '生成 Clean 中', type: 'primary' as const }
+  }
+  if (row.pipeline_status === 'queued' && row.stage_status === 'clean_stale') {
+    return { label: 'Clean 排队中', type: 'primary' as const }
+  }
+  return stageMeta[row.stage_status] || { label: row.stage_status || '未知', type: 'info' as const }
 }
 
 const stageOptions = [
@@ -320,6 +356,7 @@ const stageOptions = [
   { label: 'Raw', value: 'raw' },
   { label: 'Clean 失效', value: 'clean_stale' },
   { label: 'Clean', value: 'clean' },
+  { label: 'Standard', value: 'standard' },
   { label: '失败', value: 'failed' }
 ]
 
@@ -330,7 +367,8 @@ const artifactStages = [
   { key: 'mineru', label: 'MinerU', done: (row: MaterialItem) => row.mineru_available || hasRef(row.mineru_manifest) },
   { key: 'popo', label: 'Popo', done: (row: MaterialItem) => row.popo_available || hasRef(row.popo_manifest) },
   { key: 'raw', label: 'Raw', done: (row: MaterialItem) => row.raw_available || hasRef(row.raw_manifest) },
-  { key: 'clean', label: 'Clean', done: (row: MaterialItem) => row.clean_available || hasRef(row.clean_manifest) }
+  { key: 'clean', label: 'Clean', done: (row: MaterialItem) => row.clean_available || hasRef(row.clean_manifest) },
+  { key: 'standard', label: 'Std', done: (row: MaterialItem) => row.standard_available || hasRef(row.standard_manifest) }
 ]
 
 const availabilityLine = computed(() => {
@@ -339,7 +377,8 @@ const availabilityLine = computed(() => {
     ['PDF', stages.input || 0],
     ['Popo', stages.popo_done || 0],
     ['Raw', stages.raw_done || 0],
-    ['Clean', stages.clean_done || 0]
+    ['Clean', stages.clean_done || 0],
+    ['Standard', stages.standard_done || 0]
   ]
   return rows.map(([label, value]) => `${label} ${value}`).join(' · ')
 })
@@ -554,7 +593,8 @@ function pipelineModeText(mode: string) {
     apply: 'PDF解析',
     dry_run: '预检',
     popo2raw: 'Popo→Raw',
-    raw2clean: 'Raw→Clean'
+    raw2clean: 'Raw→Clean',
+    clean2standard: 'Clean→Standard'
   }
   return map[mode] || mode
 }
@@ -632,8 +672,15 @@ async function submitUpload() {
     })
     uploadDialogVisible.value = false
     uploadFileList.value = []
+    const uploadedMaterial = data.files.find(item => item.status === 'success' && item.material)?.material
+    if (uploadedMaterial) {
+      params.page = 1
+      params.stage = ''
+      params.search = uploadedMaterial.material_id || uploadedMaterial.filename || uploadedMaterial.id
+      rememberOperation(uploadedMaterial, '上传PDF', 'succeeded')
+    }
     await Promise.all([fetchMaterials(), fetchSummary()])
-    ElMessage.success(`上传完成：${data.success} 个成功`)
+    ElMessage.success(uploadedMaterial ? `上传完成：${data.success} 个成功，已定位到新 PDF` : `上传完成：${data.success} 个成功`)
   } finally {
     uploading.value = false
   }
@@ -748,6 +795,37 @@ function rawToCleanConfirmContent(result: RawToCleanPreflightResponse, force: bo
   return h('div', { class: 'preflight-confirm' }, rows)
 }
 
+function cleanToStandardFailureText(result: CleanToStandardPreflightResponse) {
+  const map: Record<string, string> = {
+    missing_material_id: '缺少 material_id',
+    missing_clean_asset: '缺少 Clean 产物',
+    missing_standard_script: '后端未挂载 clean_to_standard 脚本',
+    standard_already_exists: 'Standard 已存在，请使用“重建Standard”入口',
+    publish_not_confirmed: '未确认发布'
+  }
+  return result.blockers.map(item => map[item] || item).join('；') || '预检未通过'
+}
+
+function cleanToStandardConfirmContent(result: CleanToStandardPreflightResponse, force: boolean) {
+  const rows = [
+    h('p', { style: 'margin: 0 0 6px;' }, `材料：${result.filename || result.material_id}`),
+    h('p', { style: 'margin: 0 0 6px;' }, `Material ID：${result.material_id}`),
+    h('p', { style: 'margin: 0 0 6px;' }, `Clean Run：${result.clean_run_id}`),
+    h('p', { style: 'margin: 0 0 6px;' }, `读取：${result.clean_bucket}/${result.clean_prefix}`),
+    h('p', { style: 'margin: 0;' }, `写入：${result.standard_bucket}/${result.standard_prefix}`)
+  ]
+  rows.push(
+    h(
+      'p',
+      { style: `margin: 10px 0 0; color: ${force ? 'var(--el-color-danger)' : 'var(--el-color-warning)'};` },
+      force
+        ? '将基于当前 Clean 重建并覆盖 Standard；Standard 是可打印基础教材产物，会继承 Clean 并输出质量门禁报告。'
+        : 'Standard 会基于当前 Clean 输出可打印 HTML/PDF、质量分和审查页，不改写原文内容。'
+    )
+  )
+  return h('div', { class: 'preflight-confirm' }, rows)
+}
+
 async function runPreflightCheck(showMessage: boolean) {
   preflighting.value = true
   try {
@@ -790,6 +868,10 @@ function hasPopoAsset(row: MaterialItem) {
   return Boolean(row.popo_available || hasRef(row.popo_manifest))
 }
 
+function hasMineruAsset(row: MaterialItem) {
+  return Boolean(row.mineru_available || hasRef(row.mineru_manifest))
+}
+
 function hasRawAsset(row: MaterialItem) {
   return Boolean(row.raw_available || hasRef(row.raw_manifest))
 }
@@ -798,12 +880,24 @@ function hasCleanAsset(row: MaterialItem) {
   return Boolean(row.clean_available || hasRef(row.clean_manifest))
 }
 
+function hasStandardAsset(row: MaterialItem) {
+  return Boolean(row.standard_available || hasRef(row.standard_manifest))
+}
+
 function canRunPopoToRaw(row: MaterialItem) {
   return !pipelineBusy.value && hasPopoAsset(row)
 }
 
 function canRunRawToClean(row: MaterialItem) {
   return !pipelineBusy.value && hasRawAsset(row)
+}
+
+function canRunCleanToStandard(row: MaterialItem) {
+  return !pipelineBusy.value && hasCleanAsset(row)
+}
+
+function standardQualityText(row: MaterialItem) {
+  return typeof row.standard_quality_score === 'number' ? `${row.standard_quality_score}分` : ''
 }
 
 function handleSelectionChange(rows: MaterialItem[]) {
@@ -979,6 +1073,23 @@ async function startRawToClean(row: MaterialItem, force: boolean) {
   ElMessage.success(force ? 'Raw→Clean 重建任务已启动' : 'Raw→Clean 任务已启动')
 }
 
+async function startCleanToStandard(row: MaterialItem, force: boolean) {
+  const result = await materialsApi.preflightCleanToStandard(row.id, force)
+  if (!result.ready) {
+    ElMessage.warning(`Standard 生成已拦截：${cleanToStandardFailureText(result)}`)
+    return
+  }
+  await ElMessageBox.confirm(
+    cleanToStandardConfirmContent(result, force),
+    force ? '重建Standard' : '生成Standard',
+    { type: 'warning', confirmButtonText: force ? '重建并发布Standard' : '发布到Standard', cancelButtonText: '取消' }
+  )
+  const run = await materialsApi.startCleanToStandard(row.id, true, force)
+  rememberOperation(row, force ? '重建Standard' : '生成Standard', 'running', run)
+  await fetchPipeline()
+  ElMessage.success(force ? 'Clean→Standard 重建任务已启动' : 'Clean→Standard 任务已启动')
+}
+
 function updatePipelinePolling() {
   if (pipelineBusy.value && !pollingTimer.value) {
     pollingTimer.value = window.setInterval(async () => {
@@ -1009,9 +1120,47 @@ function openOutlineReview(row: MaterialItem) {
   router.push(route)
 }
 
+async function openStandardReview(row: MaterialItem) {
+  if (!hasStandardAsset(row)) {
+    ElMessage.warning('该材料还没有生成 Standard')
+    return
+  }
+  let assetId = row.review_asset_id
+  if (!assetId) {
+    try {
+      const target = await materialsApi.getReviewTarget(row.id)
+      assetId = target.review_asset_id
+    } catch {
+      ElMessage.warning('尚未建立审查索引，请先同步资产')
+      return
+    }
+  }
+  rememberOperation(row, '查看Standard', 'opened')
+  router.push({ path: '/review/standard', query: { asset_id: assetId } })
+}
+
+async function openFinalReview(row: MaterialItem) {
+  if (!hasStandardAsset(row)) {
+    ElMessage.warning('该材料还没有生成 Standard')
+    return
+  }
+  let assetId = row.review_asset_id
+  if (!assetId) {
+    try {
+      const target = await materialsApi.getReviewTarget(row.id)
+      assetId = target.review_asset_id
+    } catch {
+      ElMessage.warning('尚未建立审查索引，请先同步资产')
+      return
+    }
+  }
+  rememberOperation(row, '终极审查', 'opened')
+  router.push({ path: '/review/final', query: { asset_id: assetId } })
+}
+
 function pdfReviewRoute(row: MaterialItem) {
   if (!row.review_asset_id) return null
-  if (hasPopoAsset(row)) {
+  if (hasMineruAsset(row)) {
     return { path: '/review/pdf', query: { asset_id: row.review_asset_id } }
   }
   return null
@@ -1027,7 +1176,7 @@ function outlineReviewRoute(row: MaterialItem) {
 
 function reviewUnavailableReason(row: MaterialItem, mode: 'pdf' | 'outline') {
   if (!row.review_asset_id) return '尚未建立审查索引，请先同步资产'
-  if (mode === 'pdf') return 'PDF审查需完成 MinerU + MinerU-Popo'
+  if (mode === 'pdf') return 'PDF审查需至少完成 MinerU'
   return '目录审查需先生成 Raw、Raw 预演或 Clean'
 }
 
@@ -1156,26 +1305,12 @@ onBeforeUnmount(() => {
 }
 
 .task-ticker-track {
-  display: inline-flex;
-  align-items: center;
-  gap: 56px;
-  min-width: max-content;
+  display: block;
+  overflow: hidden;
   color: var(--text-secondary);
   font-size: 13px;
-  animation: task-ticker-scroll 32s linear infinite;
-}
-
-.task-ticker:hover .task-ticker-track {
-  animation-play-state: paused;
-}
-
-@keyframes task-ticker-scroll {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(calc(-50% - 28px));
-  }
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .operation-focus {
@@ -1260,6 +1395,13 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.sort-hint {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .batch-bar {
@@ -1393,6 +1535,11 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 
+.stage-pill.score {
+  border-color: var(--success-color);
+  color: var(--success-color);
+}
+
 .row-actions {
   display: flex;
   align-items: center;
@@ -1437,6 +1584,11 @@ onBeforeUnmount(() => {
   .stage-select {
     width: 100%;
     max-width: none;
+  }
+
+  .sort-hint {
+    margin-left: 0;
+    white-space: normal;
   }
 }
 </style>

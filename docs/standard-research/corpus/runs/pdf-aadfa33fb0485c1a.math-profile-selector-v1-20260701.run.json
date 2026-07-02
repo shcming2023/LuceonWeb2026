@@ -1,0 +1,88 @@
+{
+  "schema": "luceon-standard-research-run/v1",
+  "material_id": "pdf-aadfa33fb0485c1a",
+  "nickname": "Math 8A",
+  "title": "中学生世界 八上 数学 上册.pdf",
+  "profile": "math_textbook",
+  "run_label": "math-profile-selector-v1-20260701",
+  "standard_output": "runtime/backend/pipeline-work/audits/math-profile-selector-v1-rerun-20260701/standard-final",
+  "clean_input": "runtime/backend/pipeline-work/raw2clean/run-42-pdf-aadfa33fb0485c1a-job-20260610083901-844ae522da/clean-final",
+  "raw_input": "runtime/backend/pipeline-work/raw2clean/run-42-pdf-aadfa33fb0485c1a-job-20260610083901-844ae522da/raw_input",
+  "requested_profile": "auto",
+  "selected_profile": "math_textbook",
+  "source_pdf": "runtime/backend/pipeline-work/popo2raw/run-25-pdf-aadfa33fb0485c1a-job-20260610083901-844ae522da/rebuild_input/pdf-aadfa33fb0485c1a_origin.pdf",
+  "acceptance": {
+    "status": "review",
+    "quality_score": 86,
+    "profile_coverage": "review",
+    "context_integrity": "review",
+    "formula_table_integrity": "review",
+    "review_outcomes": "review",
+    "source_evidence": "pass",
+    "print_render": "pass",
+    "remaining_review_gates": [
+      "profile_coverage",
+      "context_integrity",
+      "formula_table_integrity",
+      "review_outcomes"
+    ]
+  },
+  "summary": {
+    "block_count": 1824,
+    "outline_count": 39,
+    "image_refs": 31,
+    "missing_images": 0,
+    "issue_candidate_count": 31,
+    "issue_candidate_unresolved_blocking_count": 31,
+    "visual_review_packet_count": 1157,
+    "review_outcome_count": 1157,
+    "review_outcome_open_blocking_count": 1157,
+    "review_outcome_closed_count": 0,
+    "pdf_page_count": 64,
+    "inline_math_delimiters": 3084,
+    "tables_preserved_from_clean": 4,
+    "formula_visual_review_count": 1153,
+    "table_visual_review_count": 4,
+    "visual_source_crop_count": 600,
+    "visual_source_crop_required_count": 1157,
+    "visual_source_crop_needs_page_bbox_count": 557,
+    "raw_bbox_fallback_located_count": 0,
+    "raw_bbox_fallback_unlocated_count": 557,
+    "math_profile_selector_closed": true,
+    "math_profile_contract_ready": false
+  },
+  "profile_selector": {
+    "status": "closed_for_profile_selection",
+    "expected_profile": "math_textbook",
+    "selected_profile": "math_textbook",
+    "reason": "Standard now exposes math_textbook and auto-selects it for formula-dense math material after workbook heuristics."
+  },
+  "math_visual_contract": {
+    "status": "review",
+    "open_formula_visual_review_outcomes": 1153,
+    "open_table_visual_review_outcomes": 4,
+    "basic_print_blocker": "math_profile_contract_not_pass"
+  },
+  "source_evidence_plumbing": {
+    "status": "partial_review_evidence_not_gate_closure",
+    "source_crop_audit": "runtime/backend/pipeline-work/audits/math-profile-selector-v1-rerun-20260701/standard-final/visual_source_crop_audit.json",
+    "source_crop_audit_html": "runtime/backend/pipeline-work/audits/math-profile-selector-v1-rerun-20260701/standard-final/visual_source_crop_audit.html",
+    "bbox_fallback_audit": "runtime/backend/pipeline-work/audits/math-profile-selector-v1-rerun-20260701/standard-final/visual_bbox_backfill_audit.json",
+    "source_crop_count": 600,
+    "needs_page_bbox_count": 557,
+    "raw_bbox_fallback_located_count": 0,
+    "decision_boundary": "Source crops are manual review evidence only; all formula/table outcomes remain open and math_textbook remains blocked."
+  },
+  "print_render": {
+    "pdf_ok": true,
+    "pdf_page_count": 64,
+    "pdf_bytes": 3663198,
+    "pdf_message": "ok"
+  },
+  "verdict": "math_profile_selector_closed_but_math_textbook_still_review_blocked",
+  "notes": [
+    "This run closes the previous profile-selector blocker: Math 8A is now evaluated as math_textbook.",
+    "The sample remains review-blocked because 1157 formula/table visual outcomes are open.",
+    "Source evidence is available for the source PDF and 600 source crops, but 557 outcomes still need page/bbox and Raw fallback locates no additional candidates."
+  ]
+}

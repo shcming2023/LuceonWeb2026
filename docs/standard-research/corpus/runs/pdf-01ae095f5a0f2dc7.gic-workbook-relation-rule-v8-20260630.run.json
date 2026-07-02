@@ -1,0 +1,251 @@
+{
+  "schema": "luceon-standard-research-run/v1",
+  "run_id": "pdf-01ae095f5a0f2dc7.gic-workbook-relation-rule-v8-20260630",
+  "material_id": "pdf-01ae095f5a0f2dc7",
+  "title": "Grammar in Context Baisic (Seventh).pdf",
+  "profile": "grammar_workbook",
+  "stage": "clean2standard",
+  "role": "third_non_grammar_friends_workbook_standard_gate_candidate",
+  "status": "basic_print_candidate",
+  "verdict": "basic_print_candidate_clean_review_closed_by_policy",
+  "created_at": "2026-06-30",
+  "standard_output": "runtime/backend/pipeline-work/audits/gic-standard-workbook-relation-rule-v8-20260630/standard-final",
+  "clean_input": "runtime/backend/pipeline-work/audits/gic-clean-v3-20260630/clean-final",
+  "raw_input": "runtime/backend/pipeline-work/popo2raw/run-8-pdf-01ae095f5a0f2dc7-popo-20260617014256-staged_popo_20260617_batch07_sma-1369cfec--005-popo_01ae095f5a0f2dc7_005/body-final",
+  "source_pdf": "runtime/backend/pipeline-work/audits/source-pdfs/pdf-01ae095f5a0f2dc7-grammar-in-context-basic-seventh.pdf",
+  "upstream_limits": [
+    "clean_acceptance_report_still_review_but_closed_by_policy",
+    "candidate_only_not_accepted_golden",
+    "grammar_workbook_profile_not_ready"
+  ],
+  "acceptance": {
+    "status": "pass",
+    "quality_score": 100,
+    "outline_lock": "pass",
+    "source_fidelity": "pass",
+    "correction_evidence": "pass",
+    "context_integrity": "pass",
+    "media_integrity": "pass",
+    "formula_table_integrity": "pass",
+    "visible_artifacts": "pass",
+    "layout_sanity": "pass",
+    "profile_coverage": "pass",
+    "image_relation_integrity": "pass",
+    "image_visual_confirmation": "pass",
+    "review_outcomes": "pass",
+    "print_render": "pass",
+    "source_evidence": "pass",
+    "auditability": "pass",
+    "review_threshold": "pass"
+  },
+  "summary": {
+    "block_count": 6374,
+    "outline_count": 102,
+    "pdf_page_count": 303,
+    "pdf_bytes": 15337219,
+    "image_refs": 138,
+    "missing_images": 0,
+    "issue_candidate_count": 138,
+    "issue_candidate_unresolved_blocking_count": 0,
+    "visual_review_packet_count": 252,
+    "review_outcome_count": 377,
+    "review_outcome_open_blocking_count": 0,
+    "review_outcome_closed_count": 377,
+    "source_crop_count": 125,
+    "correction_count": 4,
+    "visual_review_source_crop_count": 252,
+    "clean_promotion_blocker_audit": "runtime/backend/pipeline-work/audits/gic-clean-promotion-blocker-20260701/clean_promotion_blocker_audit.json",
+    "clean_media_purpose_ledger": "runtime/backend/pipeline-work/audits/gic-clean-media-purpose-ledger-20260701/clean_media_purpose_ledger.json",
+    "clean_llm_fallback_ledger": "runtime/backend/pipeline-work/audits/gic-clean-llm-fallback-ledger-20260701/clean_llm_fallback_ledger.json",
+    "clean_closure_policy_audit": "runtime/backend/pipeline-work/audits/gic-clean-closure-policy-audit-v3-20260701/clean_review_closure_policy_audit.json",
+    "gic_clean_closure_policy_verdict": "clean_review_closure_policy_pass",
+    "gic_media_review_gate_verdict": "can_close_clean_review_gate",
+    "gic_llm_review_gate_verdict": "can_close_clean_review_gate",
+    "gic_remaining_clean_review_gate": null,
+    "gic_clean_scope_contained_for_standard": true,
+    "gic_can_promote_standard_to_candidate": true,
+    "gic_basic_print_candidate": true,
+    "gic_clean_promotion_blocker_count": 4
+  },
+  "workbook_profile": {
+    "status": "pass",
+    "regression_verdict": "workbook_profile_ready_for_basic_print_review",
+    "basic_print_blockers": [],
+    "profile_contract": "pass",
+    "exercise_relation_contract": {
+      "status": "pass",
+      "metrics": {
+        "question_groups": 415,
+        "questions": 2177,
+        "grouped_questions": 2126,
+        "ungrouped_questions": 51,
+        "fill_blank_questions": 0,
+        "options": 77,
+        "parented_options": 77,
+        "orphan_options": 0,
+        "answer_blanks": 631,
+        "parented_answer_blanks": 630,
+        "orphan_answer_blanks": 1,
+        "table_questions": 112,
+        "parented_table_questions": 112,
+        "orphan_table_questions": 0,
+        "figure_relation_candidates": 138,
+        "parented_figure_relation_candidates": 134,
+        "orphan_figure_relation_candidates": 4
+      },
+      "relation_audit": {
+        "count": 187,
+        "kind_counts": {
+          "unparented_explanation_table": 132,
+          "ungrouped_question": 51,
+          "orphan_figure_relation_candidate": 4
+        },
+        "disposition_counts": {
+          "explanation_artifact": 186,
+          "helper_icon_artifact": 1
+        },
+        "real_profile_gap_count": 0,
+        "review_item_count": 0
+      },
+      "review_reasons": []
+    },
+    "image_relation_contract": {
+      "status": "pass",
+      "review_reasons": [],
+      "source_visual_check_count": 125,
+      "image_visual_confirmation_packet_count": 125,
+      "source_crop_count": 125
+    }
+  },
+  "workbook_relation_audit": {
+    "count": 187,
+    "kind_counts": {
+      "unparented_explanation_table": 132,
+      "ungrouped_question": 51,
+      "orphan_figure_relation_candidate": 4
+    },
+    "disposition_counts": {
+      "explanation_artifact": 186,
+      "helper_icon_artifact": 1
+    },
+    "real_profile_gap_count": 0,
+    "review_item_count": 0
+  },
+  "review_outcomes": {
+    "count": 377,
+    "closed_count": 377,
+    "open_blocking_count": 0,
+    "decision_counts": {
+      "accepted_by_rule": 377
+    },
+    "image_outcome_rule_audit": {
+      "decision_counts": {
+        "accepted_by_rule": 125
+      },
+      "confidence_counts": {
+        "high": 125
+      },
+      "issue_counts": {}
+    },
+    "visual_source_crop_count": 252,
+    "image_source_crop_count": 125
+  },
+  "reports": {
+    "acceptance_report": "runtime/backend/pipeline-work/audits/gic-standard-workbook-relation-rule-v8-20260630/standard-final/standard_acceptance_report.json",
+    "workbook_profile_report": "runtime/backend/pipeline-work/audits/gic-standard-workbook-relation-rule-v8-20260630/standard-final/workbook_profile_report.json",
+    "workbook_relation_audit": "runtime/backend/pipeline-work/audits/gic-standard-workbook-relation-rule-v8-20260630/standard-final/workbook_relation_audit.json",
+    "image_visual_confirmation_packets": "runtime/backend/pipeline-work/audits/gic-standard-workbook-relation-rule-v8-20260630/standard-final/image_visual_confirmation_packets.json",
+    "visual_outcome_review": "runtime/backend/pipeline-work/audits/gic-standard-workbook-relation-rule-v8-20260630/standard-final/visual_outcome_review.json",
+    "review_outcomes": "runtime/backend/pipeline-work/audits/gic-standard-workbook-relation-rule-v8-20260630/standard-final/standard_review_outcomes.json",
+    "print_qa_report": "runtime/backend/pipeline-work/audits/gic-standard-workbook-relation-rule-v8-20260630/standard-final/print_qa_report.json",
+    "standard_pdf": "runtime/backend/pipeline-work/audits/gic-standard-workbook-relation-rule-v8-20260630/standard-final/standard.pdf",
+    "basic_print_closure_report": "runtime/backend/pipeline-work/audits/gic-standard-workbook-relation-rule-v8-20260630/standard-final/basic_print_closure_report.json",
+    "clean_review_scope_report": "runtime/backend/pipeline-work/audits/gic-standard-workbook-relation-rule-v8-20260630/standard-final/clean_review_scope_report.json",
+    "correction_log": "runtime/backend/pipeline-work/audits/gic-standard-workbook-relation-rule-v8-20260630/standard-final/correction_log.json",
+    "image_outcome_rule_audit": "runtime/backend/pipeline-work/audits/gic-standard-workbook-relation-rule-v8-20260630/standard-final/image_outcome_rule_audit.json",
+    "image_source_crops": "runtime/backend/pipeline-work/audits/gic-standard-workbook-relation-rule-v8-20260630/standard-final/source_crops",
+    "visual_source_crops": "runtime/backend/pipeline-work/audits/gic-standard-workbook-relation-rule-v8-20260630/standard-final/visual_source_crops",
+    "clean_media_purpose_ledger": "runtime/backend/pipeline-work/audits/gic-clean-media-purpose-ledger-20260701/clean_media_purpose_ledger.json",
+    "clean_llm_fallback_ledger": "runtime/backend/pipeline-work/audits/gic-clean-llm-fallback-ledger-20260701/clean_llm_fallback_ledger.json",
+    "clean_closure_policy_audit": "runtime/backend/pipeline-work/audits/gic-clean-closure-policy-audit-v3-20260701/clean_review_closure_policy_audit.json",
+    "candidate_record": "docs/standard-research/corpus/golden/candidates/pdf-01ae095f5a0f2dc7.gic-workbook-clean-closure-v3-20260701.candidate.json"
+  },
+  "decision": [
+    "This run validates grammar_workbook exercise relation hardening and closes all Standard visual/review outcomes on the non-Grammar-Friends GIC pressure sample.",
+    "Standard acceptance is pass with quality score 100; workbook profile, exercise relation, image relation, table/formula, review outcomes, source evidence, and print render gates all pass.",
+    "All 377 review outcomes are closed as accepted_by_rule; four low-quality Standard images were replaced from source PDF crops and recorded in correction_log.json.",
+    "clean_review_scope_report.json scopes the two upstream Clean review gates for this Standard artifact, but does not convert Clean v3 from review to pass.",
+    "Clean review gates are closed by reusable media and LLM fallback ledgers.",
+    "This is a Basic Print candidate, not an accepted golden or profile-ready decision."
+  ],
+  "clean_scope": {
+    "status": "review_scoped_not_promoted",
+    "report": "runtime/backend/pipeline-work/audits/gic-standard-workbook-relation-rule-v8-20260630/standard-final/clean_review_scope_report.json",
+    "promotion_candidate": false,
+    "review_gates": [
+      "media_review_threshold",
+      "llm_structure_revert_threshold"
+    ],
+    "unscoped_clean_review_gates": []
+  },
+  "promotion_candidate": true,
+  "promotion_blockers": [
+    "candidate_only_not_accepted_golden",
+    "grammar_workbook_profile_not_ready"
+  ],
+  "standard_gate_candidate": true,
+  "validation_notes": [
+    {
+      "date": "2026-07-01",
+      "topic": "gic_clean_promotion_blocker_audit",
+      "status": "standard_risk_contained_clean_not_promoted",
+      "evidence": [
+        "runtime/backend/pipeline-work/audits/gic-clean-promotion-blocker-20260701/clean_promotion_blocker_audit.json",
+        "docs/standard-research/31-gic-clean-promotion-blocker-audit-v0.md"
+      ],
+      "conclusion": "GIC Standard v8 pass can be used as Standard risk-containment evidence for non-Grammar-Friends grammar_workbook, but Clean v3 remains review and blocks candidate/golden/profile-ready promotion."
+    },
+    {
+      "date": "2026-07-01",
+      "topic": "gic_clean_closure_policy_audit",
+      "status": "clean_review_closure_policy_not_ready",
+      "evidence": [
+        "runtime/backend/pipeline-work/audits/gic-clean-closure-policy-audit-20260701/clean_review_closure_policy_audit.json",
+        "docs/standard-research/32-gic-clean-closure-policy-audit-v0.md"
+      ],
+      "conclusion": "GIC Clean review gates cannot be promoted by current evidence: media needs a reusable purpose/role closure ledger, and LLM failed/reverted chunks need fallback integrity ledgers."
+    },
+    {
+      "date": "2026-07-01",
+      "topic": "gic_clean_media_purpose_ledger",
+      "status": "media_review_threshold_closable_llm_gate_still_open",
+      "evidence": [
+        "runtime/backend/pipeline-work/audits/gic-clean-media-purpose-ledger-20260701/clean_media_purpose_ledger.json",
+        "runtime/backend/pipeline-work/audits/gic-clean-closure-policy-audit-v2-20260701/clean_review_closure_policy_audit.json",
+        "docs/standard-research/33-gic-clean-media-purpose-ledger-v0.md"
+      ],
+      "conclusion": "The GIC media review gate is closable by reusable purpose/role ledger with 128/128 Clean review media covered and 0 open blockers; Clean promotion remains blocked by the LLM fallback ledger."
+    },
+    {
+      "date": "2026-07-01",
+      "topic": "gic_clean_llm_fallback_ledger",
+      "status": "llm_structure_revert_threshold_closable",
+      "evidence": [
+        "runtime/backend/pipeline-work/audits/gic-clean-llm-fallback-ledger-20260701/clean_llm_fallback_ledger.json",
+        "runtime/backend/pipeline-work/audits/gic-clean-closure-policy-audit-v3-20260701/clean_review_closure_policy_audit.json",
+        "docs/standard-research/34-gic-basic-print-candidate-promotion-v0.md"
+      ],
+      "conclusion": "The GIC LLM review gate is closable by fallback ledger with 10 failed/reverted chunk records, 1 global fallback record, and 0 open blockers."
+    },
+    {
+      "date": "2026-07-01",
+      "topic": "gic_basic_print_candidate_promotion",
+      "status": "basic_print_candidate",
+      "evidence": [
+        "docs/standard-research/corpus/golden/candidates/pdf-01ae095f5a0f2dc7.gic-workbook-clean-closure-v3-20260701.candidate.json",
+        "docs/standard-research/34-gic-basic-print-candidate-promotion-v0.md"
+      ],
+      "conclusion": "GIC is promoted to Basic Print candidate after Standard v8 pass and Clean review closure policy v3 pass; it remains candidate-only, not accepted golden/profile-ready."
+    }
+  ]
+}

@@ -52,6 +52,17 @@ const router = createRouter({
       meta: { reviewMode: 'outline' }
     },
     {
+      path: '/review/standard',
+      name: 'StandardOutputReview',
+      component: () => import('../views/Review.vue'),
+      meta: { reviewMode: 'standard' }
+    },
+    {
+      path: '/review/final',
+      name: 'StandardQualityReview',
+      component: () => import('../views/FinalReview.vue')
+    },
+    {
       path: '/review/preview/:id',
       name: 'ReviewPreview',
       redirect: route => ({
