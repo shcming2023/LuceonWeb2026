@@ -2,24 +2,25 @@
 
 Language: English | [中文](README.zh-CN.md)
 
-LuceonWeb2026 is a Luceon review and production workbench for the PDF -> MinerU -> MinerU-Popo -> Raw -> Clean pipeline. It is adapted from MinerU Web and keeps the document upload, parsing, original file preview, Markdown preview, PDF source tracing, Popo comparison, and export foundations. The current parser integration targets MinerU 3.3.1 through the official MinerU HTTP service instead of depending on MinerU internal Python APIs.
+LuceonWeb2026 is a Luceon material review and production workbench for PDF -> MinerU -> MinerU-Popo -> ElegantBook delivery. It is adapted from MinerU Web and keeps the document upload, parsing, original file preview, PDF source tracing, material metadata, Popo inventory, and PDF/ElegantBook comparison foundations. Raw/Clean/Standard research artifacts remain available as background evidence, but the current main UI is the source-PDF vs ElegantBook comparison workflow.
 
 Current release: `v3.3.1`.
 
 ## Features
 
 - FastAPI backend and Vue 3 frontend
-- Email/password login with user-scoped files, statistics, and settings
+- Public-workspace review mode by default, with email/password login available when auth is enabled
 - Redis-backed asynchronous parsing queue
 - Configurable worker concurrency for matching MinerU API capacity
 - MinIO/S3 storage for source files, Markdown outputs, and images
 - Parse service health checks, with MinerU API connection and version information on the settings page
 - Upload support for PDF, Office documents, and common image formats
 - Original file preview for PDF, Office, images, and text
-- PDF source tracing with bbox highlights, block linking, type filters, and table comparison
-- Markdown preview for raw Markdown, page-based Markdown, Popo-enhanced Markdown, and OCR/Popo comparison
+- PDF source viewing and side-by-side PDF/ElegantBook comparison
+- Material metadata editing, AI-assisted extraction, and catalog filters
+- Markdown preview foundations for raw Markdown, page-based Markdown, Popo-enhanced Markdown, and OCR/Popo comparison
 - MinerU task status and progress visibility on the files page
-- Single-file and batch export for Markdown, page Markdown, and Popo Markdown
+- ElegantBook ZIP, compiled PDF, compile-report, render-review, and final-review artifact downloads
 - Optional MinerU-Popo postprocessing; Popo failures do not block the base parsing result
 - Support for official MinerU 3.3.1 backend options
 - Multi-architecture images for the business backend, worker, and frontend
@@ -61,7 +62,7 @@ After startup, open:
 - MinerU router: `http://SERVER_IP:8002`
 - MinIO console: `http://SERVER_IP:9001`
 
-Register an email account on the first visit to start using the app.
+The local review stack defaults to public workspace mode. Set `LUCEON_AUTH_DISABLED=false` when email/password login is required.
 
 For Linux server deployment, macOS Apple Silicon setup, model downloads, MinerU Router, multi-GPU scheduling, MinIO endpoint configuration, and verification commands, see [Deployment Guide](docs/deployment.md).
 
@@ -82,6 +83,8 @@ For Linux server deployment, macOS Apple Silicon setup, model downloads, MinerU 
 
   <img src="images/pdf-source-preview.png" alt="PDF source tracing" width="800">
   <p>PDF source tracing - source bbox highlights on the left and page/block-linked Markdown on the right</p>
+
+  <p>Current review entry - source PDF and ElegantBook compiled PDF comparison at <code>/review/compare</code></p>
 
   <img src="images/pdf-table-trace.png" alt="PDF table tracing" width="800">
   <p>Table tracing - filter table blocks and compare the PDF region with the Markdown table</p>
@@ -113,6 +116,7 @@ Frequently used options:
 - `WORKER_REPLICAS` / `WORKER_CONCURRENCY`: worker replica count and per-worker concurrency.
 - `MINERU_API_USE_ASYNC_TASKS`: enable the MinerU `/tasks` asynchronous API.
 - `POPO_ENABLED`: enable MinerU-Popo postprocessing.
+- `LUCEON_AUTH_DISABLED`: when true, use the shared public workspace user for the local review station.
 
 ## Testing
 
