@@ -351,7 +351,7 @@ onMounted(loadAssets)
 
 .compare-grid {
   display: grid;
-  grid-template-columns: minmax(280px, 3fr) minmax(0, 7fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 14px;
   min-height: 0;
 }
@@ -378,7 +378,7 @@ onMounted(loadAssets)
   border-radius: 0;
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 900px) {
   .compare-toolbar,
   .selected-strip,
   .compare-header {
