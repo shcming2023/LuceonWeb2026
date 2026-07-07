@@ -75,6 +75,8 @@ import { sourceTypeLabel } from '@/utils/sourceTypes'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `${pdfWorkerUrl}?module=1`
 
+const pdfAssetBase = import.meta.env.DEV ? '/node_modules/pdfjs-dist' : '/pdfjs'
+
 interface RenderedPage {
   pageNumber: number
   width: number
@@ -402,6 +404,9 @@ const loadDocument = async () => {
     const doc = await pdfjsLib.getDocument({
       url: sourceUrl,
       withCredentials: true,
+      cMapUrl: `${pdfAssetBase}/cmaps/`,
+      cMapPacked: true,
+      standardFontDataUrl: `${pdfAssetBase}/standard_fonts/`,
       rangeChunkSize: 1024 * 1024,
       disableRange: false,
       disableStream: true,
