@@ -138,14 +138,26 @@ const latexPdfUrl = computed(() => compare.value?.latex_pdf_url || '')
 const downloadUrls = computed(() => compare.value?.download_urls || {})
 const availableOutputs = computed(() => compare.value?.available_outputs || [])
 const outputOrigin = computed(() => String(compare.value?.output_origin || 'legacy_selfloop'))
-const outputOriginLabel = computed(() => {
-  if (outputOrigin.value === 'codex_refined') return 'Codex 精修'
-  if (outputOrigin.value === 'codex_elegantbook') return 'Codex ElegantBook'
-  return 'Legacy baseline'
+type AvailableOutput = NonNullable<LatexCompareResponse['available_outputs']>[number]
+const selectedOutputRow = computed<AvailableOutput | null>(() => {
+  const target = String(compare.value?.output_id || selectedOutputId.value || '')
+  return availableOutputs.value.find(row => outputOptionValue(row) === target) || null
 })
-const zipButtonText = computed(() => outputOrigin.value === 'legacy_selfloop' ? '导出 LaTeX ZIP' : '导出精修 LaTeX ZIP')
+const selectedQualityStatus = computed(() => {
+  const manifest = compare.value?.manifest_json || {}
+  const qa = manifest.qa && typeof manifest.qa === 'object' ? manifest.qa as Record<string, unknown> : {}
+  return String(selectedOutputRow.value?.quality_status || qa.status || '')
+})
+const outputOriginLabel = computed(() => {
+  return outputOriginText(outputOrigin.value, selectedQualityStatus.value)
+})
+const zipButtonText = computed(() => {
+  if (outputOrigin.value === 'legacy_selfloop') return '导出 LaTeX ZIP'
+  return selectedQualityStatus.value === 'passed' ? '导出精修 LaTeX ZIP' : '导出候选 LaTeX ZIP'
+})
 const outputOriginTagType = computed(() => {
-  if (outputOrigin.value === 'codex_refined') return 'success'
+  if (outputOrigin.value === 'codex_refined' && selectedQualityStatus.value === 'passed') return 'success'
+  if (outputOrigin.value === 'codex_refined') return 'warning'
   if (outputOrigin.value === 'codex_elegantbook') return 'primary'
   return 'info'
 })
@@ -171,10 +183,21 @@ function outputOptionValue(row: NonNullable<LatexCompareResponse['available_outp
   return String(row.id || row.manifest?.object || row.output_run_id || '')
 }
 
+function outputOriginText(origin: string, qualityStatus = '') {
+  if (origin === 'codex_refined') {
+    if (qualityStatus === 'passed') return 'Codex 精修'
+    if (qualityStatus === 'needs_fix') return 'Codex 候选（待修复）'
+    return 'Codex 候选'
+  }
+  if (origin === 'codex_elegantbook') return 'Codex ElegantBook'
+  return 'Legacy baseline'
+}
+
 function outputOptionLabel(row: NonNullable<LatexCompareResponse['available_outputs']>[number]) {
-  const origin = row.origin === 'codex_refined' ? 'Codex 精修' : row.origin === 'codex_elegantbook' ? 'Codex ElegantBook' : 'Legacy baseline'
+  const origin = outputOriginText(row.origin, row.quality_status || '')
+  const quality = row.quality_status && row.quality_status !== 'passed' ? ` · ${row.quality_status}` : ''
   const suffix = row.is_current ? ' · 当前' : ''
-  return `${origin} · ${row.version_label || row.output_run_id || row.created_at || row.manifest?.object || '未命名'}${suffix}`
+  return `${origin}${quality} · ${row.version_label || row.output_run_id || row.created_at || row.manifest?.object || '未命名'}${suffix}`
 }
 
 function apiUrl(url: string) {
