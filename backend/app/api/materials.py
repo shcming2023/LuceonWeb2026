@@ -1,15 +1,17 @@
 import mimetypes
+import re
 from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.material import Material, PipelineEvent, PipelineRun
+from app.models.material_metadata import MaterialMetadata
 from app.services.clean_to_standard import CleanToStandardPreflightError, clean_to_standard_preflight, start_clean_to_standard_run
 from app.services.material_inventory import (
     INPUT_BUCKET,
@@ -21,6 +23,15 @@ from app.services.material_inventory import (
     start_pipeline_run,
     sync_material_inventory,
     upload_input_pdfs,
+)
+from app.services.material_metadata import (
+    MetadataExtractionError,
+    extract_metadata_with_ai,
+    get_or_create_metadata,
+    metadata_for_materials,
+    metadata_options,
+    metadata_to_dict,
+    upsert_manual_metadata,
 )
 from app.services.popo_to_raw import (
     PopoToRawPreflightError,
@@ -36,15 +47,39 @@ from app.utils.minio_client import get_presigned_url
 from app.utils.user_dep import get_user_id
 
 router = APIRouter()
+RUN_STAMP_PATTERN = re.compile(r"(20\d{12})")
+
+
+def _run_stamp(value: str | None) -> str:
+    match = RUN_STAMP_PATTERN.search(str(value or ""))
+    return match.group(1) if match else ""
+
+
+def _material_activity_sort_key(material: Material) -> tuple[str, str, str, int]:
+    run_stamp = max(
+        _run_stamp(material.latex_run_id),
+        _run_stamp(material.standard_run_id),
+        _run_stamp(material.clean_run_id),
+        _run_stamp(material.raw_run_id),
+        _run_stamp(material.popo_run_id),
+        _run_stamp(material.mineru_run_id),
+    )
+    created = material.created_at.isoformat() if material.created_at else ""
+    synced = material.last_synced_at.isoformat() if material.last_synced_at else ""
+    return (run_stamp, created, synced, int(material.id or 0))
 
 
 class PipelineStartRequest(BaseModel):
     apply: bool = False
     limit: int = 5
+    material_id: str = ""
+    input_object: str = ""
 
 
 class PipelinePreflightRequest(BaseModel):
     limit: int = 5
+    material_id: str = ""
+    input_object: str = ""
 
 
 class PopoToRawStartRequest(BaseModel):
@@ -67,6 +102,26 @@ class CleanToStandardStartRequest(BaseModel):
     force: bool = False
 
 
+class MaterialMetadataUpdateRequest(BaseModel):
+    original_title: str = ""
+    publication_date: str = ""
+    publication_year: int | None = None
+    edition: str = ""
+    subject: str = ""
+    publication_country: str = ""
+    series_name: str = ""
+    publisher: str = ""
+    isbn: str = ""
+    language: str = ""
+    grade_level: str = ""
+    confidence: float | None = None
+    evidence: list[dict] = []
+
+
+class MaterialMetadataExtractRequest(BaseModel):
+    force: bool = False
+
+
 def _material_or_404(material_pk: int, user_id: str, db: Session) -> Material:
     material = db.query(Material).filter(Material.id == material_pk, Material.user_id == user_id).first()
     if not material:
@@ -74,16 +129,34 @@ def _material_or_404(material_pk: int, user_id: str, db: Session) -> Material:
     return material
 
 
+def _legacy_stage_gone() -> None:
+    raise HTTPException(status_code=410, detail="Raw/Clean/Standard 节点已下线")
+
+
+def _popo_latex_gone() -> None:
+    raise HTTPException(
+        status_code=410,
+        detail="LuceonWeb 不再执行 Popo→LaTeX/PDF；请由 Codex 异步产出 ElegantBook 后同步消费",
+    )
+
+
 @router.get("/materials")
 def list_materials(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    search: str = Query("", description="按文件名、material_id 或 MinIO 对象搜索"),
+    search: str = Query("", description="按文件名、material_id、MinIO 对象或教材元数据搜索"),
     stage: str = Query("", description="按阶段筛选"),
+    metadata_status: str = Query("", description="按元数据状态筛选"),
+    subject: str = Query("", description="按学科筛选"),
+    country: str = Query("", description="按出版国家筛选"),
+    series: str = Query("", description="按系列名筛选"),
+    year_from: int | None = Query(None, ge=0, le=2200),
+    year_to: int | None = Query(None, ge=0, le=2200),
     user_id: str = Depends(get_user_id),
     db: Session = Depends(get_db),
 ):
-    query = db.query(Material).filter(Material.user_id == user_id, Material.ignored.is_(False))
+    metadata_join = and_(MaterialMetadata.user_id == user_id, MaterialMetadata.material_pk == Material.id)
+    query = db.query(Material).outerjoin(MaterialMetadata, metadata_join).filter(Material.user_id == user_id, Material.ignored.is_(False))
     if search:
         like = f"%{search}%"
         query = query.filter(
@@ -92,43 +165,112 @@ def list_materials(
                 Material.filename.like(like),
                 Material.material_id.like(like),
                 Material.input_object.like(like),
+                MaterialMetadata.original_title.like(like),
+                MaterialMetadata.series_name.like(like),
+                MaterialMetadata.publisher.like(like),
+                MaterialMetadata.isbn.like(like),
+                MaterialMetadata.subject.like(like),
+                MaterialMetadata.edition.like(like),
             )
         )
+    if metadata_status == "missing":
+        query = query.filter(or_(MaterialMetadata.id.is_(None), MaterialMetadata.status == "missing"))
+    elif metadata_status:
+        query = query.filter(MaterialMetadata.status == metadata_status)
+    if subject:
+        query = query.filter(MaterialMetadata.subject == subject)
+    if country:
+        query = query.filter(MaterialMetadata.publication_country == country)
+    if series:
+        query = query.filter(MaterialMetadata.series_name.like(f"%{series}%"))
+    if year_from is not None:
+        query = query.filter(MaterialMetadata.publication_year >= year_from)
+    if year_to is not None:
+        query = query.filter(MaterialMetadata.publication_year <= year_to)
     if stage == "pdf":
         query = query.filter(Material.input_object.isnot(None))
     elif stage == "mineru":
         query = query.filter(or_(Material.mineru_manifest_object.isnot(None), Material.popo_manifest_object.isnot(None)))
     elif stage == "popo":
         query = query.filter(Material.popo_manifest_object.isnot(None))
-    elif stage == "raw":
-        query = query.filter(Material.raw_manifest_object.isnot(None))
-    elif stage == "clean":
-        query = query.filter(Material.clean_manifest_object.isnot(None))
-    elif stage == "standard":
-        query = query.filter(Material.standard_manifest_object.isnot(None))
+    elif stage == "latex":
+        query = query.filter(Material.latex_manifest_object.isnot(None))
     elif stage:
         query = query.filter(Material.stage_status == stage)
 
-    total = query.count()
-    rows = (
-        query.order_by(
-            Material.last_synced_at.is_(None),
-            Material.last_synced_at.desc(),
-            Material.created_at.desc(),
-            Material.id.desc(),
-        )
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
+    rows_all = query.all()
+    total = len(rows_all)
+    rows_all.sort(key=_material_activity_sort_key, reverse=True)
+    rows = rows_all[(page - 1) * page_size : page * page_size]
+    metadata_map = metadata_for_materials(db, user_id, [row.id for row in rows])
     material_rows = []
     for row in rows:
         data = row.to_dict()
+        data["book_metadata"] = metadata_to_dict(metadata_map.get(row.id))
         dry_run = latest_successful_popo_to_raw_dry_run(db, user_id, row.material_id or "")
         data["raw_dry_run_available"] = bool(dry_run)
         data["raw_dry_run_id"] = str(dry_run.id) if dry_run else ""
         material_rows.append(data)
     return {"total": total, "page": page, "page_size": page_size, "materials": material_rows}
+
+
+@router.get("/materials/metadata/options")
+def get_material_metadata_options(
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    return metadata_options(db, user_id)
+
+
+@router.get("/materials/{material_pk}/metadata")
+def get_material_metadata(
+    material_pk: int,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    material = _material_or_404(material_pk, user_id, db)
+    metadata = get_or_create_metadata(db, user_id, material)
+    db.commit()
+    db.refresh(metadata)
+    return metadata.to_dict()
+
+
+@router.patch("/materials/{material_pk}/metadata")
+def update_material_metadata(
+    material_pk: int,
+    payload: MaterialMetadataUpdateRequest,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    material = _material_or_404(material_pk, user_id, db)
+    metadata = upsert_manual_metadata(db, user_id, material, payload.model_dump())
+    db.commit()
+    db.refresh(metadata)
+    return metadata.to_dict()
+
+
+@router.post("/materials/{material_pk}/metadata/extract")
+def extract_material_metadata(
+    material_pk: int,
+    payload: MaterialMetadataExtractRequest,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    material = _material_or_404(material_pk, user_id, db)
+    try:
+        metadata = extract_metadata_with_ai(db, user_id, material, force=payload.force)
+        db.commit()
+        db.refresh(metadata)
+        return metadata.to_dict()
+    except MetadataExtractionError as exc:
+        db.rollback()
+        metadata = get_or_create_metadata(db, user_id, material)
+        metadata.status = "failed"
+        metadata.extraction_error = str(exc)
+        db.commit()
+        if str(exc) == "manual_override":
+            raise HTTPException(status_code=409, detail="该材料元数据已被人工修改；如需覆盖，请勾选强制重新提取")
+        raise HTTPException(status_code=409, detail=f"元数据提取失败：{exc}")
 
 
 @router.get("/materials/summary")
@@ -235,7 +377,7 @@ def pipeline_preflight(
 ):
     _ = user_id
     try:
-        return run_pipeline_preflight(payload.limit)
+        return run_pipeline_preflight(payload.limit, material_id=payload.material_id, input_object=payload.input_object)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"解析预检失败: {exc}")
 
@@ -247,7 +389,14 @@ def start_pipeline(
     db: Session = Depends(get_db),
 ):
     try:
-        run = start_pipeline_run(db, user_id, apply=payload.apply, limit=payload.limit)
+        run = start_pipeline_run(
+            db,
+            user_id,
+            apply=payload.apply,
+            limit=payload.limit,
+            material_id=payload.material_id,
+            input_object=payload.input_object,
+        )
     except PipelinePreflightError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail={"message": "综合预检未通过", "preflight": exc.preflight})
@@ -255,6 +404,28 @@ def start_pipeline(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"启动解析任务失败: {exc}")
     return run.to_dict()
+
+
+@router.post("/materials/{material_pk}/popo2latex/preflight")
+def preflight_popo_to_latex(
+    material_pk: int,
+    force: bool = Query(False),
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    _ = (material_pk, force, user_id, db)
+    _popo_latex_gone()
+
+
+@router.post("/materials/{material_pk}/popo2latex/start")
+def start_popo_to_latex(
+    material_pk: int,
+    payload: dict | None = None,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    _ = (material_pk, payload, user_id, db)
+    _popo_latex_gone()
 
 
 @router.post("/materials/{material_pk}/popo2raw/preflight")
@@ -265,11 +436,8 @@ def preflight_popo_to_raw(
     user_id: str = Depends(get_user_id),
     db: Session = Depends(get_db),
 ):
-    material = _material_or_404(material_pk, user_id, db)
-    try:
-        return popo_to_raw_preflight(material, force=force, publish=publish)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Popo→Raw 预检失败: {exc}")
+    _ = (material_pk, force, publish, user_id, db)
+    _legacy_stage_gone()
 
 
 @router.post("/materials/{material_pk}/popo2raw/start")
@@ -279,16 +447,8 @@ def start_popo_to_raw(
     user_id: str = Depends(get_user_id),
     db: Session = Depends(get_db),
 ):
-    material = _material_or_404(material_pk, user_id, db)
-    try:
-        run = start_popo_to_raw_run(db, user_id, material, publish=payload.publish, force=payload.force)
-    except PopoToRawPreflightError as exc:
-        db.rollback()
-        raise HTTPException(status_code=409, detail={"message": "Popo→Raw 预检未通过", "preflight": exc.preflight})
-    except Exception as exc:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"启动 Popo→Raw 失败: {exc}")
-    return run.to_dict()
+    _ = (material_pk, payload, user_id, db)
+    _legacy_stage_gone()
 
 
 @router.post("/materials/{material_pk}/popo2raw/publish_dry_run")
@@ -298,19 +458,8 @@ def publish_popo_to_raw_dry_run_endpoint(
     user_id: str = Depends(get_user_id),
     db: Session = Depends(get_db),
 ):
-    material = _material_or_404(material_pk, user_id, db)
-    try:
-        run = publish_popo_to_raw_dry_run(db, user_id, material, dry_run_id=payload.run_id, force=payload.force)
-    except PopoToRawPreflightError as exc:
-        db.rollback()
-        raise HTTPException(status_code=409, detail={"message": "Popo→Raw 发布预检未通过", "preflight": exc.preflight})
-    except PopoToRawPublishError as exc:
-        db.rollback()
-        raise HTTPException(status_code=409, detail=str(exc))
-    except Exception as exc:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"发布 Popo→Raw dry-run 失败: {exc}")
-    return run.to_dict()
+    _ = (material_pk, payload, user_id, db)
+    _legacy_stage_gone()
 
 
 @router.post("/materials/{material_pk}/raw2clean/preflight")
@@ -320,11 +469,8 @@ def preflight_raw_to_clean(
     user_id: str = Depends(get_user_id),
     db: Session = Depends(get_db),
 ):
-    material = _material_or_404(material_pk, user_id, db)
-    try:
-        return raw_to_clean_preflight(material, force=force)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Raw→Clean 预检失败: {exc}")
+    _ = (material_pk, force, user_id, db)
+    _legacy_stage_gone()
 
 
 @router.post("/materials/{material_pk}/raw2clean/start")
@@ -334,16 +480,8 @@ def start_raw_to_clean(
     user_id: str = Depends(get_user_id),
     db: Session = Depends(get_db),
 ):
-    material = _material_or_404(material_pk, user_id, db)
-    try:
-        run = start_raw_to_clean_run(db, user_id, material, publish=payload.publish, force=payload.force)
-    except RawToCleanPreflightError as exc:
-        db.rollback()
-        raise HTTPException(status_code=409, detail={"message": "Raw→Clean 预检未通过", "preflight": exc.preflight})
-    except Exception as exc:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"启动 Raw→Clean 失败: {exc}")
-    return run.to_dict()
+    _ = (material_pk, payload, user_id, db)
+    _legacy_stage_gone()
 
 
 @router.post("/materials/{material_pk}/clean2standard/preflight")
@@ -353,11 +491,8 @@ def preflight_clean_to_standard(
     user_id: str = Depends(get_user_id),
     db: Session = Depends(get_db),
 ):
-    material = _material_or_404(material_pk, user_id, db)
-    try:
-        return clean_to_standard_preflight(material, force=force)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Clean→Standard 预检失败: {exc}")
+    _ = (material_pk, force, user_id, db)
+    _legacy_stage_gone()
 
 
 @router.post("/materials/{material_pk}/clean2standard/start")
@@ -367,16 +502,8 @@ def start_clean_to_standard(
     user_id: str = Depends(get_user_id),
     db: Session = Depends(get_db),
 ):
-    material = _material_or_404(material_pk, user_id, db)
-    try:
-        run = start_clean_to_standard_run(db, user_id, material, publish=payload.publish, force=payload.force)
-    except CleanToStandardPreflightError as exc:
-        db.rollback()
-        raise HTTPException(status_code=409, detail={"message": "Clean→Standard 预检未通过", "preflight": exc.preflight})
-    except Exception as exc:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"启动 Clean→Standard 失败: {exc}")
-    return run.to_dict()
+    _ = (material_pk, payload, user_id, db)
+    _legacy_stage_gone()
 
 
 @router.get("/materials/{material_pk}")
@@ -437,6 +564,27 @@ def material_content(
         media_type=media_type,
         headers={"Content-Disposition": f"inline; filename*=UTF-8''{encoded_filename}"},
     )
+
+
+@router.get("/materials/{material_pk}/popo_latex_export")
+def material_popo_latex_export(
+    material_pk: int,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    _ = (material_pk, user_id, db)
+    _popo_latex_gone()
+
+
+@router.get("/materials/{material_pk}/latex_export")
+def material_latex_export(
+    material_pk: int,
+    stage: str = Query("popo", description="已下线；请在 PDF 比对页下载 Codex ElegantBook ZIP"),
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    _ = (material_pk, stage, user_id, db)
+    _popo_latex_gone()
 
 
 @router.get("/materials/{material_pk}/review_target")

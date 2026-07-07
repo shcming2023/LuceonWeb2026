@@ -1,15 +1,14 @@
 import type { AxiosProgressEvent } from 'axios'
 import api from './index'
 import type {
+  MaterialBookMetadata,
   MaterialListResponse,
+  MaterialMetadataOptions,
   MaterialSummary,
   MaterialSyncSummary,
   MaterialUploadResponse,
   PipelinePreflightResponse,
-  PopoToRawPreflightResponse,
-  CleanToStandardPreflightResponse,
   PipelineRun,
-  RawToCleanPreflightResponse,
   PipelineStatusResponse
 } from '@/types/material'
 
@@ -18,6 +17,17 @@ export interface MaterialListParams {
   page_size: number
   search?: string
   stage?: string
+  metadata_status?: string
+  subject?: string
+  country?: string
+  series?: string
+  year_from?: number | null
+  year_to?: number | null
+}
+
+export interface PipelineTarget {
+  material_id?: string
+  input_object?: string
 }
 
 export const materialsApi = {
@@ -27,6 +37,24 @@ export const materialsApi = {
 
   getSummary() {
     return api.get<MaterialSummary>('/materials/summary').then(res => res.data)
+  },
+
+  getMetadataOptions() {
+    return api.get<MaterialMetadataOptions>('/materials/metadata/options').then(res => res.data)
+  },
+
+  getMetadata(materialId: string) {
+    return api.get<MaterialBookMetadata>(`/materials/${materialId}/metadata`).then(res => res.data)
+  },
+
+  updateMetadata(materialId: string, payload: Partial<MaterialBookMetadata>) {
+    return api.patch<MaterialBookMetadata>(`/materials/${materialId}/metadata`, payload).then(res => res.data)
+  },
+
+  extractMetadata(materialId: string, force = false) {
+    return api
+      .post<MaterialBookMetadata>(`/materials/${materialId}/metadata/extract`, { force }, { timeout: 120000 })
+      .then(res => res.data)
   },
 
   sync(limit?: number) {
@@ -50,58 +78,12 @@ export const materialsApi = {
     return api.get<PipelineStatusResponse>('/materials/pipeline/status').then(res => res.data)
   },
 
-  preflightPipeline(limit = 5) {
-    return api.post<PipelinePreflightResponse>('/materials/pipeline/preflight', { limit }, { timeout: 120000 }).then(res => res.data)
+  preflightPipeline(limit = 5, target: PipelineTarget = {}) {
+    return api.post<PipelinePreflightResponse>('/materials/pipeline/preflight', { limit, ...target }, { timeout: 120000 }).then(res => res.data)
   },
 
-  startPipeline(apply = false, limit = 5) {
-    return api.post<PipelineRun>('/materials/pipeline/start', { apply, limit }, { timeout: 120000 }).then(res => res.data)
-  },
-
-  preflightPopoToRaw(materialId: string, force = false, publish = false) {
-    return api
-      .post<PopoToRawPreflightResponse>(`/materials/${materialId}/popo2raw/preflight`, null, { params: { force, publish }, timeout: 120000 })
-      .then(res => res.data)
-  },
-
-  startPopoToRaw(materialId: string, publish = false, force = false) {
-    return api
-      .post<PipelineRun>(`/materials/${materialId}/popo2raw/start`, { publish, force }, { timeout: 120000 })
-      .then(res => res.data)
-  },
-
-  publishPopoToRawDryRun(materialId: string, runId: string | number, force = true) {
-    return api
-      .post<PipelineRun>(
-        `/materials/${materialId}/popo2raw/publish_dry_run`,
-        { run_id: Number(runId), force },
-        { timeout: 120000 }
-      )
-      .then(res => res.data)
-  },
-
-  preflightRawToClean(materialId: string, force = false) {
-    return api
-      .post<RawToCleanPreflightResponse>(`/materials/${materialId}/raw2clean/preflight`, null, { params: { force }, timeout: 120000 })
-      .then(res => res.data)
-  },
-
-  startRawToClean(materialId: string, publish = true, force = false) {
-    return api
-      .post<PipelineRun>(`/materials/${materialId}/raw2clean/start`, { publish, force }, { timeout: 120000 })
-      .then(res => res.data)
-  },
-
-  preflightCleanToStandard(materialId: string, force = false) {
-    return api
-      .post<CleanToStandardPreflightResponse>(`/materials/${materialId}/clean2standard/preflight`, null, { params: { force }, timeout: 120000 })
-      .then(res => res.data)
-  },
-
-  startCleanToStandard(materialId: string, publish = true, force = false) {
-    return api
-      .post<PipelineRun>(`/materials/${materialId}/clean2standard/start`, { publish, force }, { timeout: 120000 })
-      .then(res => res.data)
+  startPipeline(apply = false, limit = 5, target: PipelineTarget = {}) {
+    return api.post<PipelineRun>('/materials/pipeline/start', { apply, limit, ...target }, { timeout: 120000 }).then(res => res.data)
   },
 
   getReviewTarget(materialId: string) {

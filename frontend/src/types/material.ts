@@ -2,6 +2,7 @@ export type MaterialStage =
   | 'input'
   | 'mineru_done'
   | 'popo_done'
+  | 'latex_done'
   | 'raw_done'
   | 'clean_stale'
   | 'clean_done'
@@ -21,6 +22,7 @@ export interface MaterialItem {
   source_hash: string
   title: string
   filename: string
+  book_metadata?: MaterialBookMetadata | null
   source_type: string
   input_bucket: string
   input_object: string
@@ -31,17 +33,20 @@ export interface MaterialItem {
   pipeline_status: string
   mineru_manifest: ObjectRef
   popo_manifest: ObjectRef
+  latex_manifest: ObjectRef
   raw_manifest: ObjectRef
   clean_manifest: ObjectRef
   standard_manifest: ObjectRef
   mineru_available: boolean
   popo_available: boolean
+  latex_available: boolean
   raw_available: boolean
   clean_available: boolean
   standard_available: boolean
   raw_dry_run_available?: boolean
   mineru_run_id: string
   popo_run_id: string
+  latex_run_id: string
   raw_run_id: string
   raw_dry_run_id?: string
   clean_run_id: string
@@ -58,6 +63,42 @@ export interface MaterialListResponse {
   page: number
   page_size: number
   materials: MaterialItem[]
+}
+
+export interface MaterialBookMetadata {
+  id: string
+  material_pk: string
+  original_title: string
+  publication_date: string
+  publication_year: number | null
+  edition: string
+  subject: string
+  publication_country: string
+  series_name: string
+  publisher: string
+  isbn: string
+  language: string
+  grade_level: string
+  status: string
+  source: string
+  confidence: number | null
+  manual_override: boolean
+  evidence: Array<Record<string, unknown>>
+  sample: Record<string, unknown>
+  extraction_model: string
+  extraction_error: string
+  extracted_at: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface MaterialMetadataOptions {
+  subjects: string[]
+  countries: string[]
+  series: string[]
+  publishers: string[]
+  languages: string[]
+  editions: string[]
 }
 
 export interface MaterialSyncSummary {
@@ -122,57 +163,6 @@ export interface PipelinePreflightResponse {
   plan: Record<string, unknown>
   returncode: number
   command_text: string
-}
-
-export interface PopoToRawPreflightResponse {
-  ready: boolean
-  stage: string
-  material_pk: string
-  material_id: string
-  filename: string
-  popo_run_id: string
-  mineru_run_id: string
-  raw_bucket: string
-  raw_prefix: string
-  publish: boolean
-  checks: Record<string, boolean>
-  blockers: string[]
-  checked_at: string
-}
-
-export interface RawToCleanPreflightResponse {
-  ready: boolean
-  stage: string
-  material_pk: string
-  material_id: string
-  filename: string
-  raw_run_id: string
-  raw_bucket: string
-  raw_prefix: string
-  clean_bucket: string
-  clean_prefix: string
-  llm_mode: string
-  checks: Record<string, boolean>
-  blockers: string[]
-  checked_at: string
-}
-
-export interface CleanToStandardPreflightResponse {
-  ready: boolean
-  stage: string
-  material_pk: string
-  material_id: string
-  filename: string
-  clean_run_id: string
-  clean_bucket: string
-  clean_prefix: string
-  raw_bucket: string
-  raw_prefix: string
-  standard_bucket: string
-  standard_prefix: string
-  checks: Record<string, boolean>
-  blockers: string[]
-  checked_at: string
 }
 
 export interface MaterialUploadResponse {
