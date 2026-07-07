@@ -1,5 +1,4 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { ensureCurrentUser, fetchCurrentUser, getCurrentUser } from '@/utils/user'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -7,8 +6,7 @@ const router = createRouter({
     {
       path: '/login',
       name: 'Login',
-      component: () => import('../views/Login.vue'),
-      meta: { public: true }
+      redirect: '/files'
     },
     {
       path: '/',
@@ -18,6 +16,10 @@ const router = createRouter({
     {
       path: '/upload',
       name: 'Upload',
+      redirect: '/files'
+    },
+    {
+      path: '/cms/tasks',
       redirect: '/files'
     },
     {
@@ -37,36 +39,34 @@ const router = createRouter({
     {
       path: '/review',
       name: 'Review',
-      redirect: '/review/pdf'
+      redirect: '/review/compare'
+    },
+    {
+      path: '/review/compare',
+      name: 'PdfCompareReview',
+      component: () => import('../views/CompareReview.vue')
     },
     {
       path: '/review/pdf',
-      name: 'PdfParseReview',
-      component: () => import('../views/Review.vue'),
-      meta: { reviewMode: 'page' }
+      redirect: '/review/compare'
     },
     {
       path: '/review/outline',
-      name: 'OutlineRebuildReview',
-      component: () => import('../views/Review.vue'),
-      meta: { reviewMode: 'outline' }
+      redirect: '/review/compare'
     },
     {
       path: '/review/standard',
-      name: 'StandardOutputReview',
-      component: () => import('../views/Review.vue'),
-      meta: { reviewMode: 'standard' }
+      redirect: '/review/compare'
     },
     {
       path: '/review/final',
-      name: 'StandardQualityReview',
-      component: () => import('../views/FinalReview.vue')
+      redirect: '/review/compare'
     },
     {
       path: '/review/preview/:id',
       name: 'ReviewPreview',
       redirect: route => ({
-        path: route.query.outline === '1' ? '/review/outline' : '/review/pdf',
+        path: '/review/compare',
         query: {
           asset_id: String(route.params.id)
         }
@@ -78,30 +78,6 @@ const router = createRouter({
       component: () => import('../views/Settings.vue')
     }
   ]
-})
-
-router.beforeEach(async (to) => {
-  if (to.meta.public) {
-    if (getCurrentUser()) {
-      return { path: '/' }
-    }
-    try {
-      await fetchCurrentUser()
-      return { path: '/' }
-    } catch {
-      return true
-    }
-  }
-
-  try {
-    await ensureCurrentUser()
-    return true
-  } catch {
-    return {
-      path: '/login',
-      query: { redirect: to.fullPath }
-    }
-  }
 })
 
 export default router 

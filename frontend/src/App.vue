@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { Document, EditPen, Files, HomeFilled, Setting, SwitchButton, User, View } from '@element-plus/icons-vue'
+import { Document, HomeFilled, Setting, View } from '@element-plus/icons-vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ref, computed } from 'vue'
-import { logoutUser, useCurrentUser } from '@/utils/user'
 
 const router = useRouter()
 const route = useRoute()
@@ -10,10 +9,7 @@ const route = useRoute()
 const menuItems = [
   { icon: HomeFilled, path: '/', tooltip: '首页', label: '首页' },
   { icon: Document, path: '/files', tooltip: '文件管理', label: '文件' },
-  { icon: View, path: '/review/pdf', tooltip: 'PDF解析审查', label: 'PDF审查' },
-  { icon: Files, path: '/review/outline', tooltip: '目录重建审查', label: '目录审查' },
-  { icon: View, path: '/review/standard', tooltip: '标准输出物审查', label: '标准审查' },
-  { icon: EditPen, path: '/review/final', tooltip: 'Standard质量验收', label: '质检' },
+  { icon: View, path: '/review/compare', tooltip: 'PDF比对审查', label: 'PDF比对' },
   { icon: Setting, path: '/settings', tooltip: '运行设置', label: '设置' }
 ]
 
@@ -21,34 +17,19 @@ const activeMenu = computed(() => {
   const path = route.path
   if (path === '/') return '/'
   if (path.startsWith('/review/preview')) {
-    return route.query.outline === '1' ? '/review/outline' : '/review/pdf'
+    return '/review/compare'
   }
-  if (path.startsWith('/review/final')) return '/review/final'
-  if (path.startsWith('/review/standard')) return '/review/standard'
-  if (path.startsWith('/review/outline')) return '/review/outline'
-  if (path.startsWith('/review/pdf') || path === '/review') return '/review/pdf'
+  if (path.startsWith('/review') || path === '/review') return '/review/compare'
   if (path.startsWith('/settings')) return '/settings'
   if (path.startsWith('/files')) return '/files'
   return menuItems.find(item => path === item.path)?.path || path
 })
 
-const isAuthPage = computed(() => route.meta.public === true)
-const currentUser = useCurrentUser()
-
 const sidebarHover = ref(false)
-
-const handleLogout = async () => {
-  try {
-    await logoutUser()
-  } finally {
-    router.push('/login')
-  }
-}
 </script>
 
 <template>
-  <router-view v-if="isAuthPage" />
-  <div v-else class="mineru-layout">
+  <div class="mineru-layout">
     <!-- 侧边栏 -->
     <aside 
       class="sidebar" 
@@ -84,24 +65,6 @@ const handleLogout = async () => {
       </nav>
       
       <div class="sidebar-bottom">
-        <div class="user-item">
-          <div class="nav-icon-wrapper">
-            <el-icon :size="20"><User /></el-icon>
-          </div>
-          <transition name="fade">
-            <span v-show="sidebarHover" class="user-email">{{ currentUser?.email }}</span>
-          </transition>
-        </div>
-
-        <div class="nav-item logout-item" @click="handleLogout">
-          <div class="nav-icon-wrapper">
-            <el-icon :size="20"><SwitchButton /></el-icon>
-          </div>
-          <transition name="fade">
-            <span v-show="sidebarHover" class="nav-label">退出</span>
-          </transition>
-        </div>
-        
         <div class="version-badge">
           <span class="version-dot"></span>
           <transition name="fade">
@@ -255,29 +218,6 @@ const handleLogout = async () => {
   border-top: 1px solid var(--border-light);
 }
 
-.settings-item {
-  margin-bottom: 4px;
-}
-
-.user-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  color: var(--text-secondary);
-  overflow: hidden;
-}
-
-.user-email {
-  min-width: 0;
-  max-width: 104px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  font-weight: 500;
-}
-
 .github-link {
   display: flex;
   align-items: center;
@@ -300,14 +240,6 @@ const handleLogout = async () => {
 
 .github-link:hover img {
   opacity: 1;
-}
-
-.logout-item {
-  color: var(--text-muted);
-}
-
-.logout-item:hover {
-  color: var(--danger-color);
 }
 
 .version-badge {

@@ -26,6 +26,9 @@ services:
       - TZ=Asia/Shanghai
       - REDIS_HOST=redis
       - DATABASE_URL=sqlite:////data/mineru.db
+      - LUCEON_AUTH_DISABLED=${LUCEON_AUTH_DISABLED:-true}
+      - LUCEON_PUBLIC_WORKSPACE_USER_ID=${LUCEON_PUBLIC_WORKSPACE_USER_ID:-2}
+      - LUCEON_PUBLIC_WORKSPACE_EMAIL=${LUCEON_PUBLIC_WORKSPACE_EMAIL:-workspace@luceon.local}
       - MINIO_ENDPOINT=${MINIO_ENDPOINT:?set MINIO_ENDPOINT}
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:?set MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:?set MINIO_SECRET_KEY}
@@ -39,6 +42,7 @@ services:
       - LUCEON_RUNTIME_CONFIG=/data/runtime_config.json
       - LUCEON_BACKUP_ROOT=/backups
       - LUCEON_PIPELINE_WORK_ROOT=/data/pipeline-work
+      - LUCEON_PUBLIC_API_BASE_URL=${LUCEON_PUBLIC_API_BASE_URL:-}
       - CHROME_BIN=${CHROME_BIN:-/usr/bin/chromium}
       - LUCEON_POPO_RAW_SKILL=/skills/pdf-clean-markdown-rebuild
       - LUCEON_RAW_CLEAN_SKILL=/skills/eduassets-raw-cleaner
@@ -67,6 +71,7 @@ services:
     volumes:
       - ./runtime/backend:/data
       - ./runtime/backups:/backups
+      - /var/run/docker.sock:/var/run/docker.sock
       - /Users/concm/.codex/skills/pdf-clean-markdown-rebuild:/skills/pdf-clean-markdown-rebuild:ro
       - /Users/concm/.codex/skills/eduassets-raw-cleaner:/skills/eduassets-raw-cleaner:ro
     depends_on:

@@ -28,17 +28,8 @@ api.interceptors.response.use(
   (error: AxiosError<any>) => {
     // 统一错误处理
     const errorMessage = getErrorMessage(error)
-    const status = error.response?.status
-    const requestUrl = error.config?.url || ''
-    const isCurrentUserProbe = status === 401 && requestUrl.includes('/auth/me')
 
-    if (!isCurrentUserProbe) {
-      ElMessage.error(errorMessage)
-    }
-
-    if (status === 401 && !isCurrentUserProbe && window.location.pathname !== '/login') {
-      window.location.href = '/login'
-    }
+    ElMessage.error(errorMessage)
 
     return Promise.reject(error)
   }
@@ -64,7 +55,7 @@ function getErrorMessage(error: AxiosError<any>): string {
   // 根据状态码返回友好提示
   const statusMessages: Record<number, string> = {
     400: '请求参数错误',
-    401: '未授权，请重新登录',
+    401: '未授权访问',
     403: '没有权限访问',
     404: '请求的资源不存在',
     500: '服务器错误，请稍后重试',

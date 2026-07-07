@@ -33,7 +33,9 @@ def client():
         app.dependency_overrides.clear()
 
 
-def test_register_sets_session_cookie_and_me_returns_user(client):
+def test_register_sets_session_cookie_and_me_returns_user(client, monkeypatch):
+    monkeypatch.setenv("LUCEON_AUTH_DISABLED", "false")
+
     response = client.post(
         "/api/auth/register",
         json={"email": "Ada@Example.com", "password": "secret123"},
@@ -49,7 +51,9 @@ def test_register_sets_session_cookie_and_me_returns_user(client):
     assert me_response.json()["email"] == "ada@example.com"
 
 
-def test_register_rejects_duplicate_email(client):
+def test_register_rejects_duplicate_email(client, monkeypatch):
+    monkeypatch.setenv("LUCEON_AUTH_DISABLED", "false")
+
     client.post(
         "/api/auth/register",
         json={"email": "ada@example.com", "password": "secret123"},
@@ -63,7 +67,9 @@ def test_register_rejects_duplicate_email(client):
     assert response.status_code == 409
 
 
-def test_login_sets_session_for_existing_user(client):
+def test_login_sets_session_for_existing_user(client, monkeypatch):
+    monkeypatch.setenv("LUCEON_AUTH_DISABLED", "false")
+
     client.post(
         "/api/auth/register",
         json={"email": "ada@example.com", "password": "secret123"},
@@ -80,7 +86,29 @@ def test_login_sets_session_for_existing_user(client):
     assert response.json()["user"]["email"] == "ada@example.com"
 
 
-def test_login_rejects_wrong_password(client):
+def test_admin_alias_maps_to_dev_admin_email(client, monkeypatch):
+    monkeypatch.setenv("LUCEON_AUTH_DISABLED", "false")
+
+    register_response = client.post(
+        "/api/auth/register",
+        json={"email": "admin", "password": "123456"},
+    )
+    assert register_response.status_code == 200
+    assert register_response.json()["user"]["email"] == "admin@luceon.local"
+    client.post("/api/auth/logout")
+
+    login_response = client.post(
+        "/api/auth/login",
+        json={"email": "admin", "password": "123456"},
+    )
+
+    assert login_response.status_code == 200
+    assert login_response.json()["user"]["email"] == "admin@luceon.local"
+
+
+def test_login_rejects_wrong_password(client, monkeypatch):
+    monkeypatch.setenv("LUCEON_AUTH_DISABLED", "false")
+
     client.post(
         "/api/auth/register",
         json={"email": "ada@example.com", "password": "secret123"},
@@ -95,7 +123,9 @@ def test_login_rejects_wrong_password(client):
     assert response.status_code == 401
 
 
-def test_authenticated_cookie_can_access_files(client):
+def test_authenticated_cookie_can_access_files(client, monkeypatch):
+    monkeypatch.setenv("LUCEON_AUTH_DISABLED", "false")
+
     client.post(
         "/api/auth/register",
         json={"email": "ada@example.com", "password": "secret123"},
@@ -107,9 +137,21 @@ def test_authenticated_cookie_can_access_files(client):
     assert response.json()["total"] == 0
 
 
-def test_auth_required_for_current_user_and_files(client):
+def test_auth_required_for_current_user_and_files_when_legacy_auth_enabled(client, monkeypatch):
+    monkeypatch.setenv("LUCEON_AUTH_DISABLED", "false")
+
     me_response = client.get("/api/auth/me")
     files_response = client.get("/api/files")
 
     assert me_response.status_code == 401
     assert files_response.status_code == 401
+
+
+def test_public_workspace_available_without_session(client):
+    me_response = client.get("/api/auth/me")
+    files_response = client.get("/api/files")
+
+    assert me_response.status_code == 200
+    assert me_response.json()["email"] == "workspace@luceon.local"
+    assert files_response.status_code == 200
+    assert files_response.json()["total"] == 0

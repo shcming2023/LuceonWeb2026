@@ -18,10 +18,14 @@ AUTH_COOKIE_MAX_AGE = int(os.getenv("AUTH_COOKIE_MAX_AGE_SECONDS", "604800"))
 AUTH_SECRET_KEY = os.getenv("AUTH_SECRET_KEY", "mineru-web-dev-secret")
 PASSWORD_ITERATIONS = 260000
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+DEV_ADMIN_ALIAS = "admin"
+DEV_ADMIN_EMAIL = "admin@luceon.local"
 
 
 def normalize_email(email: str) -> str:
     normalized = email.strip().lower()
+    if normalized == DEV_ADMIN_ALIAS:
+        return DEV_ADMIN_EMAIL
     if not normalized or len(normalized) > 255 or not EMAIL_RE.match(normalized):
         raise HTTPException(status_code=400, detail="邮箱格式不正确")
     return normalized

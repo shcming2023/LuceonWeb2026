@@ -13,7 +13,7 @@ from app.services.auth import (
     validate_password,
     verify_password,
 )
-from app.utils.user_dep import get_current_user
+from app.utils.user_dep import auth_disabled, get_current_user, get_or_create_public_user
 
 
 router = APIRouter()
@@ -31,6 +31,11 @@ def _auth_response(response: Response, user: User) -> dict:
 
 @router.post("/auth/register")
 def register(payload: AuthRequest, response: Response, db: Session = Depends(get_db)):
+    if auth_disabled():
+        user = get_or_create_public_user(db)
+        clear_auth_cookie(response)
+        return {"user": user.to_dict(), "auth_disabled": True}
+
     email = normalize_email(payload.email)
     password = validate_password(payload.password)
 
@@ -47,6 +52,11 @@ def register(payload: AuthRequest, response: Response, db: Session = Depends(get
 
 @router.post("/auth/login")
 def login(payload: AuthRequest, response: Response, db: Session = Depends(get_db)):
+    if auth_disabled():
+        user = get_or_create_public_user(db)
+        clear_auth_cookie(response)
+        return {"user": user.to_dict(), "auth_disabled": True}
+
     email = normalize_email(payload.email)
     user = db.query(User).filter(User.email == email).first()
     if not user or not verify_password(payload.password, user.password_hash):
