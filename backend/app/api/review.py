@@ -20,7 +20,7 @@ from app.models.final_review import FinalReviewAnnotation, FinalReviewSession
 from app.models.material import Material
 from app.models.review_asset import ReviewAsset
 from app.services import final_review as final_review_service
-from app.services.codex_elegantbook import list_elegantbook_outputs, output_artifact_paths, output_from_ref, select_elegantbook_output
+from app.services.codex_elegantbook import output_artifact_paths, output_from_ref, select_elegantbook_output
 from app.services.luceon_review import (
     ObjectRef,
     clean_path,
@@ -31,6 +31,11 @@ from app.services.luceon_review import (
     presigned,
     read_object,
     resolve_manifest,
+)
+from app.services.material_outputs import (
+    material_output_or_404,
+    output_from_material_output,
+    sync_material_outputs_for_material,
 )
 from app.services.outline_review import build_outline_review
 from app.services.popo_to_raw import latest_successful_popo_to_raw_dry_run
@@ -1445,6 +1450,7 @@ def review_asset_detail(
 @router.get("/review/assets/{asset_id}/latex_compare")
 def review_asset_latex_compare(
     asset_id: int,
+    output_id: int | None = Query(None, description="material_outputs.id；为空时使用当前默认输出"),
     user_id: str = Depends(get_user_id),
     db: Session = Depends(get_db),
 ):
@@ -1452,7 +1458,24 @@ def review_asset_latex_compare(
     material = _material_for_asset(asset, db)
     if not material:
         raise HTTPException(status_code=404, detail="材料不存在")
-    output = select_elegantbook_output(material)
+    registry_rows = sync_material_outputs_for_material(db, user_id, material)
+    db.commit()
+    selected_registry_row = None
+    output = None
+    if output_id:
+        selected_registry_row = material_output_or_404(db, user_id, output_id, material)
+        if not selected_registry_row:
+            raise HTTPException(status_code=404, detail="指定 ElegantBook 输出不存在")
+        output = output_from_material_output(selected_registry_row, material)
+        if not output:
+            raise HTTPException(status_code=404, detail="指定 ElegantBook 输出 manifest 不存在")
+    else:
+        current_rows = [row for row in registry_rows if row.is_current]
+        if current_rows:
+            selected_registry_row = current_rows[0]
+            output = output_from_material_output(selected_registry_row, material)
+        if not output:
+            output = select_elegantbook_output(material)
     fallback_manifest_ref = _manifest_ref_from_material(material, "latex")
     fallback_manifest = _read_json_optional(fallback_manifest_ref)
     if not output and fallback_manifest_ref and isinstance(fallback_manifest, dict):
@@ -1472,29 +1495,35 @@ def review_asset_latex_compare(
     run_state = paths["run_state"]
     compile_report_ref = _same_prefix_ref(manifest_ref, compile_report)
     artifact_stage = "elegantbook"
+    output_query = f"&output_id={selected_registry_row.id}" if selected_registry_row and selected_registry_row.id else ""
+
+    def artifact_url(path: str) -> str:
+        return f"/api/review/assets/{asset_id}/artifact?stage={artifact_stage}&path={quote(path)}{output_query}"
+
     return {
         "asset_id": str(asset.id),
         "material_id": material.material_id if material else asset.material_id or "",
         "stage": artifact_stage,
+        "output_id": str(selected_registry_row.id) if selected_registry_row and selected_registry_row.id else "",
         "output_origin": output.origin,
         "output_run_id": output.output_run_id,
-        "available_outputs": [row.to_dict() for row in list_elegantbook_outputs(material)] or ([output.to_dict()] if output else []),
+        "available_outputs": [row.to_dict() for row in registry_rows] or ([output.to_dict()] if output else []),
         "manifest": _ref_dict(manifest_ref),
         "manifest_json": manifest,
         "compile_report": _read_json_optional(compile_report_ref) or {},
         "source_pdf_url": f"/api/review/assets/{asset_id}/content",
-        "latex_pdf_url": f"/api/review/assets/{asset_id}/artifact?stage={artifact_stage}&path={quote(compiled_pdf)}",
+        "latex_pdf_url": artifact_url(compiled_pdf),
         "download_urls": {
-            "compiled_pdf": f"/api/review/assets/{asset_id}/artifact?stage={artifact_stage}&path={quote(compiled_pdf)}",
-            "package_zip": f"/api/review/assets/{asset_id}/artifact?stage={artifact_stage}&path={quote(package_zip)}",
-            "compile_report": f"/api/review/assets/{asset_id}/artifact?stage={artifact_stage}&path={quote(compile_report)}",
-            "latex_polish_report": f"/api/review/assets/{asset_id}/artifact?stage={artifact_stage}&path={quote(paths['latex_polish_report'])}",
-            "latex_polish_report_json": f"/api/review/assets/{asset_id}/artifact?stage={artifact_stage}&path={quote(paths['latex_polish_report_json'])}",
-            "final_review_report": f"/api/review/assets/{asset_id}/artifact?stage={artifact_stage}&path={quote(final_review_report)}",
-            "final_review_report_json": f"/api/review/assets/{asset_id}/artifact?stage={artifact_stage}&path={quote(final_review_report_json)}",
-            "render_review": f"/api/review/assets/{asset_id}/artifact?stage={artifact_stage}&path={quote(render_review)}",
-            "render_review_json": f"/api/review/assets/{asset_id}/artifact?stage={artifact_stage}&path={quote(render_review_json)}",
-            "run_state": f"/api/review/assets/{asset_id}/artifact?stage={artifact_stage}&path={quote(run_state)}",
+            "compiled_pdf": artifact_url(compiled_pdf),
+            "package_zip": artifact_url(package_zip),
+            "compile_report": artifact_url(compile_report),
+            "latex_polish_report": artifact_url(paths["latex_polish_report"]),
+            "latex_polish_report_json": artifact_url(paths["latex_polish_report_json"]),
+            "final_review_report": artifact_url(final_review_report),
+            "final_review_report_json": artifact_url(final_review_report_json),
+            "render_review": artifact_url(render_review),
+            "render_review_json": artifact_url(render_review_json),
+            "run_state": artifact_url(run_state),
         },
     }
 
@@ -1658,7 +1687,7 @@ def review_asset_download_url(
     return {"url": presigned(ref)}
 
 
-def _artifact_base_refs(asset: ReviewAsset, stage: str, db: Session) -> list[ObjectRef]:
+def _artifact_base_refs(asset: ReviewAsset, stage: str, db: Session, user_id: str, output_id: int | None = None) -> list[ObjectRef]:
     normalized_stage = stage.lower().strip()
     refs: list[ObjectRef | None] = []
     if normalized_stage == "mineru":
@@ -1690,7 +1719,14 @@ def _artifact_base_refs(asset: ReviewAsset, stage: str, db: Session) -> list[Obj
         )
     elif normalized_stage == "elegantbook":
         material = _material_for_asset(asset, db)
-        output = select_elegantbook_output(material) if material else None
+        output = None
+        if material and output_id:
+            row = material_output_or_404(db, user_id, output_id, material)
+            if not row:
+                raise HTTPException(status_code=404, detail="指定 ElegantBook 输出不存在")
+            output = output_from_material_output(row, material)
+        if not output:
+            output = select_elegantbook_output(material) if material else None
         if output:
             refs.append(output.manifest_ref)
         else:
@@ -1727,6 +1763,7 @@ def review_asset_artifact(
     asset_id: int,
     stage: str = Query("mineru", description="资源阶段：mineru、popo、elegantbook、latex、raw、clean 或 standard"),
     path: str = Query(..., description="相对资源路径，如 images/a.jpg"),
+    output_id: int | None = Query(None, description="material_outputs.id；仅 elegantbook 阶段使用"),
     user_id: str = Depends(get_user_id),
     db: Session = Depends(get_db),
 ):
@@ -1753,7 +1790,7 @@ def review_asset_artifact(
                 media_type = mimetypes.guess_type(candidate.name)[0] or "application/octet-stream"
                 return StreamingResponse(iter([candidate.read_bytes()]), media_type=media_type)
 
-    for base_ref in _artifact_base_refs(asset, stage, db):
+    for base_ref in _artifact_base_refs(asset, stage, db, user_id, output_id):
         prefix = base_ref.object.rsplit("/", 1)[0] + "/" if "/" in base_ref.object else ""
         object_name = clean_path(f"{prefix}{relative_path}")
         if object_exists(base_ref.bucket, object_name):

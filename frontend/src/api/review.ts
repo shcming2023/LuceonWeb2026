@@ -39,9 +39,11 @@ export interface LatexCompareResponse {
   asset_id: string
   material_id: string
   stage: string
+  output_id?: string
   output_origin?: string
   output_run_id?: string
   available_outputs?: Array<{
+    id?: string
     manifest: {
       bucket: string
       object: string
@@ -50,6 +52,10 @@ export interface LatexCompareResponse {
     popo_run_id: string
     output_run_id: string
     origin: string
+    status?: string
+    quality_status?: string
+    is_current?: boolean
+    version_label?: string
     created_at: string
   }>
   manifest: {
@@ -99,8 +105,9 @@ export const reviewApi = {
     return api.get(`/review/assets/${assetId}`).then(res => res.data)
   },
 
-  getLatexCompare(assetId: string) {
-    return api.get<LatexCompareResponse>(`/review/assets/${assetId}/latex_compare`).then(res => res.data)
+  getLatexCompare(assetId: string, outputId = '') {
+    const params = outputId ? { output_id: outputId } : undefined
+    return api.get<LatexCompareResponse>(`/review/assets/${assetId}/latex_compare`, { params }).then(res => res.data)
   },
 
   updateMetadata(assetId: string, payload: ReviewMetadataPayload) {

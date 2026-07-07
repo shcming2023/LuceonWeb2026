@@ -62,6 +62,8 @@ def list_codex_elegantbook_manifest_refs(material: Material, *, limit: int = 100
                 object_name = clean_path(getattr(item, "object_name", ""))
                 if not object_name.endswith("/manifest.json"):
                     continue
+                if not is_codex_elegantbook_root_manifest(object_name):
+                    continue
                 key = (ELEGANTBOOK_BUCKET, object_name)
                 if key in seen:
                     continue
@@ -84,12 +86,20 @@ def list_all_codex_elegantbook_manifest_refs(*, limit: int | None = None) -> lis
             object_name = clean_path(getattr(item, "object_name", ""))
             if not object_name.endswith("/manifest.json"):
                 continue
+            if not is_codex_elegantbook_root_manifest(object_name):
+                continue
             refs.append(ObjectRef(ELEGANTBOOK_BUCKET, object_name))
             if limit and len(refs) >= limit:
                 break
     except Exception:
         return []
     return refs
+
+
+def is_codex_elegantbook_root_manifest(object_name: str) -> bool:
+    parts = clean_path(object_name).split("/")
+    prefix_parts = clean_path(ELEGANTBOOK_PREFIX).strip("/").split("/")
+    return len(parts) == len(prefix_parts) + 4 and parts[: len(prefix_parts)] == prefix_parts and parts[-1] == "manifest.json"
 
 
 def legacy_latex_manifest_ref(material: Material) -> ObjectRef | None:
@@ -141,10 +151,11 @@ def infer_ids(object_name: str, manifest: dict[str, Any], material: Material) ->
 
 def classify_output(ref: ObjectRef, manifest: dict[str, Any]) -> str:
     text = json.dumps(manifest, ensure_ascii=False).lower()
-    bucket = ref.bucket.lower()
     object_name = ref.object.lower()
-    if "legacy_selfloop" in text or bucket == LEGACY_LATEX_BUCKET.lower() or object_name.startswith("latex/"):
+    if "legacy_selfloop" in text or object_name.startswith("latex/"):
         return "legacy_selfloop"
+    if "codex_skill" in text or object_name.startswith("codex-elegantbook/"):
+        return "codex_skill"
     if "refine-elegantbook-latex" in text or "latex_polish_report" in text or "editorial_decisions" in text:
         return "codex_refined"
     return "codex_elegantbook"
@@ -153,6 +164,7 @@ def classify_output(ref: ObjectRef, manifest: dict[str, Any]) -> str:
 def output_priority(output: ElegantBookOutput) -> tuple[int, str, str]:
     origin_priority = {
         "codex_refined": 30,
+        "codex_skill": 25,
         "codex_elegantbook": 20,
         "legacy_selfloop": 10,
     }.get(output.origin, 0)

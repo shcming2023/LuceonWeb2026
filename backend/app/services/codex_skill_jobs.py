@@ -1,0 +1,680 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import mimetypes
+import os
+import subprocess
+from datetime import datetime
+from io import BytesIO
+from pathlib import Path
+from typing import Any
+
+from sqlalchemy import or_
+from sqlalchemy.orm import Session
+
+from app.models.material import CodexSkillJob, Material
+from app.services.codex_elegantbook import output_from_ref
+from app.services.luceon_review import ObjectRef, clean_path, minio_client, read_object
+from app.services.material_outputs import promote_material_output, register_elegantbook_output
+
+
+DEFAULT_SKILL_NAME = "luceon-popo-to-refined-elegantbook"
+DEFAULT_SKILL_VERSION = "draft"
+DEFAULT_STAGING_ROOT = Path("/data/codex-skill-work")
+DEFAULT_PUBLISH_BUCKET = os.getenv("LUCEON_CODEX_PUBLISH_BUCKET", "eduassets-elegantbook")
+DEFAULT_PUBLISH_PREFIX = clean_path(os.getenv("LUCEON_CODEX_PUBLISH_PREFIX", "elegantbook")).rstrip("/")
+DEFAULT_CODEX_BIN = os.getenv("LUCEON_CODEX_BIN", "codex")
+ACTIVE_STATUSES = {"queued", "running", "dry_run_succeeded", "validating"}
+RETRYABLE_STATUSES = {"failed", "cancelled", "dry_run_succeeded"}
+
+
+class CodexSkillJobError(Exception):
+    pass
+
+
+def create_codex_skill_job(
+    db: Session,
+    user_id: str,
+    material: Material,
+    *,
+    mode: str = "new_pdf",
+    requested_skill: str = DEFAULT_SKILL_NAME,
+    skill_version: str = DEFAULT_SKILL_VERSION,
+    force: bool = False,
+    payload: dict[str, Any] | None = None,
+) -> CodexSkillJob:
+    if not material.material_id:
+        raise CodexSkillJobError("材料缺少 material_id")
+    if not material.popo_manifest_bucket or not material.popo_manifest_object:
+        raise CodexSkillJobError("材料尚无 Popo manifest，不能创建 Codex 精修任务")
+
+    idempotency_key = _idempotency_key(user_id, material, mode, requested_skill, skill_version)
+    existing = (
+        db.query(CodexSkillJob)
+        .filter(CodexSkillJob.user_id == user_id, CodexSkillJob.idempotency_key == idempotency_key)
+        .order_by(CodexSkillJob.id.desc())
+        .first()
+    )
+    if existing and not force:
+        return existing
+    if existing and force and existing.status in ACTIVE_STATUSES:
+        raise CodexSkillJobError("已有活跃 Codex 精修任务，不能强制重复创建")
+
+    job = CodexSkillJob(
+        user_id=user_id,
+        material_pk=material.id,
+        material_id=material.material_id,
+        review_asset_id=material.review_asset_id,
+        mode=mode,
+        status="queued",
+        requested_skill=requested_skill,
+        skill_version=skill_version,
+        idempotency_key=idempotency_key if not force else f"{idempotency_key}:{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}",
+        source_popo_manifest_bucket=material.popo_manifest_bucket,
+        source_popo_manifest_object=material.popo_manifest_object,
+        baseline_manifest_bucket=material.latex_manifest_bucket,
+        baseline_manifest_object=material.latex_manifest_object,
+        attempt_count=(existing.attempt_count + 1) if existing else 0,
+        payload_json=json.dumps(payload or {}, ensure_ascii=False),
+    )
+    db.add(job)
+    db.flush()
+    return job
+
+
+def list_codex_skill_jobs(db: Session, user_id: str, material: Material | None = None) -> list[CodexSkillJob]:
+    query = db.query(CodexSkillJob).filter(CodexSkillJob.user_id == user_id)
+    if material:
+        query = query.filter(CodexSkillJob.material_id == (material.material_id or ""))
+    return query.order_by(CodexSkillJob.created_at.desc(), CodexSkillJob.id.desc()).all()
+
+
+def latest_codex_skill_job_for_material(db: Session, user_id: str, material: Material) -> CodexSkillJob | None:
+    return (
+        db.query(CodexSkillJob)
+        .filter(CodexSkillJob.user_id == user_id, CodexSkillJob.material_id == (material.material_id or ""))
+        .order_by(CodexSkillJob.created_at.desc(), CodexSkillJob.id.desc())
+        .first()
+    )
+
+
+def enqueue_new_pdf_codex_jobs(db: Session, user_id: str, *, limit: int | None = None) -> dict[str, int]:
+    query = (
+        db.query(Material)
+        .filter(
+            Material.user_id == user_id,
+            Material.ignored.is_(False),
+            Material.popo_manifest_object.isnot(None),
+            Material.latex_manifest_object.is_(None),
+        )
+        .order_by(Material.last_synced_at.desc(), Material.id.desc())
+    )
+    if limit:
+        query = query.limit(limit)
+    return _enqueue_materials(db, user_id, query.all(), mode="new_pdf")
+
+
+def enqueue_legacy_refresh_codex_jobs(
+    db: Session,
+    user_id: str,
+    *,
+    limit: int = 10,
+    material_ids: list[str] | None = None,
+) -> dict[str, int]:
+    query = (
+        db.query(Material)
+        .filter(
+            Material.user_id == user_id,
+            Material.ignored.is_(False),
+            Material.popo_manifest_object.isnot(None),
+            Material.latex_manifest_object.isnot(None),
+            or_(Material.latex_manifest_bucket == "eduassets-latex", Material.latex_manifest_object.like("latex/%")),
+        )
+        .order_by(Material.last_synced_at.desc(), Material.id.desc())
+    )
+    cleaned_ids = [value.strip() for value in material_ids or [] if value.strip()]
+    if cleaned_ids:
+        query = query.filter(Material.material_id.in_(cleaned_ids))
+    else:
+        query = query.limit(max(1, min(int(limit or 10), 200)))
+    return _enqueue_materials(db, user_id, query.all(), mode="refresh_legacy")
+
+
+def get_codex_skill_job(db: Session, user_id: str, job_id: int) -> CodexSkillJob | None:
+    return db.query(CodexSkillJob).filter(CodexSkillJob.id == job_id, CodexSkillJob.user_id == user_id).first()
+
+
+def cancel_codex_skill_job(job: CodexSkillJob) -> CodexSkillJob:
+    if job.status not in {"queued", "running", "dry_run_succeeded"}:
+        raise CodexSkillJobError("当前状态不能取消")
+    job.status = "cancelled"
+    job.finished_at = datetime.utcnow()
+    return job
+
+
+def retry_codex_skill_job(job: CodexSkillJob) -> CodexSkillJob:
+    if job.status not in RETRYABLE_STATUSES:
+        raise CodexSkillJobError("当前状态不能重试")
+    job.status = "queued"
+    job.error_message = ""
+    job.started_at = None
+    job.finished_at = None
+    job.result_json = None
+    job.staging_dir = None
+    job.output_manifest_bucket = None
+    job.output_manifest_object = None
+    job.attempt_count = int(job.attempt_count or 0) + 1
+    return job
+
+
+def run_dry_run_job(db: Session, job: CodexSkillJob, *, staging_root: Path = DEFAULT_STAGING_ROOT) -> CodexSkillJob:
+    if job.status not in {"queued", "running"}:
+        raise CodexSkillJobError("只有 queued/running 任务可以 dry-run")
+    job.status = "running"
+    job.started_at = job.started_at or datetime.utcnow()
+    db.flush()
+
+    staging_dir = staging_root / f"job-{job.id}"
+    staging_dir.mkdir(parents=True, exist_ok=True)
+    prompt_path = staging_dir / "codex_prompt.md"
+    manifest_path = staging_dir / "dry_run_manifest.json"
+    report_path = staging_dir / "dry_run_report.json"
+
+    prompt_path.write_text(_dry_run_prompt(job), encoding="utf-8")
+    manifest = {
+        "schema": "luceon-codex-skill-dry-run/v1",
+        "job_id": str(job.id),
+        "material_id": job.material_id,
+        "mode": job.mode,
+        "requested_skill": job.requested_skill,
+        "skill_version": job.skill_version,
+        "source_popo_manifest": job._ref(job.source_popo_manifest_bucket, job.source_popo_manifest_object),
+        "baseline_manifest": job._ref(job.baseline_manifest_bucket, job.baseline_manifest_object),
+        "published": False,
+        "created_at": datetime.utcnow().isoformat(),
+        "objects": {
+            "prompt": str(prompt_path),
+            "dry_run_report": str(report_path),
+        },
+    }
+    report = {
+        "status": "dry_run_succeeded",
+        "published": False,
+        "staging_dir": str(staging_dir),
+        "next_step": "Run live Codex skill execution, validate output, then publish to MinIO.",
+    }
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    job.status = "dry_run_succeeded"
+    job.staging_dir = str(staging_dir)
+    job.result_json = json.dumps({"manifest": str(manifest_path), **report}, ensure_ascii=False)
+    job.finished_at = datetime.utcnow()
+    return job
+
+
+def run_codex_skill_job(
+    db: Session,
+    job: CodexSkillJob,
+    *,
+    staging_root: Path = DEFAULT_STAGING_ROOT,
+    codex_bin: str = DEFAULT_CODEX_BIN,
+    timeout: int | None = None,
+) -> CodexSkillJob:
+    if job.status not in {"queued", "running", "dry_run_succeeded"}:
+        raise CodexSkillJobError("只有 queued/running/dry-run 任务可以执行 Codex")
+    material = _job_material(db, job)
+    if not material:
+        raise CodexSkillJobError("任务对应材料不存在")
+    job.status = "running"
+    job.started_at = job.started_at or datetime.utcnow()
+    staging_dir = Path(job.staging_dir or staging_root / f"job-{job.id}")
+    staging_dir.mkdir(parents=True, exist_ok=True)
+    job.staging_dir = str(staging_dir)
+    input_paths = materialize_job_inputs(job, material, staging_dir)
+    prompt_path = staging_dir / "codex_exec_prompt.md"
+    stdout_path = staging_dir / "codex_exec_stdout.jsonl"
+    final_path = staging_dir / "codex_exec_final.md"
+    prompt_path.write_text(_codex_exec_prompt(job, material, staging_dir, input_paths), encoding="utf-8")
+    db.flush()
+
+    command = [
+        codex_bin,
+        "exec",
+        "--json",
+        "--dangerously-bypass-approvals-and-sandbox",
+        "--cd",
+        str(staging_dir),
+        "-o",
+        str(final_path),
+        "-",
+    ]
+    try:
+        completed = subprocess.run(
+            command,
+            input=prompt_path.read_text(encoding="utf-8"),
+            text=True,
+            capture_output=True,
+            timeout=timeout,
+        )
+    except FileNotFoundError as exc:
+        job.status = "failed"
+        job.error_message = f"Codex CLI 不存在: {codex_bin}"
+        job.finished_at = datetime.utcnow()
+        raise CodexSkillJobError(job.error_message) from exc
+    except subprocess.TimeoutExpired as exc:
+        job.status = "failed"
+        job.error_message = "Codex CLI 执行超时"
+        job.result_json = json.dumps({"stdout": str(stdout_path), "stderr": str(staging_dir / "codex_exec_stderr.log"), "staging_dir": str(staging_dir)}, ensure_ascii=False)
+        job.finished_at = datetime.utcnow()
+        raise CodexSkillJobError(job.error_message) from exc
+    except KeyboardInterrupt:
+        job.status = "failed"
+        job.error_message = "Codex CLI 执行被中断"
+        job.result_json = json.dumps({"stdout": str(stdout_path), "stderr": str(staging_dir / "codex_exec_stderr.log"), "staging_dir": str(staging_dir)}, ensure_ascii=False)
+        job.finished_at = datetime.utcnow()
+        raise CodexSkillJobError(job.error_message)
+    stdout_path.write_text(completed.stdout or "", encoding="utf-8")
+    (staging_dir / "codex_exec_stderr.log").write_text(completed.stderr or "", encoding="utf-8")
+    if completed.returncode != 0:
+        job.status = "failed"
+        job.error_message = f"Codex CLI 执行失败: {completed.returncode}"
+        job.result_json = json.dumps({"codex_returncode": completed.returncode, "stdout": str(stdout_path), "stderr": str(staging_dir / "codex_exec_stderr.log")}, ensure_ascii=False)
+        job.finished_at = datetime.utcnow()
+        raise CodexSkillJobError(job.error_message)
+    job.status = "dry_run_succeeded"
+    job.result_json = json.dumps(
+        {
+            **job.result(),
+            "codex_returncode": completed.returncode,
+            "codex_stdout": str(stdout_path),
+            "codex_final": str(final_path),
+            "staging_dir": str(staging_dir),
+        },
+        ensure_ascii=False,
+    )
+    job.finished_at = datetime.utcnow()
+    return job
+
+
+def publish_staging_job(
+    db: Session,
+    job: CodexSkillJob,
+    *,
+    target_bucket: str = DEFAULT_PUBLISH_BUCKET,
+    target_prefix: str = DEFAULT_PUBLISH_PREFIX,
+    promote: bool = True,
+) -> CodexSkillJob:
+    if job.status not in {"dry_run_succeeded", "validating"}:
+        raise CodexSkillJobError("只有 dry-run 通过的任务可以发布")
+    material = _job_material(db, job)
+    if not material:
+        raise CodexSkillJobError("任务对应材料不存在")
+    staging_dir = Path(job.staging_dir or "")
+    if not staging_dir.exists() or not staging_dir.is_dir():
+        raise CodexSkillJobError("staging 目录不存在")
+
+    compiled_pdf = _first_existing(staging_dir, ["compiled.pdf", "main.pdf", "output.pdf"])
+    package_zip = _first_existing(staging_dir, ["refined-overleaf.zip", "latex-project.zip", "package.zip"])
+    if not compiled_pdf or not package_zip:
+        job.status = "failed"
+        job.error_message = "staging 缺少 compiled PDF 或 LaTeX ZIP，不能发布"
+        job.finished_at = datetime.utcnow()
+        raise CodexSkillJobError(job.error_message)
+    if not _has_magic(compiled_pdf, b"%PDF"):
+        job.status = "failed"
+        job.error_message = "compiled PDF 文件头无效，不能发布"
+        job.finished_at = datetime.utcnow()
+        raise CodexSkillJobError(job.error_message)
+    if not _has_magic(package_zip, b"PK"):
+        job.status = "failed"
+        job.error_message = "LaTeX ZIP 文件头无效，不能发布"
+        job.finished_at = datetime.utcnow()
+        raise CodexSkillJobError(job.error_message)
+    final_review = _read_json_file(staging_dir / "final_review_report.json")
+    compile_report = _read_json_file(staging_dir / "compile_report.json")
+    qa = final_review.get("qa") if isinstance(final_review.get("qa"), dict) else {}
+    qa_status = str(qa.get("status") or final_review.get("status") or "needs_fix")
+    quality_status = "passed" if qa_status == "passed" else "needs_fix"
+
+    job.status = "validating"
+    db.flush()
+    run_id = f"codex-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}-job-{job.id}-attempt-{int(job.attempt_count or 0)}"
+    prefix = clean_path(f"{target_prefix}/{job.material_id}/{material.popo_run_id or 'popo'}/{run_id}")
+    files = _publishable_files(staging_dir)
+    object_map: dict[str, str] = {}
+    _ensure_bucket(target_bucket)
+    for path in files:
+        object_name = clean_path(f"{prefix}/{path.relative_to(staging_dir).as_posix()}")
+        _put_file(target_bucket, object_name, path)
+        object_map[path.name] = path.relative_to(staging_dir).as_posix()
+
+    manifest = _published_manifest(job, material, run_id, object_map, compiled_pdf, package_zip, final_review, compile_report)
+    manifest_object = clean_path(f"{prefix}/manifest.json")
+    _put_bytes(target_bucket, manifest_object, json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8"), "application/json")
+    output = output_from_ref(ObjectRef(target_bucket, manifest_object), material, manifest)
+    if not output:
+        job.status = "failed"
+        job.error_message = "发布 manifest 后无法解析输出"
+        job.finished_at = datetime.utcnow()
+        raise CodexSkillJobError(job.error_message)
+
+    row = register_elegantbook_output(db, job.user_id, material, output, status="published", quality_status=quality_status)
+    row.codex_job_id = job.id
+    promoted = bool(promote and quality_status == "passed")
+    if promoted:
+        promote_material_output(db, row, material)
+    db.flush()
+    job.status = "published"
+    job.output_manifest_bucket = target_bucket
+    job.output_manifest_object = manifest_object
+    job.result_json = json.dumps(
+        {
+            **job.result(),
+            "published": True,
+            "promoted": promoted,
+            "quality_status": quality_status,
+            "manifest": {"bucket": target_bucket, "object": manifest_object},
+            "material_output_id": str(row.id),
+        },
+        ensure_ascii=False,
+    )
+    job.finished_at = datetime.utcnow()
+    return job
+
+
+def _idempotency_key(user_id: str, material: Material, mode: str, requested_skill: str, skill_version: str) -> str:
+    raw = "|".join(
+        [
+            user_id,
+            material.material_id or "",
+            material.popo_manifest_bucket or "",
+            material.popo_manifest_object or "",
+            mode,
+            requested_skill,
+            skill_version,
+        ]
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _enqueue_materials(db: Session, user_id: str, materials: list[Material], *, mode: str) -> dict[str, int]:
+    created = 0
+    existing = 0
+    failed = 0
+    for material in materials:
+        before = (
+            db.query(CodexSkillJob)
+            .filter(
+                CodexSkillJob.user_id == user_id,
+                CodexSkillJob.material_id == (material.material_id or ""),
+                CodexSkillJob.mode == mode,
+                CodexSkillJob.requested_skill == DEFAULT_SKILL_NAME,
+                CodexSkillJob.skill_version == DEFAULT_SKILL_VERSION,
+            )
+            .count()
+        )
+        try:
+            create_codex_skill_job(db, user_id, material, mode=mode)
+            after = (
+                db.query(CodexSkillJob)
+                .filter(
+                    CodexSkillJob.user_id == user_id,
+                    CodexSkillJob.material_id == (material.material_id or ""),
+                    CodexSkillJob.mode == mode,
+                    CodexSkillJob.requested_skill == DEFAULT_SKILL_NAME,
+                    CodexSkillJob.skill_version == DEFAULT_SKILL_VERSION,
+                )
+                .count()
+            )
+            if after > before:
+                created += 1
+            else:
+                existing += 1
+        except CodexSkillJobError:
+            failed += 1
+    db.flush()
+    return {"selected": len(materials), "created": created, "existing": existing, "failed": failed}
+
+
+def _dry_run_prompt(job: CodexSkillJob) -> str:
+    return "\n".join(
+        [
+            f"# Codex Skill Dry Run: job {job.id}",
+            "",
+            f"- material_id: {job.material_id}",
+            f"- mode: {job.mode}",
+            f"- skill: {job.requested_skill}",
+            f"- skill_version: {job.skill_version}",
+            f"- source_popo_manifest: {job.source_popo_manifest_bucket}/{job.source_popo_manifest_object}",
+            f"- baseline_manifest: {job.baseline_manifest_bucket or ''}/{job.baseline_manifest_object or ''}",
+            "",
+            "Dry-run only. Do not publish to MinIO from this staging directory.",
+        ]
+    )
+
+
+def materialize_job_inputs(job: CodexSkillJob, material: Material, staging_dir: Path) -> dict[str, str]:
+    inputs_dir = staging_dir / "inputs"
+    inputs_dir.mkdir(parents=True, exist_ok=True)
+    rows: dict[str, str] = {}
+    popo_manifest = _materialize_manifest_with_objects(
+        job.source_popo_manifest_bucket,
+        job.source_popo_manifest_object,
+        inputs_dir / "popo",
+        keys=("document_tree", "document_tree_txt", "popo_raw", "label_normalization", "inference", "full_tree"),
+    )
+    rows.update({f"popo_{key}": value for key, value in popo_manifest.items()})
+    legacy_manifest = _materialize_manifest_with_objects(
+        job.baseline_manifest_bucket,
+        job.baseline_manifest_object,
+        inputs_dir / "legacy",
+        keys=("compiled_pdf", "package_zip", "main_tex", "main_fallback_tex", "compile_report", "final_review_report_json", "clean_markdown", "run_state"),
+    )
+    rows.update({f"legacy_{key}": value for key, value in legacy_manifest.items()})
+    if material.input_bucket and material.input_object:
+        path = _download_ref(material.input_bucket, material.input_object, inputs_dir / "source" / Path(material.input_object).name)
+        if path:
+            rows["source_pdf"] = str(path)
+    return rows
+
+
+def _materialize_manifest_with_objects(bucket: str | None, object_name: str | None, output_dir: Path, keys: tuple[str, ...]) -> dict[str, str]:
+    rows: dict[str, str] = {}
+    if not bucket or not object_name:
+        return rows
+    manifest_path = _download_ref(bucket, object_name, output_dir / "manifest.json")
+    if manifest_path:
+        rows["manifest"] = str(manifest_path)
+    manifest = _read_json_file(manifest_path) if manifest_path else {}
+    objects = manifest.get("objects") if isinstance(manifest.get("objects"), dict) else {}
+    for key in keys:
+        ref = _object_value_ref(bucket, object_name, objects.get(key))
+        if not ref:
+            continue
+        suffix = Path(ref.object).suffix
+        local_name = f"{key}{suffix}" if suffix else key
+        local_path = _download_ref(ref.bucket, ref.object, output_dir / local_name)
+        if local_path:
+            rows[key] = str(local_path)
+    return rows
+
+
+def _object_value_ref(default_bucket: str, manifest_object: str, value: Any) -> ObjectRef | None:
+    bucket = default_bucket
+    raw = ""
+    if isinstance(value, dict):
+        bucket = str(value.get("bucket") or default_bucket)
+        raw = clean_path(value.get("object") or value.get("key") or value.get("path"))
+    elif isinstance(value, str):
+        raw = clean_path(value)
+    if not raw or raw.endswith("/"):
+        return None
+    if "/" not in raw:
+        prefix = manifest_object.rsplit("/", 1)[0] + "/" if "/" in manifest_object else ""
+        raw = clean_path(f"{prefix}{raw}")
+    return ObjectRef(bucket, raw)
+
+
+def _download_ref(bucket: str, object_name: str, path: Path) -> Path | None:
+    try:
+        data = read_object(bucket, object_name)
+    except Exception:
+        return None
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    return path
+
+
+def _codex_exec_prompt(job: CodexSkillJob, material: Material, staging_dir: Path, input_paths: dict[str, str]) -> str:
+    input_lines = [f"- {key}: {value}" for key, value in sorted(input_paths.items())]
+    return "\n".join(
+        [
+            "Use $luceon-popo-to-refined-elegantbook in produce-selected mode.",
+            "",
+            "You are producing artifacts for LuceonWeb. Write all local outputs directly into this staging directory:",
+            str(staging_dir),
+            "",
+            "Required successful local outputs before you finish:",
+            "- compiled.pdf",
+            "- refined-overleaf.zip",
+            "- main.tex",
+            "- main-fallback.tex",
+            "- compile_report.json",
+            "- latex_polish_report.md",
+            "- latex_polish_report.json",
+            "- final_review_report.md",
+            "- final_review_report.json",
+            "- render_review.md",
+            "- render_review.json",
+            "- decision_log.json",
+            "- model_calls.jsonl",
+            "- run_state.json",
+            "- source_trace.json",
+            "",
+            "Finish rule: once a valid PDF and ZIP exist in a work subdirectory, copy them to the staging root as compiled.pdf and refined-overleaf.zip, write the required root reports, then stop. Do not continue open-ended polishing after root deliverables are complete.",
+            "If the refined package cannot be fully improved within this run, use the best valid compiled PDF/ZIP as the candidate, set qa.status=needs_fix, record the reason, and finish.",
+            "",
+            "Do not publish to MinIO. Do not edit the LuceonWeb repo. Do not overwrite legacy outputs.",
+            "Use the local input files below. Do not search the whole filesystem for this material.",
+            *input_lines,
+            "If you cannot produce a valid compiled PDF and Overleaf ZIP, write run_state.json and final_review_report.json with qa.status=blocked and explain why.",
+            "",
+            f"material_pk: {material.id}",
+            f"material_id: {job.material_id}",
+            f"popo_run_id: {material.popo_run_id or ''}",
+            f"source_popo_manifest: {job.source_popo_manifest_bucket}/{job.source_popo_manifest_object}",
+            f"legacy_baseline_manifest: {job.baseline_manifest_bucket or ''}/{job.baseline_manifest_object or ''}",
+        ]
+    )
+
+
+def _job_material(db: Session, job: CodexSkillJob) -> Material | None:
+    query = db.query(Material).filter(Material.user_id == job.user_id)
+    if job.material_pk:
+        material = query.filter(Material.id == job.material_pk).first()
+        if material:
+            return material
+    return query.filter(Material.material_id == job.material_id).order_by(Material.id.desc()).first()
+
+
+def _first_existing(root: Path, names: list[str]) -> Path | None:
+    for name in names:
+        path = root / name
+        if path.exists() and path.is_file():
+            return path
+    return None
+
+
+def _has_magic(path: Path, magic: bytes) -> bool:
+    try:
+        with path.open("rb") as stream:
+            return stream.read(len(magic)) == magic
+    except OSError:
+        return False
+
+
+def _read_json_file(path: Path) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _publishable_files(root: Path) -> list[Path]:
+    allowed_suffixes = {".pdf", ".zip", ".json", ".md", ".tex", ".sty", ".cls", ".bib", ".png", ".jpg", ".jpeg"}
+    rows: list[Path] = []
+    for path in root.rglob("*"):
+        if path.is_file() and path.suffix.lower() in allowed_suffixes:
+            rows.append(path)
+    return sorted(rows)
+
+
+def _ensure_bucket(bucket: str) -> None:
+    try:
+        exists = minio_client.bucket_exists(bucket)
+    except Exception:
+        exists = True
+    if not exists:
+        minio_client.make_bucket(bucket)
+
+
+def _put_file(bucket: str, object_name: str, path: Path) -> None:
+    content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    with path.open("rb") as stream:
+        minio_client.put_object(bucket, object_name, stream, length=path.stat().st_size, content_type=content_type)
+
+
+def _put_bytes(bucket: str, object_name: str, data: bytes, content_type: str) -> None:
+    minio_client.put_object(bucket, object_name, BytesIO(data), length=len(data), content_type=content_type)
+
+
+def _published_manifest(
+    job: CodexSkillJob,
+    material: Material,
+    run_id: str,
+    object_map: dict[str, str],
+    compiled_pdf: Path,
+    package_zip: Path,
+    final_review: dict[str, Any],
+    compile_report: dict[str, Any],
+) -> dict[str, Any]:
+    now = datetime.utcnow().isoformat()
+    final_qa = final_review.get("qa") if isinstance(final_review.get("qa"), dict) else {}
+    qa_status = str(final_qa.get("status") or final_review.get("status") or "needs_fix")
+    hard_blockers = final_qa.get("hard_blockers") if isinstance(final_qa.get("hard_blockers"), list) else []
+    review_status = str(final_qa.get("review_status") or qa_status)
+    compile_pages = compile_report.get("pages") if isinstance(compile_report.get("pages"), int) else None
+    compile_engine = str(compile_report.get("engine") or "codex-worker")
+    return {
+        "schema": "luceon-codex-elegantbook/v1",
+        "stage": "elegantbook",
+        "origin": "codex_refined",
+        "material_id": job.material_id,
+        "popo_run_id": material.popo_run_id or "",
+        "codex_run_id": run_id,
+        "job_id": str(job.id),
+        "skill_name": job.requested_skill,
+        "skill_version": job.skill_version,
+        "created_at": now,
+        "updated_at": now,
+        "source": {
+            "input_pdf": job._ref(material.input_bucket, material.input_object),
+            "mineru_manifest": job._ref(material.mineru_manifest_bucket, material.mineru_manifest_object),
+            "popo_manifest": job._ref(job.source_popo_manifest_bucket, job.source_popo_manifest_object),
+            "legacy_latex_manifest": job._ref(job.baseline_manifest_bucket, job.baseline_manifest_object),
+        },
+        "compile": {"status": "succeeded", "engine": compile_engine, "pages": compile_pages},
+        "qa": {"status": qa_status, "hard_blockers": hard_blockers, "review_status": review_status},
+        "stages": [{"skill": job.requested_skill, "status": "passed", "mode": job.mode}],
+        "objects": {
+            "compiled_pdf": object_map.get(compiled_pdf.name, compiled_pdf.name),
+            "refined_overleaf_zip": object_map.get(package_zip.name, package_zip.name),
+            "package_zip": object_map.get(package_zip.name, package_zip.name),
+            "compile_report": object_map.get("compile_report.json", "compile_report.json"),
+            "latex_polish_report": object_map.get("latex_polish_report.md", "latex_polish_report.md"),
+            "run_state": object_map.get("dry_run_report.json", "dry_run_report.json"),
+        },
+    }

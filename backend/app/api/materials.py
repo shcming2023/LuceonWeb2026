@@ -5,7 +5,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
@@ -13,6 +13,16 @@ from app.database import get_db
 from app.models.material import Material, PipelineEvent, PipelineRun
 from app.models.material_metadata import MaterialMetadata
 from app.services.clean_to_standard import CleanToStandardPreflightError, clean_to_standard_preflight, start_clean_to_standard_run
+from app.services.codex_skill_jobs import (
+    CodexSkillJobError,
+    cancel_codex_skill_job,
+    create_codex_skill_job,
+    enqueue_legacy_refresh_codex_jobs,
+    get_codex_skill_job,
+    latest_codex_skill_job_for_material,
+    list_codex_skill_jobs,
+    retry_codex_skill_job,
+)
 from app.services.material_inventory import (
     INPUT_BUCKET,
     PipelinePreflightError,
@@ -100,6 +110,19 @@ class RawToCleanStartRequest(BaseModel):
 class CleanToStandardStartRequest(BaseModel):
     publish: bool = True
     force: bool = False
+
+
+class CodexSkillJobCreateRequest(BaseModel):
+    mode: str = "new_pdf"
+    requested_skill: str = "luceon-popo-to-refined-elegantbook"
+    skill_version: str = "draft"
+    force: bool = False
+    payload: dict = Field(default_factory=dict)
+
+
+class CodexSkillBatchRefreshRequest(BaseModel):
+    limit: int = 10
+    material_ids: list[str] = Field(default_factory=list)
 
 
 class MaterialMetadataUpdateRequest(BaseModel):
@@ -210,6 +233,8 @@ def list_materials(
         dry_run = latest_successful_popo_to_raw_dry_run(db, user_id, row.material_id or "")
         data["raw_dry_run_available"] = bool(dry_run)
         data["raw_dry_run_id"] = str(dry_run.id) if dry_run else ""
+        latest_codex_job = latest_codex_skill_job_for_material(db, user_id, row)
+        data["codex_job"] = latest_codex_job.to_dict() if latest_codex_job else None
         material_rows.append(data)
     return {"total": total, "page": page, "page_size": page_size, "materials": material_rows}
 
@@ -370,6 +395,116 @@ def pipeline_run_artifact(
     )
 
 
+@router.post("/materials/{material_pk}/codex-jobs")
+def create_material_codex_job(
+    material_pk: int,
+    payload: CodexSkillJobCreateRequest,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    material = _material_or_404(material_pk, user_id, db)
+    try:
+        job = create_codex_skill_job(
+            db,
+            user_id,
+            material,
+            mode=payload.mode,
+            requested_skill=payload.requested_skill,
+            skill_version=payload.skill_version,
+            force=payload.force,
+            payload=payload.payload,
+        )
+        db.commit()
+        db.refresh(job)
+    except CodexSkillJobError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc))
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"创建 Codex 精修任务失败: {exc}")
+    return job.to_dict()
+
+
+@router.get("/materials/{material_pk}/codex-jobs")
+def list_material_codex_jobs(
+    material_pk: int,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    material = _material_or_404(material_pk, user_id, db)
+    return {"jobs": [job.to_dict() for job in list_codex_skill_jobs(db, user_id, material)]}
+
+
+@router.post("/materials/codex-jobs/batch-refresh-legacy")
+def create_legacy_refresh_codex_jobs(
+    payload: CodexSkillBatchRefreshRequest,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    try:
+        summary = enqueue_legacy_refresh_codex_jobs(
+            db,
+            user_id,
+            limit=payload.limit,
+            material_ids=payload.material_ids,
+        )
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"创建旧产物刷新队列失败: {exc}")
+    return summary
+
+
+@router.get("/materials/codex-jobs/{job_id}")
+def get_material_codex_job(
+    job_id: int,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    job = get_codex_skill_job(db, user_id, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Codex 精修任务不存在")
+    return job.to_dict()
+
+
+@router.post("/materials/codex-jobs/{job_id}/cancel")
+def cancel_material_codex_job(
+    job_id: int,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    job = get_codex_skill_job(db, user_id, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Codex 精修任务不存在")
+    try:
+        cancel_codex_skill_job(job)
+        db.commit()
+        db.refresh(job)
+    except CodexSkillJobError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc))
+    return job.to_dict()
+
+
+@router.post("/materials/codex-jobs/{job_id}/retry")
+def retry_material_codex_job(
+    job_id: int,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    job = get_codex_skill_job(db, user_id, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Codex 精修任务不存在")
+    try:
+        retry_codex_skill_job(job)
+        db.commit()
+        db.refresh(job)
+    except CodexSkillJobError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc))
+    return job.to_dict()
+
+
 @router.post("/materials/pipeline/preflight")
 def pipeline_preflight(
     payload: PipelinePreflightRequest,
@@ -512,7 +647,11 @@ def material_detail(
     user_id: str = Depends(get_user_id),
     db: Session = Depends(get_db),
 ):
-    return _material_or_404(material_pk, user_id, db).to_dict()
+    material = _material_or_404(material_pk, user_id, db)
+    data = material.to_dict()
+    latest_codex_job = latest_codex_skill_job_for_material(db, user_id, material)
+    data["codex_job"] = latest_codex_job.to_dict() if latest_codex_job else None
+    return data
 
 
 @router.get("/materials/{material_pk}/download_url")

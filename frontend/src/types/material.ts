@@ -16,6 +16,21 @@ export interface ObjectRef {
   object: string
 }
 
+export interface CodexSkillJob {
+  id: string
+  mode: string
+  status: string
+  requested_skill: string
+  skill_version: string
+  attempt_count: number
+  staging_dir: string
+  error_message: string
+  output_manifest: ObjectRef
+  created_at: string | null
+  started_at: string | null
+  finished_at: string | null
+}
+
 export interface MaterialItem {
   id: string
   material_id: string
@@ -44,6 +59,7 @@ export interface MaterialItem {
   clean_available: boolean
   standard_available: boolean
   raw_dry_run_available?: boolean
+  codex_job?: CodexSkillJob | null
   mineru_run_id: string
   popo_run_id: string
   latex_run_id: string

@@ -91,6 +91,7 @@ def make_client(monkeypatch, objects: dict[tuple[str, str], bytes]):
     monkeypatch.setattr("app.services.codex_elegantbook.read_object", fake_read_object)
     monkeypatch.setattr("app.services.codex_elegantbook.object_exists", fake_object_exists)
     monkeypatch.setattr("app.services.codex_elegantbook.minio_client", fake_minio)
+    monkeypatch.setattr("app.services.material_outputs.read_object", fake_read_object)
 
     db = testing_session()
     asset = ReviewAsset(
@@ -213,12 +214,28 @@ def test_compare_prefers_codex_refined_elegantbook_output(monkeypatch):
     body = response.json()
     assert body["output_origin"] == "codex_refined"
     assert body["output_run_id"] == "codex-001"
+    assert body["output_id"]
+    assert len(body["available_outputs"]) == 2
     assert body["manifest"]["bucket"] == "eduassets-elegantbook"
-    assert body["download_urls"]["package_zip"].endswith("stage=elegantbook&path=refined-overleaf.zip")
+    assert "stage=elegantbook&path=refined-overleaf.zip" in body["download_urls"]["package_zip"]
+    assert "output_id=" in body["download_urls"]["package_zip"]
 
     artifact = client.get(f"/api/review/assets/{asset_id}/artifact", params={"stage": "elegantbook", "path": "compiled.pdf"})
     assert artifact.status_code == 200
     assert artifact.content == b"%PDF-codex\n"
+
+    legacy_output_id = next(row["id"] for row in body["available_outputs"] if row["origin"] == "legacy_selfloop")
+    legacy_response = client.get(f"/api/review/assets/{asset_id}/latex_compare", params={"output_id": legacy_output_id})
+    assert legacy_response.status_code == 200
+    legacy_body = legacy_response.json()
+    assert legacy_body["output_origin"] == "legacy_selfloop"
+    assert f"output_id={legacy_output_id}" in legacy_body["latex_pdf_url"]
+    legacy_artifact = client.get(
+        f"/api/review/assets/{asset_id}/artifact",
+        params={"stage": "elegantbook", "path": "compiled.pdf", "output_id": legacy_output_id},
+    )
+    assert legacy_artifact.status_code == 200
+    assert legacy_artifact.content == b"%PDF-legacy\n"
 
 
 def test_internal_latex_execution_and_workspace_routes_are_gone(monkeypatch):

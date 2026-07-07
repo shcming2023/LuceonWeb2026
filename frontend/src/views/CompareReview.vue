@@ -21,7 +21,7 @@
         filterable
         placeholder="选择已有 ElegantBook 输出的材料"
         class="asset-select"
-        @change="loadSelectedCompare"
+        @change="handleAssetChange"
       >
         <el-option
           v-for="row in assets"
@@ -49,6 +49,21 @@
         <el-tag size="small" :type="outputOriginTagType">{{ outputOriginLabel }}</el-tag>
         <el-tag v-if="compileStatus" size="small" :type="compileTagType">{{ compileStatus }}</el-tag>
       </div>
+      <el-select
+        v-if="availableOutputs.length > 1"
+        v-model="selectedOutputId"
+        size="small"
+        class="output-select"
+        placeholder="输出版本"
+        @change="loadSelectedCompare"
+      >
+        <el-option
+          v-for="row in availableOutputs"
+          :key="outputOptionValue(row)"
+          :label="outputOptionLabel(row)"
+          :value="outputOptionValue(row)"
+        />
+      </el-select>
       <div class="download-actions">
         <el-button v-if="downloadUrls.package_zip" type="primary" :icon="Download" @click="openUrl(downloadUrls.package_zip)">
           {{ zipButtonText }}
@@ -111,6 +126,7 @@ const pageSize = ref(20)
 const search = ref('')
 const loading = ref(false)
 const selectedAssetId = ref('')
+const selectedOutputId = ref('')
 const compare = ref<LatexCompareResponse | null>(null)
 const compareError = ref('')
 const sourceActivePage = ref(1)
@@ -120,6 +136,7 @@ const selectedAsset = computed(() => assets.value.find(row => row.id === selecte
 const sourcePdfUrl = computed(() => compare.value?.source_pdf_url || (selectedAssetId.value ? reviewApi.getContentUrl(selectedAssetId.value) : ''))
 const latexPdfUrl = computed(() => compare.value?.latex_pdf_url || '')
 const downloadUrls = computed(() => compare.value?.download_urls || {})
+const availableOutputs = computed(() => compare.value?.available_outputs || [])
 const outputOrigin = computed(() => String(compare.value?.output_origin || 'legacy_selfloop'))
 const outputOriginLabel = computed(() => {
   if (outputOrigin.value === 'codex_refined') return 'Codex 精修'
@@ -150,6 +167,16 @@ function displayFilename(row: FileItem) {
   return row.title || row.input_filename || row.filename || row.material_id || `#${row.id}`
 }
 
+function outputOptionValue(row: NonNullable<LatexCompareResponse['available_outputs']>[number]) {
+  return String(row.id || row.manifest?.object || row.output_run_id || '')
+}
+
+function outputOptionLabel(row: NonNullable<LatexCompareResponse['available_outputs']>[number]) {
+  const origin = row.origin === 'codex_refined' ? 'Codex 精修' : row.origin === 'codex_elegantbook' ? 'Codex ElegantBook' : 'Legacy baseline'
+  const suffix = row.is_current ? ' · 当前' : ''
+  return `${origin} · ${row.version_label || row.output_run_id || row.created_at || row.manifest?.object || '未命名'}${suffix}`
+}
+
 function apiUrl(url: string) {
   if (!url) return ''
   if (/^https?:\/\//i.test(url)) return url
@@ -166,6 +193,11 @@ async function refreshCurrent() {
     await loadAssets()
     return
   }
+  await loadSelectedCompare()
+}
+
+async function handleAssetChange() {
+  selectedOutputId.value = ''
   await loadSelectedCompare()
 }
 
@@ -192,11 +224,14 @@ async function loadAssets() {
     assets.value = response.files
     total.value = response.total
     const routeAssetId = typeof route.query.asset_id === 'string' ? route.query.asset_id : ''
+    const routeOutputId = typeof route.query.output_id === 'string' ? route.query.output_id : ''
     if (routeAssetId) {
       selectedAssetId.value = routeAssetId
+      selectedOutputId.value = routeOutputId
       await ensureSelectedAssetVisible(routeAssetId)
     } else if (!selectedAssetId.value || !assets.value.some(row => row.id === selectedAssetId.value)) {
       selectedAssetId.value = assets.value[0]?.id || ''
+      selectedOutputId.value = ''
     }
     await loadSelectedCompare()
   } finally {
@@ -210,9 +245,12 @@ async function loadSelectedCompare() {
   sourceActivePage.value = 1
   latexActivePage.value = 1
   if (!selectedAssetId.value) return
-  void router.replace({ path: '/review/compare', query: { asset_id: selectedAssetId.value } })
+  const query: Record<string, string> = { asset_id: selectedAssetId.value }
+  if (selectedOutputId.value) query.output_id = selectedOutputId.value
+  void router.replace({ path: '/review/compare', query })
   try {
-    compare.value = await reviewApi.getLatexCompare(selectedAssetId.value)
+    compare.value = await reviewApi.getLatexCompare(selectedAssetId.value, selectedOutputId.value)
+    selectedOutputId.value = compare.value.output_id || selectedOutputId.value
   } catch (error: any) {
     compareError.value = error?.response?.data?.detail || error?.message || 'LaTeX 比对信息加载失败'
     ElMessage.error(compareError.value)
@@ -273,6 +311,11 @@ onMounted(loadAssets)
 
 .asset-select {
   width: min(420px, 34vw);
+}
+
+.output-select {
+  width: min(320px, 26vw);
+  flex-shrink: 0;
 }
 
 .selected-strip {
@@ -344,6 +387,10 @@ onMounted(loadAssets)
   }
 
   .asset-select {
+    width: 100%;
+  }
+
+  .output-select {
     width: 100%;
   }
 

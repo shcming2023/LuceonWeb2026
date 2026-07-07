@@ -540,10 +540,24 @@ function rowStageNote(row: MaterialItem) {
   if (row.pipeline_status === 'running') return '任务运行中'
   if (row.pipeline_status === 'queued') return '任务排队中'
   if (hasLatexAsset(row)) return '可进行 PDF 比对'
+  if (row.codex_job) return codexJobStatusText(row.codex_job.status)
   if (hasPopoAsset(row)) return '等待 Codex 精修输出'
   if (hasMineruAsset(row)) return '等待 Popo 或继续 GPU 解析'
   if (row.input_object) return '等待上游解析'
   return '缺少源 PDF'
+}
+
+function codexJobStatusText(status: string) {
+  const map: Record<string, string> = {
+    queued: 'Codex 精修排队中',
+    running: 'Codex 精修运行中',
+    dry_run_succeeded: 'Codex dry-run 已完成',
+    validating: 'Codex 输出验证中',
+    published: 'Codex 输出已发布',
+    failed: 'Codex 精修失败',
+    cancelled: 'Codex 精修已取消'
+  }
+  return map[status] || `Codex ${status || '未知状态'}`
 }
 
 const stageOptions = [
@@ -1089,8 +1103,9 @@ function primaryAction(row: MaterialItem): PrimaryRowAction {
     }
   }
   if (hasPopoAsset(row)) {
+    const codexStatus = row.codex_job?.status || ''
     return {
-      label: '等待 Codex 输出',
+      label: codexStatus ? codexJobStatusText(codexStatus) : '等待 Codex 输出',
       command: null,
       enabled: false,
       type: 'info',

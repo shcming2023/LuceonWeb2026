@@ -13,8 +13,9 @@ from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
-from app.models.material import Material, PipelineEvent, PipelineRun
+from app.models.material import Material, MaterialOutput, PipelineEvent, PipelineRun
 from app.models.review_asset import ReviewAsset
+from app.services.codex_skill_jobs import enqueue_new_pdf_codex_jobs
 from app.services.codex_elegantbook import (
     ELEGANTBOOK_BUCKET,
     list_all_codex_elegantbook_manifest_refs,
@@ -30,6 +31,7 @@ from app.services.luceon_review import (
     read_object,
     resolve_manifest,
 )
+from app.services.material_outputs import sync_material_outputs_for_material
 from app.services.runtime_settings import pipeline_env
 
 
@@ -505,6 +507,16 @@ def sync_material_inventory(db: Session, user_id: str, limit: int | None = None)
         partial = sync_step()
         summary.update(partial)
         db.flush()
+    output_query = (
+        db.query(Material)
+        .filter(Material.user_id == user_id, Material.material_id.isnot(None))
+        .order_by(Material.last_synced_at.desc(), Material.id.desc())
+    )
+    if limit:
+        output_query = output_query.limit(limit)
+    for material in output_query.all():
+        sync_material_outputs_for_material(db, user_id, material)
+    summary["material_outputs"] = db.query(MaterialOutput).filter(MaterialOutput.user_id == user_id).count()
     total = db.query(Material).filter(Material.user_id == user_id).count()
     stages = {
         stage: db.query(Material).filter(Material.user_id == user_id, Material.stage_status == stage).count()
@@ -782,6 +794,8 @@ def run_pipeline_subprocess(
             run.current_stage = "finished"
             create_pipeline_event(db, run, "解析任务执行完成", stage="finished", payload={"returncode": completed.returncode})
             sync_material_inventory(db, run.user_id)
+            codex_queue = enqueue_new_pdf_codex_jobs(db, run.user_id, limit=limit)
+            create_pipeline_event(db, run, "已为新 Popo 产物创建 Codex 精修队列", stage="codex_queued", payload=codex_queue)
         else:
             run.status = "failed"
             run.current_stage = "failed"
