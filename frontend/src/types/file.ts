@@ -31,6 +31,9 @@ export interface FileItem {
   mineru_task_id?: string | null
   mineru_task_status?: string | null
   title?: string
+  material_id?: string
+  run_id?: string
+  material_stage?: string
   input_filename?: string
   review_stage?: 'parse' | 'raw' | 'clean' | string
   review_status?: 'pending' | 'pass' | 'needs_fix' | 'reject' | string
@@ -38,6 +41,11 @@ export interface FileItem {
   review_note?: string
   report_generated_at?: string | null
   has_report?: boolean
+  has_latex?: boolean
+  latex_manifest?: {
+    bucket: string
+    object: string
+  }
 }
 
 // 导出格式类型

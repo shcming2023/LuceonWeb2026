@@ -11,6 +11,7 @@ STAGE_ORDER = {
     "input": 10,
     "mineru_done": 20,
     "popo_done": 30,
+    "latex_done": 70,
     "raw_done": 40,
     "clean_stale": 45,
     "clean_done": 50,
@@ -46,6 +47,10 @@ class Material(Base):
     popo_manifest_bucket = Column(String(128), nullable=True)
     popo_manifest_object = Column(String(1024), nullable=True)
     popo_run_id = Column(String(128), nullable=True)
+
+    latex_manifest_bucket = Column(String(128), nullable=True)
+    latex_manifest_object = Column(String(1024), nullable=True)
+    latex_run_id = Column(String(128), nullable=True)
 
     raw_manifest_bucket = Column(String(128), nullable=True)
     raw_manifest_object = Column(String(1024), nullable=True)
@@ -95,16 +100,19 @@ class Material(Base):
             "pipeline_status": self.pipeline_status or "idle",
             "mineru_manifest": self._ref(self.mineru_manifest_bucket, self.mineru_manifest_object),
             "popo_manifest": self._ref(self.popo_manifest_bucket, self.popo_manifest_object),
+            "latex_manifest": self._ref(self.latex_manifest_bucket, self.latex_manifest_object),
             "raw_manifest": self._ref(self.raw_manifest_bucket, self.raw_manifest_object),
             "clean_manifest": self._ref(self.clean_manifest_bucket, self.clean_manifest_object),
             "standard_manifest": self._ref(self.standard_manifest_bucket, self.standard_manifest_object),
             "mineru_available": mineru_available,
             "popo_available": bool(self.popo_manifest_bucket and self.popo_manifest_object),
+            "latex_available": bool(self.latex_manifest_bucket and self.latex_manifest_object),
             "raw_available": bool(self.raw_manifest_bucket and self.raw_manifest_object),
             "clean_available": bool(self.clean_manifest_bucket and self.clean_manifest_object),
             "standard_available": bool(self.standard_manifest_bucket and self.standard_manifest_object),
             "mineru_run_id": self.mineru_run_id or "",
             "popo_run_id": self.popo_run_id or "",
+            "latex_run_id": self.latex_run_id or "",
             "raw_run_id": self.raw_run_id or "",
             "clean_run_id": self.clean_run_id or "",
             "standard_run_id": self.standard_run_id or "",

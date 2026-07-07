@@ -20,6 +20,7 @@ from app.models.final_review import FinalReviewAnnotation, FinalReviewSession
 from app.models.material import Material
 from app.models.review_asset import ReviewAsset
 from app.services import final_review as final_review_service
+from app.services.codex_elegantbook import list_elegantbook_outputs, output_artifact_paths, output_from_ref, select_elegantbook_output
 from app.services.luceon_review import (
     ObjectRef,
     clean_path,
@@ -149,6 +150,51 @@ def _read_ref_range(ref: ObjectRef, offset: int, length: int, missing_detail: st
         if is_missing_object_error(exc):
             raise HTTPException(status_code=404, detail=missing_detail)
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+def _stream_ref(ref: ObjectRef, missing_detail: str):
+    try:
+        response = minio_client.get_object(ref.bucket, ref.object)
+    except Exception as exc:
+        if is_missing_object_error(exc):
+            raise HTTPException(status_code=404, detail=missing_detail)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    def iter_chunks():
+        try:
+            for chunk in response.stream(64 * 1024):
+                if chunk:
+                    yield chunk
+        finally:
+            close = getattr(response, "close", None)
+            if close:
+                close()
+            release_conn = getattr(response, "release_conn", None)
+            if release_conn:
+                release_conn()
+
+    return iter_chunks()
+
+
+def _stream_file(path: Path):
+    def iter_chunks():
+        with path.open("rb") as fh:
+            while True:
+                chunk = fh.read(64 * 1024)
+                if not chunk:
+                    break
+                yield chunk
+
+    return iter_chunks()
+
+
+def _skip_http_compression(media_type: str | None) -> bool:
+    normalized = (media_type or "").split(";", 1)[0].lower()
+    return normalized in {
+        "application/pdf",
+        "application/zip",
+        "application/x-zip-compressed",
+    } or normalized.startswith("image/")
 
 
 def _parse_range_header(range_header: str | None, size: int) -> tuple[int, int] | None:
@@ -293,6 +339,8 @@ def _manifest_ref_from_material(material: Material | None, stage: str) -> Object
         return _ref(material.mineru_manifest_bucket, material.mineru_manifest_object)
     if stage in {"popo", "minerupopo"}:
         return _ref(material.popo_manifest_bucket, material.popo_manifest_object)
+    if stage == "latex":
+        return _ref(material.latex_manifest_bucket, material.latex_manifest_object)
     if stage == "raw":
         return _ref(material.raw_manifest_bucket, material.raw_manifest_object)
     if stage == "clean":
@@ -707,6 +755,7 @@ def _asset_dict_with_material(asset: ReviewAsset, db: Session) -> dict[str, Any]
     row["has_raw"] = bool(material and material.raw_manifest_bucket and material.raw_manifest_object)
     row["has_clean"] = bool(material and material.clean_manifest_bucket and material.clean_manifest_object)
     row["has_standard"] = bool(material and material.standard_manifest_bucket and material.standard_manifest_object)
+    row["has_latex"] = bool(material and material.latex_manifest_bucket and material.latex_manifest_object)
     row["standard_quality_score"] = material.standard_quality_score if material else None
     row["has_raw_dry_run"] = bool(dry_run)
     row["raw_dry_run_id"] = str(dry_run.id) if dry_run else ""
@@ -721,6 +770,10 @@ def _asset_dict_with_material(asset: ReviewAsset, db: Session) -> dict[str, Any]
     row["standard_manifest"] = {
         "bucket": material.standard_manifest_bucket if material else "",
         "object": material.standard_manifest_object if material else "",
+    }
+    row["latex_manifest"] = {
+        "bucket": material.latex_manifest_bucket if material else "",
+        "object": material.latex_manifest_object if material else "",
     }
     return row
 
@@ -1028,7 +1081,7 @@ def list_review_assets(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     search: str = Query("", description="按标题、material_id 或 manifest 搜索"),
-    view: str = Query("", description="审查视角：page、outline 或 standard"),
+    view: str = Query("", description="审查视角：page、outline、standard 或 compare"),
     user_id: str = Depends(get_user_id),
     db: Session = Depends(get_db),
 ):
@@ -1041,18 +1094,28 @@ def list_review_assets(
             | (ReviewAsset.material_id.like(like))
             | (ReviewAsset.manifest_object.like(like))
         )
-    if view in {"page", "outline", "standard"}:
+    if view == "page":
+        query = query.filter(
+            ReviewAsset.manifest_json.isnot(None),
+            ReviewAsset.manifest_json != "",
+            ~ReviewAsset.review_stage.in_(["raw", "clean"]),
+        )
+        total = query.count()
+        assets = query.order_by(ReviewAsset.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+        return {
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "files": [_asset_dict_with_material(asset, db) for asset in assets],
+        }
+    if view in {"outline", "standard", "compare"}:
         rows = [_asset_dict_with_material(asset, db) for asset in query.order_by(ReviewAsset.created_at.desc()).all()]
-        if view == "page":
-            rows = [
-                row
-                for row in rows
-                if row.get("has_manifest") and row.get("review_stage") not in {"raw", "clean"}
-            ]
-        elif view == "outline":
+        if view == "outline":
             rows = [row for row in rows if row.get("has_raw") or row.get("has_clean") or row.get("has_raw_dry_run")]
-        else:
+        elif view == "standard":
             rows = [row for row in rows if row.get("has_standard")]
+        else:
+            rows = [row for row in rows if row.get("has_latex")]
         total = len(rows)
         start = (page - 1) * page_size
         return {
@@ -1379,6 +1442,102 @@ def review_asset_detail(
     return _asset_dict_with_material(_asset_or_404(asset_id, user_id, db), db)
 
 
+@router.get("/review/assets/{asset_id}/latex_compare")
+def review_asset_latex_compare(
+    asset_id: int,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    asset = _asset_or_404(asset_id, user_id, db)
+    material = _material_for_asset(asset, db)
+    if not material:
+        raise HTTPException(status_code=404, detail="材料不存在")
+    output = select_elegantbook_output(material)
+    fallback_manifest_ref = _manifest_ref_from_material(material, "latex")
+    fallback_manifest = _read_json_optional(fallback_manifest_ref)
+    if not output and fallback_manifest_ref and isinstance(fallback_manifest, dict):
+        output = output_from_ref(fallback_manifest_ref, material, fallback_manifest)
+    if not output:
+        raise HTTPException(status_code=404, detail="ElegantBook/LaTeX 产物不存在")
+    manifest_ref = output.manifest_ref
+    manifest = output.manifest
+    paths = output_artifact_paths(output)
+    compiled_pdf = paths["compiled_pdf"]
+    package_zip = paths["package_zip"]
+    compile_report = paths["compile_report"]
+    final_review_report = paths["final_review_report"]
+    final_review_report_json = paths["final_review_report_json"]
+    render_review = paths["render_review"]
+    render_review_json = paths["render_review_json"]
+    run_state = paths["run_state"]
+    compile_report_ref = _same_prefix_ref(manifest_ref, compile_report)
+    artifact_stage = "elegantbook"
+    return {
+        "asset_id": str(asset.id),
+        "material_id": material.material_id if material else asset.material_id or "",
+        "stage": artifact_stage,
+        "output_origin": output.origin,
+        "output_run_id": output.output_run_id,
+        "available_outputs": [row.to_dict() for row in list_elegantbook_outputs(material)] or ([output.to_dict()] if output else []),
+        "manifest": _ref_dict(manifest_ref),
+        "manifest_json": manifest,
+        "compile_report": _read_json_optional(compile_report_ref) or {},
+        "source_pdf_url": f"/api/review/assets/{asset_id}/content",
+        "latex_pdf_url": f"/api/review/assets/{asset_id}/artifact?stage={artifact_stage}&path={quote(compiled_pdf)}",
+        "download_urls": {
+            "compiled_pdf": f"/api/review/assets/{asset_id}/artifact?stage={artifact_stage}&path={quote(compiled_pdf)}",
+            "package_zip": f"/api/review/assets/{asset_id}/artifact?stage={artifact_stage}&path={quote(package_zip)}",
+            "compile_report": f"/api/review/assets/{asset_id}/artifact?stage={artifact_stage}&path={quote(compile_report)}",
+            "latex_polish_report": f"/api/review/assets/{asset_id}/artifact?stage={artifact_stage}&path={quote(paths['latex_polish_report'])}",
+            "latex_polish_report_json": f"/api/review/assets/{asset_id}/artifact?stage={artifact_stage}&path={quote(paths['latex_polish_report_json'])}",
+            "final_review_report": f"/api/review/assets/{asset_id}/artifact?stage={artifact_stage}&path={quote(final_review_report)}",
+            "final_review_report_json": f"/api/review/assets/{asset_id}/artifact?stage={artifact_stage}&path={quote(final_review_report_json)}",
+            "render_review": f"/api/review/assets/{asset_id}/artifact?stage={artifact_stage}&path={quote(render_review)}",
+            "render_review_json": f"/api/review/assets/{asset_id}/artifact?stage={artifact_stage}&path={quote(render_review_json)}",
+            "run_state": f"/api/review/assets/{asset_id}/artifact?stage={artifact_stage}&path={quote(run_state)}",
+        },
+    }
+
+
+def _manual_latex_workspace_gone() -> None:
+    raise HTTPException(
+        status_code=410,
+        detail="LuceonWeb 不再提供内置 LaTeX 工作区或 Overleaf 接入；请在 PDF 比对页下载 ElegantBook ZIP 后外部编辑",
+    )
+
+
+@router.get("/review/public/overleaf/{asset_id}/package.zip")
+def download_public_overleaf_package(asset_id: int, token: str = Query("")):
+    _ = (asset_id, token)
+    _manual_latex_workspace_gone()
+
+
+@router.get("/review/assets/{asset_id}/overleaf")
+@router.post("/review/assets/{asset_id}/overleaf/start")
+@router.put("/review/assets/{asset_id}/overleaf/project")
+@router.get("/review/assets/{asset_id}/overleaf/package.zip")
+@router.post("/review/assets/{asset_id}/overleaf/revisions/import")
+def review_asset_overleaf_workflow_gone(asset_id: int):
+    _ = asset_id
+    _manual_latex_workspace_gone()
+
+
+@router.get("/review/assets/{asset_id}/overleaf/revisions/{revision_id}/artifact")
+def review_asset_overleaf_revision_artifact_gone(asset_id: int, revision_id: str, kind: str = Query("compiled_pdf")):
+    _ = (asset_id, revision_id, kind)
+    _manual_latex_workspace_gone()
+
+
+@router.get("/review/assets/{asset_id}/latex_workspace")
+@router.get("/review/assets/{asset_id}/latex_workspace/file")
+@router.put("/review/assets/{asset_id}/latex_workspace/file")
+@router.post("/review/assets/{asset_id}/latex_workspace/compile")
+@router.get("/review/assets/{asset_id}/latex_workspace/artifact")
+def review_asset_latex_workspace_gone(asset_id: int):
+    _ = asset_id
+    _manual_latex_workspace_gone()
+
+
 @router.post("/review/assets/{asset_id}/report")
 def generate_review_report(
     asset_id: int,
@@ -1431,6 +1590,7 @@ def review_asset_content(
     headers = {
         "Accept-Ranges": "bytes",
         "Content-Disposition": f"inline; filename*=UTF-8''{encoded_filename}",
+        "Content-Encoding": "identity",
     }
     range_value = _parse_range_header(request.headers.get("range"), size)
     if range_value:
@@ -1445,13 +1605,8 @@ def review_asset_content(
             headers=headers,
         )
 
-    content = _read_ref(ref, "源 PDF 不存在")
-    headers["Content-Length"] = str(len(content))
-    return Response(
-        content,
-        media_type=media_type,
-        headers=headers,
-    )
+    headers["Content-Length"] = str(size)
+    return StreamingResponse(_stream_ref(ref, "源 PDF 不存在"), media_type=media_type, headers=headers)
 
 
 @router.get("/review/assets/{asset_id}/page_image")
@@ -1523,7 +1678,7 @@ def _artifact_base_refs(asset: ReviewAsset, stage: str, db: Session) -> list[Obj
                 _manifest_ref_for_asset(asset),
             ]
         )
-    elif normalized_stage in {"raw", "clean", "standard"}:
+    elif normalized_stage in {"raw", "clean", "standard", "latex"}:
         material = _material_for_asset(asset, db)
         manifest_ref = _manifest_ref_from_material(material, normalized_stage)
         manifest = _read_json_optional(manifest_ref)
@@ -1533,6 +1688,13 @@ def _artifact_base_refs(asset: ReviewAsset, stage: str, db: Session) -> list[Obj
                 manifest_ref,
             ]
         )
+    elif normalized_stage == "elegantbook":
+        material = _material_for_asset(asset, db)
+        output = select_elegantbook_output(material) if material else None
+        if output:
+            refs.append(output.manifest_ref)
+        else:
+            refs.append(_manifest_ref_from_material(material, "latex"))
     else:
         raise HTTPException(status_code=400, detail="不支持的资源阶段")
     return [ref for ref in refs if ref]
@@ -1561,8 +1723,9 @@ def _rewrite_standard_html_artifact(content: bytes, asset_id: int, stage: str) -
 
 @router.get("/review/assets/{asset_id}/artifact")
 def review_asset_artifact(
+    request: Request,
     asset_id: int,
-    stage: str = Query("mineru", description="资源阶段：mineru、popo、raw、clean 或 standard"),
+    stage: str = Query("mineru", description="资源阶段：mineru、popo、elegantbook、latex、raw、clean 或 standard"),
     path: str = Query(..., description="相对资源路径，如 images/a.jpg"),
     user_id: str = Depends(get_user_id),
     db: Session = Depends(get_db),
@@ -1594,11 +1757,31 @@ def review_asset_artifact(
         prefix = base_ref.object.rsplit("/", 1)[0] + "/" if "/" in base_ref.object else ""
         object_name = clean_path(f"{prefix}{relative_path}")
         if object_exists(base_ref.bucket, object_name):
-            content = read_object(base_ref.bucket, object_name)
+            ref = ObjectRef(base_ref.bucket, object_name)
             media_type = mimetypes.guess_type(object_name)[0] or "application/octet-stream"
+            stat = _stat_ref(ref, "资源文件不存在")
+            size = int(getattr(stat, "size", 0) or 0)
+            headers = {
+                "Accept-Ranges": "bytes",
+                "Content-Disposition": f"inline; filename*=UTF-8''{quote(Path(object_name).name)}",
+            }
+            if _skip_http_compression(media_type):
+                headers["Content-Encoding"] = "identity"
+            range_value = _parse_range_header(request.headers.get("range"), size)
+            if range_value:
+                start, end = range_value
+                content = _read_ref_range(ref, start, end - start + 1, "资源文件不存在")
+                headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+                headers["Content-Length"] = str(len(content))
+                return Response(content, status_code=206, media_type=media_type, headers=headers)
+
+            headers["Content-Length"] = str(size)
             if media_type == "text/html":
+                content = read_object(ref.bucket, ref.object)
                 content = _rewrite_standard_html_artifact(content, asset_id, stage)
-            return StreamingResponse(iter([content]), media_type=media_type)
+                headers["Content-Length"] = str(len(content))
+                return StreamingResponse(iter([content]), media_type=media_type, headers=headers)
+            return StreamingResponse(_stream_ref(ref, "资源文件不存在"), media_type=media_type, headers=headers)
     raise HTTPException(status_code=404, detail="资源文件不存在")
 
 

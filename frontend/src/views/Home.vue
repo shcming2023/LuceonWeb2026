@@ -3,11 +3,11 @@
     <header class="home-header">
       <div>
         <h1>LuceonWeb2026</h1>
-        <p>PDF · MinerU · Popo · Raw · Clean</p>
+        <p>PDF · MinerU · Popo · LaTeX</p>
       </div>
       <div class="home-actions">
         <el-button type="primary" :icon="Document" @click="$router.push('/files')">文件管理</el-button>
-        <el-button :icon="View" @click="$router.push('/review')">溯源审查</el-button>
+        <el-button :icon="View" @click="$router.push('/review/compare')">PDF 比对</el-button>
       </div>
     </header>
 
@@ -21,12 +21,12 @@
         <span class="label">待继续解析</span>
       </div>
       <div class="overview-item">
-        <span class="value">{{ summary?.stages.raw_done || 0 }}</span>
-        <span class="label">Raw</span>
+        <span class="value">{{ summary?.stages.popo_done || 0 }}</span>
+        <span class="label">Popo</span>
       </div>
       <div class="overview-item">
-        <span class="value">{{ summary?.stages.clean_done || 0 }}</span>
-        <span class="label">Clean</span>
+        <span class="value">{{ summary?.stages.latex_done || 0 }}</span>
+        <span class="label">LaTeX</span>
       </div>
     </section>
 
@@ -72,13 +72,12 @@ const stageLabels = [
   { key: 'input', label: 'PDF' },
   { key: 'mineru_done', label: 'MinerU' },
   { key: 'popo_done', label: 'Popo' },
-  { key: 'raw_done', label: 'Raw' },
-  { key: 'clean_done', label: 'Clean' }
+  { key: 'latex_done', label: 'LaTeX' }
 ]
 
 const pendingCount = computed(() => {
   const stages = summary.value?.stages || {}
-  return (stages.input || 0) + (stages.mineru_done || 0)
+  return (stages.input || 0) + (stages.mineru_done || 0) + (stages.popo_done || 0)
 })
 
 const stageRows = computed(() => {

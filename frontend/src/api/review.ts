@@ -35,6 +35,34 @@ export interface FinalReviewDecisionPayload {
   reviewer_note?: string
 }
 
+export interface LatexCompareResponse {
+  asset_id: string
+  material_id: string
+  stage: string
+  output_origin?: string
+  output_run_id?: string
+  available_outputs?: Array<{
+    manifest: {
+      bucket: string
+      object: string
+    }
+    material_id: string
+    popo_run_id: string
+    output_run_id: string
+    origin: string
+    created_at: string
+  }>
+  manifest: {
+    bucket: string
+    object: string
+  }
+  manifest_json: Record<string, unknown>
+  compile_report: Record<string, unknown>
+  source_pdf_url: string
+  latex_pdf_url: string
+  download_urls: Record<string, string>
+}
+
 export const reviewApi = {
   importManifest(payload: ManifestImportPayload) {
     return api.post('/review/assets/from_manifest', payload).then(res => res.data)
@@ -69,6 +97,10 @@ export const reviewApi = {
 
   getAsset(assetId: string) {
     return api.get(`/review/assets/${assetId}`).then(res => res.data)
+  },
+
+  getLatexCompare(assetId: string) {
+    return api.get<LatexCompareResponse>(`/review/assets/${assetId}/latex_compare`).then(res => res.data)
   },
 
   updateMetadata(assetId: string, payload: ReviewMetadataPayload) {
@@ -159,5 +191,13 @@ export const reviewApi = {
 
   getContentUrl(assetId: string) {
     return `/api/review/assets/${assetId}/content`
+  },
+
+  getArtifactUrl(assetId: string, stage: string, path: string) {
+    return `/api/review/assets/${assetId}/artifact?stage=${encodeURIComponent(stage)}&path=${encodeURIComponent(path)}`
+  },
+
+  getElegantBookPackageUrl(assetId: string) {
+    return `/api/review/assets/${assetId}/artifact?stage=elegantbook&path=latex-project.zip`
   }
 }
