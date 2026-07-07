@@ -18,6 +18,9 @@ export interface ObjectRef {
 
 export interface CodexSkillJob {
   id: string
+  material_pk?: string
+  material_id?: string
+  review_asset_id?: string
   mode: string
   status: string
   requested_skill: string
@@ -25,6 +28,10 @@ export interface CodexSkillJob {
   attempt_count: number
   staging_dir: string
   error_message: string
+  payload?: Record<string, unknown>
+  result?: Record<string, unknown>
+  source_popo_manifest?: ObjectRef
+  baseline_manifest?: ObjectRef
   output_manifest: ObjectRef
   created_at: string | null
   started_at: string | null

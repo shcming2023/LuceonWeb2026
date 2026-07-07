@@ -44,6 +44,7 @@ export interface LatexCompareResponse {
   output_run_id?: string
   available_outputs?: Array<{
     id?: string
+    material_pk?: string
     manifest: {
       bucket: string
       object: string

@@ -65,6 +65,14 @@
         />
       </el-select>
       <div class="download-actions">
+        <el-button
+          v-if="canContinueCodex"
+          type="warning"
+          :loading="continueCodexStarting"
+          @click="continueCodexRefine"
+        >
+          继续精修
+        </el-button>
         <el-button v-if="downloadUrls.package_zip" type="primary" :icon="Download" @click="openUrl(downloadUrls.package_zip)">
           {{ zipButtonText }}
         </el-button>
@@ -110,8 +118,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Document, Download, Refresh, Search } from '@element-plus/icons-vue'
+import { materialsApi } from '@/api/materials'
 import { reviewApi, type LatexCompareResponse } from '@/api/review'
 import PdfSourceViewer from '@/components/PdfSourceViewer.vue'
 import type { FileItem } from '@/types/file'
@@ -131,6 +140,7 @@ const compare = ref<LatexCompareResponse | null>(null)
 const compareError = ref('')
 const sourceActivePage = ref(1)
 const latexActivePage = ref(1)
+const continueCodexStarting = ref(false)
 
 const selectedAsset = computed(() => assets.value.find(row => row.id === selectedAssetId.value) || null)
 const sourcePdfUrl = computed(() => compare.value?.source_pdf_url || (selectedAssetId.value ? reviewApi.getContentUrl(selectedAssetId.value) : ''))
@@ -161,6 +171,7 @@ const outputOriginTagType = computed(() => {
   if (outputOrigin.value === 'codex_elegantbook') return 'primary'
   return 'info'
 })
+const canContinueCodex = computed(() => outputOrigin.value === 'codex_refined' && selectedQualityStatus.value === 'needs_fix')
 const compileStatus = computed(() => {
   const report = compare.value?.compile_report || {}
   const manifest = compare.value?.manifest_json || {}
@@ -209,6 +220,44 @@ function apiUrl(url: string) {
 function openUrl(url: string) {
   const target = apiUrl(url)
   if (target) window.open(target, '_blank', 'noopener,noreferrer')
+}
+
+function codexSkillVersion() {
+  return `manual-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`
+}
+
+async function continueCodexRefine() {
+  const materialPk = selectedOutputRow.value?.material_pk || ''
+  if (!materialPk) {
+    ElMessage.warning('当前输出缺少 material_pk，不能创建继续精修任务')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      '将为当前 Codex 候选创建新的异步精修任务。旧候选和 legacy baseline 都会保留，新任务不会在浏览器请求中直接长时间执行。',
+      '继续 Codex 精修',
+      { type: 'warning', confirmButtonText: '创建任务', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  continueCodexStarting.value = true
+  try {
+    const job = await materialsApi.createCodexJob(materialPk, {
+      mode: 'refresh_legacy',
+      skill_version: codexSkillVersion(),
+      run_reason: 'continue_refine_candidate',
+      force: true,
+      payload: {
+        source: 'compare_review_continue',
+        source_output_id: selectedOutputId.value || compare.value?.output_id || '',
+        source_quality_status: selectedQualityStatus.value
+      }
+    })
+    ElMessage.success(`继续精修任务已入队：#${job.id}`)
+  } finally {
+    continueCodexStarting.value = false
+  }
 }
 
 async function refreshCurrent() {

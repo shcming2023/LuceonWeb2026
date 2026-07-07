@@ -121,6 +121,16 @@
         >
           AI 补全元数据
         </el-button>
+        <el-button
+          size="small"
+          type="warning"
+          :icon="Cpu"
+          :loading="codexBatchStarting"
+          :disabled="batchState.running || codexBatchStarting || !selectedCodexStartableRows.length"
+          @click="startSelectedCodexJobs"
+        >
+          批量 Codex 重扫
+        </el-button>
       </div>
       <div v-if="batchState.logs.length" class="batch-log">最近失败：{{ batchState.logs[0] }}</div>
     </section>
@@ -189,6 +199,7 @@
                 size="small"
                 :icon="primaryAction(row).icon"
                 :type="primaryAction(row).type"
+                :loading="codexStartingIds.has(row.id)"
                 :disabled="!primaryAction(row).enabled"
                 @click="runPrimaryAction(row)"
               >
@@ -201,6 +212,9 @@
                     <el-dropdown-item command="metadata-edit" :icon="DocumentChecked">编辑元数据</el-dropdown-item>
                     <el-dropdown-item command="metadata-extract" :icon="Cpu">AI 提取元数据</el-dropdown-item>
                     <el-dropdown-item command="compare-review" :disabled="!hasLatexAsset(row)" :icon="View">PDF 比对</el-dropdown-item>
+                    <el-dropdown-item command="start-codex" :disabled="!canStartCodex(row)" :icon="Cpu">
+                      {{ hasLatexAsset(row) ? 'Codex 重扫' : '启动 Codex 精修' }}
+                    </el-dropdown-item>
                     <el-dropdown-item divided command="preview-pdf" :disabled="!row.input_object" :icon="Document">打开 PDF</el-dropdown-item>
                     <el-dropdown-item command="download-pdf" :disabled="!row.input_object" :icon="Download">下载 PDF</el-dropdown-item>
                   </el-dropdown-menu>
@@ -411,6 +425,8 @@ const metadataDrawerVisible = ref(false)
 const metadataSaving = ref(false)
 const metadataExtracting = ref(false)
 const metadataBatchExtracting = ref(false)
+const codexBatchStarting = ref(false)
+const codexStartingIds = ref(new Set<string>())
 const metadataForceExtract = ref(false)
 const activeMetadataRow = ref<MaterialItem | null>(null)
 const metadataForm = reactive<MaterialBookMetadata>({
@@ -456,6 +472,7 @@ type RowCommand =
   | 'metadata-edit'
   | 'metadata-extract'
   | 'compare-review'
+  | 'start-codex'
   | 'preview-pdf'
   | 'download-pdf'
 
@@ -541,7 +558,7 @@ function rowStageNote(row: MaterialItem) {
   if (row.pipeline_status === 'queued') return '任务排队中'
   if (hasLatexAsset(row)) return '可进行 PDF 比对'
   if (row.codex_job) return codexJobStatusText(row.codex_job.status)
-  if (hasPopoAsset(row)) return '等待 Codex 精修输出'
+  if (hasPopoAsset(row)) return '可启动 Codex 精修任务'
   if (hasMineruAsset(row)) return '等待 Popo 或继续 GPU 解析'
   if (row.input_object) return '等待上游解析'
   return '缺少源 PDF'
@@ -549,8 +566,8 @@ function rowStageNote(row: MaterialItem) {
 
 function codexJobStatusText(status: string) {
   const map: Record<string, string> = {
-    queued: 'Codex 精修排队中',
-    running: 'Codex 精修运行中',
+    queued: 'Codex 任务排队中',
+    running: 'Codex 任务运行中',
     dry_run_succeeded: 'Codex dry-run 已完成',
     validating: 'Codex 输出验证中',
     published: 'Codex 输出已发布',
@@ -681,6 +698,7 @@ const orderedMaterials = computed(() => {
   const recent = recentOperation.value
   return [...materials.value].sort((a, b) => rowPriority(a, active, recent) - rowPriority(b, active, recent))
 })
+const selectedCodexStartableRows = computed(() => selectedRows.value.filter(canStartCodex))
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
@@ -1092,6 +1110,14 @@ function hasLatexAsset(row: MaterialItem) {
   return Boolean(row.latex_available || hasRef(row.latex_manifest))
 }
 
+function canStartCodex(row: MaterialItem) {
+  return hasPopoAsset(row) && !codexJobActive(row)
+}
+
+function codexJobActive(row: MaterialItem) {
+  return ['queued', 'running', 'dry_run_succeeded', 'validating'].includes(row.codex_job?.status || '')
+}
+
 function primaryAction(row: MaterialItem): PrimaryRowAction {
   if (hasLatexAsset(row)) {
     return {
@@ -1104,8 +1130,17 @@ function primaryAction(row: MaterialItem): PrimaryRowAction {
   }
   if (hasPopoAsset(row)) {
     const codexStatus = row.codex_job?.status || ''
+    if (!codexStatus || codexStatus === 'failed' || codexStatus === 'cancelled') {
+      return {
+        label: '启动 Codex 精修',
+        command: 'start-codex',
+        enabled: true,
+        type: 'warning',
+        icon: Cpu
+      }
+    }
     return {
-      label: codexStatus ? codexJobStatusText(codexStatus) : '等待 Codex 输出',
+      label: codexJobStatusText(codexStatus),
       command: null,
       enabled: false,
       type: 'info',
@@ -1259,6 +1294,93 @@ function stopBatchAfterCurrent() {
   ElMessage.info('已设置为当前任务完成后停止')
 }
 
+function codexSkillVersion() {
+  return `manual-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`
+}
+
+function codexModeForRow(row: MaterialItem) {
+  return hasLatexAsset(row) ? 'refresh_legacy' : 'new_pdf'
+}
+
+function codexRunReasonForRow(row: MaterialItem, batch = false) {
+  if (hasLatexAsset(row)) return batch ? 'batch_refresh_legacy' : 'manual_refresh_legacy'
+  return batch ? 'batch_new_pdf' : 'manual_new_pdf'
+}
+
+async function startCodexJob(row: MaterialItem, batch = false) {
+  if (!canStartCodex(row)) {
+    ElMessage.warning('该材料暂不能启动 Codex 任务')
+    return null
+  }
+  const next = new Set(codexStartingIds.value)
+  next.add(row.id)
+  codexStartingIds.value = next
+  try {
+    const job = await materialsApi.createCodexJob(row.id, {
+      mode: codexModeForRow(row),
+      skill_version: codexSkillVersion(),
+      run_reason: codexRunReasonForRow(row, batch),
+      force: true,
+      payload: {
+        source: batch ? 'files_batch_action' : 'files_row_action',
+        previous_job_id: row.codex_job?.id || '',
+        had_legacy_output: hasLatexAsset(row)
+      }
+    })
+    row.codex_job = job
+    recentOperation.value = {
+      materialPk: row.id,
+      materialId: row.material_id,
+      filename: displayTitle(row),
+      action: hasLatexAsset(row) ? 'Codex 重扫已入队' : 'Codex 精修已入队',
+      status: 'started',
+      runId: job.id,
+      updatedAt: new Date().toISOString()
+    }
+    if (!batch) ElMessage.success(`Codex 任务已入队：#${job.id}`)
+    return job
+  } catch (error: any) {
+    if (!batch) {
+      const message = error?.response?.data?.detail || error?.message || '创建 Codex 任务失败'
+      ElMessage.warning(message)
+    }
+    return null
+  } finally {
+    const current = new Set(codexStartingIds.value)
+    current.delete(row.id)
+    codexStartingIds.value = current
+  }
+}
+
+async function startSelectedCodexJobs() {
+  const rows = selectedCodexStartableRows.value
+  if (!rows.length) return
+  try {
+    await ElMessageBox.confirm(
+      `将为已选 ${rows.length} 份材料创建新的 Codex 异步任务。任务只入队，不会在浏览器请求中直接执行长时间精修。`,
+      '批量 Codex 重扫',
+      { type: 'warning', confirmButtonText: '创建任务', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  codexBatchStarting.value = true
+  let success = 0
+  let failed = 0
+  try {
+    for (const row of rows) {
+      const job = await startCodexJob(row, true)
+      if (job) success += 1
+      else failed += 1
+    }
+  } finally {
+    codexBatchStarting.value = false
+  }
+  await fetchMaterials()
+  if (failed) ElMessage.warning(`Codex 任务创建结束：成功 ${success}，失败 ${failed}`)
+  else ElMessage.success(`已创建 ${success} 个 Codex 任务`)
+}
+
 function updatePipelinePolling() {
   if (pipelineBusy.value && !pollingTimer.value) {
     pollingTimer.value = window.setInterval(async () => {
@@ -1279,6 +1401,7 @@ function handleRowCommand(row: MaterialItem, command: RowCommand) {
   if (command === 'metadata-edit') return openMetadataDrawer(row)
   if (command === 'metadata-extract') return extractRowMetadata(row, false, true)
   if (command === 'compare-review') return openCompareReview(row)
+  if (command === 'start-codex') return startCodexJob(row)
   if (command === 'preview-pdf') return previewPdf(row)
   if (command === 'download-pdf') return downloadPdf(row)
 }

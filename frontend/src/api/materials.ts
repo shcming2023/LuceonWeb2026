@@ -1,6 +1,7 @@
 import type { AxiosProgressEvent } from 'axios'
 import api from './index'
 import type {
+  CodexSkillJob,
   MaterialBookMetadata,
   MaterialListResponse,
   MaterialMetadataOptions,
@@ -28,6 +29,15 @@ export interface MaterialListParams {
 export interface PipelineTarget {
   material_id?: string
   input_object?: string
+}
+
+export interface CodexJobCreatePayload {
+  mode?: string
+  requested_skill?: string
+  skill_version?: string
+  run_reason?: string
+  force?: boolean
+  payload?: Record<string, unknown>
 }
 
 export const materialsApi = {
@@ -96,5 +106,9 @@ export const materialsApi = {
 
   getContentUrl(materialId: string) {
     return `/api/materials/${materialId}/content`
+  },
+
+  createCodexJob(materialId: string, payload: CodexJobCreatePayload) {
+    return api.post<CodexSkillJob>(`/materials/${materialId}/codex-jobs`, payload).then(res => res.data)
   }
 }

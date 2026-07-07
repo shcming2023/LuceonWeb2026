@@ -117,6 +117,31 @@ def test_codex_skill_job_create_is_idempotent_and_lists():
     assert [row["id"] for row in listed.json()["jobs"]] == [body["id"]]
 
 
+def test_codex_skill_job_force_new_version_records_run_reason():
+    client, material_id = make_client()
+
+    first = client.post(
+        f"/api/materials/{material_id}/codex-jobs",
+        json={"mode": "refresh_legacy", "skill_version": "refine-v2", "run_reason": "manual_refresh"},
+    )
+    assert first.status_code == 200
+    body = first.json()
+    assert body["payload"]["run_reason"] == "manual_refresh"
+    cancelled = client.post(f"/api/materials/codex-jobs/{body['id']}/cancel")
+    assert cancelled.status_code == 200
+
+    forced = client.post(
+        f"/api/materials/{material_id}/codex-jobs",
+        json={"mode": "refresh_legacy", "skill_version": "refine-v2", "force": True, "run_reason": "continue_refine"},
+    )
+    assert forced.status_code == 200
+    forced_body = forced.json()
+    assert forced_body["id"] != body["id"]
+    assert forced_body["skill_version"] == "refine-v2"
+    assert forced_body["payload"]["run_reason"] == "continue_refine"
+    assert forced_body["attempt_count"] == 1
+
+
 def test_codex_skill_job_cancel_and_retry():
     client, material_id = make_client()
     created = client.post(f"/api/materials/{material_id}/codex-jobs", json={"mode": "new_pdf"}).json()

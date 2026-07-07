@@ -116,6 +116,7 @@ class CodexSkillJobCreateRequest(BaseModel):
     mode: str = "new_pdf"
     requested_skill: str = "luceon-popo-to-refined-elegantbook"
     skill_version: str = "draft"
+    run_reason: str = ""
     force: bool = False
     payload: dict = Field(default_factory=dict)
 
@@ -404,6 +405,9 @@ def create_material_codex_job(
 ):
     material = _material_or_404(material_pk, user_id, db)
     try:
+        job_payload = dict(payload.payload or {})
+        if payload.run_reason:
+            job_payload["run_reason"] = payload.run_reason
         job = create_codex_skill_job(
             db,
             user_id,
@@ -412,7 +416,7 @@ def create_material_codex_job(
             requested_skill=payload.requested_skill,
             skill_version=payload.skill_version,
             force=payload.force,
-            payload=payload.payload,
+            payload=job_payload,
         )
         db.commit()
         db.refresh(job)
