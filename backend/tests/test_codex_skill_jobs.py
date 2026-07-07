@@ -178,7 +178,15 @@ def test_publish_staging_job_registers_promoted_output(monkeypatch, tmp_path):
     staging_dir = tmp_path / f"job-{job.id}"
     (staging_dir / "compiled.pdf").write_bytes(b"%PDF-codex\n")
     (staging_dir / "refined-overleaf.zip").write_bytes(b"PK-codex")
+    nested = staging_dir / "work" / "candidate"
+    nested.mkdir(parents=True)
+    (nested / "compiled.pdf").write_bytes(b"%PDF-nested\n")
+    (nested / "refined-overleaf.zip").write_bytes(b"PK-nested")
+    (staging_dir / "main.tex").write_text("\\documentclass{article}")
+    (staging_dir / "run_state.json").write_text(json.dumps({"status": "passed"}))
+    (staging_dir / "source_trace.json").write_text(json.dumps({"status": "passed"}))
     (staging_dir / "final_review_report.json").write_text(json.dumps({"status": "passed", "qa": {"status": "passed", "hard_blockers": [], "review_status": "passed"}}))
+    (staging_dir / "final_review_report.md").write_text("# passed")
     (staging_dir / "compile_report.json").write_text(json.dumps({"status": "succeeded", "engine": "test", "pages": 1}))
 
     publish_staging_job(db, job, target_bucket="eduassets-elegantbook", promote=True)
@@ -187,9 +195,19 @@ def test_publish_staging_job_registers_promoted_output(monkeypatch, tmp_path):
     db.refresh(material)
 
     assert job.status == "published"
+    assert job.result()["status"] == "published"
     assert job.output_manifest_bucket == "eduassets-elegantbook"
     assert job.output_manifest_object.startswith("elegantbook/pdf-demo/popo-run/")
     assert ("eduassets-elegantbook", job.output_manifest_object) in fake_minio.objects
+    manifest = json.loads(fake_minio.objects[("eduassets-elegantbook", job.output_manifest_object)]["content"])
+    assert manifest["objects"]["compiled_pdf"] == "compiled.pdf"
+    assert manifest["objects"]["refined_overleaf_zip"] == "refined-overleaf.zip"
+    assert manifest["objects"]["package_zip"] == "refined-overleaf.zip"
+    assert manifest["objects"]["main_tex"] == "main.tex"
+    assert manifest["objects"]["final_review_report"] == "final_review_report.md"
+    assert manifest["objects"]["final_review_report_json"] == "final_review_report.json"
+    assert manifest["objects"]["run_state"] == "run_state.json"
+    assert manifest["objects"]["source_trace"] == "source_trace.json"
     output = db.query(MaterialOutput).filter(MaterialOutput.codex_job_id == job.id).one()
     assert output.is_current is True
     assert output.quality_status == "passed"

@@ -229,7 +229,7 @@ def run_codex_skill_job(
         raise CodexSkillJobError("任务对应材料不存在")
     job.status = "running"
     job.started_at = job.started_at or datetime.utcnow()
-    staging_dir = Path(job.staging_dir or staging_root / f"job-{job.id}")
+    staging_dir = _writable_staging_dir(job, staging_root)
     staging_dir.mkdir(parents=True, exist_ok=True)
     job.staging_dir = str(staging_dir)
     input_paths = materialize_job_inputs(job, material, staging_dir)
@@ -346,9 +346,14 @@ def publish_staging_job(
     object_map: dict[str, str] = {}
     _ensure_bucket(target_bucket)
     for path in files:
-        object_name = clean_path(f"{prefix}/{path.relative_to(staging_dir).as_posix()}")
+        relative_path = path.relative_to(staging_dir).as_posix()
+        object_name = clean_path(f"{prefix}/{relative_path}")
         _put_file(target_bucket, object_name, path)
-        object_map[path.name] = path.relative_to(staging_dir).as_posix()
+        object_map[relative_path] = relative_path
+        if path.parent == staging_dir:
+            object_map[path.name] = relative_path
+        else:
+            object_map.setdefault(path.name, relative_path)
 
     manifest = _published_manifest(job, material, run_id, object_map, compiled_pdf, package_zip, final_review, compile_report)
     manifest_object = clean_path(f"{prefix}/manifest.json")
@@ -372,6 +377,7 @@ def publish_staging_job(
     job.result_json = json.dumps(
         {
             **job.result(),
+            "status": "published",
             "published": True,
             "promoted": promoted,
             "quality_status": quality_status,
@@ -579,6 +585,20 @@ def _job_material(db: Session, job: CodexSkillJob) -> Material | None:
     return query.filter(Material.material_id == job.material_id).order_by(Material.id.desc()).first()
 
 
+def _writable_staging_dir(job: CodexSkillJob, staging_root: Path) -> Path:
+    if not job.staging_dir:
+        return staging_root / f"job-{job.id}"
+    current = Path(job.staging_dir)
+    try:
+        current.mkdir(parents=True, exist_ok=True)
+        probe = current / ".write-test"
+        probe.write_text("", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        return current
+    except OSError:
+        return staging_root / f"job-{job.id}"
+
+
 def _first_existing(root: Path, names: list[str]) -> Path | None:
     for name in names:
         path = root / name
@@ -669,12 +689,38 @@ def _published_manifest(
         "compile": {"status": "succeeded", "engine": compile_engine, "pages": compile_pages},
         "qa": {"status": qa_status, "hard_blockers": hard_blockers, "review_status": review_status},
         "stages": [{"skill": job.requested_skill, "status": "passed", "mode": job.mode}],
-        "objects": {
-            "compiled_pdf": object_map.get(compiled_pdf.name, compiled_pdf.name),
-            "refined_overleaf_zip": object_map.get(package_zip.name, package_zip.name),
-            "package_zip": object_map.get(package_zip.name, package_zip.name),
-            "compile_report": object_map.get("compile_report.json", "compile_report.json"),
-            "latex_polish_report": object_map.get("latex_polish_report.md", "latex_polish_report.md"),
-            "run_state": object_map.get("dry_run_report.json", "dry_run_report.json"),
-        },
+        "objects": _manifest_objects(object_map, compiled_pdf, package_zip),
     }
+
+
+def _manifest_objects(object_map: dict[str, str], compiled_pdf: Path, package_zip: Path) -> dict[str, str]:
+    objects: dict[str, str] = {
+        "compiled_pdf": object_map.get(compiled_pdf.name, compiled_pdf.name),
+        "refined_overleaf_zip": object_map.get(package_zip.name, package_zip.name),
+        "package_zip": object_map.get(package_zip.name, package_zip.name),
+    }
+    optional_files = {
+        "main_tex": "main.tex",
+        "main_fallback_tex": "main-fallback.tex",
+        "compile_report": "compile_report.json",
+        "latex_polish_report": "latex_polish_report.md",
+        "latex_polish_report_json": "latex_polish_report.json",
+        "final_review_report": "final_review_report.md",
+        "final_review_report_json": "final_review_report.json",
+        "render_review": "render_review.md",
+        "render_review_json": "render_review.json",
+        "decision_log": "decision_log.json",
+        "model_calls": "model_calls.jsonl",
+        "run_state": "run_state.json",
+        "source_trace": "source_trace.json",
+    }
+    for key, filename in optional_files.items():
+        if filename in object_map:
+            objects[key] = object_map[filename]
+    if "run_state" not in objects and "dry_run_report.json" in object_map:
+        objects["run_state"] = object_map["dry_run_report.json"]
+    if any(path.startswith("chapters/") for path in object_map.values()):
+        objects["chapters_dir"] = "chapters/"
+    if any(path.startswith("images/") for path in object_map.values()):
+        objects["images_dir"] = "images/"
+    return objects
