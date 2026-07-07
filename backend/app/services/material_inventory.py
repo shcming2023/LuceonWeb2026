@@ -15,6 +15,11 @@ from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app.models.material import Material, PipelineEvent, PipelineRun
 from app.models.review_asset import ReviewAsset
+from app.services.codex_elegantbook import (
+    ELEGANTBOOK_BUCKET,
+    list_all_codex_elegantbook_manifest_refs,
+    output_from_ref,
+)
 from app.services.luceon_review import (
     ObjectRef,
     clean_path,
@@ -31,6 +36,8 @@ from app.services.runtime_settings import pipeline_env
 INPUT_BUCKET = "eduassets-input"
 MINERU_BUCKET = "eduassets-mineru"
 POPO_BUCKET = "eduassets-minerupopo"
+LATEX_BUCKET = "eduassets-latex"
+ELEGANTBOOK_OUTPUT_BUCKET = ELEGANTBOOK_BUCKET
 RAW_BUCKET = "eduassets-raw"
 CLEAN_BUCKET = "eduassets-clean"
 STANDARD_BUCKET = "eduassets-standard"
@@ -150,6 +157,9 @@ def merge_material_rows(db: Session, target: Material, duplicate: Material) -> M
         "popo_manifest_bucket",
         "popo_manifest_object",
         "popo_run_id",
+        "latex_manifest_bucket",
+        "latex_manifest_object",
+        "latex_run_id",
         "raw_manifest_bucket",
         "raw_manifest_object",
         "raw_run_id",
@@ -257,6 +267,25 @@ def ensure_input_review_asset(db: Session, user_id: str, bucket: str, object_nam
     return asset
 
 
+def material_has_downstream_assets(material: Material) -> bool:
+    return bool(
+        material.mineru_manifest_object
+        or material.popo_manifest_object
+        or material.latex_manifest_object
+        or material.raw_manifest_object
+        or material.clean_manifest_object
+        or material.standard_manifest_object
+    )
+
+
+def assign_input_review_asset(material: Material, asset: ReviewAsset | None) -> None:
+    if not asset:
+        return
+    if material.review_asset_id and material_has_downstream_assets(material):
+        return
+    material.review_asset_id = asset.id
+
+
 def ensure_resolved_review_asset(db: Session, user_id: str, resolved) -> ReviewAsset:
     if resolved.input_pdf:
         input_only = (
@@ -327,7 +356,7 @@ def sync_input_materials(db: Session, user_id: str, limit: int | None = None) ->
         )
         material.promote_stage("input")
         asset = ensure_input_review_asset(db, user_id, INPUT_BUCKET, object_name)
-        material.review_asset_id = asset.id if asset else material.review_asset_id
+        assign_input_review_asset(material, asset)
         link_review_asset(db, material)
         count += 1
     return {"input": count}
@@ -402,7 +431,11 @@ def sync_downstream_stage(
         manifest = read_json_object(bucket, manifest_object)
         title = str(manifest.get("title") or manifest.get("filename") or material_id or Path(manifest_object).parent.name)
         material = upsert_material(db, user_id, title, title, material_id=material_id)
-        if stage == "raw_done":
+        if stage == "latex_done":
+            material.latex_manifest_bucket = bucket
+            material.latex_manifest_object = manifest_object
+            material.latex_run_id = run_id
+        elif stage == "raw_done":
             material.raw_manifest_bucket = bucket
             material.raw_manifest_object = manifest_object
             material.raw_run_id = run_id
@@ -419,6 +452,27 @@ def sync_downstream_stage(
         link_review_asset(db, material)
         count += 1
     return {stage.replace("_done", ""): count}
+
+
+def sync_codex_elegantbook_outputs(db: Session, user_id: str, limit: int | None = None) -> dict[str, int]:
+    count = 0
+    for ref in list_all_codex_elegantbook_manifest_refs(limit=limit):
+        manifest = read_json_object(ref.bucket, ref.object)
+        probe = Material(user_id=user_id, title="", filename="", material_id=str(manifest.get("material_id") or ""))
+        output = output_from_ref(ref, probe, manifest)
+        if not output or not output.material_id:
+            continue
+        title = str(manifest.get("title") or manifest.get("filename") or output.material_id or Path(ref.object).parent.name)
+        material = upsert_material(db, user_id, title, title, material_id=output.material_id)
+        if output.popo_run_id and not material.popo_run_id:
+            material.popo_run_id = output.popo_run_id
+        material.latex_manifest_bucket = ref.bucket
+        material.latex_manifest_object = ref.object
+        material.latex_run_id = output.output_run_id
+        material.promote_stage("latex_done")
+        link_review_asset(db, material)
+        count += 1
+    return {"elegantbook": count}
 
 
 def standard_quality_score_from_manifest(manifest: dict[str, Any]) -> int | None:
@@ -444,9 +498,8 @@ def sync_material_inventory(db: Session, user_id: str, limit: int | None = None)
         lambda: sync_input_materials(db, user_id, limit),
         lambda: sync_mineru_materials(db, user_id, limit),
         lambda: sync_popo_materials(db, user_id, limit),
-        lambda: sync_downstream_stage(db, user_id, RAW_BUCKET, "raw/", "raw_done", limit),
-        lambda: sync_downstream_stage(db, user_id, CLEAN_BUCKET, "clean/", "clean_done", limit),
-        lambda: sync_downstream_stage(db, user_id, STANDARD_BUCKET, "standard/", "standard_done", limit),
+        lambda: sync_downstream_stage(db, user_id, LATEX_BUCKET, "latex/", "latex_done", limit),
+        lambda: sync_codex_elegantbook_outputs(db, user_id, limit),
     ]
     for sync_step in sync_steps:
         partial = sync_step()
@@ -455,7 +508,7 @@ def sync_material_inventory(db: Session, user_id: str, limit: int | None = None)
     total = db.query(Material).filter(Material.user_id == user_id).count()
     stages = {
         stage: db.query(Material).filter(Material.user_id == user_id, Material.stage_status == stage).count()
-        for stage in ["input", "mineru_done", "popo_done", "raw_done", "clean_stale", "clean_done", "standard_done", "failed"]
+        for stage in ["input", "mineru_done", "popo_done", "latex_done", "failed"]
     }
     return {"total": total, "scanned": summary, "stages": stages, "availability": material_availability(db, user_id)}
 
@@ -496,7 +549,8 @@ async def upload_input_pdfs(files: list[UploadFile], user_id: str, db: Session) 
         material.content_type = file.content_type or "application/pdf"
         material.promote_stage("input")
         asset = ensure_input_review_asset(db, user_id, INPUT_BUCKET, object_name)
-        material.review_asset_id = asset.id if asset else material.review_asset_id
+        assign_input_review_asset(material, asset)
+        link_review_asset(db, material)
         db.flush()
         results.append({"filename": filename, "status": "success", "material": material.to_dict()})
     db.commit()
@@ -534,19 +588,39 @@ def pipeline_limit(limit: int) -> int:
     return max(1, min(int(limit or 5), 5))
 
 
-def pipeline_command(apply: bool, limit: int) -> list[str]:
+def pipeline_target_args(material_id: str = "", input_object: str = "") -> list[str]:
+    args: list[str] = []
+    cleaned_material_id = str(material_id or "").strip()
+    cleaned_input_object = str(input_object or "").strip()
+    if cleaned_material_id:
+        args.extend(["--material-id", cleaned_material_id])
+    if cleaned_input_object:
+        args.extend(["--input-object", cleaned_input_object])
+    return args
+
+
+def pipeline_command(apply: bool, limit: int, material_id: str = "", input_object: str = "") -> list[str]:
+    target_args = pipeline_target_args(material_id, input_object)
     if apply:
         command = ["python3", PIPELINE_SCRIPT, "run-staged", "--limit", str(pipeline_limit(limit))]
-        command.extend(["--skip-sha", "--input-status-only", "--apply", "--wait"])
+        if target_args:
+            command.extend(["--skip-sha", "--input-status-only"])
+        command.extend(target_args)
+        command.extend(["--apply", "--wait"])
     else:
         command = ["python3", PIPELINE_SCRIPT, "plan-next", "--limit", str(pipeline_limit(limit))]
-        command.extend(["--skip-sha", "--input-status-only"])
+        if target_args:
+            command.extend(["--skip-sha", "--input-status-only"])
+        command.extend(target_args)
     return command
 
 
-def pipeline_preflight_command(limit: int) -> list[str]:
+def pipeline_preflight_command(limit: int, material_id: str = "", input_object: str = "") -> list[str]:
     command = ["python3", PIPELINE_SCRIPT, "preflight", "--limit", str(pipeline_limit(limit))]
-    command.extend(["--skip-sha", "--input-status-only"])
+    target_args = pipeline_target_args(material_id, input_object)
+    if target_args:
+        command.extend(["--skip-sha", "--input-status-only"])
+    command.extend(target_args)
     return command
 
 
@@ -558,8 +632,41 @@ def parse_pipeline_json(stdout: str) -> dict[str, Any]:
     return parsed if isinstance(parsed, dict) else {}
 
 
-def run_pipeline_preflight(limit: int = 5) -> dict[str, Any]:
-    command = pipeline_preflight_command(limit)
+def _list_count(value: Any) -> int:
+    return len(value) if isinstance(value, list) else 0
+
+
+def pipeline_result_counts(payload: dict[str, Any], fallback_total: int = 0) -> dict[str, int]:
+    total = int(payload.get("selected_count") or fallback_total or 0)
+    status = str(payload.get("status") or "").upper()
+    popo = payload.get("popo") if isinstance(payload.get("popo"), dict) else {}
+    has_popo_counts = "freezes" in popo or "errors" in popo
+
+    popo_success = _list_count(popo.get("freezes"))
+    popo_failed = _list_count(popo.get("errors"))
+    mineru_success = _list_count(payload.get("mineru_freezes"))
+    mineru_failed = _list_count(payload.get("mineru_errors"))
+
+    if has_popo_counts:
+        success = popo_success
+        failed = popo_failed
+    else:
+        success = mineru_success
+        failed = mineru_failed
+
+    if status == "DONE" and total and success == 0 and failed == 0:
+        success = total
+    elif status == "PARTIAL" and total and success + failed < total:
+        failed = total - success
+
+    processed = success + failed
+    if total:
+        processed = min(total, processed)
+    return {"total": total, "processed": processed, "success": success, "failed": failed}
+
+
+def run_pipeline_preflight(limit: int = 5, material_id: str = "", input_object: str = "") -> dict[str, Any]:
+    command = pipeline_preflight_command(limit, material_id=material_id, input_object=input_object)
     completed = subprocess.run(
         command,
         cwd=PIPELINE_WORKDIR,
@@ -581,7 +688,14 @@ def run_pipeline_preflight(limit: int = 5) -> dict[str, Any]:
     return payload
 
 
-def start_pipeline_run(db: Session, user_id: str, apply: bool = False, limit: int = 5) -> PipelineRun:
+def start_pipeline_run(
+    db: Session,
+    user_id: str,
+    apply: bool = False,
+    limit: int = 5,
+    material_id: str = "",
+    input_object: str = "",
+) -> PipelineRun:
     active = (
         db.query(PipelineRun)
         .filter(PipelineRun.user_id == user_id, PipelineRun.status.in_(["queued", "running"]))
@@ -590,17 +704,22 @@ def start_pipeline_run(db: Session, user_id: str, apply: bool = False, limit: in
     )
     if active:
         return active
-    preflight = run_pipeline_preflight(limit) if apply else None
+    preflight = run_pipeline_preflight(limit, material_id=material_id, input_object=input_object) if apply else None
     if apply and not bool(preflight and preflight.get("ready")):
         raise PipelinePreflightError(preflight or {})
     run = PipelineRun(
         user_id=user_id,
         status="queued",
         mode="apply" if apply else "dry_run",
-        command=" ".join(pipeline_command(apply=apply, limit=limit)),
+        command=" ".join(pipeline_command(apply=apply, limit=limit, material_id=material_id, input_object=input_object)),
         current_stage="queued",
         total=int(preflight.get("selected_count") or 0) if preflight else 0,
-        summary_json=json.dumps({"preflight": preflight}, ensure_ascii=False) if preflight else None,
+        summary_json=json.dumps(
+            {"preflight": preflight, "material_id": material_id, "input_object": input_object},
+            ensure_ascii=False,
+        )
+        if preflight or material_id or input_object
+        else None,
         created_at=datetime.utcnow(),
     )
     db.add(run)
@@ -613,11 +732,21 @@ def start_pipeline_run(db: Session, user_id: str, apply: bool = False, limit: in
         payload={"preflight": preflight} if preflight else None,
     )
     db.commit()
-    threading.Thread(target=run_pipeline_subprocess, args=(run.id, apply, limit), daemon=True).start()
+    threading.Thread(
+        target=run_pipeline_subprocess,
+        args=(run.id, apply, limit, material_id, input_object),
+        daemon=True,
+    ).start()
     return run
 
 
-def run_pipeline_subprocess(run_id: int, apply: bool, limit: int) -> None:
+def run_pipeline_subprocess(
+    run_id: int,
+    apply: bool,
+    limit: int,
+    material_id: str = "",
+    input_object: str = "",
+) -> None:
     db = SessionLocal()
     try:
         run = db.query(PipelineRun).filter(PipelineRun.id == run_id).first()
@@ -629,7 +758,7 @@ def run_pipeline_subprocess(run_id: int, apply: bool, limit: int) -> None:
         create_pipeline_event(db, run, "开始执行现有 Luceon first-stage 调度脚本", stage="pipeline_command")
         db.commit()
 
-        command = pipeline_command(apply=apply, limit=limit)
+        command = pipeline_command(apply=apply, limit=limit, material_id=material_id, input_object=input_object)
         completed = subprocess.run(
             command,
             cwd=PIPELINE_WORKDIR,
@@ -640,6 +769,12 @@ def run_pipeline_subprocess(run_id: int, apply: bool, limit: int) -> None:
         )
         output = (completed.stdout or "")[-8000:]
         error = (completed.stderr or "")[-4000:]
+        payload = parse_pipeline_json(completed.stdout)
+        counts = pipeline_result_counts(payload, fallback_total=run.total)
+        run.total = counts["total"]
+        run.processed = counts["processed"]
+        run.success = counts["success"]
+        run.failed = counts["failed"]
         run.finished_at = datetime.utcnow()
         run.summary_json = json.dumps({"returncode": completed.returncode, "stdout_tail": output, "stderr_tail": error}, ensure_ascii=False)
         if completed.returncode == 0:
@@ -670,7 +805,7 @@ def material_summary(db: Session, user_id: str) -> dict[str, Any]:
     total = db.query(Material).filter(Material.user_id == user_id).count()
     stages = {
         stage: db.query(Material).filter(Material.user_id == user_id, Material.stage_status == stage).count()
-        for stage in ["input", "mineru_done", "popo_done", "raw_done", "clean_stale", "clean_done", "standard_done", "failed"]
+        for stage in ["input", "mineru_done", "popo_done", "latex_done", "failed"]
     }
     latest = latest_pipeline_run(db, user_id)
     return {
@@ -687,7 +822,5 @@ def material_availability(db: Session, user_id: str) -> dict[str, int]:
         "input": sum(1 for row in rows if row.input_object),
         "mineru_done": sum(1 for row in rows if row.mineru_manifest_object or row.popo_manifest_object),
         "popo_done": sum(1 for row in rows if row.popo_manifest_object),
-        "raw_done": sum(1 for row in rows if row.raw_manifest_object),
-        "clean_done": sum(1 for row in rows if row.clean_manifest_object),
-        "standard_done": sum(1 for row in rows if row.standard_manifest_object),
+        "latex_done": sum(1 for row in rows if row.latex_manifest_object),
     }

@@ -25,8 +25,9 @@
       <div v-if="loading" class="pdf-source-state">正在加载 PDF...</div>
       <div v-else-if="error" class="pdf-source-state error">{{ error }}</div>
       <template v-else>
+        <div v-if="topSpacerHeight" class="pdf-page-spacer" :style="{ height: `${topSpacerHeight}px` }" />
         <section
-          v-for="page in pages"
+          v-for="page in visiblePages"
           :key="page.pageNumber"
           :ref="(el) => setPageRef(el, page.pageNumber)"
           class="pdf-page-shell"
@@ -57,6 +58,7 @@
             </div>
           </div>
         </section>
+        <div v-if="bottomSpacerHeight" class="pdf-page-spacer" :style="{ height: `${bottomSpacerHeight}px` }" />
       </template>
     </div>
   </div>
@@ -112,17 +114,21 @@ const canvasRefs = new Map<number, HTMLCanvasElement>()
 const pageRefs = new Map<number, HTMLElement>()
 const blockRefs = new Map<string, HTMLElement>()
 const renderTasks = new Map<number, RenderTask>()
+const VIRTUALIZE_PAGE_THRESHOLD = 80
+const VIRTUAL_WINDOW_RADIUS = 8
+const PAGE_VERTICAL_CHROME = 44
 let loadToken = 0
 let pendingScrollPage: number | undefined
 let visibleRenderFrame: number | undefined
 
 const activePage = computed(() => props.activePage || currentPage.value)
+const useVirtualPages = computed(() => pages.value.length > VIRTUALIZE_PAGE_THRESHOLD)
 const sourcePages = computed(() => props.sourceMap?.pages || [])
 const sourcePageMap = computed(() => new Map(sourcePages.value.map((page) => [page.page, page])))
 const sourceBlockCount = computed(() => sourcePages.value.reduce((total, page) => total + page.blocks.length, 0))
 const pageLabel = computed(() => {
   const total = pdfPageTotal.value || pages.value.length
-  const trace = sourceBlockCount.value ? `${sourceBlockCount.value} 个溯源框` : '暂无 bbox'
+  const trace = sourceBlockCount.value ? `${sourceBlockCount.value} 个溯源框` : '无溯源数据'
   return total ? `第 ${activePage.value} / ${total} 页 · ${trace}` : trace
 })
 
@@ -142,6 +148,59 @@ const blocksForRenderedPage = (pageNumber: number): SourceBlock[] => {
   return shouldRenderSourceBlocks(pageNumber) ? blocksForPage(pageNumber) : []
 }
 
+const clampPageNumber = (pageNumber: number) => {
+  const total = pdfPageTotal.value || pages.value.length || pageNumber
+  return Math.max(1, Math.min(total, pageNumber))
+}
+
+const pageOuterHeight = (page: RenderedPage) => page.height + PAGE_VERTICAL_CHROME
+
+const pageOffsetBefore = (pageNumber: number) => {
+  const target = clampPageNumber(pageNumber)
+  let offset = 0
+  for (const page of pages.value) {
+    if (page.pageNumber >= target) break
+    offset += pageOuterHeight(page)
+  }
+  return offset
+}
+
+const totalScrollHeight = computed(() => pages.value.reduce((total, page) => total + pageOuterHeight(page), 0))
+
+const pageFromScrollOffset = (offset: number) => {
+  if (!pages.value.length) return currentPage.value
+  let cursor = 0
+  for (const page of pages.value) {
+    cursor += pageOuterHeight(page)
+    if (offset <= cursor) return page.pageNumber
+  }
+  return pages.value[pages.value.length - 1]?.pageNumber || currentPage.value
+}
+
+const visiblePages = computed(() => {
+  if (!useVirtualPages.value) return pages.value
+  const total = pdfPageTotal.value || pages.value.length
+  const anchors = new Set([clampPageNumber(currentPage.value), clampPageNumber(activePage.value)])
+  let start = total
+  let end = 1
+  anchors.forEach((anchor) => {
+    start = Math.min(start, Math.max(1, anchor - VIRTUAL_WINDOW_RADIUS))
+    end = Math.max(end, Math.min(total, anchor + VIRTUAL_WINDOW_RADIUS))
+  })
+  return pages.value.filter((page) => page.pageNumber >= start && page.pageNumber <= end)
+})
+
+const topSpacerHeight = computed(() => {
+  if (!useVirtualPages.value || !visiblePages.value.length) return 0
+  return pageOffsetBefore(visiblePages.value[0].pageNumber)
+})
+
+const bottomSpacerHeight = computed(() => {
+  if (!useVirtualPages.value || !visiblePages.value.length) return 0
+  const last = visiblePages.value[visiblePages.value.length - 1]
+  return Math.max(0, totalScrollHeight.value - pageOffsetBefore(last.pageNumber) - pageOuterHeight(last))
+})
+
 const setCanvasRef = (el: unknown, pageNumber: number) => {
   if (el instanceof HTMLCanvasElement) {
     canvasRefs.set(pageNumber, el)
@@ -153,7 +212,7 @@ const setCanvasRef = (el: unknown, pageNumber: number) => {
 const setPageRef = (el: unknown, pageNumber: number) => {
   if (el instanceof HTMLElement) {
     pageRefs.set(pageNumber, el)
-    if (pendingScrollPage === pageNumber) {
+    if (!useVirtualPages.value && pendingScrollPage === pageNumber) {
       void scrollToPage(pageNumber)
     }
   } else {
@@ -343,8 +402,10 @@ const loadDocument = async () => {
     const doc = await pdfjsLib.getDocument({
       url: sourceUrl,
       withCredentials: true,
-      rangeChunkSize: 256 * 1024,
-      disableRange: false
+      rangeChunkSize: 1024 * 1024,
+      disableRange: false,
+      disableStream: true,
+      disableAutoFetch: true
     }).promise
     if (token !== loadToken) {
       await doc.destroy()
@@ -408,15 +469,26 @@ const blockTitle = (block: SourceBlock) => {
 const scrollToPage = async (pageNumber: number, behavior: ScrollBehavior = 'auto') => {
   await nextTick()
   const scroller = scrollRef.value
-  const total = pdfPageTotal.value || pages.value.length || pageNumber
-  const targetPage = Math.max(1, Math.min(total, pageNumber))
-  const page = pageRefs.get(targetPage)
-  if (!scroller || !page) {
+  const targetPage = clampPageNumber(pageNumber)
+  if (!scroller) {
     pendingScrollPage = targetPage
     return
   }
   pendingScrollPage = undefined
   currentPage.value = targetPage
+  if (useVirtualPages.value) {
+    scroller.scrollTo({
+      top: Math.max(0, pageOffsetBefore(targetPage) - 8),
+      behavior
+    })
+    await nextTick()
+  }
+  const page = pageRefs.get(targetPage)
+  if (!page) {
+    pendingScrollPage = targetPage
+    renderAroundPage(targetPage, 2)
+    return
+  }
   renderAroundPage(targetPage, 2)
   const scrollerRect = scroller.getBoundingClientRect()
   const pageRect = page.getBoundingClientRect()
@@ -459,18 +531,21 @@ const handleSourceBlockClick = (pageNumber: number, block: SourceBlock) => {
 const handleScroll = () => {
   const scroller = scrollRef.value
   if (!scroller || !pages.value.length) return
-  const scrollerTop = scroller.getBoundingClientRect().top
-  const probeTop = scrollerTop + scroller.clientHeight * 0.35
   let nextPage = currentPage.value
-  let nearestDistance = Number.POSITIVE_INFINITY
-
-  pageRefs.forEach((el, pageNumber) => {
-    const distance = Math.abs(el.getBoundingClientRect().top - probeTop)
-    if (distance < nearestDistance) {
-      nearestDistance = distance
-      nextPage = pageNumber
-    }
-  })
+  if (useVirtualPages.value) {
+    nextPage = pageFromScrollOffset(scroller.scrollTop + scroller.clientHeight * 0.35)
+  } else {
+    const scrollerTop = scroller.getBoundingClientRect().top
+    const probeTop = scrollerTop + scroller.clientHeight * 0.35
+    let nearestDistance = Number.POSITIVE_INFINITY
+    pageRefs.forEach((el, pageNumber) => {
+      const distance = Math.abs(el.getBoundingClientRect().top - probeTop)
+      if (distance < nearestDistance) {
+        nearestDistance = distance
+        nextPage = pageNumber
+      }
+    })
+  }
 
   if (nextPage !== currentPage.value) {
     currentPage.value = nextPage
@@ -606,6 +681,12 @@ defineExpose({ scrollToPage, scrollToBlock })
   width: fit-content;
   margin: 0 auto 18px;
   transition: filter var(--transition-fast), transform var(--transition-fast);
+}
+
+.pdf-page-spacer {
+  width: 1px;
+  margin: 0 auto;
+  pointer-events: none;
 }
 
 .pdf-page-shell.active {

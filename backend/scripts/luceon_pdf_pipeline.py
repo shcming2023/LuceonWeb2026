@@ -1483,6 +1483,36 @@ def sort_plan_items(items: list[dict[str, Any]], sort_by: str) -> list[dict[str,
     return sorted(items, key=lambda item: (int(item.get("input_size_bytes") or 0), str(item.get("input_object") or "")))
 
 
+def normalize_filter_values(values: list[str] | tuple[str, ...] | None) -> tuple[str, ...]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for raw in values or []:
+        value = str(raw or "").strip()
+        if value and value not in seen:
+            seen.add(value)
+            result.append(value)
+    return tuple(result)
+
+
+def target_filters_from_args(args: argparse.Namespace) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    return (
+        normalize_filter_values(getattr(args, "input_object", []) or []),
+        normalize_filter_values(getattr(args, "material_id", []) or []),
+    )
+
+
+def item_matches_target_filters(
+    item: dict[str, Any],
+    input_objects: tuple[str, ...],
+    material_ids: tuple[str, ...],
+) -> bool:
+    if input_objects and str(item.get("input_object") or item.get("object") or "") not in set(input_objects):
+        return False
+    if material_ids and str(item.get("material_id") or "") not in set(material_ids):
+        return False
+    return True
+
+
 def load_lineage_file(path: str) -> dict[str, Any]:
     p = Path(path).expanduser()
     if not p.exists():
@@ -1517,8 +1547,14 @@ def build_next_batch_plan(
     lineage_file: str = "",
     include_error_review: bool = False,
     input_status_only: bool = False,
+    input_objects: list[str] | tuple[str, ...] | None = None,
+    material_ids: list[str] | tuple[str, ...] | None = None,
+    allow_active: bool = False,
+    candidate_states: set[str] | None = None,
 ) -> dict[str, Any]:
     limit = min(max(1, int(limit or MAX_BATCH_PDFS)), MAX_BATCH_PDFS)
+    input_object_filters = normalize_filter_values(input_objects)
+    material_id_filters = normalize_filter_values(material_ids)
     if lineage_file:
         lineage = load_lineage_file(lineage_file)
     elif input_status_only:
@@ -1526,16 +1562,26 @@ def build_next_batch_plan(
     else:
         lineage = first_stage_lineage_audit(s3, cfg, sample_limit=max(100, limit), with_sha=with_sha)
     selected: list[dict[str, Any]] = []
-    if lineage.get("active_marker_count"):
+    normalized_items = [normalize_lineage_scheduler_fields(item) for item in lineage["items"]]
+    target_items = [
+        item
+        for item in normalized_items
+        if item_matches_target_filters(item, input_object_filters, material_id_filters)
+    ]
+    selected_states = set(candidate_states or {"eligible_for_submit"})
+    if include_error_review:
+        selected_states.add("error_review")
+    if lineage.get("active_marker_count") and not allow_active:
         status = "BLOCKED_ACTIVE_MARKERS"
     else:
-        normalized_items = [normalize_lineage_scheduler_fields(item) for item in lineage["items"]]
-        candidate_states = {"eligible_for_submit"}
-        if include_error_review:
-            candidate_states.add("error_review")
-        candidates = [item for item in normalized_items if item.get("scheduler_state") in candidate_states]
+        candidates = [item for item in target_items if item.get("scheduler_state") in selected_states]
         selected = sort_plan_items(candidates, sort_by)[:limit]
-        status = "READY" if selected else "IDLE"
+        if selected:
+            status = "READY"
+        elif input_object_filters or material_id_filters:
+            status = "TARGET_NOT_ELIGIBLE"
+        else:
+            status = "IDLE"
     return {
         "command": "plan-next",
         "applied": False,
@@ -1546,6 +1592,13 @@ def build_next_batch_plan(
         "with_sha": with_sha,
         "include_error_review": include_error_review,
         "input_status_only": input_status_only,
+        "allow_active": allow_active,
+        "candidate_states": sorted(selected_states),
+        "target_filters": {
+            "input_objects": list(input_object_filters),
+            "material_ids": list(material_id_filters),
+            "matched_count": len(target_items),
+        },
         "lineage_scope": lineage.get("scope"),
         "selected_count": len(selected),
         "selected": [compact_lineage_item(item) for item in selected],
@@ -2385,6 +2438,144 @@ def lineage_item_to_submit_doc(s3: S3Client, cfg: Config, item: dict[str, Any], 
     }
 
 
+def int_or_none(value: Any) -> int | None:
+    try:
+        if value in (None, ""):
+            return None
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def input_object_from_url(url: str, input_bucket: str) -> str:
+    if not url:
+        return ""
+    parsed = urllib.parse.urlparse(url)
+    path = urllib.parse.unquote(parsed.path or "").lstrip("/")
+    if not path:
+        return ""
+    prefix = input_bucket.rstrip("/") + "/"
+    if path.startswith(prefix):
+        return path[len(prefix) :]
+    return ""
+
+
+def input_pdf_lookup_rows(s3: S3Client, cfg: Config) -> dict[str, dict[str, str]]:
+    rows: dict[str, dict[str, str]] = {}
+    for row in s3.list_objects(cfg.input_bucket):
+        key = str(row.get("Key") or "")
+        if key.lower().endswith(".pdf"):
+            rows[key] = row
+    return rows
+
+
+def resolve_existing_stage_input_object(
+    s3: S3Client,
+    cfg: Config,
+    doc_status: dict[str, Any],
+) -> tuple[str, str, int]:
+    source = doc_status.get("source") if isinstance(doc_status.get("source"), dict) else {}
+    declared_sha = str(
+        source.get("sha256")
+        or source.get("source_sha256")
+        or doc_status.get("source_pdf_sha256")
+        or doc_status.get("sha256")
+        or ""
+    )
+    declared_size = int_or_none(
+        source.get("size_bytes") or source.get("source_pdf_size_bytes") or doc_status.get("source_pdf_size_bytes")
+    )
+    candidate_objects = normalize_filter_values(
+        [
+            str(source.get("input_object") or ""),
+            str(source.get("object") or ""),
+            input_object_from_url(str(source.get("url") or ""), cfg.input_bucket),
+            input_object_from_url(str(source.get("source_url") or ""), cfg.input_bucket),
+            str(doc_status.get("input_object") or ""),
+            str(source.get("filename") or ""),
+            str(doc_status.get("filename") or ""),
+        ]
+    )
+    rows_by_key = input_pdf_lookup_rows(s3, cfg)
+
+    def matches_declared(obj: str) -> tuple[str, str, int] | None:
+        row = rows_by_key.get(obj)
+        if not row:
+            return None
+        row_size = int_or_none(row.get("Size"))
+        if declared_size is not None and row_size is not None and row_size != declared_size:
+            return None
+        data = s3.get_bytes(cfg.input_bucket, obj, max_bytes=cfg.max_file_bytes)
+        source_sha = sha256_hex(data)
+        if declared_sha and source_sha != declared_sha:
+            return None
+        return obj, source_sha, len(data)
+
+    for obj in candidate_objects:
+        match = matches_declared(obj)
+        if match:
+            return match
+
+    if declared_sha:
+        for obj, row in rows_by_key.items():
+            row_size = int_or_none(row.get("Size"))
+            if declared_size is not None and row_size is not None and row_size != declared_size:
+                continue
+            data = s3.get_bytes(cfg.input_bucket, obj, max_bytes=cfg.max_file_bytes)
+            if sha256_hex(data) == declared_sha:
+                return obj, declared_sha, len(data)
+
+    detail = {
+        "doc_id": doc_status.get("doc_id"),
+        "source_filename": source.get("filename"),
+        "sha256": declared_sha,
+        "size_bytes": declared_size,
+    }
+    raise ValueError("cannot resolve existing staged document to eduassets-input object: %s" % json_safe(detail))
+
+
+def existing_stage_status_to_submit_doc(
+    s3: S3Client,
+    cfg: Config,
+    doc_status: dict[str, Any],
+    index: int,
+) -> dict[str, Any]:
+    source = doc_status.get("source") if isinstance(doc_status.get("source"), dict) else {}
+    obj, source_sha, size_bytes = resolve_existing_stage_input_object(s3, cfg, doc_status)
+    material_id = str(source.get("material_id") or doc_status.get("material_id") or material_id_from_sha(source_sha))
+    filename = str(source.get("filename") or doc_status.get("filename") or obj.rsplit("/", 1)[-1] or "input.pdf")
+    doc_id = str(doc_status.get("doc_id") or "staged_%s_%03d" % (source_sha[:16], index + 1))
+    return {
+        "bucket": cfg.input_bucket,
+        "object": obj,
+        "filename": filename,
+        "source_hash": source_key_hash(cfg.input_bucket, obj),
+        "material_id": material_id,
+        "doc_id": doc_id,
+        "source_pdf_sha256": source_sha,
+        "source_pdf_size_bytes": size_bytes,
+        "source_url": s3.presign_get(cfg.minio_public_endpoint, cfg.input_bucket, obj, expires=cfg.presign_expires),
+        "source_url_expires_seconds": cfg.presign_expires,
+    }
+
+
+def existing_stage_docs_from_batch_status(
+    s3: S3Client,
+    cfg: Config,
+    batch_status: dict[str, Any],
+    input_objects: tuple[str, ...],
+    material_ids: tuple[str, ...],
+) -> list[dict[str, Any]]:
+    docs: list[dict[str, Any]] = []
+    for idx, status in enumerate(stage_status_documents(batch_status)):
+        if not isinstance(status, dict):
+            continue
+        doc = existing_stage_status_to_submit_doc(s3, cfg, status, idx)
+        if item_matches_target_filters(doc, input_objects, material_ids):
+            docs.append(doc)
+    return docs
+
+
 def freeze_mineru_only_result(
     s3: S3Client,
     cfg: Config,
@@ -3082,6 +3273,7 @@ def lineage_audit_command(args: argparse.Namespace) -> dict[str, Any]:
 def plan_next_command(args: argparse.Namespace) -> dict[str, Any]:
     cfg = cfg_from_args(args)
     s3 = S3Client(cfg.minio_endpoint, cfg.minio_access_key, cfg.minio_secret_key)
+    input_objects, material_ids = target_filters_from_args(args)
     return build_next_batch_plan(
         s3,
         cfg,
@@ -3091,6 +3283,9 @@ def plan_next_command(args: argparse.Namespace) -> dict[str, Any]:
         lineage_file=args.lineage_file,
         include_error_review=args.include_error_review,
         input_status_only=args.input_status_only,
+        input_objects=input_objects,
+        material_ids=material_ids,
+        allow_active=args.allow_active,
     )
 
 
@@ -3100,6 +3295,7 @@ def preflight_command(args: argparse.Namespace) -> dict[str, Any]:
 
     try:
         s3 = S3Client(cfg.minio_endpoint, cfg.minio_access_key, cfg.minio_secret_key)
+        input_objects, material_ids = target_filters_from_args(args)
         plan = build_next_batch_plan(
             s3,
             cfg,
@@ -3109,6 +3305,9 @@ def preflight_command(args: argparse.Namespace) -> dict[str, Any]:
             lineage_file=args.lineage_file,
             include_error_review=args.include_error_review,
             input_status_only=args.input_status_only,
+            input_objects=input_objects,
+            material_ids=material_ids,
+            allow_active=args.allow_active,
         )
     except Exception as exc:
         plan = {"status": "ERROR", "error": str(exc), "type": type(exc).__name__}
@@ -3302,20 +3501,72 @@ def run_staged_command(args: argparse.Namespace) -> dict[str, Any]:
     apply_run_mode(args, "run-staged")
     cfg = cfg_from_args(args)
     s3 = S3Client(cfg.minio_endpoint, cfg.minio_access_key, cfg.minio_secret_key)
-    plan = build_next_batch_plan(
-        s3,
-        cfg,
-        args.limit,
-        args.sort_by,
-        with_sha=not args.skip_sha,
-        lineage_file=args.lineage_file,
-        include_error_review=args.include_error_review,
-        input_status_only=args.input_status_only,
-    )
+    input_objects, material_ids = target_filters_from_args(args)
+    if args.apply and args.input_status_only and not (input_objects or material_ids or args.existing_mineru_batch_id or args.existing_popo_batch_id):
+        return {
+            "command": "run-staged",
+            "applied": False,
+            "status": "BLOCKED_UNTARGETED_INPUT_STATUS_ONLY_APPLY",
+            "reason": "--input-status-only apply cannot prove content-level duplicates; pass --input-object/--material-id or run full SHA planning",
+        }
+    wrapper: WrapperClient | None = None
+    health: dict[str, Any] = {}
+    staged_probe: dict[str, Any] = {}
+    mineru_submit: dict[str, Any] | None = None
+    if args.existing_mineru_batch_id:
+        wrapper = WrapperClient(cfg.wrapper_url, cfg.wrapper_api_key)
+        try:
+            health = wrapper_ready(wrapper, require_mineru=True)
+            staged_probe = staged_api_probe(wrapper)
+        except Exception as exc:
+            return {
+                "command": "run-staged",
+                "applied": False,
+                "status": "GPU_OFFLINE",
+                "health": wrapper_offline_payload(exc),
+            }
+        if not health["ok"]:
+            return {"command": "run-staged", "applied": False, "status": "GPU_OFFLINE", "health": health}
+        if not staged_probe["available"]:
+            return {
+                "command": "run-staged",
+                "applied": False,
+                "status": "STAGED_API_UNAVAILABLE",
+                "health": health,
+                "staged_api_probe": staged_probe,
+            }
+        mineru_submit = wrapper.request_json("GET", f"/api/v1/mineru/batches/{args.existing_mineru_batch_id}", timeout=60)
+        docs = existing_stage_docs_from_batch_status(s3, cfg, mineru_submit, input_objects, material_ids)
+        plan = {
+            "command": "run-staged",
+            "status": "READY" if docs else "TARGET_NOT_FOUND_IN_EXISTING_MINERU_BATCH",
+            "mode": "existing_mineru_recovery",
+            "existing_mineru_batch_id": str(args.existing_mineru_batch_id),
+            "selected_count": len(docs),
+            "target_filters": {"input_objects": list(input_objects), "material_ids": list(material_ids)},
+        }
+    else:
+        candidate_states = {"eligible_for_submit"}
+        if args.existing_popo_batch_id:
+            candidate_states = {"mineru_only_resume_popo"}
+        plan = build_next_batch_plan(
+            s3,
+            cfg,
+            args.limit,
+            args.sort_by,
+            with_sha=not args.skip_sha,
+            lineage_file=args.lineage_file,
+            include_error_review=args.include_error_review,
+            input_status_only=args.input_status_only,
+            input_objects=input_objects,
+            material_ids=material_ids,
+            allow_active=args.allow_active or bool(args.existing_popo_batch_id),
+            candidate_states=candidate_states,
+        )
+        selected = plan.get("selected") or []
+        docs = [lineage_item_to_submit_doc(s3, cfg, item, idx) for idx, item in enumerate(selected)]
     if plan.get("status") != "READY":
         return {"command": "run-staged", "applied": False, "status": plan.get("status"), "plan": plan}
-    selected = plan.get("selected") or []
-    docs = [lineage_item_to_submit_doc(s3, cfg, item, idx) for idx, item in enumerate(selected)]
     dry_docs = [
         {k: d[k] for k in ("object", "material_id", "source_pdf_size_bytes", "source_pdf_sha256")}
         for d in docs
@@ -3342,27 +3593,28 @@ def run_staged_command(args: argparse.Namespace) -> dict[str, Any]:
             "selected_count": len(docs),
             "docs": dry_docs,
         }
-    wrapper = WrapperClient(cfg.wrapper_url, cfg.wrapper_api_key)
-    try:
-        health = wrapper_ready(wrapper, require_mineru=not bool(args.existing_popo_batch_id))
-        staged_probe = staged_api_probe(wrapper)
-    except Exception as exc:
-        return {
-            "command": "run-staged",
-            "applied": False,
-            "status": "GPU_OFFLINE",
-            "health": wrapper_offline_payload(exc),
-        }
-    if not health["ok"]:
-        return {"command": "run-staged", "applied": False, "status": "GPU_OFFLINE", "health": health}
-    if not staged_probe["available"]:
-        return {
-            "command": "run-staged",
-            "applied": False,
-            "status": "STAGED_API_UNAVAILABLE",
-            "health": health,
-            "staged_api_probe": staged_probe,
-        }
+    if wrapper is None:
+        wrapper = WrapperClient(cfg.wrapper_url, cfg.wrapper_api_key)
+        try:
+            health = wrapper_ready(wrapper, require_mineru=not bool(args.existing_popo_batch_id))
+            staged_probe = staged_api_probe(wrapper)
+        except Exception as exc:
+            return {
+                "command": "run-staged",
+                "applied": False,
+                "status": "GPU_OFFLINE",
+                "health": wrapper_offline_payload(exc),
+            }
+        if not health["ok"]:
+            return {"command": "run-staged", "applied": False, "status": "GPU_OFFLINE", "health": health}
+        if not staged_probe["available"]:
+            return {
+                "command": "run-staged",
+                "applied": False,
+                "status": "STAGED_API_UNAVAILABLE",
+                "health": health,
+                "staged_api_probe": staged_probe,
+            }
 
     if args.existing_popo_batch_id:
         popo_batch_id = str(args.existing_popo_batch_id)
@@ -3472,7 +3724,8 @@ def run_staged_command(args: argparse.Namespace) -> dict[str, Any]:
 
     if args.existing_mineru_batch_id:
         mineru_batch_id = str(args.existing_mineru_batch_id)
-        mineru_submit = wrapper.request_json("GET", f"/api/v1/mineru/batches/{mineru_batch_id}", timeout=60)
+        if mineru_submit is None:
+            mineru_submit = wrapper.request_json("GET", f"/api/v1/mineru/batches/{mineru_batch_id}", timeout=60)
     else:
         mineru_client_batch_id = args.client_batch_id or "staged_mineru_%s" % utc_stamp()
         mineru_payload_docs = [
@@ -3812,6 +4065,21 @@ def add_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--out", default="")
 
 
+def add_target_filters(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--input-object",
+        action="append",
+        default=[],
+        help="Limit planning/recovery to this exact eduassets-input object. Repeat for multiple objects.",
+    )
+    parser.add_argument(
+        "--material-id",
+        action="append",
+        default=[],
+        help="Limit planning/recovery to this exact material_id, for example pdf-<sha16>. Repeat for multiple materials.",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -3846,6 +4114,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Use only eduassets-input status markers for fast planning; intended for error retry planning, not completion audit.",
     )
+    add_target_filters(p)
     p.set_defaults(func=plan_next_command)
     p = sub.add_parser("preflight", help="Check GPU wrapper, staged APIs, active markers, and the next eligible batch.")
     add_common(p)
@@ -3859,6 +4128,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Use only eduassets-input status markers for fast planning; intended for quick UI preflight.",
     )
+    add_target_filters(p)
     p.set_defaults(func=preflight_command)
     p = sub.add_parser("report", help="Sanitized read-only first-stage report with queues and bucket contract audit.")
     add_common(p)
@@ -3892,6 +4162,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Use only eduassets-input status markers for fast retry selection; final completion still requires lineage audit.",
     )
+    add_target_filters(p)
     p.add_argument("--wait", action="store_true", help="Wait for MinerU and Popo completion and freeze outputs.")
     p.add_argument("--poll-interval", type=int, default=30)
     p.add_argument("--timeout-seconds", type=int, default=7200)

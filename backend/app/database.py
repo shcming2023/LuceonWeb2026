@@ -14,7 +14,7 @@ DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///./mineru.db')
 # 创建数据库引擎（整个应用共享一个实例）
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False} if DATABASE_URL.startswith('sqlite') else {},
+    connect_args={"check_same_thread": False, "timeout": 30} if DATABASE_URL.startswith('sqlite') else {},
     pool_pre_ping=True,  # 连接前检测连接是否有效
     pool_recycle=3600,   # 连接回收时间（秒）
 )

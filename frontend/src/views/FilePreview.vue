@@ -883,7 +883,7 @@ const sourceTraceLabel = computed(() => {
     return `${filteredSourceBlockTotal.value} / ${sourceBlockTotal.value} 个 bbox`
   }
   if (sourceBlockTotal.value) return `${sourceBlockTotal.value} 个 bbox`
-  return '暂无 bbox'
+  return '无溯源数据'
 })
 const sourcePageFor = (page: number) => {
   return sourceMap.value.pages.find((item) => item.page === page)
@@ -895,7 +895,7 @@ const sourceStatusForPage = (page: number) => {
   const count = filteredSourcePageFor(page)?.blocks.length || 0
   const total = sourcePageFor(page)?.blocks.length || 0
   if (isSourceTypeFilterActive.value && total) return count ? `${count} / ${total} 个 bbox` : '无匹配'
-  return total ? `${total} 个 bbox` : '无 bbox'
+  return total ? `${total} 个 bbox` : '无溯源'
 }
 const sourceTypeFilterCount = (filter: SourceTypeFilter) => {
   if (filter === 'all') return sourceBlockTotal.value
