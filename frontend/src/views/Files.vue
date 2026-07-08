@@ -556,6 +556,7 @@ function currentStageKey(row: MaterialItem) {
 function rowStageNote(row: MaterialItem) {
   if (row.pipeline_status === 'running') return '任务运行中'
   if (row.pipeline_status === 'queued') return '任务排队中'
+  if (codexJobActive(row)) return codexJobStatusText(row.codex_job?.status || '')
   if (hasLatexAsset(row)) return '可进行 PDF 比对'
   if (row.codex_job) return codexJobStatusText(row.codex_job.status)
   if (hasPopoAsset(row)) return '可启动 Codex 精修任务'
