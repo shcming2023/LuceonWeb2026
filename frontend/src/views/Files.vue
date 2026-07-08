@@ -199,7 +199,7 @@
                 size="small"
                 :icon="primaryAction(row).icon"
                 :type="primaryAction(row).type"
-                :loading="codexStartingIds.has(row.id)"
+                :loading="codexStartingIds.has(row.id) || primaryActionLoading(row)"
                 :disabled="!primaryAction(row).enabled"
                 @click="runPrimaryAction(row)"
               >
@@ -214,6 +214,9 @@
                     <el-dropdown-item command="compare-review" :disabled="!hasLatexAsset(row)" :icon="View">PDF 比对</el-dropdown-item>
                     <el-dropdown-item command="start-codex" :disabled="!canStartCodex(row)" :icon="Cpu">
                       {{ hasLatexAsset(row) ? 'Codex 重扫' : '启动 Codex 精修' }}
+                    </el-dropdown-item>
+                    <el-dropdown-item command="run-worker" :disabled="!canRunCodexWorker(row)" :icon="VideoPlay">
+                      运行 Worker
                     </el-dropdown-item>
                     <el-dropdown-item divided command="preview-pdf" :disabled="!row.input_object" :icon="Document">打开 PDF</el-dropdown-item>
                     <el-dropdown-item command="download-pdf" :disabled="!row.input_object" :icon="Download">下载 PDF</el-dropdown-item>
@@ -381,6 +384,7 @@ import {
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { UploadUserFile } from 'element-plus'
 import { useRouter } from 'vue-router'
+import { codexWorkerApi, type CodexWorkerStatus } from '@/api/codexWorker'
 import { materialsApi } from '@/api/materials'
 import type {
   MaterialItem,
@@ -427,6 +431,9 @@ const metadataExtracting = ref(false)
 const metadataBatchExtracting = ref(false)
 const codexBatchStarting = ref(false)
 const codexStartingIds = ref(new Set<string>())
+const workerStartingIds = ref(new Set<string>())
+const workerStatuses = ref<Record<string, CodexWorkerStatus>>({})
+const workerPollingTimer = ref<number | null>(null)
 const metadataForceExtract = ref(false)
 const activeMetadataRow = ref<MaterialItem | null>(null)
 const metadataForm = reactive<MaterialBookMetadata>({
@@ -473,6 +480,7 @@ type RowCommand =
   | 'metadata-extract'
   | 'compare-review'
   | 'start-codex'
+  | 'run-worker'
   | 'preview-pdf'
   | 'download-pdf'
 
@@ -556,6 +564,8 @@ function currentStageKey(row: MaterialItem) {
 function rowStageNote(row: MaterialItem) {
   if (row.pipeline_status === 'running') return '任务运行中'
   if (row.pipeline_status === 'queued') return '任务排队中'
+  const workerStatus = workerStatusForRow(row)
+  if (workerStatus?.state) return workerStatusText(workerStatus)
   if (codexJobActive(row)) return codexJobStatusText(row.codex_job?.status || '')
   if (hasLatexAsset(row)) return '可进行 PDF 比对'
   if (row.codex_job) return codexJobStatusText(row.codex_job.status)
@@ -576,6 +586,19 @@ function codexJobStatusText(status: string) {
     cancelled: 'Codex 精修已取消'
   }
   return map[status] || `Codex ${status || '未知状态'}`
+}
+
+function workerStatusText(status: CodexWorkerStatus) {
+  const map: Record<string, string> = {
+    queued: 'Worker 已提交',
+    running: 'Worker running',
+    publishing: 'Worker publishing',
+    published: 'Worker published',
+    failed: 'Worker failed',
+    missing: 'Worker 找不到任务'
+  }
+  if (status.state === 'failed' && status.message) return `Worker failed：${status.message}`
+  return map[status.state] || `Worker ${status.state || 'unknown'}`
 }
 
 const stageOptions = [
@@ -814,6 +837,7 @@ function currentPipelineTarget(): PipelineTarget {
 }
 
 function rowPriority(row: MaterialItem, active: string, recent: RecentOperation | null) {
+  if (workerRunning(row)) return 0
   if (codexJobActive(row)) return 0
   if (active && row.material_id === active) return 1
   if (recent && (row.id === recent.materialPk || (!!recent.materialId && row.material_id === recent.materialId))) return 2
@@ -1120,7 +1144,48 @@ function codexJobActive(row: MaterialItem) {
   return ['queued', 'running', 'dry_run_succeeded', 'validating'].includes(row.codex_job?.status || '')
 }
 
+function workerStatusForRow(row: MaterialItem) {
+  const jobId = row.codex_job?.id || ''
+  return jobId ? workerStatuses.value[jobId] : null
+}
+
+function workerRunning(row: MaterialItem) {
+  const status = workerStatusForRow(row)
+  return Boolean(status?.running || status?.state === 'running' || status?.state === 'publishing')
+}
+
+function canRunCodexWorker(row: MaterialItem) {
+  const job = row.codex_job
+  if (!job?.id) return false
+  if (workerRunning(row)) return false
+  return ['queued', 'running', 'dry_run_succeeded'].includes(job.status || '')
+}
+
+function primaryActionLoading(row: MaterialItem) {
+  const jobId = row.codex_job?.id || ''
+  return Boolean((jobId && workerStartingIds.value.has(jobId)) || workerRunning(row))
+}
+
 function primaryAction(row: MaterialItem): PrimaryRowAction {
+  const workerStatus = workerStatusForRow(row)
+  if (workerStatus?.state === 'running' || workerStatus?.state === 'publishing') {
+    return {
+      label: workerStatusText(workerStatus),
+      command: null,
+      enabled: false,
+      type: 'warning',
+      icon: Timer
+    }
+  }
+  if (canRunCodexWorker(row)) {
+    return {
+      label: '运行 Worker',
+      command: 'run-worker',
+      enabled: true,
+      type: 'warning',
+      icon: VideoPlay
+    }
+  }
   if (hasLatexAsset(row)) {
     return {
       label: 'PDF 比对',
@@ -1383,6 +1448,86 @@ async function startSelectedCodexJobs() {
   else ElMessage.success(`已创建 ${success} 个 Codex 任务`)
 }
 
+async function runCodexWorker(row: MaterialItem) {
+  const jobId = row.codex_job?.id || ''
+  if (!jobId || !canRunCodexWorker(row)) {
+    ElMessage.warning('该材料没有可运行的 Codex job')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `将调用本机 Worker 执行 Codex job #${jobId}，完成后自动发布 ElegantBook 输出并刷新材料列表。`,
+      '运行 Worker',
+      { type: 'warning', confirmButtonText: '运行 Worker', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+
+  const next = new Set(workerStartingIds.value)
+  next.add(jobId)
+  workerStartingIds.value = next
+  try {
+    const status = await codexWorkerApi.runJob(jobId)
+    workerStatuses.value = { ...workerStatuses.value, [jobId]: status }
+    rememberOperation(row, 'Worker 已启动', 'running')
+    ensureWorkerPolling()
+    ElMessage.success(`Worker 已提交：job #${jobId}`)
+  } catch (error: any) {
+    const message = error?.message || '本机 Worker 控制端不可用'
+    ElMessage.warning(message)
+  } finally {
+    const current = new Set(workerStartingIds.value)
+    current.delete(jobId)
+    workerStartingIds.value = current
+  }
+}
+
+function ensureWorkerPolling() {
+  if (workerPollingTimer.value) return
+  workerPollingTimer.value = window.setInterval(pollWorkerStatuses, 5000)
+}
+
+async function pollWorkerStatuses() {
+  const jobIds = new Set<string>()
+  for (const [jobId, status] of Object.entries(workerStatuses.value)) {
+    if (status.running || ['queued', 'running', 'publishing'].includes(status.state)) jobIds.add(jobId)
+  }
+  for (const row of materials.value) {
+    const jobId = row.codex_job?.id || ''
+    if (jobId && workerStatuses.value[jobId]?.running) jobIds.add(jobId)
+  }
+  if (!jobIds.size) {
+    if (workerPollingTimer.value) {
+      window.clearInterval(workerPollingTimer.value)
+      workerPollingTimer.value = null
+    }
+    return
+  }
+
+  let shouldRefresh = false
+  const nextStatuses = { ...workerStatuses.value }
+  for (const jobId of jobIds) {
+    try {
+      const status = await codexWorkerApi.getJob(jobId)
+      const previous = workerStatuses.value[jobId]
+      nextStatuses[jobId] = status
+      if ((!previous || previous.state !== status.state) && ['published', 'failed'].includes(status.state)) {
+        shouldRefresh = true
+        if (status.state === 'published') ElMessage.success(`Worker published：job #${jobId}`)
+        if (status.state === 'failed') ElMessage.warning(`Worker failed：job #${jobId}`)
+      }
+    } catch {
+      // Keep the latest visible status; the next polling tick may recover.
+    }
+  }
+  workerStatuses.value = nextStatuses
+  if (shouldRefresh) {
+    await fetchMaterials()
+    await fetchSummary()
+  }
+}
+
 function updatePipelinePolling() {
   if (pipelineBusy.value && !pollingTimer.value) {
     pollingTimer.value = window.setInterval(async () => {
@@ -1404,6 +1549,7 @@ function handleRowCommand(row: MaterialItem, command: RowCommand) {
   if (command === 'metadata-extract') return extractRowMetadata(row, false, true)
   if (command === 'compare-review') return openCompareReview(row)
   if (command === 'start-codex') return startCodexJob(row)
+  if (command === 'run-worker') return runCodexWorker(row)
   if (command === 'preview-pdf') return previewPdf(row)
   if (command === 'download-pdf') return downloadPdf(row)
 }
@@ -1472,6 +1618,7 @@ onMounted(loadDashboard)
 onBeforeUnmount(() => {
   if (searchTimer.value) window.clearTimeout(searchTimer.value)
   if (pollingTimer.value) window.clearInterval(pollingTimer.value)
+  if (workerPollingTimer.value) window.clearInterval(workerPollingTimer.value)
 })
 </script>
 
