@@ -814,9 +814,10 @@ function currentPipelineTarget(): PipelineTarget {
 }
 
 function rowPriority(row: MaterialItem, active: string, recent: RecentOperation | null) {
-  if (active && row.material_id === active) return 0
-  if (recent && (row.id === recent.materialPk || (!!recent.materialId && row.material_id === recent.materialId))) return 1
-  return 2
+  if (codexJobActive(row)) return 0
+  if (active && row.material_id === active) return 1
+  if (recent && (row.id === recent.materialPk || (!!recent.materialId && row.material_id === recent.materialId))) return 2
+  return 3
 }
 
 function materialRowClassName({ row }: { row: MaterialItem }) {

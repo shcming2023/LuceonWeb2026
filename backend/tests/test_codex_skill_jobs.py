@@ -168,6 +168,36 @@ def test_legacy_batch_refresh_enqueues_existing_latex_outputs():
     assert second.json() == {"selected": 1, "created": 0, "existing": 1, "failed": 0}
 
 
+def test_materials_list_prioritizes_active_codex_jobs():
+    client, material_id = make_client()
+    db = next(app.dependency_overrides[get_db]())
+    try:
+        db.add(
+            Material(
+                user_id="u1",
+                material_id="pdf-newer",
+                title="Newer ordinary material",
+                filename="Newer.pdf",
+                source_type="imported",
+                stage_status="latex_done",
+                pipeline_status="idle",
+                latex_manifest_bucket="eduassets-latex",
+                latex_manifest_object="latex/pdf-newer/popo-run/manifest.json",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+    created = client.post(f"/api/materials/{material_id}/codex-jobs", json={"mode": "refresh_legacy"})
+    assert created.status_code == 200
+
+    listed = client.get("/api/materials", params={"page": 1, "page_size": 1})
+    assert listed.status_code == 200
+    rows = listed.json()["materials"]
+    assert rows[0]["id"] == str(material_id)
+    assert rows[0]["codex_job"]["status"] == "queued"
+
+
 def test_publish_staging_job_registers_promoted_output(monkeypatch, tmp_path):
     db, material = make_session()
     fake_minio = FakeMinio()

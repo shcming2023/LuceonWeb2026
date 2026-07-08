@@ -10,7 +10,7 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.material import Material, PipelineEvent, PipelineRun
+from app.models.material import CodexSkillJob, Material, PipelineEvent, PipelineRun
 from app.models.material_metadata import MaterialMetadata
 from app.services.clean_to_standard import CleanToStandardPreflightError, clean_to_standard_preflight, start_clean_to_standard_run
 from app.services.codex_skill_jobs import (
@@ -65,7 +65,16 @@ def _run_stamp(value: str | None) -> str:
     return match.group(1) if match else ""
 
 
-def _material_activity_sort_key(material: Material) -> tuple[str, str, str, int]:
+CODEX_JOB_STATUS_PRIORITY = {
+    "running": 40,
+    "queued": 35,
+    "dry_run_succeeded": 30,
+    "validating": 25,
+    "published": 10,
+}
+
+
+def _material_activity_sort_key(material: Material, codex_job: CodexSkillJob | None = None) -> tuple[int, str, str, str, str, int]:
     run_stamp = max(
         _run_stamp(material.latex_run_id),
         _run_stamp(material.standard_run_id),
@@ -76,7 +85,25 @@ def _material_activity_sort_key(material: Material) -> tuple[str, str, str, int]
     )
     created = material.created_at.isoformat() if material.created_at else ""
     synced = material.last_synced_at.isoformat() if material.last_synced_at else ""
-    return (run_stamp, created, synced, int(material.id or 0))
+    codex_priority = CODEX_JOB_STATUS_PRIORITY.get(codex_job.status, 0) if codex_job else 0
+    codex_created = codex_job.created_at.isoformat() if codex_job and codex_job.created_at else ""
+    return (codex_priority, codex_created, run_stamp, created, synced, int(material.id or 0))
+
+
+def _latest_codex_jobs_for_materials(db: Session, user_id: str, material_ids: list[int]) -> dict[int, CodexSkillJob]:
+    if not material_ids:
+        return {}
+    jobs = (
+        db.query(CodexSkillJob)
+        .filter(CodexSkillJob.user_id == user_id, CodexSkillJob.material_pk.in_(material_ids))
+        .order_by(CodexSkillJob.created_at.desc(), CodexSkillJob.id.desc())
+        .all()
+    )
+    latest: dict[int, CodexSkillJob] = {}
+    for job in jobs:
+        if job.material_pk and job.material_pk not in latest:
+            latest[job.material_pk] = job
+    return latest
 
 
 class PipelineStartRequest(BaseModel):
@@ -223,8 +250,9 @@ def list_materials(
         query = query.filter(Material.stage_status == stage)
 
     rows_all = query.all()
+    latest_codex_jobs = _latest_codex_jobs_for_materials(db, user_id, [int(row.id) for row in rows_all if row.id])
     total = len(rows_all)
-    rows_all.sort(key=_material_activity_sort_key, reverse=True)
+    rows_all.sort(key=lambda row: _material_activity_sort_key(row, latest_codex_jobs.get(int(row.id or 0))), reverse=True)
     rows = rows_all[(page - 1) * page_size : page * page_size]
     metadata_map = metadata_for_materials(db, user_id, [row.id for row in rows])
     material_rows = []
@@ -234,7 +262,7 @@ def list_materials(
         dry_run = latest_successful_popo_to_raw_dry_run(db, user_id, row.material_id or "")
         data["raw_dry_run_available"] = bool(dry_run)
         data["raw_dry_run_id"] = str(dry_run.id) if dry_run else ""
-        latest_codex_job = latest_codex_skill_job_for_material(db, user_id, row)
+        latest_codex_job = latest_codex_jobs.get(int(row.id or 0)) or latest_codex_skill_job_for_material(db, user_id, row)
         data["codex_job"] = latest_codex_job.to_dict() if latest_codex_job else None
         material_rows.append(data)
     return {"total": total, "page": page, "page_size": page_size, "materials": material_rows}
