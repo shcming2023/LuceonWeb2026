@@ -12,6 +12,8 @@ services:
       - TZ=Asia/Shanghai
     depends_on:
       - backend
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - luceon-review-net
 
