@@ -23,8 +23,20 @@ for key in ("backend_worker", "frontend", "redis", "compiler_mongo", "compiler_r
     subprocess.run(["docker", "image", "inspect", ref], check=True, stdout=subprocess.DEVNULL)
 PY
 
-if docker compose --env-file .env.production -f compose.production.arm64.yml ps --format json | grep -Eq '"OOMKilled":true|"RestartCount":[1-9]'; then
-  echo "restart or OOM evidence detected" >&2
+expected_count=$(docker compose --env-file .env.production -f compose.production.arm64.yml config --services | wc -l | tr -d ' ')
+container_ids=$(docker compose --env-file .env.production -f compose.production.arm64.yml ps -aq)
+actual_count=$(printf '%s\n' "$container_ids" | sed '/^$/d' | wc -l | tr -d ' ')
+if [ "$actual_count" -ne "$expected_count" ]; then
+  echo "container count gate failed: expected=$expected_count actual=$actual_count" >&2
   exit 1
 fi
+
+for container_id in $container_ids; do
+  state=$(docker inspect --format '{{.State.Status}} {{.State.OOMKilled}} {{.RestartCount}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container_id")
+  set -- $state
+  if [ "$1" != "running" ] || [ "$2" != "false" ] || [ "$3" -ne 0 ] || { [ "$4" != "none" ] && [ "$4" != "healthy" ]; }; then
+    echo "container runtime gate failed: $container_id status=$1 oom=$2 restarts=$3 health=$4" >&2
+    exit 1
+  fi
+done
 echo "deployment verification passed"

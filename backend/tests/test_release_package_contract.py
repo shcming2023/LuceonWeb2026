@@ -14,7 +14,7 @@ def test_production_compose_template_has_no_build_or_mutable_image_tags():
     assert "/Users/concm" not in text
     assert "~/.codex" not in text
     assert text.count("image:") == 7
-    assert text.count("@sha256:") == 4
+    assert text.count("@sha256:") == 5
     assert text.count("__BACKEND_IMAGE__") == 2
     assert text.count("__FRONTEND_IMAGE__") == 1
 
@@ -24,6 +24,31 @@ def test_worker_does_not_inherit_backend_http_healthcheck():
     worker = text.split("  workflow-v2-worker:\n", 1)[1].split("\n  frontend:\n", 1)[0]
 
     assert "healthcheck:\n      disable: true" in worker
+
+
+def test_compiler_uses_current_overleaf_data_path():
+    text = (DEPLOY / "compose.production.arm64.yml.tmpl").read_text()
+    compiler = text.split("  texlive:\n", 1)[1].split("\n  backend:\n", 1)[0]
+
+    assert "compiler-data:/var/lib/overleaf" in compiler
+    assert "/var/lib/sharelatex" not in compiler
+    assert "OVERLEAF_MONGO_URL:" in compiler
+    assert "OVERLEAF_REDIS_HOST:" in compiler
+    assert "SHARELATEX_" not in compiler
+    assert 'SANDBOXED_COMPILES: "false"' in compiler
+    assert "ALL_TEX_LIVE_DOCKER_IMAGE_NAMES: TeX Live" in compiler
+    assert "ALL_TEX_LIVE_DOCKER_IMAGES: ghcr.io/lcpu-club/sharelatex@sha256:" in compiler
+
+
+def test_release_verifier_reads_actual_container_runtime_state():
+    text = (DEPLOY / "scripts" / "verify").read_text()
+
+    assert "docker inspect --format" in text
+    assert ".State.OOMKilled" in text
+    assert ".RestartCount" in text
+    assert '.State.Health.Status' in text
+    assert "config --services" in text
+    assert "ps -aq" in text
 
 
 def test_release_package_separates_private_skills_from_public_source():

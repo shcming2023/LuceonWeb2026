@@ -30,14 +30,17 @@ services:
     container_name: ${LUCEON_TEX_CONTAINER:-luceonweb2026-production-texlive}
     restart: unless-stopped
     environment:
-      SHARELATEX_MONGO_URL: mongodb://compiler-mongo/sharelatex
-      SHARELATEX_REDIS_HOST: compiler-redis
+      OVERLEAF_MONGO_URL: mongodb://compiler-mongo/sharelatex
+      OVERLEAF_REDIS_HOST: compiler-redis
       REDIS_HOST: compiler-redis
+      SANDBOXED_COMPILES: "false"
+      ALL_TEX_LIVE_DOCKER_IMAGE_NAMES: TeX Live
+      ALL_TEX_LIVE_DOCKER_IMAGES: ghcr.io/lcpu-club/sharelatex@sha256:633e180fa9357c2b00e2fa9234b63460033fd2d4e4c441a5bb91c9697a08e145
     depends_on:
       - compiler-mongo
       - compiler-redis
     volumes:
-      - compiler-data:/var/lib/sharelatex
+      - compiler-data:/var/lib/overleaf
     networks: [luceon]
 
   backend:
