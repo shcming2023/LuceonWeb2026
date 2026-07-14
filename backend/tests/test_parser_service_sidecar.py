@@ -236,6 +236,7 @@ def test_parse_file_triggers_popo_after_artifact_sync(monkeypatch):
 
     monkeypatch.setattr("app.services.parser.minio_client", FakeMinio())
     monkeypatch.setattr("app.services.parser.get_buckets", lambda: ["mds"])
+    monkeypatch.setattr("app.services.parser.MINIO_BUCKET", "source-bucket")
 
     assert service.parse_file(file, user_id="u1") == {"status": "success"}
     assert fake_popo.calls == [
@@ -248,7 +249,7 @@ def test_parse_file_triggers_popo_after_artifact_sync(monkeypatch):
                 "sample/auto/sample_model.json",
             ],
             "uploads/sample.pdf",
-            "mineru-files",
+            "source-bucket",
         )
     ]
 

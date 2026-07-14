@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.models.material import Material, MaterialOutput
-from app.services.codex_elegantbook import ElegantBookOutput, list_elegantbook_outputs, output_priority
+from app.services.codex_elegantbook import ElegantBookOutput, list_elegantbook_outputs, normalize_workflow_artifact_manifest, output_priority
 from app.services.luceon_review import ObjectRef, read_object
 
 
@@ -54,6 +54,7 @@ def register_elegantbook_output(
 
 def sync_material_outputs_for_material(db: Session, user_id: str, material: Material) -> list[MaterialOutput]:
     rows = [register_elegantbook_output(db, user_id, material, output) for output in list_elegantbook_outputs(material)]
+    db.flush()
     _ensure_single_current(db, user_id, material, rows)
     db.flush()
     return list_material_outputs(db, user_id, material)
@@ -109,6 +110,7 @@ def output_from_material_output(row: MaterialOutput, material: Material) -> Eleg
     manifest = _read_manifest(row.manifest_bucket, row.manifest_object)
     if not isinstance(manifest, dict):
         return None
+    manifest = normalize_workflow_artifact_manifest(manifest)
     return ElegantBookOutput(
         manifest_ref=ObjectRef(row.manifest_bucket, row.manifest_object),
         manifest=manifest,
@@ -128,33 +130,59 @@ def _read_manifest(bucket: str, object_name: str) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
-def _ensure_single_current(db: Session, user_id: str, material: Material, rows: list[MaterialOutput]) -> None:
-    if not rows:
-        return
-    if any(row.is_current for row in rows):
-        current_rows = [row for row in rows if row.is_current]
-        winner = sorted(current_rows, key=_registry_sort_key, reverse=True)[0]
-    else:
-        winner = sorted(rows, key=_registry_sort_key, reverse=True)[0]
-        winner.is_current = True
-        if winner.status == "candidate":
-            winner.status = "promoted"
-        winner.promoted_at = winner.promoted_at or datetime.utcnow()
-    for row in (
+def _ensure_single_current(db: Session, user_id: str, material: Material, _rows: list[MaterialOutput]) -> None:
+    registry_rows = (
         db.query(MaterialOutput)
         .filter(
             MaterialOutput.user_id == user_id,
             MaterialOutput.material_id == (material.material_id or ""),
             MaterialOutput.output_type == "elegantbook",
-            MaterialOutput.id != winner.id,
+            MaterialOutput.manifest_object.notlike("%/work/%"),
         )
         .all()
+    )
+    if not registry_rows:
+        return
+    eligible_rows = [
+        row
+        for row in registry_rows
+        if row.quality_status == "passed" and row.status in {"promoted", "published"}
+    ]
+    if not eligible_rows:
+        for row in registry_rows:
+            row.is_current = False
+        if any(
+            row.manifest_bucket == material.latex_manifest_bucket
+            and row.manifest_object == material.latex_manifest_object
+            for row in registry_rows
+        ):
+            material.latex_manifest_bucket = None
+            material.latex_manifest_object = None
+            material.latex_run_id = None
+            if material.popo_manifest_bucket and material.popo_manifest_object:
+                material.stage_status = "popo_done"
+        return
+    current_rows = [row for row in eligible_rows if row.is_current]
+    if current_rows:
+        winner = sorted(current_rows, key=_registry_sort_key, reverse=True)[0]
+    else:
+        winner = sorted(eligible_rows, key=_registry_sort_key, reverse=True)[0]
+        winner.is_current = True
+        if winner.status == "candidate":
+            winner.status = "promoted"
+        winner.promoted_at = winner.promoted_at or datetime.utcnow()
+    for row in (
+        row for row in registry_rows if row.id != winner.id
     ):
         row.is_current = False
+    material.latex_manifest_bucket = winner.manifest_bucket
+    material.latex_manifest_object = winner.manifest_object
+    material.latex_run_id = winner.output_run_id
+    material.promote_stage("latex_done")
 
 
 def _registry_sort_key(row: MaterialOutput) -> tuple[int, int, str, str]:
-    origin_rank = {"codex_refined": 30, "codex_skill": 25, "codex_elegantbook": 20, "legacy_selfloop": 10}.get(row.origin, 0)
+    origin_rank = {"worker_v2": 40, "codex_refined": 30, "codex_skill": 25, "codex_elegantbook": 20, "legacy_selfloop": 10}.get(row.origin, 0)
     status_rank = {"promoted": 30, "published": 20, "candidate": 10}.get(row.status, 0)
     created = row.created_at.isoformat() if row.created_at else ""
     return (status_rank, origin_rank, created, row.manifest_object)
@@ -169,6 +197,8 @@ def _default_quality_status(origin: str) -> str:
 
 
 def _infer_skill_name(output: ElegantBookOutput) -> str:
+    if output.origin == "worker_v2":
+        return "worker-v2-core-production"
     if output.origin == "legacy_selfloop":
         return "legacy-selfloop"
     text = json.dumps(output.manifest, ensure_ascii=False).lower()
@@ -178,6 +208,8 @@ def _infer_skill_name(output: ElegantBookOutput) -> str:
 
 
 def _version_label(output: ElegantBookOutput) -> str:
+    if output.origin == "worker_v2":
+        return f"Worker V2.3 · {output.output_run_id}"
     if output.origin == "legacy_selfloop":
         return "legacy baseline"
     return output.output_run_id or output.created_at or "codex output"

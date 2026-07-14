@@ -120,6 +120,7 @@ def output_from_ref(ref: ObjectRef, material: Material, manifest: dict[str, Any]
     manifest = manifest if isinstance(manifest, dict) else parse_manifest_ref(ref)
     if not isinstance(manifest, dict):
         return None
+    manifest = normalize_workflow_artifact_manifest(manifest)
     material_id, popo_run_id, output_run_id = infer_ids(ref.object, manifest, material)
     return ElegantBookOutput(
         manifest_ref=ref,
@@ -136,7 +137,7 @@ def infer_ids(object_name: str, manifest: dict[str, Any], material: Material) ->
     parts = clean_path(object_name).split("/")
     material_id = str(manifest.get("material_id") or material.material_id or "").strip()
     popo_run_id = str(manifest.get("popo_run_id") or material.popo_run_id or "").strip()
-    output_run_id = str(manifest.get("codex_run_id") or manifest.get("output_run_id") or manifest.get("run_id") or "").strip()
+    output_run_id = str(manifest.get("workflow_job_id") or manifest.get("codex_run_id") or manifest.get("output_run_id") or manifest.get("run_id") or "").strip()
     if len(parts) >= 5 and parts[-1] == "manifest.json":
         material_id = material_id or parts[-4]
         popo_run_id = popo_run_id or parts[-3]
@@ -152,6 +153,8 @@ def infer_ids(object_name: str, manifest: dict[str, Any], material: Material) ->
 def classify_output(ref: ObjectRef, manifest: dict[str, Any]) -> str:
     text = json.dumps(manifest, ensure_ascii=False).lower()
     object_name = ref.object.lower()
+    if manifest.get("schema") == "luceon.workflow.artifact-manifest/v1" or object_name.startswith("worker-v2/"):
+        return "worker_v2"
     if "legacy_selfloop" in text or object_name.startswith("latex/"):
         return "legacy_selfloop"
     if "codex_skill" in text or object_name.startswith("codex-elegantbook/"):
@@ -163,6 +166,7 @@ def classify_output(ref: ObjectRef, manifest: dict[str, Any]) -> str:
 
 def output_priority(output: ElegantBookOutput) -> tuple[int, str, str]:
     origin_priority = {
+        "worker_v2": 40,
         "codex_refined": 30,
         "codex_skill": 25,
         "codex_elegantbook": 20,
@@ -234,3 +238,30 @@ def output_artifact_paths(output: ElegantBookOutput) -> dict[str, str]:
         "render_review_json": object_path(manifest, ("render_review_json",), "render_review.json"),
         "run_state": object_path(manifest, ("run_state",), "run_state.json"),
     }
+
+
+def normalize_workflow_artifact_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
+    if manifest.get("schema") != "luceon.workflow.artifact-manifest/v1":
+        return manifest
+    available = {
+        clean_path(str(row.get("path") or ""))
+        for row in manifest.get("files") or []
+        if isinstance(row, dict)
+    }
+
+    def workflow_path(*candidates: str) -> str:
+        for candidate in candidates:
+            if candidate in available:
+                return f"files/{candidate}"
+        return ""
+
+    normalized = dict(manifest)
+    normalized["objects"] = {
+        "compiled_pdf": workflow_path("main.pdf", "compiled.pdf"),
+        "package_zip": workflow_path("latex-project.zip"),
+        "compile_report": workflow_path("compile-report.json", "compile_report.json"),
+        "final_review_report_json": workflow_path("core-acceptance.json"),
+        "run_state": workflow_path("core-acceptance.json"),
+    }
+    normalized["output_run_id"] = str(manifest.get("workflow_job_id") or "")
+    return normalized

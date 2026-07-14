@@ -1,87 +1,76 @@
 <script setup lang="ts">
 import { Document, HomeFilled, Setting, View } from '@element-plus/icons-vue'
-import { useRouter, useRoute } from 'vue-router'
-import { ref, computed } from 'vue'
+import { useRoute } from 'vue-router'
+import { computed } from 'vue'
 
-const router = useRouter()
 const route = useRoute()
 
 const menuItems = [
-  { icon: HomeFilled, path: '/', tooltip: '首页', label: '首页' },
-  { icon: Document, path: '/files', tooltip: '文件管理', label: '文件' },
-  { icon: View, path: '/review/compare', tooltip: 'PDF比对审查', label: 'PDF比对' },
-  { icon: Setting, path: '/settings', tooltip: '运行设置', label: '设置' }
+  { icon: HomeFilled, path: '/', label: '工作概览' },
+  { icon: Document, path: '/files', label: '材料生产' },
+  { icon: View, path: '/review/compare', label: '比对审查' },
+  { icon: Setting, path: '/settings', label: '运行设置' }
 ]
 
 const activeMenu = computed(() => {
   const path = route.path
   if (path === '/') return '/'
-  if (path.startsWith('/review/preview')) {
-    return '/review/compare'
-  }
+  if (path.startsWith('/files/preview')) return '/files'
+  if (path.startsWith('/review/preview')) return '/review/compare'
   if (path.startsWith('/review') || path === '/review') return '/review/compare'
   if (path.startsWith('/settings')) return '/settings'
   if (path.startsWith('/files')) return '/files'
   return menuItems.find(item => path === item.path)?.path || path
 })
 
-const sidebarHover = ref(false)
+const immersiveView = computed(() => route.name === 'FilePreview' || route.name === 'ReviewPreview')
+const workbenchView = computed(() => route.path === '/files' || route.path === '/review/compare')
 </script>
 
 <template>
-  <div class="mineru-layout">
-    <!-- 侧边栏 -->
-    <aside 
-      class="sidebar" 
-      :class="{ 'sidebar-expanded': sidebarHover }"
-      @mouseenter="sidebarHover = true"
-      @mouseleave="sidebarHover = false"
-    >
-      <div class="logo-area">
-        <div class="logo-wrapper">
+  <div class="app-layout">
+    <aside :class="['app-sidebar', { 'app-sidebar-compact': immersiveView }]">
+      <router-link class="brand" to="/" aria-label="Luceon 首页">
+        <span class="brand-mark">
           <img src="/logo.png" alt="logo" class="logo" />
-          <transition name="fade">
-            <span v-show="sidebarHover" class="logo-text">Luceon</span>
-          </transition>
-        </div>
-      </div>
+        </span>
+        <span class="brand-copy">
+          <strong>Luceon</strong>
+          <small>2026</small>
+        </span>
+      </router-link>
       
-      <nav class="nav-menu">
-        <div 
+      <nav class="app-nav" aria-label="主导航">
+        <span class="nav-caption">工作空间</span>
+        <router-link
           v-for="item in menuItems" 
           :key="item.path" 
-          class="nav-item" 
-          :class="{ active: activeMenu === item.path }" 
-          @click="router.push(item.path)"
+          :to="item.path"
+          class="nav-item"
+          :class="{ active: activeMenu === item.path }"
+          :aria-current="activeMenu === item.path ? 'page' : undefined"
+          :title="item.label"
         >
-          <div class="nav-icon-wrapper">
-            <el-icon :size="22"><component :is="item.icon" /></el-icon>
-          </div>
-          <transition name="fade">
-            <span v-show="sidebarHover" class="nav-label">{{ item.label }}</span>
-          </transition>
-          <div v-if="activeMenu === item.path" class="nav-indicator"></div>
-        </div>
+          <el-icon :size="18"><component :is="item.icon" /></el-icon>
+          <span>{{ item.label }}</span>
+        </router-link>
       </nav>
       
       <div class="sidebar-bottom">
-        <div class="version-badge">
-          <span class="version-dot"></span>
-          <transition name="fade">
-            <span v-show="sidebarHover" class="version-text">2026</span>
-          </transition>
+        <div class="runtime-indicator">
+          <span class="runtime-dot"></span>
+          <span>本机服务</span>
         </div>
       </div>
     </aside>
 
-    <!-- 主内容区 -->
     <div class="main-area">
-      <template v-if="route.name === 'FilePreview' || route.name === 'ReviewPreview'">
+      <template v-if="immersiveView">
         <router-view />
       </template>
       <template v-else>
-        <main class="content-area">
-          <div :class="['content-wrapper', { 'content-full': route.path !== '/' }]">
+        <main :class="['content-area', { 'content-area-workbench': workbenchView }]">
+          <div :class="['content-wrapper', { 'content-wrapper-workbench': workbenchView }]">
             <router-view />
           </div>
         </main>
@@ -91,180 +80,170 @@ const sidebarHover = ref(false)
 </template>
 
 <style scoped>
-.mineru-layout {
+.app-layout {
   display: flex;
+  width: 100%;
   min-height: 100vh;
   background: var(--bg-secondary);
 }
 
-/* 侧边栏 */
-.sidebar {
-  width: 72px;
+.app-sidebar {
+  width: 216px;
+  min-height: 100vh;
+  padding: 18px 14px 16px;
   background: var(--bg-primary);
+  border-right: 1px solid var(--border-light);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  box-shadow: var(--shadow-md);
   z-index: 100;
-  padding: 16px 12px;
   flex-shrink: 0;
-  min-height: 100vh;
-  transition: width var(--transition-normal);
-  position: relative;
 }
 
-.sidebar-expanded {
-  width: 180px;
-}
-
-/* Logo区域 */
-.logo-area {
-  padding: 8px 0 24px;
-  width: 100%;
-}
-
-.logo-wrapper {
+.brand {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
+  gap: 11px;
+  min-height: 44px;
+  padding: 0 8px;
+  color: var(--text-primary);
+}
+
+.brand:hover {
+  color: var(--text-primary);
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--bg-primary);
 }
 
 .logo {
-  width: 36px;
-  height: 36px;
-  transition: transform var(--transition-normal);
+  width: 34px;
+  height: 34px;
 }
 
-.sidebar:hover .logo {
-  transform: scale(1.05);
+.brand-copy {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
 }
 
-.logo-text {
-  font-size: 18px;
-  font-weight: 700;
-  background: var(--primary-gradient);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  white-space: nowrap;
+.brand-copy strong {
+  font-size: 17px;
+  font-weight: 720;
+  letter-spacing: 0;
 }
 
-/* 导航菜单 */
-.nav-menu {
+.brand-copy small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.app-nav {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  width: 100%;
-  padding: 0 4px;
+  gap: 4px;
+  padding-top: 34px;
+}
+
+.nav-caption {
+  margin: 0 10px 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  padding: 12px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--transition-normal);
-  position: relative;
-  color: var(--text-muted);
-  gap: 12px;
+  gap: 11px;
+  min-height: 40px;
+  padding: 0 11px;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 520;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .nav-item:hover {
-  background: var(--bg-tertiary);
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
 .nav-item.active {
   background: var(--primary-tint);
-  color: var(--primary-color);
+  color: var(--primary-dark);
+  font-weight: 650;
 }
 
-.nav-icon-wrapper {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 24px;
-}
-
-.nav-label {
-  font-size: 14px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.nav-indicator {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 20px;
-  background: var(--primary-gradient);
-  border-radius: 0 3px 3px 0;
-}
-
-/* 底部区域 */
 .sidebar-bottom {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 100%;
-  padding: 0 4px;
   margin-top: auto;
-  padding-top: 16px;
+  padding: 14px 8px 0;
   border-top: 1px solid var(--border-light);
 }
 
-.github-link {
+.runtime-indicator {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px;
-  border-radius: var(--radius-md);
-  color: var(--text-muted);
-  transition: all var(--transition-normal);
-}
-
-.github-link:hover {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-}
-
-.github-link img {
-  opacity: 0.6;
-  transition: opacity var(--transition-normal);
-}
-
-.github-link:hover img {
-  opacity: 1;
-}
-
-.version-badge {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   gap: 8px;
-  padding: 8px 12px;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
-.version-dot {
-  width: 8px;
-  height: 8px;
+.runtime-dot {
+  width: 7px;
+  height: 7px;
   background: var(--success-color);
   border-radius: 50%;
-  animation: pulse 2s infinite;
 }
 
-.version-text {
-  font-size: 12px;
-  color: var(--text-muted);
-  white-space: nowrap;
+.app-sidebar-compact {
+  width: 72px;
+  align-items: center;
+  padding-right: 10px;
+  padding-left: 10px;
 }
 
-/* 主内容区 */
+.app-sidebar-compact .brand {
+  padding: 0;
+}
+
+.app-sidebar-compact .brand-copy,
+.app-sidebar-compact .nav-caption,
+.app-sidebar-compact .nav-item span,
+.app-sidebar-compact .runtime-indicator span:last-child {
+  display: none;
+}
+
+.app-sidebar-compact .app-nav {
+  width: 100%;
+}
+
+.app-sidebar-compact .nav-item {
+  justify-content: center;
+  padding: 0;
+}
+
+.app-sidebar-compact .sidebar-bottom {
+  width: 100%;
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.app-sidebar-compact .runtime-indicator {
+  justify-content: center;
+}
+
 .main-area {
   flex: 1;
   display: flex;
@@ -276,126 +255,107 @@ const sidebarHover = ref(false)
 .content-area {
   flex: 1;
   width: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: stretch;
-  padding: 24px;
   min-height: 0;
+  overflow: auto;
+  padding: 28px 30px;
+}
+
+.content-area-workbench {
+  overflow: hidden;
+  padding: 22px 24px;
 }
 
 .content-wrapper {
+  width: min(100%, 1180px);
+  min-height: 100%;
+  margin: 0 auto;
+  animation: pageEnter 0.2s ease-out;
+}
+
+.content-wrapper-workbench {
   width: 100%;
-  max-width: 1200px;
-  background: var(--bg-primary);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg);
-  padding: 24px;
-  animation: fadeIn 0.3s ease;
-  min-height: 0;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.content-full {
-  max-width: none;
-  background: transparent;
-  border-radius: 0;
-  box-shadow: none;
-  padding: 0;
   height: 100%;
+  margin: 0;
+  min-height: 0;
 }
 
-/* 过渡动画 */
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
+@keyframes pageEnter {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
+@media (max-width: 1100px) {
+  .app-sidebar {
+    width: 188px;
+  }
 
-/* 响应式 */
-@media (max-width: 1200px) {
   .content-area {
     padding: 24px;
   }
 }
 
 @media (max-width: 768px) {
-  .mineru-layout {
+  .app-layout {
     flex-direction: column;
   }
-  
-  .sidebar {
+
+  .app-sidebar {
     width: 100%;
     min-height: auto;
-    padding: 12px 16px;
+    height: 58px;
+    padding: 8px 10px;
     flex-direction: row;
     align-items: center;
-    gap: 8px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-light);
   }
-  
-  .sidebar-expanded {
-    width: 100%;
+
+  .brand {
+    padding: 0 5px;
   }
-  
-  .logo-area {
-    padding: 0;
-    width: auto;
-  }
-  
-  .logo-text {
+
+  .brand-copy {
     display: none;
   }
-  
-  .nav-menu {
+
+  .app-nav {
     flex-direction: row;
     flex: 1;
-    justify-content: center;
+    justify-content: flex-end;
     gap: 4px;
     padding: 0;
   }
-  
+
+  .nav-caption {
+    display: none;
+  }
+
   .nav-item {
-    padding: 10px 14px;
+    justify-content: center;
+    width: 42px;
+    min-height: 40px;
+    padding: 0;
   }
-  
-  .nav-label {
+
+  .nav-item span {
     display: none;
   }
-  
-  .nav-indicator {
-    display: none;
-  }
-  
+
   .sidebar-bottom {
-    flex-direction: row;
-    align-items: center;
-    gap: 8px;
-    margin-top: 0;
-    padding-top: 0;
-    border-top: none;
-    width: auto;
-  }
-  
-  .version-badge {
     display: none;
   }
-  
+
   .main-area {
+    height: calc(100vh - 58px);
     min-height: auto;
   }
-  
+
   .content-area {
-    padding: 16px;
+    padding: 18px 14px;
   }
-  
-  .content-wrapper {
-    border-radius: var(--radius-lg);
-    padding: 20px;
+
+  .content-area-workbench {
+    padding: 14px 10px;
   }
 }
 </style>

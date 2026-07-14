@@ -13,6 +13,8 @@ import type {
   PipelineStatusResponse
 } from '@/types/material'
 
+const UPLOAD_TIMEOUT_MS = 30 * 60 * 1000
+
 export interface MaterialListParams {
   page: number
   page_size: number
@@ -29,6 +31,8 @@ export interface MaterialListParams {
 export interface PipelineTarget {
   material_id?: string
   input_object?: string
+  material_ids?: string[]
+  input_objects?: string[]
 }
 
 export interface CodexJobCreatePayload {
@@ -38,6 +42,38 @@ export interface CodexJobCreatePayload {
   run_reason?: string
   force?: boolean
   payload?: Record<string, unknown>
+}
+
+export interface WorkerV1Policy {
+  mode: string
+  batch_enabled: boolean
+  auto_retry_enabled: boolean
+  single_job_audit_enabled: boolean
+}
+
+export interface WorkflowV2JobSummary {
+  id: string
+  material_pk: string
+  material_id: string
+  workflow_version: string
+  is_current_workflow: boolean
+  status: string
+  current_stage_key: string
+  current_stage_status: string
+  current_attempt: number
+  stages: Array<{ key: string; attempt: number; status: string }>
+  event_count: number
+  artifact_count: number
+  model_call_count: number
+  open_finding_count: number
+  error: { code: string; message: string }
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface WorkflowV2JobCreateResponse {
+  created: boolean
+  job: Record<string, any>
 }
 
 export const materialsApi = {
@@ -75,7 +111,7 @@ export const materialsApi = {
     const formData = new FormData()
     files.forEach(file => formData.append('files', file))
     return api.post<MaterialUploadResponse>('/materials/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: UPLOAD_TIMEOUT_MS,
       onUploadProgress: (event: AxiosProgressEvent) => {
         if (onProgress && event.total) {
           onProgress(Math.round((event.loaded * 100) / event.total))
@@ -96,8 +132,16 @@ export const materialsApi = {
     return api.post<PipelineRun>('/materials/pipeline/start', { apply, limit, ...target }, { timeout: 120000 }).then(res => res.data)
   },
 
+  preflightPopoResume(materialId: string) {
+    return api.post<PipelinePreflightResponse>(`/materials/${materialId}/pipeline/resume-popo/preflight`, null, { timeout: 120000 }).then(res => res.data)
+  },
+
+  startPopoResume(materialId: string) {
+    return api.post<PipelineRun>(`/materials/${materialId}/pipeline/resume-popo/start`, null, { timeout: 120000 }).then(res => res.data)
+  },
+
   getReviewTarget(materialId: string) {
-    return api.get<{ review_asset_id: string }>(`/materials/${materialId}/review_target`).then(res => res.data)
+    return api.get<{ review_asset_id: string; output_id?: string }>(`/materials/${materialId}/review_target`).then(res => res.data)
   },
 
   getDownloadUrl(materialId: string) {
@@ -110,5 +154,48 @@ export const materialsApi = {
 
   createCodexJob(materialId: string, payload: CodexJobCreatePayload) {
     return api.post<CodexSkillJob>(`/materials/${materialId}/codex-jobs`, payload).then(res => res.data)
+  },
+
+  getWorkerV1Policy() {
+    return api.get<WorkerV1Policy>('/materials/codex-jobs/v1-policy').then(res => res.data)
+  },
+
+  getWorkflowV2JobSummaries(limit = 200) {
+    return api.get<{ jobs: WorkflowV2JobSummary[] }>('/workflow-v2/job-summaries', { params: { limit } }).then(res => res.data.jobs)
+  },
+
+  getWorkflowV2Job(jobId: string) {
+    return api.get<Record<string, any>>(`/workflow-v2/jobs/${jobId}`).then(res => res.data)
+  },
+
+  createWorkflowV2Job(materialId: string, source = 'files_row_action') {
+    return api.post<WorkflowV2JobCreateResponse>(`/workflow-v2/materials/${materialId}/jobs`, {
+      priority: 100,
+      payload: { source }
+    }).then(res => res.data)
+  },
+
+  runWorkflowV2Job(jobId: string) {
+    return api.post<{ queued: boolean; message_id: string; job: Record<string, any> }>(`/workflow-v2/jobs/${jobId}/run`).then(res => res.data)
+  },
+
+  retryWorkflowV2Job(jobId: string) {
+    return api.post<Record<string, any>>(`/workflow-v2/jobs/${jobId}/retry`).then(res => res.data)
+  },
+
+  restartWorkflowV2Job(jobId: string, stageKey: string) {
+    return api.post<Record<string, any>>(`/workflow-v2/jobs/${jobId}/restart/${stageKey}`).then(res => res.data)
+  },
+
+  getWorkflowV2ReviewCandidate(jobId: string) {
+    return api.get<Record<string, any>>(`/workflow-v2/jobs/${jobId}/review-candidate`).then(res => res.data)
+  },
+
+  handoffWorkflowV2ReviewCandidate(jobId: string) {
+    return api.post<Record<string, any>>(`/workflow-v2/jobs/${jobId}/handoff`).then(res => res.data)
+  },
+
+  revalidateWorkflowV2ReviewCandidate(jobId: string) {
+    return api.post<Record<string, any>>(`/workflow-v2/jobs/${jobId}/revalidate`).then(res => res.data)
   }
 }

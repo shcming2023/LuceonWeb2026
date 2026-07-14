@@ -153,5 +153,35 @@ def test_public_workspace_available_without_session(client):
 
     assert me_response.status_code == 200
     assert me_response.json()["email"] == "workspace@luceon.local"
+    assert me_response.json()["capabilities"]["pipeline_admin"] is False
     assert files_response.status_code == 200
     assert files_response.json()["total"] == 0
+
+
+def test_pipeline_admin_capability_uses_authenticated_email_allowlist(client, monkeypatch):
+    monkeypatch.setenv("LUCEON_AUTH_DISABLED", "false")
+    monkeypatch.setenv("LUCEON_PIPELINE_ADMIN_EMAILS", "ops@example.com")
+
+    response = client.post(
+        "/api/auth/register",
+        json={"email": "ops@example.com", "password": "secret123"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["user"]["capabilities"]["pipeline_admin"] is True
+    assert client.get("/api/auth/me").json()["capabilities"]["pipeline_admin"] is True
+
+
+def test_popo_recovery_is_forbidden_for_normal_authenticated_user(client, monkeypatch):
+    monkeypatch.setenv("LUCEON_AUTH_DISABLED", "false")
+    monkeypatch.setenv("LUCEON_PIPELINE_ADMIN_EMAILS", "ops@example.com")
+    client.post(
+        "/api/auth/register",
+        json={"email": "reader@example.com", "password": "secret123"},
+    )
+
+    preflight = client.post("/api/materials/1/pipeline/resume-popo/preflight")
+    start = client.post("/api/materials/1/pipeline/resume-popo/start")
+
+    assert preflight.status_code == 403
+    assert start.status_code == 403

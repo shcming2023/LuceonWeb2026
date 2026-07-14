@@ -27,7 +27,7 @@ from app.services.material_inventory import (
 from app.services.runtime_settings import pipeline_env
 
 
-SKILL_ROOT = Path(os.getenv("LUCEON_POPO_RAW_SKILL", "/skills/pdf-clean-markdown-rebuild"))
+SKILL_ROOT = Path(os.getenv("LUCEON_POPO_RAW_SKILL", "/app/app/workflow_v2/runtime/canonical"))
 BOOTSTRAP_SCRIPT = SKILL_ROOT / "scripts" / "bootstrap_clean_markdown.py"
 WORK_ROOT = Path(os.getenv("LUCEON_PIPELINE_WORK_ROOT", "/data/pipeline-work"))
 
@@ -419,7 +419,15 @@ def delete_prefix(bucket: str, prefix: str) -> int:
     return deleted
 
 
-def execute_popo_to_raw(material: Material, run_id: int, publish: bool, force: bool, event_callback) -> dict[str, Any]:
+def execute_popo_to_raw(
+    material: Material,
+    run_id: int,
+    publish: bool,
+    force: bool,
+    event_callback,
+    *,
+    canonical_content_only: bool = False,
+) -> dict[str, Any]:
     preflight = popo_to_raw_preflight(material, force=force, publish=publish)
     if not preflight["ready"]:
         raise PopoToRawPreflightError(preflight)
@@ -447,9 +455,11 @@ def execute_popo_to_raw(material: Material, run_id: int, publish: bool, force: b
     run_env = pipeline_env()
     event_callback("bootstrap", "开始调用 pdf-clean-markdown-rebuild 的 bootstrap_clean_markdown.py")
     bootstrap_cmd = ["python3", str(BOOTSTRAP_SCRIPT), str(rebuild_input), "--out-dir", str(body_final)]
-    if run_env.get("LUCEON_RAW_OUTLINE_LLM", "1").lower() in {"1", "true", "yes", "on"}:
+    if canonical_content_only:
+        bootstrap_cmd.append("--canonical-content-only")
+    if not canonical_content_only and run_env.get("LUCEON_RAW_OUTLINE_LLM", "1").lower() in {"1", "true", "yes", "on"}:
         bootstrap_cmd.append("--with-llm-outline")
-    if run_env.get("LUCEON_RAW_OUTLINE_VISION", "").lower() in {"1", "true", "yes", "on"}:
+    if not canonical_content_only and run_env.get("LUCEON_RAW_OUTLINE_VISION", "").lower() in {"1", "true", "yes", "on"}:
         bootstrap_cmd.append("--with-visual-outline")
     bootstrap_cmd.extend(
         [
@@ -474,7 +484,10 @@ def execute_popo_to_raw(material: Material, run_id: int, publish: bool, force: b
     build_image_semantics(body_final)
     outline_summary = outline_artifact_summary(body_final)
     emit_outline_stage_events(event_callback, outline_summary)
-    validate_outline_mechanical_qa(outline_summary)
+    if canonical_content_only:
+        validate_canonical_mechanical_qa(outline_summary)
+    else:
+        validate_outline_mechanical_qa(outline_summary)
     enrich_raw_manifest(body_final, material, raw_prefix, mineru_run_id, popo_run_id, publish=publish)
     ensure_raw_deliverables(body_final)
     if publish:
@@ -494,6 +507,7 @@ def execute_popo_to_raw(material: Material, run_id: int, publish: bool, force: b
         "work_dir": str(work_dir),
         "body_final": str(body_final),
         "published": publish,
+        "canonical_content_only": canonical_content_only,
         "outline_artifacts": outline_summary,
     }
 
@@ -563,7 +577,7 @@ def emit_outline_stage_events(event_callback, summary: dict[str, Any]) -> None:
     )
 
 
-def validate_outline_mechanical_qa(summary: dict[str, Any]) -> None:
+def validate_outline_mechanical_qa(summary: dict[str, Any], *, require_model_evidence: bool = True) -> None:
     blockers: list[str] = []
     decision = summary.get("outline_decision") or {}
     candidates = summary.get("outline_candidates_summary") or {}
@@ -573,8 +587,8 @@ def validate_outline_mechanical_qa(summary: dict[str, Any]) -> None:
     chunk_report = summary.get("chunk_boundary_report") or {}
     heading_report = summary.get("heading_order_report") or {}
     run_env = pipeline_env()
-    llm_required = run_env.get("LUCEON_RAW_OUTLINE_LLM", "1").lower() in {"1", "true", "yes", "on"}
-    vision_required = run_env.get("LUCEON_RAW_OUTLINE_VISION", "").lower() in {"1", "true", "yes", "on"}
+    llm_required = require_model_evidence and run_env.get("LUCEON_RAW_OUTLINE_LLM", "1").lower() in {"1", "true", "yes", "on"}
+    vision_required = require_model_evidence and run_env.get("LUCEON_RAW_OUTLINE_VISION", "").lower() in {"1", "true", "yes", "on"}
 
     if not decision.get("available"):
         blockers.append("missing_outline_decision")
@@ -626,6 +640,20 @@ def validate_outline_mechanical_qa(summary: dict[str, Any]) -> None:
 
     if blockers:
         raise RuntimeError("Raw mechanical QA failed: " + "; ".join(blockers))
+
+
+def validate_canonical_mechanical_qa(summary: dict[str, Any]) -> None:
+    blockers: list[str] = []
+    apply_report = summary.get("outline_apply_report") or {}
+    image_report = summary.get("image_closure_report") or {}
+    if apply_report.get("unassigned_block_count"):
+        blockers.append(f"unassigned_blocks:{apply_report.get('unassigned_block_count')}")
+    if image_report.get("missing_image_count"):
+        blockers.append(f"missing_images:{image_report.get('missing_image_count')}")
+    if image_report.get("markdown_refs_not_copied_count"):
+        blockers.append(f"uncopied_image_refs:{image_report.get('markdown_refs_not_copied_count')}")
+    if blockers:
+        raise RuntimeError("Canonical mechanical QA failed: " + "; ".join(blockers))
 
 
 def resolve_mineru_run_id(material: Material) -> str:
@@ -848,6 +876,9 @@ def heading_order_report(clean_md: Path) -> dict[str, Any]:
 
     def heading_parent_number(title: str) -> int | None:
         title = title.strip()
+        english_chapter = re.match(r"^Chapter\s+(\d{1,2})\b", title, re.IGNORECASE)
+        if english_chapter:
+            return int(english_chapter.group(1))
         bare = re.match(r"^(\d{1,2})\s+\S+", title)
         if bare:
             return int(bare.group(1))
@@ -915,7 +946,7 @@ def heading_order_report(clean_md: Path) -> dict[str, Any]:
             if parent_title and not structural_container_title(parent_title):
                 nested_numbered_by_parent.setdefault(parent_path, []).append(heading)
         parent_number = heading_parent_number(title)
-        if heading.get("level") == 1 and parent_number is not None:
+        if parent_number is not None:
             seen_parent_numbers[parent_number] = heading
         child = re.match(r"^(\d{1,2})\.\d+\b", title)
         if child:

@@ -1,0 +1,50 @@
+#!/bin/sh
+set -eu
+
+backend=${1:?backend image must be repository@sha256:digest}
+frontend=${2:?frontend image must be repository@sha256:digest}
+revision=${3:?Git commit SHA required}
+tree=${4:?Git tree SHA required}
+out=${5:?output directory required}
+
+case "$backend" in *@sha256:????????????????????????????????????????????????????????????????) ;; *) exit 2 ;; esac
+case "$frontend" in *@sha256:????????????????????????????????????????????????????????????????) ;; *) exit 2 ;; esac
+
+root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+mkdir -p "$out" "$out/config" "$out/docs" "$out/scripts" "$out/sbom"
+sed "s|__BACKEND_IMAGE__|$backend|g; s|__FRONTEND_IMAGE__|$frontend|g" \
+  "$root/compose.production.arm64.yml.tmpl" > "$out/compose.production.arm64.yml"
+sed "s|__BACKEND_IMAGE__|$backend|g; s|__FRONTEND_IMAGE__|$frontend|g" \
+  "$root/images.lock.json.tmpl" > "$out/images.lock.json"
+cp "$root/.env.production.example" "$out/.env.production.example"
+cp "$root/skill-lock.json" "$out/skill-lock.json"
+cp "$root/config/runtime-config.example.json" "$out/config/runtime-config.example.json"
+cp "$root/docs/"*.md "$out/docs/"
+for script in preflight pull-or-load backup migrate start verify rollback; do cp "$root/scripts/$script" "$out/scripts/$script"; done
+chmod +x "$out/scripts/"*
+
+python3 - "$out/release-manifest.json" "$backend" "$frontend" "$revision" "$tree" <<'PY'
+import json, platform, sys
+path, backend, frontend, revision, tree = sys.argv[1:]
+manifest = {
+  "schema": "luceon-release-manifest/v1",
+  "version": "luceon-v1.0.0",
+  "platform": "linux/arm64",
+  "source": {"repository": "https://github.com/shcming2023/LuceonWeb2026", "commit": revision, "tree": tree},
+  "images": {"backend_worker": backend, "frontend": frontend},
+  "gpu": {"started": False, "new_jobs": False, "evidence_inherited_from": "2026-07-14 four-sample UAT"},
+  "build_host": {"system": platform.system(), "machine": platform.machine()},
+}
+open(path, "w").write(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
+PY
+
+python3 - "$out" <<'PY'
+from pathlib import Path
+import hashlib, sys
+root = Path(sys.argv[1])
+rows = []
+for path in sorted(root.rglob("*")):
+    if path.is_file() and path.name != "checksums.sha256":
+        rows.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.relative_to(root).as_posix()}")
+(root / "checksums.sha256").write_text("\n".join(rows) + "\n")
+PY

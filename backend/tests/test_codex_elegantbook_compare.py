@@ -137,6 +137,15 @@ def teardown_function():
     app.dependency_overrides.clear()
 
 
+def attach_source_pdf(asset_id: int):
+    db = next(app.dependency_overrides[get_db]())
+    asset = db.query(ReviewAsset).filter(ReviewAsset.id == asset_id).one()
+    asset.input_pdf_bucket = "eduassets-input"
+    asset.input_pdf_object = "Demo.pdf"
+    db.commit()
+    db.close()
+
+
 def test_compare_uses_legacy_selfloop_when_codex_output_missing(monkeypatch):
     legacy_manifest = {
         "schema": "luceon-latex-material/v1",
@@ -166,6 +175,8 @@ def test_compare_uses_legacy_selfloop_when_codex_output_missing(monkeypatch):
     assert body["stage"] == "elegantbook"
     assert body["output_origin"] == "legacy_selfloop"
     assert body["manifest"]["bucket"] == "eduassets-latex"
+    assert body["source_pdf_url"].endswith(f"/review/assets/{asset_id}/review_pdf")
+    assert body["source_pdf_original_url"].endswith(f"/review/assets/{asset_id}/content")
     assert "stage=elegantbook" in body["latex_pdf_url"]
 
     artifact = client.get(f"/api/review/assets/{asset_id}/artifact", params={"stage": "elegantbook", "path": "compiled.pdf"})
@@ -236,6 +247,109 @@ def test_compare_prefers_codex_refined_elegantbook_output(monkeypatch):
     )
     assert legacy_artifact.status_code == 200
     assert legacy_artifact.content == b"%PDF-legacy\n"
+
+
+def test_compare_reads_worker_v2_immutable_artifact_manifest(monkeypatch):
+    prefix = "worker-v2/pdf-demo/workflow-001/bounded_deepseek_polish_qa/attempt-1/digest"
+    workflow_manifest = {
+        "schema": "luceon.workflow.artifact-manifest/v1",
+        "workflow_job_id": "workflow-001",
+        "material_id": "pdf-demo",
+        "stage": {"key": "bounded_deepseek_polish_qa", "version": "v1", "attempt": 1},
+        "files": [
+            {"path": "main.pdf", "sha256": "a" * 64},
+            {"path": "latex-project.zip", "sha256": "b" * 64},
+            {"path": "compile-report.json", "sha256": "c" * 64},
+            {"path": "core-acceptance.json", "sha256": "d" * 64},
+        ],
+    }
+    objects = {
+        ("eduassets-input", "Demo.pdf"): b"%PDF-source\n",
+        ("eduassets-elegantbook", f"{prefix}/manifest.json"): json.dumps(workflow_manifest).encode(),
+        ("eduassets-elegantbook", f"{prefix}/files/main.pdf"): b"%PDF-worker-v2\n",
+        ("eduassets-elegantbook", f"{prefix}/files/latex-project.zip"): b"PK-worker-v2",
+        ("eduassets-elegantbook", f"{prefix}/files/compile-report.json"): b'{"byte_identical_final_passes":true}',
+        ("eduassets-elegantbook", f"{prefix}/files/core-acceptance.json"): b'{"status":"passed"}',
+    }
+    client, asset_id = make_client(monkeypatch, objects)
+
+    from app.models.material import MaterialOutput
+
+    db = next(app.dependency_overrides[get_db]())
+    db.add(MaterialOutput(
+        user_id="u1", material_pk=1, material_id="pdf-demo", output_type="elegantbook",
+        origin="worker_v2", status="promoted", quality_status="passed", is_current=True,
+        manifest_bucket="eduassets-elegantbook", manifest_object=f"{prefix}/manifest.json",
+        output_run_id="workflow-001", version_label="Worker V2",
+    ))
+    material = db.query(Material).filter(Material.material_id == "pdf-demo").one()
+    material.latex_manifest_bucket = "eduassets-elegantbook"
+    material.latex_manifest_object = f"{prefix}/manifest.json"
+    material.latex_run_id = "workflow-001"
+    db.commit()
+    db.close()
+
+    response = client.get(f"/api/review/assets/{asset_id}/latex_compare")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["output_origin"] == "worker_v2"
+    assert body["output_run_id"] == "workflow-001"
+    assert "path=files/main.pdf" in body["latex_pdf_url"]
+    assert "path=files/latex-project.zip" in body["download_urls"]["package_zip"]
+    artifact = client.get(body["latex_pdf_url"])
+    assert artifact.status_code == 200
+    assert artifact.content == b"%PDF-worker-v2\n"
+
+
+def test_pdf_content_supports_range_and_conditional_cache(monkeypatch):
+    objects = {("eduassets-input", "Demo.pdf"): b"%PDF-source-cache-test\n"}
+    client, asset_id = make_client(monkeypatch, objects)
+    attach_source_pdf(asset_id)
+
+    response = client.get(f"/api/review/assets/{asset_id}/content", headers={"Range": "bytes=0-3"})
+
+    assert response.status_code == 206
+    assert response.content == b"%PDF"
+    assert response.headers["content-range"] == f"bytes 0-3/{len(objects[('eduassets-input', 'Demo.pdf')])}"
+    assert response.headers["etag"]
+    cached = client.get(
+        f"/api/review/assets/{asset_id}/content",
+        headers={"If-None-Match": response.headers["etag"]},
+    )
+    assert cached.status_code == 304
+
+
+def test_review_pdf_endpoint_serves_cached_compressed_pdf(monkeypatch, tmp_path):
+    source = b"%PDF-large-source\n"
+    preview_path = tmp_path / "review.pdf"
+    preview_path.write_bytes(b"%PDF-compressed-review\n")
+    objects = {("eduassets-input", "Demo.pdf"): source}
+    client, asset_id = make_client(monkeypatch, objects)
+    attach_source_pdf(asset_id)
+    monkeypatch.setattr("app.api.review.REVIEW_PDF_MIN_SOURCE_BYTES", 1)
+    monkeypatch.setattr(
+        "app.api.review.ensure_review_pdf_preview_isolated",
+        lambda *args, **kwargs: SimpleNamespace(
+            path=preview_path,
+            page_count=1,
+            size=preview_path.stat().st_size,
+            linearized=True,
+        ),
+    )
+
+    response = client.get(f"/api/review/assets/{asset_id}/review_pdf", headers={"Range": "bytes=0-3"})
+
+    assert response.status_code == 206
+    assert response.content == b"%PDF"
+    assert response.headers["x-review-pdf"] == "compressed"
+    assert response.headers["x-review-pdf-linearized"] == "1"
+    assert response.headers["x-review-pdf-original-length"] == str(len(source))
+    cached = client.get(
+        f"/api/review/assets/{asset_id}/review_pdf",
+        headers={"If-None-Match": response.headers["etag"]},
+    )
+    assert cached.status_code == 304
 
 
 def test_internal_latex_execution_and_workspace_routes_are_gone(monkeypatch):

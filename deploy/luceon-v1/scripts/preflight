@@ -1,0 +1,57 @@
+#!/bin/sh
+set -eu
+
+cd "$(dirname "$0")/.."
+
+arch=$(uname -m)
+case "$arch" in
+  arm64|aarch64) ;;
+  *) echo "unsupported architecture: $arch" >&2; exit 1 ;;
+esac
+
+command -v docker >/dev/null
+docker info >/dev/null
+docker compose version >/dev/null
+test -f .env.production
+test "$(stat -f '%Lp' .env.production 2>/dev/null || stat -c '%a' .env.production)" = "600"
+test -f compose.production.arm64.yml
+test -f images.lock.json
+test -f skill-lock.json
+
+if grep -Eq '^[[:space:]]*build:' compose.production.arm64.yml; then
+  echo "production compose must not contain build" >&2
+  exit 1
+fi
+if grep -Eq 'image:.*:(latest|local)([[:space:]]|$)' compose.production.arm64.yml; then
+  echo "production compose must not use mutable latest/local tags" >&2
+  exit 1
+fi
+image_count=$(grep -Ec '^[[:space:]]+image: [^ ]+@sha256:[0-9a-f]{64}$' compose.production.arm64.yml)
+test "$image_count" -eq 7
+
+python3 - <<'PY'
+from pathlib import Path
+import hashlib, json, shutil
+
+lock = json.loads(Path("skill-lock.json").read_text())
+for item in lock["skills"]:
+    root = Path("private/skills") / item["name"]
+    if not root.is_dir():
+        raise SystemExit(f"missing private skill: {root}")
+    digest = hashlib.sha256()
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or "__pycache__" in path.parts or path.suffix == ".pyc":
+            continue
+        rel = path.relative_to(root).as_posix()
+        file_sha = hashlib.sha256(path.read_bytes()).digest()
+        digest.update(rel.encode() + b"\0" + file_sha)
+    if digest.hexdigest() != item["tree_sha256"]:
+        raise SystemExit(f"skill hash mismatch: {item['name']}")
+
+usage = shutil.disk_usage(".")
+if usage.free < 20 * 1024**3:
+    raise SystemExit("less than 20 GiB free disk space")
+PY
+
+docker compose --env-file .env.production -f compose.production.arm64.yml config --quiet
+echo "preflight passed: arm64, Docker, immutable compose, skill hashes, disk"

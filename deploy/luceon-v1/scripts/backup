@@ -1,0 +1,33 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")/.."
+
+stamp=$(date -u +%Y%m%dT%H%M%SZ)
+dest="state/backups/release-$stamp"
+mkdir -p "$dest"
+
+if [ -f state/backend/mineru.db ]; then
+  python3 - "$dest/mineru.db" <<'PY'
+from pathlib import Path
+import sqlite3, sys
+source = sqlite3.connect("file:state/backend/mineru.db?mode=ro", uri=True)
+target = sqlite3.connect(sys.argv[1])
+with target:
+    source.backup(target)
+target.close(); source.close()
+PY
+  shasum -a 256 "$dest/mineru.db" > "$dest/mineru.db.sha256"
+fi
+
+if [ -n "${WORKFLOW_MYSQL_BACKUP_COMMAND:-}" ]; then
+  sh -c "$WORKFLOW_MYSQL_BACKUP_COMMAND" > "$dest/workflow.sql"
+  shasum -a 256 "$dest/workflow.sql" > "$dest/workflow.sql.sha256"
+else
+  echo "WORKFLOW_MYSQL_BACKUP_COMMAND is required for a production migration" >&2
+  exit 1
+fi
+
+cp .env.production "$dest/.env.production"
+cp state/backend/runtime_config.json "$dest/runtime_config.json"
+chmod 600 "$dest/.env.production" "$dest/runtime_config.json"
+echo "$dest"

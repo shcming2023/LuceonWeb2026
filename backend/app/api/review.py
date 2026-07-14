@@ -2,9 +2,11 @@ import json
 import mimetypes
 import os
 import hashlib
+import logging
 import re
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timezone
+from email.utils import format_datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -39,6 +41,7 @@ from app.services.material_outputs import (
 )
 from app.services.outline_review import build_outline_review
 from app.services.popo_to_raw import latest_successful_popo_to_raw_dry_run
+from app.services.review_pdf_preview import ensure_review_pdf_preview_isolated
 from app.services.source_map import normalize_source_map, synthesize_page_markdown, synthesize_page_markdown_from_content_list
 from app.utils.minio_client import minio_client
 from app.utils.user_dep import get_user_id
@@ -102,6 +105,13 @@ class FinalReviewDecisionRequest(BaseModel):
 
 REVIEW_STATUSES = {"pending", "pass", "needs_fix", "reject"}
 PDF_PAGE_CACHE_ROOT = Path(os.getenv("LUCEON_REVIEW_PDF_PAGE_CACHE", "/data/pdf-page-cache"))
+REVIEW_PDF_CACHE_ROOT = Path(os.getenv("LUCEON_REVIEW_PDF_CACHE", "/data/review-pdf-cache"))
+REVIEW_PDF_MIN_SOURCE_BYTES = 12 * 1024 * 1024
+REVIEW_PDF_DPI = 120
+REVIEW_PDF_JPEG_QUALITY = 58
+REVIEW_PDF_MAX_EDGE = 2000
+REVIEW_PDF_CACHE_VERSION = "review-pdf-v2-120dpi-q58-max2000"
+logger = logging.getLogger(__name__)
 
 
 def _ref(bucket: str | None, object_name: str | None) -> ObjectRef | None:
@@ -224,6 +234,59 @@ def _parse_range_header(range_header: str | None, size: int) -> tuple[int, int] 
     if start < 0 or start >= size or end < start:
         raise HTTPException(status_code=416, detail="请求范围不可用", headers={"Content-Range": f"bytes */{size}"})
     return start, min(end, size - 1)
+
+
+def _http_cache_headers(ref: ObjectRef, stat: Any) -> dict[str, str]:
+    raw_etag = str(getattr(stat, "etag", "") or "").strip('"')
+    if not raw_etag:
+        raw_etag = hashlib.sha256(
+            f"{ref.bucket}|{ref.object}|{getattr(stat, 'size', 0)}|{getattr(stat, 'last_modified', '')}".encode("utf-8")
+        ).hexdigest()
+    headers = {
+        "ETag": f'"{raw_etag}"',
+        "Cache-Control": "private, max-age=3600, must-revalidate",
+    }
+    last_modified = getattr(stat, "last_modified", None)
+    if last_modified:
+        try:
+            headers["Last-Modified"] = format_datetime(last_modified, usegmt=True)
+        except (TypeError, ValueError):
+            pass
+    return headers
+
+
+def _is_not_modified(request: Request, headers: dict[str, str]) -> bool:
+    if_none_match = request.headers.get("if-none-match", "")
+    etag = headers.get("ETag", "")
+    return bool(etag and (if_none_match.strip() == "*" or etag in [part.strip() for part in if_none_match.split(",")]))
+
+
+def _effective_range_header(request: Request, headers: dict[str, str]) -> str | None:
+    range_header = request.headers.get("range")
+    if_range = request.headers.get("if-range")
+    if if_range and if_range not in {headers.get("ETag"), headers.get("Last-Modified")}:
+        return None
+    return range_header
+
+
+def _read_file_range(path: Path, offset: int, length: int) -> bytes:
+    with path.open("rb") as handle:
+        handle.seek(offset)
+        return handle.read(length)
+
+
+def _review_pdf_cache_key(ref: ObjectRef, stat: Any) -> str:
+    marker = "|".join(
+        [
+            REVIEW_PDF_CACHE_VERSION,
+            ref.bucket,
+            ref.object,
+            str(getattr(stat, "etag", "") or ""),
+            str(getattr(stat, "last_modified", "") or ""),
+            str(getattr(stat, "size", "") or ""),
+        ]
+    )
+    return hashlib.sha256(marker.encode("utf-8")).hexdigest()
 
 
 def _source_pdf_ref_for_asset(asset: ReviewAsset) -> ObjectRef | None:
@@ -1511,7 +1574,8 @@ def review_asset_latex_compare(
         "manifest": _ref_dict(manifest_ref),
         "manifest_json": manifest,
         "compile_report": _read_json_optional(compile_report_ref) or {},
-        "source_pdf_url": f"/api/review/assets/{asset_id}/content",
+        "source_pdf_url": f"/api/review/assets/{asset_id}/review_pdf",
+        "source_pdf_original_url": f"/api/review/assets/{asset_id}/content",
         "latex_pdf_url": artifact_url(compiled_pdf),
         "download_urls": {
             "compiled_pdf": artifact_url(compiled_pdf),
@@ -1620,8 +1684,11 @@ def review_asset_content(
         "Accept-Ranges": "bytes",
         "Content-Disposition": f"inline; filename*=UTF-8''{encoded_filename}",
         "Content-Encoding": "identity",
+        **_http_cache_headers(ref, stat),
     }
-    range_value = _parse_range_header(request.headers.get("range"), size)
+    if _is_not_modified(request, headers):
+        return Response(status_code=304, headers=headers)
+    range_value = _parse_range_header(_effective_range_header(request, headers), size)
     if range_value:
         start, end = range_value
         content = _read_ref_range(ref, start, end - start + 1, "源 PDF 不存在")
@@ -1636,6 +1703,74 @@ def review_asset_content(
 
     headers["Content-Length"] = str(size)
     return StreamingResponse(_stream_ref(ref, "源 PDF 不存在"), media_type=media_type, headers=headers)
+
+
+@router.get("/review/assets/{asset_id}/review_pdf")
+def review_asset_review_pdf(
+    request: Request,
+    asset_id: int,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    asset = _asset_or_404(asset_id, user_id, db)
+    ref = _source_pdf_ref_for_asset(asset)
+    if not ref:
+        raise HTTPException(status_code=404, detail="源 PDF 不存在")
+    source_stat = _stat_ref(ref, "源 PDF 不存在")
+    source_size = int(getattr(source_stat, "size", 0) or 0)
+    if source_size < REVIEW_PDF_MIN_SOURCE_BYTES:
+        response = review_asset_content(request, asset_id, user_id, db)
+        response.headers["X-Review-PDF"] = "original-small"
+        return response
+
+    cache_key = _review_pdf_cache_key(ref, source_stat)
+    cache_path = REVIEW_PDF_CACHE_ROOT / f"{cache_key}.pdf"
+    skip_path = cache_path.with_suffix(".skip")
+    try:
+        source_pdf = b"" if cache_path.exists() or skip_path.exists() else _read_ref(ref, "源 PDF 不存在")
+        preview = ensure_review_pdf_preview_isolated(
+            source_pdf,
+            cache_path,
+            source_size=source_size,
+            dpi=REVIEW_PDF_DPI,
+            jpeg_quality=REVIEW_PDF_JPEG_QUALITY,
+            max_edge=REVIEW_PDF_MAX_EDGE,
+        )
+    except Exception as exc:
+        logger.warning("review PDF preview failed for %s/%s: %s", ref.bucket, ref.object, exc)
+        preview = None
+
+    if not preview:
+        response = review_asset_content(request, asset_id, user_id, db)
+        response.headers["X-Review-PDF"] = "original-fallback"
+        return response
+
+    size = preview.size
+    modified_at = datetime.fromtimestamp(preview.path.stat().st_mtime, tz=timezone.utc)
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Disposition": f"inline; filename*=UTF-8''{quote(Path(asset.to_dict()['filename']).stem + '-review.pdf')}",
+        "Content-Encoding": "identity",
+        "Cache-Control": "private, max-age=3600, must-revalidate",
+        "ETag": f'"{cache_key}"',
+        "Last-Modified": format_datetime(modified_at, usegmt=True),
+        "X-Review-PDF": "compressed",
+        "X-Review-PDF-Linearized": "1" if preview.linearized else "0",
+        "X-Review-PDF-Pages": str(preview.page_count),
+        "X-Review-PDF-Original-Length": str(source_size),
+    }
+    if _is_not_modified(request, headers):
+        return Response(status_code=304, headers=headers)
+    range_value = _parse_range_header(_effective_range_header(request, headers), size)
+    if range_value:
+        start, end = range_value
+        content = _read_file_range(preview.path, start, end - start + 1)
+        headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+        headers["Content-Length"] = str(len(content))
+        return Response(content, status_code=206, media_type="application/pdf", headers=headers)
+
+    headers["Content-Length"] = str(size)
+    return StreamingResponse(_stream_file(preview.path), media_type="application/pdf", headers=headers)
 
 
 @router.get("/review/assets/{asset_id}/page_image")
@@ -1801,10 +1936,13 @@ def review_asset_artifact(
             headers = {
                 "Accept-Ranges": "bytes",
                 "Content-Disposition": f"inline; filename*=UTF-8''{quote(Path(object_name).name)}",
+                **_http_cache_headers(ref, stat),
             }
             if _skip_http_compression(media_type):
                 headers["Content-Encoding"] = "identity"
-            range_value = _parse_range_header(request.headers.get("range"), size)
+            if _is_not_modified(request, headers):
+                return Response(status_code=304, headers=headers)
+            range_value = _parse_range_header(_effective_range_header(request, headers), size)
             if range_value:
                 start, end = range_value
                 content = _read_ref_range(ref, start, end - start + 1, "资源文件不存在")

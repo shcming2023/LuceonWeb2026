@@ -73,35 +73,44 @@
       <el-select v-model="params.stage" clearable class="stage-select" placeholder="全部阶段">
         <el-option v-for="stage in stageOptions" :key="stage.value" :label="stage.label" :value="stage.value" />
       </el-select>
-    </section>
-
-    <section class="metadata-filter-bar" aria-label="教材元数据筛选">
-      <el-select v-model="params.metadata_status" clearable placeholder="元数据状态">
-        <el-option label="待提取" value="missing" />
-        <el-option label="AI 已提取" value="ai_extracted" />
-        <el-option label="人工已修改" value="manual" />
-        <el-option label="提取失败" value="failed" />
-      </el-select>
-      <el-select v-model="params.subject" clearable filterable placeholder="学科">
-        <el-option v-for="item in metadataOptions.subjects" :key="item" :label="item" :value="item" />
-      </el-select>
-      <el-select v-model="params.country" clearable filterable placeholder="出版国家">
-        <el-option v-for="item in metadataOptions.countries" :key="item" :label="item" :value="item" />
-      </el-select>
-      <el-autocomplete
-        v-model="params.series"
-        clearable
-        value-key="value"
-        placeholder="系列名"
-        :fetch-suggestions="suggestSeries"
-        :trigger-on-focus="true"
-      />
-      <div class="year-filter">
-        <el-input-number v-model="params.year_from" :min="0" :max="2200" controls-position="right" placeholder="起始年" />
-        <span>至</span>
-        <el-input-number v-model="params.year_to" :min="0" :max="2200" controls-position="right" placeholder="结束年" />
+      <div class="filter-actions">
+        <el-button :icon="Filter" @click="metadataFiltersExpanded = !metadataFiltersExpanded">
+          {{ metadataFiltersExpanded ? '收起筛选' : '更多筛选' }}
+          <span v-if="metadataFilterCount" class="filter-count">{{ metadataFilterCount }}</span>
+        </el-button>
+        <el-button v-if="metadataFilterCount" link @click="clearMetadataFilters">清除</el-button>
       </div>
     </section>
+
+    <transition name="filter-reveal">
+      <section v-show="metadataFiltersExpanded" class="metadata-filter-bar" aria-label="教材元数据筛选">
+        <el-select v-model="params.metadata_status" clearable placeholder="元数据状态">
+          <el-option label="待提取" value="missing" />
+          <el-option label="AI 已提取" value="ai_extracted" />
+          <el-option label="人工已修改" value="manual" />
+          <el-option label="提取失败" value="failed" />
+        </el-select>
+        <el-select v-model="params.subject" clearable filterable placeholder="学科">
+          <el-option v-for="item in metadataOptions.subjects" :key="item" :label="item" :value="item" />
+        </el-select>
+        <el-select v-model="params.country" clearable filterable placeholder="出版国家">
+          <el-option v-for="item in metadataOptions.countries" :key="item" :label="item" :value="item" />
+        </el-select>
+        <el-autocomplete
+          v-model="params.series"
+          clearable
+          value-key="value"
+          placeholder="系列名"
+          :fetch-suggestions="suggestSeries"
+          :trigger-on-focus="true"
+        />
+        <div class="year-filter">
+          <el-input-number v-model="params.year_from" :min="0" :max="2200" controls-position="right" placeholder="起始年" />
+          <span>至</span>
+          <el-input-number v-model="params.year_to" :min="0" :max="2200" controls-position="right" placeholder="结束年" />
+        </div>
+      </section>
+    </transition>
 
     <section v-if="selectedRows.length || batchState.running" class="batch-bar">
       <div class="batch-summary">
@@ -123,6 +132,17 @@
         </el-button>
         <el-button
           size="small"
+          type="primary"
+          :icon="Cpu"
+          :loading="workflowV2BatchStarting"
+          :disabled="batchState.running || workflowV2BatchStarting || !selectedWorkflowV23StartableRows.length"
+          @click="startSelectedWorkflowV23Jobs"
+        >
+          批量升级到 Worker V2.3
+        </el-button>
+        <el-button
+          v-if="workerV1Policy.batch_enabled"
+          size="small"
           type="warning"
           :icon="Cpu"
           :loading="codexBatchStarting"
@@ -131,14 +151,15 @@
         >
           批量 Codex 重扫
         </el-button>
+        <span v-else class="batch-policy-note">Worker V1 批量已冻结</span>
       </div>
       <div v-if="batchState.logs.length" class="batch-log">最近失败：{{ batchState.logs[0] }}</div>
     </section>
 
     <section class="table-shell">
       <el-table
-        v-if="!loading"
         ref="materialTable"
+        v-loading="loading"
         :data="orderedMaterials"
         height="100%"
         row-key="id"
@@ -146,7 +167,7 @@
         :header-cell-style="{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)', fontWeight: 600 }"
         @selection-change="handleSelectionChange"
       >
-        <el-table-column type="selection" width="44" fixed="left" />
+        <el-table-column type="selection" width="44" fixed="left" reserve-selection />
         <el-table-column prop="filename" label="材料" min-width="330">
           <template #default="{ row }">
             <div class="material-cell">
@@ -179,6 +200,13 @@
                 <span :class="['pipeline-status', `stage-${row.stage_status}`]">{{ rowStageMeta(row).label }}</span>
                 <span class="stage-note">{{ rowStageNote(row) }}</span>
               </div>
+              <button v-if="workflowV2ForRow(row)" type="button" class="workflow-v2-line" @click.stop="openWorkflowV2Drawer(row)">
+                <span class="workflow-v2-label">Worker V2.3</span>
+                <strong>{{ workflowV2StageForRow(row) }}</strong>
+                <span>{{ workflowV2StatusForRow(row) }}</span>
+                <span v-if="workflowV2ModelCallsForRow(row)">模型 {{ workflowV2ModelCallsForRow(row) }}</span>
+                <span v-if="workflowV2FindingsForRow(row)" class="workflow-v2-findings">问题 {{ workflowV2FindingsForRow(row) }}</span>
+              </button>
               <div class="stage-track">
                 <span
                   v-for="stage in artifactStages"
@@ -212,8 +240,13 @@
                     <el-dropdown-item command="metadata-edit" :icon="DocumentChecked">编辑元数据</el-dropdown-item>
                     <el-dropdown-item command="metadata-extract" :icon="Cpu">AI 提取元数据</el-dropdown-item>
                     <el-dropdown-item command="compare-review" :disabled="!hasLatexAsset(row)" :icon="View">PDF 比对</el-dropdown-item>
+                    <el-dropdown-item v-if="isPipelineAdmin" command="resume-popo" :disabled="!hasMineruAsset(row) || hasPopoAsset(row) || pipelineBusy" :icon="Refresh">管理员：从冻结 MinerU 恢复 Popo</el-dropdown-item>
+                    <el-dropdown-item command="start-worker-v2" :disabled="!hasPopoAsset(row) || hasCurrentWorkflowV2(row)" :icon="Cpu">
+                      {{ workflowV2ForRow(row) ? '升级到 V2.3' : '启动 Worker V2.3' }}
+                    </el-dropdown-item>
+                    <el-dropdown-item command="retry-worker-v2" :disabled="workflowV2ForRow(row)?.status !== 'failed'" :icon="Refresh">重试 V2.3 当前阶段</el-dropdown-item>
                     <el-dropdown-item command="start-codex" :disabled="!canStartCodex(row)" :icon="Cpu">
-                      {{ hasLatexAsset(row) ? 'Codex 重扫' : '启动 Codex 精修' }}
+                      {{ row.codex_job?.status === 'published' ? 'Worker V1 输出已发布' : (hasLatexAsset(row) ? 'Worker V1 单任务重扫' : 'Worker V1 单任务审计') }}
                     </el-dropdown-item>
                     <el-dropdown-item command="run-worker" :disabled="!canRunCodexWorker(row)" :icon="VideoPlay">
                       运行 Worker
@@ -227,8 +260,7 @@
           </template>
         </el-table-column>
       </el-table>
-      <el-skeleton v-else :rows="8" animated />
-      <el-empty v-if="!loading && !materials.length" :description="emptyText">
+        <el-empty v-if="!loading && !materials.length" :description="emptyText">
         <el-button type="primary" :icon="Upload" @click="uploadDialogVisible = true">上传 PDF</el-button>
         <el-button :loading="syncing" @click="syncMaterials(true)">同步资产</el-button>
       </el-empty>
@@ -244,6 +276,111 @@
       />
     </footer>
 
+    <el-drawer v-model="workflowV2DrawerVisible" title="Worker V2.3 任务" size="520px">
+      <div v-loading="workflowV2DetailLoading" class="workflow-v2-detail">
+        <template v-if="activeWorkflowV2Job">
+          <div class="workflow-v2-detail-head">
+            <div>
+              <span>当前阶段</span>
+              <strong>{{ workflowV2StageLabel(activeWorkflowV2Job.current_stage_key) }}</strong>
+            </div>
+            <el-tag :type="activeWorkflowV2Job.status === 'failed' ? 'danger' : activeWorkflowV2Job.status === 'needs_review' ? 'warning' : activeWorkflowV2Job.status === 'succeeded' ? 'success' : 'primary'">
+              {{ workflowV2StatusText(activeWorkflowV2Job.status) }}
+            </el-tag>
+          </div>
+          <div class="workflow-v2-detail-actions">
+            <el-button v-if="activeWorkflowV2Job.status === 'failed'" type="primary" :loading="workflowV2ActionLoading" @click="retryActiveWorkflowV2">重试当前阶段</el-button>
+            <template v-if="activeWorkflowV2Job.status === 'needs_review' && activeWorkflowV2Candidate">
+              <el-button type="primary" plain @click="openWorkflowV2CandidatePdf">查看候选 PDF</el-button>
+              <el-button @click="downloadWorkflowV2CandidateLatex">下载待修复 LaTeX ZIP</el-button>
+              <el-button :loading="workflowV2ActionLoading" @click="handoffActiveWorkflowV2">转人工处理</el-button>
+              <el-button type="primary" :loading="workflowV2ActionLoading" @click="revalidateActiveWorkflowV2">修复后重新验证</el-button>
+            </template>
+            <el-button
+              v-else-if="activeWorkflowV2Job.status === 'needs_review'"
+              type="primary"
+              :loading="workflowV2ActionLoading"
+              @click="restartActiveWorkflowV2CurrentStage"
+            >
+              应用修复并重试当前阶段
+            </el-button>
+            <el-button
+              v-if="activeWorkflowV2Job.status === 'succeeded' && workflowV2ReviewClosureMissing(activeWorkflowV2Job)"
+              type="warning"
+              :loading="workflowV2ActionLoading"
+              @click="restartActiveWorkflowV2CurrentStage"
+            >
+              补全审阅闭环
+            </el-button>
+            <el-button
+              v-if="activeWorkflowV2Job.status === 'succeeded'"
+              :loading="workflowV2ActionLoading"
+              @click="restartActiveWorkflowV2LatexBuild"
+            >
+              从排版构建重新运行
+            </el-button>
+          </div>
+          <section v-if="activeWorkflowV2Candidate?.blockers?.length" class="workflow-v2-section workflow-v2-blockers">
+            <h3>排版阻断证据</h3>
+            <p class="workflow-v2-muted">候选件已完整保存；这些是质量门禁，不是服务故障。可先查看 PDF/下载 LaTeX，再转人工或修复后重新验证。</p>
+            <article v-for="blocker in activeWorkflowV2Candidate.blockers" :key="blocker.code" class="workflow-v2-blocker-card">
+              <div>
+                <strong>{{ workflowV2BlockerLabel(blocker.code) }}</strong>
+                <el-tag size="small" type="warning" effect="plain">{{ blocker.count || 1 }} 处</el-tag>
+              </div>
+              <small v-if="blocker.max_overfull_pt">最大溢出 {{ blocker.max_overfull_pt }}pt</small>
+              <small v-for="(item, index) in workflowV2BlockerEvidence(blocker)" :key="index">{{ item }}</small>
+            </article>
+          </section>
+          <section class="workflow-v2-section">
+            <h3>阶段记录</h3>
+            <div v-for="stage in activeWorkflowV2Job.stages" :key="stage.id" class="workflow-v2-record">
+              <strong>{{ workflowV2StageLabel(stage.stage_key) }}</strong>
+              <span>第 {{ stage.attempt }} 次</span>
+              <el-tag size="small" effect="plain" :type="stage.status === 'failed' ? 'danger' : stage.status === 'needs_review' ? 'warning' : stage.status === 'succeeded' ? 'success' : 'info'">{{ workflowV2StatusText(stage.status) }}</el-tag>
+              <small v-if="stage.error?.message">{{ workflowV2ErrorSummary(stage.error) }}</small>
+            </div>
+          </section>
+          <section class="workflow-v2-section">
+            <h3>可观察证据</h3>
+            <div class="workflow-v2-counters">
+              <span>事件 <strong>{{ activeWorkflowV2Job.events?.length || 0 }}</strong></span>
+              <span>产物 <strong>{{ activeWorkflowV2Job.artifacts?.length || 0 }}</strong></span>
+              <span>模型调用 <strong>{{ activeWorkflowV2Job.model_calls?.length || 0 }}</strong></span>
+              <span>开放问题 <strong>{{ activeWorkflowV2OpenFindingCount }}</strong></span>
+            </div>
+          </section>
+          <section v-if="activeWorkflowV2Job.qa_findings?.length" class="workflow-v2-section">
+            <h3>QA 问题</h3>
+            <div v-for="finding in activeWorkflowV2Job.qa_findings" :key="finding.id" class="workflow-v2-finding-row">
+              <el-tag size="small" type="danger" effect="plain">{{ finding.severity }}</el-tag>
+              <strong>{{ finding.code }}</strong>
+              <span v-if="finding.page_number">第 {{ finding.page_number }} 页</span>
+            </div>
+          </section>
+          <section v-if="activeWorkflowV2Job.repair_attempts?.length" class="workflow-v2-section">
+            <h3>修复尝试</h3>
+            <div v-for="repair in activeWorkflowV2Job.repair_attempts" :key="repair.id" class="workflow-v2-record">
+              <strong>{{ repair.repair_kind }}</strong>
+              <el-tag size="small" effect="plain" :type="repair.status === 'failed' ? 'danger' : repair.status === 'succeeded' ? 'success' : 'info'">{{ repair.status }}</el-tag>
+              <span v-if="repair.result?.post_patch_quality_status">质量门：{{ repair.result.post_patch_quality_status }}</span>
+              <small v-if="repair.result?.remaining_blockers?.length">仍有 {{ repair.result.remaining_blockers.length }} 类阻断</small>
+            </div>
+          </section>
+          <section v-if="activeWorkflowV2Job.model_calls?.length" class="workflow-v2-section">
+            <h3>模型调用</h3>
+            <div v-for="call in activeWorkflowV2VisibleModelCalls" :key="call.id" class="workflow-v2-call-row">
+              <strong>{{ call.purpose }}</strong>
+              <span>{{ call.model }}</span>
+              <span>{{ call.status }}</span>
+              <small v-if="call.usage?.total_tokens">{{ call.usage.total_tokens }} tokens</small>
+            </div>
+            <p v-if="activeWorkflowV2HiddenModelCallCount" class="workflow-v2-muted">另有 {{ activeWorkflowV2HiddenModelCallCount }} 个视觉审查批次，可通过 API 查看完整记录。</p>
+          </section>
+        </template>
+      </div>
+    </el-drawer>
+
     <el-dialog v-model="uploadDialogVisible" title="上传 PDF" width="520px">
       <el-upload
         v-model:file-list="uploadFileList"
@@ -257,6 +394,14 @@
         <div class="el-upload__text">拖入 PDF 或点击选择</div>
       </el-upload>
       <el-progress v-if="uploading" :percentage="uploadProgress" class="upload-progress" />
+      <el-alert
+        v-if="uploadError"
+        class="upload-error"
+        type="error"
+        :closable="false"
+        show-icon
+        :title="uploadError"
+      />
       <template #footer>
         <el-button @click="uploadDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="uploading" :disabled="!uploadableFiles.length" @click="submitUpload">
@@ -371,6 +516,7 @@ import {
   Document,
   DocumentChecked,
   Download,
+  Filter,
   MoreFilled,
   Refresh,
   Search,
@@ -385,7 +531,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import type { UploadUserFile } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { codexWorkerApi, type CodexWorkerStatus } from '@/api/codexWorker'
-import { materialsApi } from '@/api/materials'
+import { materialsApi, type WorkflowV2JobSummary } from '@/api/materials'
 import type {
   MaterialItem,
   MaterialBookMetadata,
@@ -398,8 +544,11 @@ import type {
 } from '@/types/material'
 import { formatFileSize } from '@/utils/format'
 import { formatDateTime as formatDate } from '@/utils/status'
+import { useCurrentUser } from '@/utils/user'
 
 const router = useRouter()
+const currentUser = useCurrentUser()
+const isPipelineAdmin = computed(() => Boolean(currentUser.value?.capabilities?.pipeline_admin))
 const materials = ref<MaterialItem[]>([])
 const total = ref(0)
 const loading = ref(false)
@@ -407,14 +556,17 @@ const syncing = ref(false)
 const uploadDialogVisible = ref(false)
 const uploading = ref(false)
 const uploadProgress = ref(0)
+const uploadError = ref('')
 const uploadFileList = ref<UploadUserFile[]>([])
 const summary = ref<MaterialSummary | null>(null)
 const pipeline = reactive<PipelineStatusResponse>({ run: null, events: [] })
 const preflight = ref<PipelinePreflightResponse | null>(null)
 const searchTimer = ref<number | null>(null)
+let materialsRequestSerial = 0
 const pollingTimer = ref<number | null>(null)
 const initialSyncChecked = ref(false)
 const preflighting = ref(false)
+const metadataFiltersExpanded = ref(false)
 const materialTable = ref()
 const selectedRows = ref<MaterialItem[]>([])
 const metadataOptions = ref<MaterialMetadataOptions>({
@@ -430,10 +582,37 @@ const metadataSaving = ref(false)
 const metadataExtracting = ref(false)
 const metadataBatchExtracting = ref(false)
 const codexBatchStarting = ref(false)
+const workflowV2BatchStarting = ref(false)
 const codexStartingIds = ref(new Set<string>())
 const workerStartingIds = ref(new Set<string>())
+const popoResumeIds = ref(new Set<string>())
 const workerStatuses = ref<Record<string, CodexWorkerStatus>>({})
+const workflowV2Jobs = ref<Record<string, WorkflowV2JobSummary>>({})
+const workflowV2PollingTimer = ref<number | null>(null)
+const workflowV2DrawerVisible = ref(false)
+const workflowV2DetailLoading = ref(false)
+const workflowV2ActionLoading = ref(false)
+const activeWorkflowV2Job = ref<Record<string, any> | null>(null)
+const activeWorkflowV2Candidate = ref<Record<string, any> | null>(null)
+const activeWorkflowV2OpenFindingCount = computed(() =>
+  (activeWorkflowV2Job.value?.qa_findings || []).filter((item: any) => item.status === 'open').length
+)
+const activeWorkflowV2VisibleModelCalls = computed(() => {
+  const calls = activeWorkflowV2Job.value?.model_calls || []
+  const core = calls.filter((call: any) => !String(call.purpose || '').startsWith('independent_visual_qa_pages_'))
+  const visual = calls.filter((call: any) => String(call.purpose || '').startsWith('independent_visual_qa_pages_'))
+  return [...core, ...visual.slice(-5)]
+})
+const activeWorkflowV2HiddenModelCallCount = computed(() =>
+  Math.max(0, (activeWorkflowV2Job.value?.model_calls?.length || 0) - activeWorkflowV2VisibleModelCalls.value.length)
+)
 const workerPollingTimer = ref<number | null>(null)
+const workerV1Policy = reactive({
+  mode: 'audit_only',
+  batch_enabled: false,
+  auto_retry_enabled: false,
+  single_job_audit_enabled: true
+})
 const metadataForceExtract = ref(false)
 const activeMetadataRow = ref<MaterialItem | null>(null)
 const metadataForm = reactive<MaterialBookMetadata>({
@@ -479,8 +658,12 @@ type RowCommand =
   | 'metadata-edit'
   | 'metadata-extract'
   | 'compare-review'
+  | 'resume-popo'
   | 'start-codex'
   | 'run-worker'
+  | 'start-worker-v2'
+  | 'retry-worker-v2'
+  | 'view-worker-v2'
   | 'preview-pdf'
   | 'download-pdf'
 
@@ -495,6 +678,8 @@ type PrimaryRowAction = {
 type PipelineTarget = {
   material_id?: string
   input_object?: string
+  material_ids?: string[]
+  input_objects?: string[]
 }
 
 const RECENT_OPERATION_STORAGE_KEY = 'luceon.files.recentOperation'
@@ -524,6 +709,24 @@ const params = reactive({
   year_to: null as number | null
 })
 
+const metadataFilterCount = computed(() => [
+  params.metadata_status,
+  params.subject,
+  params.country,
+  params.series,
+  params.year_from,
+  params.year_to
+].filter(value => value !== '' && value !== null).length)
+
+function clearMetadataFilters() {
+  params.metadata_status = ''
+  params.subject = ''
+  params.country = ''
+  params.series = ''
+  params.year_from = null
+  params.year_to = null
+}
+
 const stageMeta: Record<string, { label: string; type: 'primary' | 'success' | 'warning' | 'danger' | 'info' }> = {
   input: { label: 'PDF', type: 'info' },
   mineru_done: { label: 'MinerU', type: 'warning' },
@@ -537,6 +740,9 @@ const stageMeta: Record<string, { label: string; type: 'primary' | 'success' | '
 }
 
 function rowStageMeta(row: MaterialItem) {
+  if (pipelineBusy.value && isActiveTaskRow(row)) {
+    return { label: '解析中', type: 'primary' as const }
+  }
   if (row.pipeline_status === 'running' && row.stage_status === 'clean_stale') {
     return { label: '旧节点任务中', type: 'primary' as const }
   }
@@ -562,6 +768,9 @@ function currentStageKey(row: MaterialItem) {
 }
 
 function rowStageNote(row: MaterialItem) {
+  const v2 = workflowV2ForRow(row)
+  if (v2) return workflowV2StatusLabel(v2)
+  if (pipelineBusy.value && isActiveTaskRow(row)) return 'GPU 解析运行中'
   if (row.pipeline_status === 'running') return '任务运行中'
   if (row.pipeline_status === 'queued') return '任务排队中'
   const workerStatus = workerStatusForRow(row)
@@ -569,10 +778,139 @@ function rowStageNote(row: MaterialItem) {
   if (codexJobActive(row)) return codexJobStatusText(row.codex_job?.status || '')
   if (hasLatexAsset(row)) return '可进行 PDF 比对'
   if (row.codex_job) return codexJobStatusText(row.codex_job.status)
-  if (hasPopoAsset(row)) return '可启动 Codex 精修任务'
+  if (hasPopoAsset(row)) return '可启动 Worker V2.3'
   if (hasMineruAsset(row)) return '等待 Popo 或继续 GPU 解析'
   if (row.input_object) return '等待上游解析'
   return '缺少源 PDF'
+}
+
+function workflowV2ForRow(row: MaterialItem) {
+  return workflowV2Jobs.value[row.id] || workflowV2Jobs.value[row.material_id]
+}
+
+function hasCurrentWorkflowV2(row: MaterialItem) {
+  return workflowV2ForRow(row)?.is_current_workflow === true
+}
+
+function workflowV2StageLabel(key: string) {
+  const labels: Record<string, string> = {
+    canonical_clean_material: '正文守恒重建',
+    outline_reconstruction: '目录重建',
+    semantic_annotation: '语义标注',
+    deterministic_elegantbook: '排版构建',
+    bounded_deepseek_polish_qa: '核心门禁',
+    bounded_llm_polish: '受限精修',
+    independent_final_review: '独立审查'
+  }
+  return labels[key] || key
+}
+
+function workflowV2StatusLabel(job: WorkflowV2JobSummary) {
+  const attempt = job.current_attempt > 1 ? ` · 第 ${job.current_attempt} 次` : ''
+  const version = job.is_current_workflow ? '' : ' · 早期版本'
+  return `${workflowV2StatusText(job.status)}${attempt}${version}`
+}
+
+function workflowV2StatusText(status: string) {
+  const labels: Record<string, string> = {
+    queued: '排队中',
+    running: '执行中',
+    failed: '技术失败',
+    needs_review: '质量阻断 · 待处理',
+    succeeded: '已通过',
+    cancelled: '已取消'
+  }
+  return labels[status] || status
+}
+
+function workflowV2BlockerLabel(code: string) {
+  const labels: Record<string, string> = {
+    latex_missing_glyphs: '字体缺字',
+    latex_obvious_overflow: '明显横向溢出',
+    latex_unresolved_reference_or_resource: '引用或资源未解析',
+    latex_project_zip_too_large: 'LaTeX ZIP 超过 50MB',
+    latex_project_structure_invalid: 'LaTeX ZIP 目录结构不合规',
+    manual_review_handoff_missing: '缺少人工交接记录',
+    elegantbook_locked_main_template_changed: '锁定模板发生变化',
+    elegantbook_body_defines_custom_latex: '正文新增了自定义 LaTeX 定义'
+  }
+  return labels[code] || code
+}
+
+function workflowV2BlockerEvidence(blocker: Record<string, any>) {
+  if (Array.isArray(blocker.characters)) {
+    return blocker.characters.slice(0, 12).map((item: any) => {
+      const occurrence = item.occurrences?.[0] || {}
+      const positions = [
+        item.pdf_page_hint ? `PDF 第 ${item.pdf_page_hint} 页` : '',
+        occurrence.source_page_idx ? `源页 ${occurrence.source_page_idx}` : '',
+        occurrence.line ? `LaTeX 第 ${occurrence.line} 行` : ''
+      ].filter(Boolean).join(' · ')
+      return `${item.character || item.codepoint} ${item.codepoint || ''}${positions ? ` — ${positions}` : ''}`
+    })
+  }
+  if (Array.isArray(blocker.boxes)) {
+    return blocker.boxes.slice(0, 12).map((item: any) => {
+      const positions = [
+        item.pdf_page_hint ? `PDF 第 ${item.pdf_page_hint} 页` : '',
+        item.source_page_idx ? `源页 ${item.source_page_idx}` : '',
+        item.line_start ? `LaTeX 第 ${item.line_start}–${item.line_end || item.line_start} 行` : ''
+      ].filter(Boolean).join(' · ')
+      return `${item.width_pt}pt${positions ? ` — ${positions}` : ''}${item.excerpt ? ` — ${item.excerpt}` : ''}`
+    })
+  }
+  return []
+}
+
+function workflowV2ReviewClosureMissing(job: Record<string, any>) {
+  const enteredReview = Array.isArray(job?.stages) && job.stages.some((stage: any) => stage.status === 'needs_review')
+  const hasHandoff = Array.isArray(job?.repair_attempts) && job.repair_attempts.some((repair: any) => repair.repair_kind === 'manual_handoff')
+  return enteredReview && !hasHandoff
+}
+
+function workflowV2StageForRow(row: MaterialItem) {
+  const job = workflowV2ForRow(row)
+  return job ? workflowV2StageLabel(job.current_stage_key) : ''
+}
+
+function workflowV2StatusForRow(row: MaterialItem) {
+  const job = workflowV2ForRow(row)
+  return job ? workflowV2StatusLabel(job) : ''
+}
+
+function workflowV2ModelCallsForRow(row: MaterialItem) {
+  return workflowV2ForRow(row)?.model_call_count || 0
+}
+
+function workflowV2FindingsForRow(row: MaterialItem) {
+  return workflowV2ForRow(row)?.open_finding_count || 0
+}
+
+function workflowV2ErrorSummary(error: { code?: string; message?: string }) {
+  const message = String(error?.message || '').replace(/\s+/g, ' ').split('[SQL:', 1)[0].trim()
+  const prefix = error?.code ? `${error.code}：` : ''
+  const value = `${prefix}${message}`
+  return value.length > 180 ? `${value.slice(0, 177)}...` : value
+}
+
+async function openWorkflowV2Drawer(row: MaterialItem) {
+  const summary = workflowV2ForRow(row)
+  if (!summary) return
+  workflowV2DrawerVisible.value = true
+  workflowV2DetailLoading.value = true
+  activeWorkflowV2Candidate.value = null
+  try {
+    activeWorkflowV2Job.value = await materialsApi.getWorkflowV2Job(summary.id)
+    if (activeWorkflowV2Job.value?.status === 'needs_review') {
+      try {
+        activeWorkflowV2Candidate.value = await materialsApi.getWorkflowV2ReviewCandidate(summary.id)
+      } catch (error: any) {
+        if (error?.response?.status !== 404) throw error
+      }
+    }
+  } finally {
+    workflowV2DetailLoading.value = false
+  }
 }
 
 function codexJobStatusText(status: string) {
@@ -655,24 +993,40 @@ const uploadableFiles = computed(() => uploadFileList.value.map(item => item.raw
 const pipelineBusy = computed(() => pipeline.run?.status === 'queued' || pipeline.run?.status === 'running')
 const pipelineSummary = computed(() => asRecord(pipeline.run?.summary))
 const pipelinePreflight = computed(() => asRecord(pipelineSummary.value.preflight))
-const activeMaterialId = computed(() => textValue(pipelineSummary.value.material_id || pipelinePreflight.value.material_id, ''))
+const activeMaterialIds = computed(() => {
+  const values = [
+    pipelineSummary.value.material_id,
+    pipelinePreflight.value.material_id,
+    ...(Array.isArray(pipelineSummary.value.material_ids) ? pipelineSummary.value.material_ids : [])
+  ]
+  return new Set(values.map(value => textValue(value, '')).filter(Boolean))
+})
+const activeInputObjects = computed(() => {
+  const values = [
+    pipelineSummary.value.input_object,
+    pipelinePreflight.value.input_object,
+    ...(Array.isArray(pipelineSummary.value.input_objects) ? pipelineSummary.value.input_objects : [])
+  ]
+  return new Set(values.map(value => textValue(value, '')).filter(Boolean))
+})
 const pipelineProgress = computed(() => {
   if (!pipeline.run) return 0
   if (pipeline.run.status === 'succeeded') return 100
-  if (pipeline.run.status === 'failed') return 100
+  if (pipeline.run.status === 'failed' || pipeline.run.status === 'partial') return 100
   if (pipeline.run.total > 0) return Math.min(95, Math.round((pipeline.run.processed / pipeline.run.total) * 100))
   return pipeline.run.status === 'running' ? 35 : 10
 })
 const latestPipelineEvent = computed(() => pipeline.events[0] || null)
 const taskTickerTone = computed(() => {
   if (pipeline.run?.status === 'failed') return 'danger'
+  if (pipeline.run?.status === 'partial') return 'warning'
   if (preflight.value && !preflight.value.ready) return 'warning'
   if (pipelineBusy.value) return 'active'
   if (pipeline.run?.status === 'succeeded' || preflight.value?.ready) return 'success'
   return 'idle'
 })
 const pipelineStateIcon = computed(() => {
-  if (pipeline.run?.status === 'failed' || (preflight.value && !preflight.value.ready)) return WarningFilled
+  if (pipeline.run?.status === 'failed' || pipeline.run?.status === 'partial' || (preflight.value && !preflight.value.ready)) return WarningFilled
   if (pipelineBusy.value) return Timer
   if (pipeline.run?.status === 'succeeded' || preflight.value?.ready) return CircleCheckFilled
   return Timer
@@ -718,11 +1072,13 @@ const metadataSampleLabel = computed(() => {
   return `${chars ? `${chars.toLocaleString('zh-CN')} 字符样本` : '文本样本'}`
 })
 const orderedMaterials = computed(() => {
-  const active = activeMaterialId.value
   const recent = recentOperation.value
-  return [...materials.value].sort((a, b) => rowPriority(a, active, recent) - rowPriority(b, active, recent))
+  return [...materials.value].sort((a, b) => rowPriority(a, recent) - rowPriority(b, recent))
 })
 const selectedCodexStartableRows = computed(() => selectedRows.value.filter(canStartCodex))
+const selectedWorkflowV23StartableRows = computed(() => selectedRows.value.filter(
+  row => hasPopoAsset(row) && !hasCurrentWorkflowV2(row)
+))
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
@@ -803,7 +1159,7 @@ function operationStatusText(status: RecentOperationStatus) {
 }
 
 function isActiveTaskRow(row: MaterialItem) {
-  return Boolean(activeMaterialId.value && row.material_id === activeMaterialId.value)
+  return activeMaterialIds.value.has(row.material_id) || activeInputObjects.value.has(row.input_object)
 }
 
 function isRecentOperationRow(row: MaterialItem) {
@@ -819,9 +1175,18 @@ function pipelineTargetForRow(row: MaterialItem | null | undefined): PipelineTar
   }
 }
 
+function pipelineTargetForRows(rows: MaterialItem[]): PipelineTarget {
+  const materialIds = [...new Set(rows.map(row => row.material_id).filter(Boolean))]
+  const inputObjects = [...new Set(rows.map(row => row.input_object).filter(Boolean))]
+  return {
+    material_ids: materialIds,
+    input_objects: inputObjects
+  }
+}
+
 function currentPipelineTarget(): PipelineTarget {
-  if (selectedRows.value.length === 1) {
-    return pipelineTargetForRow(selectedRows.value[0])
+  if (selectedRows.value.length) {
+    return pipelineTargetForRows(selectedRows.value.slice(0, 5))
   }
   const recent = recentOperation.value
   if (recent) {
@@ -836,11 +1201,10 @@ function currentPipelineTarget(): PipelineTarget {
   return {}
 }
 
-function rowPriority(row: MaterialItem, active: string, recent: RecentOperation | null) {
+function rowPriority(row: MaterialItem, recent: RecentOperation | null) {
   if (workerRunning(row)) return 0
-  if (codexJobActive(row)) return 0
-  if (active && row.material_id === active) return 1
-  if (recent && (row.id === recent.materialPk || (!!recent.materialId && row.material_id === recent.materialId))) return 2
+  if (recent && (row.id === recent.materialPk || (!!recent.materialId && row.material_id === recent.materialId))) return 1
+  if (isActiveTaskRow(row)) return 2
   return 3
 }
 
@@ -855,6 +1219,7 @@ function pipelineStatusText(status: string) {
     queued: '排队中',
     running: '运行中',
     succeeded: '已完成',
+    partial: '部分完成',
     failed: '失败',
     idle: '空闲'
   }
@@ -963,13 +1328,15 @@ function resetMetadataForm(metadata?: MaterialBookMetadata | null) {
 }
 
 async function fetchMaterials() {
+  const requestSerial = ++materialsRequestSerial
   loading.value = true
   try {
     const data = await materialsApi.getMaterials(params)
+    if (requestSerial !== materialsRequestSerial) return
     materials.value = data.materials
     total.value = data.total
   } finally {
-    loading.value = false
+    if (requestSerial === materialsRequestSerial) loading.value = false
   }
 }
 
@@ -989,23 +1356,56 @@ async function fetchPipeline() {
   updatePipelinePolling()
 }
 
+async function fetchWorkflowV2Jobs() {
+  const jobs = await materialsApi.getWorkflowV2JobSummaries()
+  const next: Record<string, WorkflowV2JobSummary> = {}
+  for (const job of jobs) {
+    if (!next[job.material_pk]) next[job.material_pk] = job
+    if (!next[job.material_id]) next[job.material_id] = job
+  }
+  workflowV2Jobs.value = next
+}
+
 function syncRecentOperationFromPipeline() {
-  const recent = recentOperation.value
   const run = pipeline.run
-  if (!recent || !run) return
-  const runMaterialId = textValue(asRecord(run.summary).material_id || asRecord(asRecord(run.summary).preflight).material_id, '')
-  const sameMaterial = runMaterialId && recent.materialId === runMaterialId
+  if (!run) return
+  const activeRow = materials.value.find(isActiveTaskRow)
+  const recent = recentOperation.value
+  if (activeRow && (!recent || String(recent.runId || '') !== String(run.id))) {
+    saveRecentOperation({
+      materialPk: activeRow.id,
+      materialId: activeRow.material_id,
+      filename: displayTitle(activeRow),
+      action: 'GPU 解析',
+      status: run.status === 'succeeded' ? 'succeeded' : ['failed', 'partial'].includes(run.status) ? 'failed' : 'running',
+      runId: run.id,
+      updatedAt: new Date().toISOString()
+    })
+    return
+  }
+  if (!recent) return
+  const sameMaterial = activeMaterialIds.value.has(recent.materialId)
   const sameRun = recent.runId && String(recent.runId) === String(run.id)
   if (!sameMaterial && !sameRun) return
   const nextStatus: RecentOperationStatus =
-    run.status === 'succeeded' ? 'succeeded' : run.status === 'failed' ? 'failed' : pipelineBusy.value ? 'running' : recent.status
+    run.status === 'succeeded' ? 'succeeded' : ['failed', 'partial'].includes(run.status) ? 'failed' : pipelineBusy.value ? 'running' : recent.status
   if (nextStatus !== recent.status || recent.runId !== run.id) {
     saveRecentOperation({ ...recent, status: nextStatus, runId: run.id, updatedAt: new Date().toISOString() })
   }
 }
 
 async function loadDashboard() {
-  await Promise.all([fetchMaterials(), fetchSummary(), fetchPipeline(), fetchMetadataOptions()])
+  const policyResult = await Promise.allSettled([
+    fetchMaterials(),
+    fetchSummary(),
+    fetchPipeline(),
+    fetchMetadataOptions(),
+    materialsApi.getWorkerV1Policy(),
+    fetchWorkflowV2Jobs()
+  ])
+  const policy = policyResult[4]
+  if (policy.status === 'fulfilled') Object.assign(workerV1Policy, policy.value)
+  await hydrateWorkerStatuses()
   if (!initialSyncChecked.value && total.value === 0) {
     initialSyncChecked.value = true
     await syncMaterials(false)
@@ -1029,21 +1429,43 @@ async function submitUpload() {
   if (!uploadableFiles.value.length) return
   uploading.value = true
   uploadProgress.value = 0
+  uploadError.value = ''
   try {
     const data = await materialsApi.upload(uploadableFiles.value, progress => {
       uploadProgress.value = progress
     })
+    const uploadedMaterials = data.files
+      .filter(item => item.status === 'success' && item.material)
+      .map(item => item.material as MaterialItem)
     uploadDialogVisible.value = false
     uploadFileList.value = []
-    const uploadedMaterial = data.files.find(item => item.status === 'success' && item.material)?.material
-    if (uploadedMaterial) {
+    if (uploadedMaterials.length) {
+      const latestMaterial = uploadedMaterials[uploadedMaterials.length - 1]
       params.page = 1
       params.stage = ''
-      params.search = uploadedMaterial.material_id || uploadedMaterial.filename || uploadedMaterial.id
-      rememberOperation(uploadedMaterial, '上传PDF', 'succeeded')
+      params.search = ''
+      clearMetadataFilters()
+      metadataFiltersExpanded.value = false
+      saveRecentOperation({
+        materialPk: latestMaterial.id,
+        materialId: latestMaterial.material_id || '',
+        filename: uploadedMaterials.length > 1
+          ? `${latestMaterial.filename || latestMaterial.title} 等 ${uploadedMaterials.length} 份`
+          : latestMaterial.filename || latestMaterial.title || latestMaterial.id,
+        action: `上传 ${uploadedMaterials.length} 份 PDF`,
+        status: 'succeeded',
+        updatedAt: new Date().toISOString()
+      })
     }
     await Promise.all([fetchMaterials(), fetchSummary()])
-    ElMessage.success(uploadedMaterial ? `上传完成：${data.success} 个成功，已定位到新 PDF` : `上传完成：${data.success} 个成功`)
+    ElMessage.success(uploadedMaterials.length
+      ? `上传完成：${data.success} 个 PDF 已置顶`
+      : `上传完成：${data.success} 个成功`)
+  } catch (error: any) {
+    uploadProgress.value = 0
+    uploadError.value = error?.code === 'ECONNABORTED'
+      ? '上传超时，文件没有进入材料库。请保留文件并重新提交。'
+      : '上传中断，文件没有进入材料库。请保留当前文件并重新提交。'
   } finally {
     uploading.value = false
   }
@@ -1133,11 +1555,20 @@ function hasMineruAsset(row: MaterialItem) {
 }
 
 function hasLatexAsset(row: MaterialItem) {
-  return Boolean(row.latex_available || hasRef(row.latex_manifest))
+  const workflowV2 = workflowV2ForRow(row)
+  return Boolean(
+    row.latex_available
+      || hasRef(row.latex_manifest)
+      || (row.codex_job?.status === 'published' && hasRef(row.codex_job.output_manifest))
+      || (
+        workflowV2?.status === 'succeeded'
+        && workflowV2.current_stage_key === 'bounded_deepseek_polish_qa'
+      )
+  )
 }
 
 function canStartCodex(row: MaterialItem) {
-  return hasPopoAsset(row) && !codexJobActive(row)
+  return hasPopoAsset(row) && !codexJobActive(row) && row.codex_job?.status !== 'published'
 }
 
 function codexJobActive(row: MaterialItem) {
@@ -1158,15 +1589,31 @@ function canRunCodexWorker(row: MaterialItem) {
   const job = row.codex_job
   if (!job?.id) return false
   if (workerRunning(row)) return false
-  return ['queued', 'running', 'dry_run_succeeded'].includes(job.status || '')
+  return ['queued', 'dry_run_succeeded'].includes(job.status || '')
 }
 
 function primaryActionLoading(row: MaterialItem) {
   const jobId = row.codex_job?.id || ''
-  return Boolean((jobId && workerStartingIds.value.has(jobId)) || workerRunning(row))
+  return Boolean(popoResumeIds.value.has(row.id) || (jobId && workerStartingIds.value.has(jobId)) || workerRunning(row))
 }
 
 function primaryAction(row: MaterialItem): PrimaryRowAction {
+  const workflowV2 = workflowV2ForRow(row)
+  if (workflowV2 && !workflowV2.is_current_workflow && hasPopoAsset(row)) {
+    return { label: '升级到 V2.3', command: 'start-worker-v2', enabled: true, type: 'primary', icon: Cpu }
+  }
+  if (workflowV2?.status === 'needs_review') {
+    return { label: '处理 V2.3 质量阻断', command: 'view-worker-v2', enabled: true, type: 'warning', icon: View }
+  }
+  if (workflowV2?.status === 'failed') {
+    return { label: '查看 V2.3 问题', command: 'view-worker-v2', enabled: true, type: 'warning', icon: View }
+  }
+  if (workflowV2 && ['queued', 'running'].includes(workflowV2.status)) {
+    return { label: workflowV2StatusLabel(workflowV2), command: null, enabled: false, type: 'info', icon: Timer }
+  }
+  if (!workflowV2 && hasPopoAsset(row)) {
+    return { label: '启动 Worker V2.3', command: 'start-worker-v2', enabled: true, type: 'primary', icon: Cpu }
+  }
   const workerStatus = workerStatusForRow(row)
   if (workerStatus?.state === 'running' || workerStatus?.state === 'publishing') {
     return {
@@ -1419,6 +1866,128 @@ async function startCodexJob(row: MaterialItem, batch = false) {
   }
 }
 
+async function startWorkflowV2(row: MaterialItem) {
+  if (!hasPopoAsset(row)) {
+    ElMessage.warning('材料尚未完成 Popo，不能启动 Worker V2.3')
+    return
+  }
+  workflowV2ActionLoading.value = true
+  try {
+    const created = await materialsApi.createWorkflowV2Job(row.id)
+    await materialsApi.runWorkflowV2Job(created.job.id)
+    ElMessage.success('Worker V2.3 已入队，将自动逐阶段执行')
+    await fetchWorkflowV2Jobs()
+  } catch (error: any) {
+    ElMessage.warning(error?.response?.data?.detail || error?.message || 'Worker V2.3 启动失败')
+  } finally {
+    workflowV2ActionLoading.value = false
+  }
+}
+
+async function retryWorkflowV2(row: MaterialItem) {
+  const job = workflowV2ForRow(row)
+  if (!job || job.status !== 'failed') return
+  workflowV2ActionLoading.value = true
+  try {
+    await materialsApi.retryWorkflowV2Job(job.id)
+    ElMessage.success('失败阶段已创建新尝试并重新入队')
+    await fetchWorkflowV2Jobs()
+    if (workflowV2DrawerVisible.value) activeWorkflowV2Job.value = await materialsApi.getWorkflowV2Job(job.id)
+  } catch (error: any) {
+    ElMessage.warning(error?.response?.data?.detail || error?.message || 'Worker V2.3 重试失败')
+  } finally {
+    workflowV2ActionLoading.value = false
+  }
+}
+
+async function retryActiveWorkflowV2() {
+  const materialPk = activeWorkflowV2Job.value?.material_pk
+  const row = materials.value.find(item => String(item.id) === String(materialPk))
+  if (row) await retryWorkflowV2(row)
+}
+
+function openWorkflowV2CandidatePdf() {
+  const url = activeWorkflowV2Candidate.value?.files?.pdf
+  if (url) window.open(url, '_blank', 'noopener')
+}
+
+function downloadWorkflowV2CandidateLatex() {
+  const url = activeWorkflowV2Candidate.value?.files?.latex_zip
+  if (!url) return
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'latex-project-needs-review.zip'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+}
+
+async function handoffActiveWorkflowV2() {
+  const jobId = activeWorkflowV2Job.value?.id
+  if (!jobId) return
+  workflowV2ActionLoading.value = true
+  try {
+    const result = await materialsApi.handoffWorkflowV2ReviewCandidate(jobId)
+    activeWorkflowV2Job.value = result.job
+    ElMessage.success('候选件已登记为人工处理，原始候选件保持不可变')
+  } catch (error: any) {
+    ElMessage.warning(error?.response?.data?.detail || error?.message || '转人工处理失败')
+  } finally {
+    workflowV2ActionLoading.value = false
+  }
+}
+
+async function revalidateActiveWorkflowV2() {
+  const jobId = activeWorkflowV2Job.value?.id
+  if (!jobId) return
+  workflowV2ActionLoading.value = true
+  try {
+    const result = await materialsApi.revalidateWorkflowV2ReviewCandidate(jobId)
+    activeWorkflowV2Job.value = result.job
+    activeWorkflowV2Candidate.value = null
+    await fetchWorkflowV2Jobs()
+    ElMessage.success('已从当前阶段创建新尝试并进入重新验证')
+  } catch (error: any) {
+    ElMessage.warning(error?.response?.data?.detail || error?.message || '重新验证失败')
+  } finally {
+    workflowV2ActionLoading.value = false
+  }
+}
+
+async function restartActiveWorkflowV2CurrentStage() {
+  const jobId = activeWorkflowV2Job.value?.id
+  const stageKey = activeWorkflowV2Job.value?.current_stage_key
+  if (!jobId || !stageKey) return
+  workflowV2ActionLoading.value = true
+  try {
+    const result = await materialsApi.restartWorkflowV2Job(jobId, stageKey)
+    activeWorkflowV2Job.value = result.job
+    await fetchWorkflowV2Jobs()
+    ElMessage.success('已从当前阶段创建新尝试并进入重新验证')
+  } catch (error: any) {
+    ElMessage.warning(error?.response?.data?.detail || error?.message || '当前阶段重新验证失败')
+  } finally {
+    workflowV2ActionLoading.value = false
+  }
+}
+
+async function restartActiveWorkflowV2LatexBuild() {
+  const jobId = activeWorkflowV2Job.value?.id
+  if (!jobId) return
+  workflowV2ActionLoading.value = true
+  try {
+    const result = await materialsApi.restartWorkflowV2Job(jobId, 'deterministic_elegantbook')
+    activeWorkflowV2Job.value = result.job
+    activeWorkflowV2Candidate.value = null
+    await fetchWorkflowV2Jobs()
+    ElMessage.success('已保留上游冻结产物，并从排版构建创建新尝试')
+  } catch (error: any) {
+    ElMessage.warning(error?.response?.data?.detail || error?.message || '排版构建重新运行失败')
+  } finally {
+    workflowV2ActionLoading.value = false
+  }
+}
+
 async function startSelectedCodexJobs() {
   const rows = selectedCodexStartableRows.value
   if (!rows.length) return
@@ -1446,6 +2015,39 @@ async function startSelectedCodexJobs() {
   await fetchMaterials()
   if (failed) ElMessage.warning(`Codex 任务创建结束：成功 ${success}，失败 ${failed}`)
   else ElMessage.success(`已创建 ${success} 个 Codex 任务`)
+}
+
+async function startSelectedWorkflowV23Jobs() {
+  const rows = selectedWorkflowV23StartableRows.value
+  if (!rows.length) return
+  try {
+    await ElMessageBox.confirm(
+      `将把已选 ${rows.length} 份已完成 Popo 的材料人工升级到 Worker V2.3。未选材料不会重刷。`,
+      '批量升级到 Worker V2.3',
+      { type: 'warning', confirmButtonText: '确认升级', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  workflowV2BatchStarting.value = true
+  let success = 0
+  let failed = 0
+  try {
+    for (const row of rows) {
+      try {
+        const created = await materialsApi.createWorkflowV2Job(row.id, 'files_manual_batch_v2_3')
+        await materialsApi.runWorkflowV2Job(created.job.id)
+        success += 1
+      } catch {
+        failed += 1
+      }
+    }
+  } finally {
+    workflowV2BatchStarting.value = false
+  }
+  await fetchWorkflowV2Jobs()
+  if (failed) ElMessage.warning(`Worker V2.3 批量升级结束：成功 ${success}，失败 ${failed}`)
+  else ElMessage.success(`已人工提交 ${success} 个 Worker V2.3 任务`)
 }
 
 async function runCodexWorker(row: MaterialItem) {
@@ -1486,6 +2088,25 @@ async function runCodexWorker(row: MaterialItem) {
 function ensureWorkerPolling() {
   if (workerPollingTimer.value) return
   workerPollingTimer.value = window.setInterval(pollWorkerStatuses, 5000)
+}
+
+async function hydrateWorkerStatuses() {
+  const jobIds = [...new Set(
+    materials.value
+      .map(row => row.codex_job)
+      .filter(job => job?.id && ['queued', 'running', 'dry_run_succeeded', 'validating'].includes(job.status || ''))
+      .map(job => job!.id)
+  )]
+  if (!jobIds.length) return
+  const settled = await Promise.allSettled(jobIds.map(jobId => codexWorkerApi.getJob(jobId)))
+  const nextStatuses = { ...workerStatuses.value }
+  settled.forEach((result, index) => {
+    if (result.status === 'fulfilled') nextStatuses[jobIds[index]] = result.value
+  })
+  workerStatuses.value = nextStatuses
+  if (Object.values(nextStatuses).some(status => status.running || ['running', 'publishing'].includes(status.state))) {
+    ensureWorkerPolling()
+  }
 }
 
 async function pollWorkerStatuses() {
@@ -1548,8 +2169,12 @@ function handleRowCommand(row: MaterialItem, command: RowCommand) {
   if (command === 'metadata-edit') return openMetadataDrawer(row)
   if (command === 'metadata-extract') return extractRowMetadata(row, false, true)
   if (command === 'compare-review') return openCompareReview(row)
+  if (command === 'resume-popo') return resumePopoFromFrozenMineru(row)
   if (command === 'start-codex') return startCodexJob(row)
   if (command === 'run-worker') return runCodexWorker(row)
+  if (command === 'start-worker-v2') return startWorkflowV2(row)
+  if (command === 'retry-worker-v2') return retryWorkflowV2(row)
+  if (command === 'view-worker-v2') return openWorkflowV2Drawer(row)
   if (command === 'preview-pdf') return previewPdf(row)
   if (command === 'download-pdf') return downloadPdf(row)
 }
@@ -1559,23 +2184,60 @@ function handleDropdownCommand(row: MaterialItem, command: string | number | obj
   handleRowCommand(row, command as RowCommand)
 }
 
+async function resumePopoFromFrozenMineru(row: MaterialItem) {
+  if (!isPipelineAdmin.value) {
+    ElMessage.warning('仅管线管理员可执行 Popo 异常恢复')
+    return
+  }
+  if (!hasMineruAsset(row) || hasPopoAsset(row) || pipelineBusy.value) return
+  const next = new Set(popoResumeIds.value)
+  next.add(row.id)
+  popoResumeIds.value = next
+  try {
+    const result = await materialsApi.preflightPopoResume(row.id)
+    if (!result.ready) {
+      ElMessage.warning(`恢复已拦截：${preflightFailureText(result)}`)
+      return
+    }
+    await ElMessageBox.confirm(
+      h('div', { class: 'preflight-confirm' }, [
+        h('p', { style: 'margin: 0 0 6px;' }, `文件：${row.filename}`),
+        h('p', { style: 'margin: 0 0 6px;' }, '仅复用已冻结的 MinerU 产物，不重复执行 MinerU。'),
+        h('p', { style: 'margin: 0;' }, '将提交 Popo GPU 任务并在完成后冻结结果。')
+      ]),
+      '从冻结 MinerU 恢复 Popo',
+      { type: 'warning', confirmButtonText: '提交 Popo', cancelButtonText: '取消' }
+    )
+    const run = await materialsApi.startPopoResume(row.id)
+    rememberOperation(row, '恢复 Popo', 'started', run)
+    await fetchPipeline()
+    ElMessage.success('Popo 恢复任务已提交')
+  } finally {
+    const current = new Set(popoResumeIds.value)
+    current.delete(row.id)
+    popoResumeIds.value = current
+  }
+}
+
 async function openCompareReview(row: MaterialItem) {
   if (!hasLatexAsset(row)) {
     ElMessage.warning('该材料还没有可比对的 ElegantBook 输出')
     return
   }
   let assetId = row.review_asset_id
-  if (!assetId) {
-    try {
-      const target = await materialsApi.getReviewTarget(row.id)
-      assetId = target.review_asset_id
-    } catch {
+  let outputId = ''
+  try {
+    const target = await materialsApi.getReviewTarget(row.id)
+    assetId = assetId || target.review_asset_id
+    outputId = target.output_id || ''
+  } catch {
+    if (!assetId) {
       ElMessage.warning('尚未建立审查索引，请先同步资产')
       return
     }
   }
   rememberOperation(row, 'PDF比对', 'opened')
-  router.push({ path: '/review/compare', query: { asset_id: assetId } })
+  router.push({ path: '/review/compare', query: { asset_id: assetId, ...(outputId ? { output_id: outputId } : {}) } })
 }
 
 function previewPdf(row: MaterialItem) {
@@ -1615,398 +2277,35 @@ watch(
 
 onMounted(loadDashboard)
 
+onMounted(() => {
+  workflowV2PollingTimer.value = window.setInterval(fetchWorkflowV2Jobs, 5000)
+})
+
 onBeforeUnmount(() => {
   if (searchTimer.value) window.clearTimeout(searchTimer.value)
   if (pollingTimer.value) window.clearInterval(pollingTimer.value)
   if (workerPollingTimer.value) window.clearInterval(workerPollingTimer.value)
+  if (workflowV2PollingTimer.value) window.clearInterval(workflowV2PollingTimer.value)
 })
 </script>
 
 <style scoped>
 .materials-root {
+  display: flex;
   height: 100%;
   min-height: 0;
-  display: flex;
   flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.page-header {
+  display: flex;
+  min-height: 48px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
   gap: 18px;
-  overflow: hidden;
-}
-
-.page-header {
-  flex-shrink: 0;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.page-title {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 24px;
-  font-weight: 700;
-}
-
-.page-meta {
-  display: flex;
-  gap: 14px;
-  margin-top: 6px;
-  color: var(--text-muted);
-  font-size: 13px;
-}
-
-.header-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.task-ticker,
-.operation-focus,
-.filter-bar,
-.batch-bar,
-.table-shell {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
-}
-
-.task-ticker {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 42px;
-  padding: 0 12px;
-  overflow: hidden;
-}
-
-.task-ticker.tone-active {
-  border-color: var(--primary-light);
-  background: var(--primary-faint);
-}
-
-.task-ticker.tone-success {
-  border-color: color-mix(in srgb, var(--success-color) 28%, var(--border-light));
-}
-
-.task-ticker.tone-warning {
-  border-color: color-mix(in srgb, var(--warning-color) 42%, var(--border-light));
-}
-
-.task-ticker.tone-danger {
-  border-color: color-mix(in srgb, var(--danger-color) 48%, var(--border-light));
-}
-
-.task-ticker-label {
-  flex-shrink: 0;
-  color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.task-ticker-viewport {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.task-ticker-track {
-  display: block;
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.operation-focus {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-}
-
-.operation-focus.running,
-.operation-focus.started {
-  border-color: var(--primary-light);
-  background: var(--primary-faint);
-}
-
-.operation-focus.succeeded {
-  border-color: color-mix(in srgb, var(--success-color) 34%, var(--border-light));
-}
-
-.operation-focus.failed {
-  border-color: color-mix(in srgb, var(--danger-color) 46%, var(--border-light));
-}
-
-.operation-main {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-.operation-main strong {
-  max-width: 420px;
-  overflow: hidden;
-  color: var(--text-primary);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.operation-label {
-  flex-shrink: 0;
-  color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.operation-id {
-  max-width: 180px;
-  overflow: hidden;
-  color: var(--text-muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.operation-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.filter-bar {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-}
-
-.search-input {
-  max-width: 420px;
-}
-
-.stage-select {
-  width: 160px;
-}
-
-.quick-selects {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.sort-hint {
-  margin-left: auto;
-  color: var(--text-muted);
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.batch-bar {
-  flex-shrink: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px;
-}
-
-.batch-summary {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-.batch-summary strong {
-  color: var(--text-primary);
-}
-
-.batch-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.batch-log {
-  width: 100%;
-  overflow: hidden;
-  color: var(--danger-color);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.table-shell {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.table-shell :deep(.el-table) {
-  flex: 1;
-  min-height: 0;
-}
-
-.table-shell :deep(.el-table__inner-wrapper) {
-  height: 100%;
-}
-
-.table-shell :deep(.el-table-fixed-column--left),
-.table-shell :deep(.el-table-fixed-column--right) {
-  background: var(--bg-primary);
-}
-
-.table-shell :deep(.is-active-task-row td) {
-  background: var(--primary-faint) !important;
-}
-
-.table-shell :deep(.is-recent-operation-row td) {
-  background: color-mix(in srgb, var(--warning-color) 4%, var(--bg-primary)) !important;
-}
-
-.material-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.file-name {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 100%;
-  color: var(--text-primary);
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.object-path {
-  color: var(--text-muted);
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pipeline-cell {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.pipeline-status {
-  flex-shrink: 0;
-}
-
-.stage-chain {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 6px;
-  min-width: 0;
-}
-
-.stage-pill {
-  flex-shrink: 0;
-  padding: 3px 7px;
-  border: 1px solid var(--border-light);
-  border-radius: 6px;
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.3;
-}
-
-.stage-pill.done {
-  border-color: var(--primary-light);
-  background: var(--primary-faint);
-  color: var(--primary-color);
-  font-weight: 600;
-}
-
-.stage-pill.score {
-  border-color: var(--success-color);
-  color: var(--success-color);
-}
-
-.row-actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: nowrap;
-  gap: 8px;
-  white-space: nowrap;
-}
-
-.row-actions :deep(.el-button) {
-  margin-left: 0 !important;
-  padding: 0;
-}
-
-.action-wrap {
-  display: inline-flex;
-}
-
-.pagination-row {
-  flex-shrink: 0;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.upload-icon {
-  color: var(--primary-color);
-  font-size: 42px;
-}
-
-.upload-progress {
-  margin-top: 14px;
-}
-
-@media (max-width: 900px) {
-  .page-header,
-  .operation-focus,
-  .filter-bar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .search-input,
-  .stage-select {
-    width: 100%;
-    max-width: none;
-  }
-
-  .sort-hint {
-    margin-left: 0;
-    white-space: normal;
-  }
-}
-
-.materials-root {
-  gap: 12px;
-}
-
-.page-header {
-  align-items: center;
 }
 
 .page-heading {
@@ -2014,78 +2313,92 @@ onBeforeUnmount(() => {
 }
 
 .page-title {
-  font-size: 26px;
-  line-height: 1.15;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 24px;
+  font-weight: 720;
+  line-height: 1.2;
   letter-spacing: 0;
 }
 
 .page-meta {
-  gap: 10px;
-  color: var(--text-secondary);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
-.header-actions :deep(.el-button) {
-  height: 38px;
-  padding: 0 14px !important;
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  gap: 7px;
 }
 
 .summary-band {
-  flex-shrink: 0;
   display: grid;
-  grid-template-columns: repeat(6, minmax(92px, 1fr));
   overflow: hidden;
+  flex-shrink: 0;
+  grid-template-columns: repeat(4, minmax(92px, 1fr));
   border: 1px solid var(--border-light);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--bg-primary);
 }
 
 .summary-tile {
   min-width: 0;
-  padding: 12px 14px;
+  padding: 11px 15px;
   border: 0;
   border-right: 1px solid var(--border-light);
   background: transparent;
   color: var(--text-secondary);
   text-align: left;
   cursor: pointer;
+  transition: background var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .summary-tile:last-child {
   border-right: 0;
 }
 
-.summary-tile:hover,
-.summary-tile.active {
-  background: color-mix(in srgb, var(--primary-color) 5%, var(--bg-primary));
+.summary-tile:hover {
+  background: var(--bg-hover);
 }
 
 .summary-tile.active {
+  background: var(--primary-faint);
   box-shadow: inset 0 -2px 0 var(--primary-color);
 }
 
 .summary-tile strong {
   display: block;
   color: var(--text-primary);
-  font-size: 20px;
+  font-size: 19px;
+  font-weight: 700;
   line-height: 1.1;
 }
 
 .summary-tile span {
   display: block;
   margin-top: 4px;
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 520;
 }
 
 .workspace-status {
-  flex-shrink: 0;
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) minmax(220px, 0.75fr) auto;
+  min-height: 64px;
+  flex-shrink: 0;
+  grid-template-columns: minmax(280px, 1fr) minmax(230px, 0.7fr) auto;
   align-items: center;
   gap: 14px;
-  padding: 12px 14px;
+  padding: 10px 13px;
   border: 1px solid var(--border-light);
   border-left-width: 3px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--bg-primary);
 }
 
@@ -2111,59 +2424,61 @@ onBeforeUnmount(() => {
 
 .workspace-state {
   display: flex;
-  align-items: center;
   min-width: 0;
+  align-items: center;
   gap: 10px;
 }
 
 .state-icon {
   display: inline-flex;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
   align-items: center;
   justify-content: center;
-  flex: 0 0 34px;
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
   color: var(--text-secondary);
 }
 
 .tone-active .state-icon {
-  background: var(--primary-faint);
-  color: var(--primary-color);
+  background: var(--primary-tint);
+  color: var(--primary-dark);
 }
 
 .tone-success .state-icon {
-  background: color-mix(in srgb, var(--success-color) 12%, var(--bg-primary));
+  background: rgb(46 139 87 / 0.09);
   color: var(--success-dark);
 }
 
 .tone-warning .state-icon {
-  background: color-mix(in srgb, var(--warning-color) 14%, var(--bg-primary));
+  background: rgb(179 107 0 / 0.09);
   color: var(--warning-dark);
 }
 
 .tone-danger .state-icon {
-  background: color-mix(in srgb, var(--danger-color) 12%, var(--bg-primary));
+  background: rgb(217 45 32 / 0.08);
   color: var(--danger-dark);
 }
 
 .state-copy {
   display: grid;
   min-width: 0;
-  gap: 2px;
+  gap: 1px;
 }
 
-.state-label {
+.state-label,
+.recent-work > span {
   color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 10px;
+  font-weight: 650;
 }
 
 .state-copy strong {
   overflow: hidden;
   color: var(--text-primary);
-  font-size: 15px;
+  font-size: 14px;
+  font-weight: 650;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2172,7 +2487,7 @@ onBeforeUnmount(() => {
 .state-copy span:last-child {
   overflow: hidden;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2180,139 +2495,230 @@ onBeforeUnmount(() => {
 .recent-work {
   display: grid;
   min-width: 0;
-  gap: 2px;
+  gap: 1px;
   padding-left: 14px;
   border-left: 1px solid var(--border-light);
 }
 
-.recent-work span {
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 700;
+.recent-work strong,
+.recent-work em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .recent-work strong {
-  overflow: hidden;
   color: var(--text-primary);
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 620;
 }
 
 .recent-work em {
-  overflow: hidden;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 11px;
   font-style: normal;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .workspace-actions {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 4px;
+}
+
+.filter-bar,
+.metadata-filter-bar,
+.batch-bar {
+  flex-shrink: 0;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  background: var(--bg-primary);
 }
 
 .filter-bar {
   display: grid;
   grid-template-columns: minmax(280px, 1fr) 170px auto;
-  gap: 10px;
-  padding: 10px;
-  border-radius: 8px;
+  align-items: center;
+  gap: 9px;
+  padding: 9px;
+}
+
+.search-input {
+  min-width: 0;
+}
+
+.stage-select {
+  width: 170px;
+}
+
+.filter-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.filter-count {
+  display: inline-grid;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 4px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--primary-tint);
+  color: var(--primary-dark);
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .metadata-filter-bar {
-  flex-shrink: 0;
   display: grid;
-  grid-template-columns: repeat(4, minmax(120px, 1fr)) minmax(230px, auto);
-  gap: 10px;
-  padding: 10px;
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-primary) 86%, var(--bg-secondary));
+  grid-template-columns: repeat(4, minmax(118px, 1fr)) minmax(230px, 1.25fr);
+  gap: 9px;
+  padding: 9px;
+  background: #fafbfc;
 }
 
 .year-filter {
   display: grid;
-  grid-template-columns: minmax(92px, 1fr) auto minmax(92px, 1fr);
+  grid-template-columns: minmax(90px, 1fr) auto minmax(90px, 1fr);
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .year-filter :deep(.el-input-number) {
   width: 100%;
 }
 
-.search-input {
-  max-width: none;
+.filter-reveal-enter-active,
+.filter-reveal-leave-active {
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
 }
 
-.quick-selects {
-  justify-content: flex-end;
+.filter-reveal-enter-from,
+.filter-reveal-leave-to {
+  opacity: 0;
+  transform: translateY(-3px);
 }
 
 .batch-bar {
-  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 9px 11px;
+  border-left: 3px solid var(--primary-color);
+  background: var(--primary-whisper);
+}
+
+.batch-summary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.batch-summary strong {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.batch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.batch-policy-note {
+  align-self: center;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.batch-log {
+  width: 100%;
+  overflow: hidden;
+  color: var(--danger-color);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .table-shell {
-  border-radius: 8px;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
   background: var(--bg-primary);
 }
 
 .table-shell :deep(.el-table) {
-  --el-table-row-hover-bg-color: color-mix(in srgb, var(--primary-color) 4%, var(--bg-primary));
+  min-height: 0;
+  flex: 1;
+}
+
+.table-shell :deep(.el-table__inner-wrapper) {
+  height: 100%;
 }
 
 .table-shell :deep(.el-table__cell) {
-  padding: 12px 0;
+  padding: 10px 0;
 }
 
 .table-shell :deep(.el-table__header .cell) {
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 680;
+}
+
+.table-shell :deep(.el-table-fixed-column--left),
+.table-shell :deep(.el-table-fixed-column--right) {
+  background: var(--bg-primary);
 }
 
 .table-shell :deep(.el-table-fixed-column--right) {
-  box-shadow: -12px 0 18px -18px rgb(29 29 31 / 0.32);
+  box-shadow: -10px 0 16px -16px rgb(16 24 40 / 0.28);
+}
+
+.table-shell :deep(.is-active-task-row td) {
+  background: var(--primary-faint) !important;
+}
+
+.table-shell :deep(.is-recent-operation-row td) {
+  background: rgb(179 107 0 / 0.035) !important;
 }
 
 .material-cell {
-  gap: 7px;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
 }
 
 .material-title-row {
   display: flex;
-  align-items: center;
   min-width: 0;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
 }
 
 .file-name {
   display: block;
   min-width: 0;
-  font-size: 14px;
-  line-height: 1.35;
-}
-
-.material-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.25;
-}
-
-.material-meta span {
-  min-width: 0;
-  max-width: 220px;
   overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2320,8 +2726,24 @@ onBeforeUnmount(() => {
 .book-subtitle {
   overflow: hidden;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.material-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 9px;
+  color: var(--text-muted);
+  font-size: 10px;
   line-height: 1.25;
+}
+
+.material-meta span {
+  max-width: 200px;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2329,66 +2751,74 @@ onBeforeUnmount(() => {
 .metadata-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 4px;
 }
 
 .metadata-chips span {
-  max-width: 180px;
+  max-width: 170px;
   overflow: hidden;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: var(--bg-secondary);
+  padding: 1px 6px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: #fafbfc;
   color: var(--text-secondary);
-  font-size: 11px;
-  line-height: 1.45;
+  font-size: 10px;
+  line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .pipeline-cell {
+  display: flex;
+  min-width: 0;
   flex-direction: column;
   align-items: stretch;
-  gap: 9px;
+  gap: 8px;
 }
 
 .stage-summary {
   display: flex;
-  align-items: center;
   min-width: 0;
-  gap: 8px;
+  align-items: center;
+  gap: 7px;
 }
 
 .pipeline-status {
   flex: 0 0 auto;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: var(--bg-secondary);
+  padding: 2px 7px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: #f4f5f6;
   color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.4;
+  font-size: 10px;
+  font-weight: 680;
+  line-height: 1.45;
 }
 
 .pipeline-status.stage-raw_done,
 .pipeline-status.stage-clean_done,
 .pipeline-status.stage-standard_done {
-  background: color-mix(in srgb, var(--success-color) 12%, var(--bg-primary));
+  border-color: rgb(46 139 87 / 0.18);
+  background: rgb(46 139 87 / 0.08);
   color: var(--success-dark);
 }
 
 .pipeline-status.stage-popo_done,
 .pipeline-status.stage-mineru_done {
-  background: color-mix(in srgb, var(--primary-color) 8%, var(--bg-primary));
+  border-color: rgb(0 113 227 / 0.16);
+  background: var(--primary-faint);
   color: var(--primary-dark);
 }
 
 .pipeline-status.stage-clean_stale {
-  background: color-mix(in srgb, var(--warning-color) 14%, var(--bg-primary));
+  border-color: rgb(179 107 0 / 0.18);
+  background: rgb(179 107 0 / 0.07);
   color: var(--warning-dark);
 }
 
 .pipeline-status.stage-failed {
-  background: color-mix(in srgb, var(--danger-color) 12%, var(--bg-primary));
+  border-color: rgb(217 45 32 / 0.18);
+  background: rgb(217 45 32 / 0.07);
   color: var(--danger-dark);
 }
 
@@ -2396,37 +2826,194 @@ onBeforeUnmount(() => {
   min-width: 0;
   overflow: hidden;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.workflow-v2-line {
+  width: fit-content;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.workflow-v2-line:hover strong {
+  color: var(--primary-dark);
+}
+
+.workflow-v2-line strong {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.workflow-v2-label {
+  padding: 1px 5px;
+  border: 1px solid rgb(0 113 227 / 0.2);
+  border-radius: var(--radius-sm);
+  background: var(--primary-faint);
+  color: var(--primary-dark);
+  font-weight: 680;
+}
+
+.workflow-v2-findings {
+  color: var(--danger-dark);
+}
+
+.workflow-v2-detail {
+  min-height: 180px;
+}
+
+.workflow-v2-detail-head,
+.workflow-v2-record,
+.workflow-v2-call-row,
+.workflow-v2-finding-row,
+.workflow-v2-counters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.workflow-v2-detail-head {
+  justify-content: space-between;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.workflow-v2-detail-head div {
+  display: grid;
+  gap: 3px;
+}
+
+.workflow-v2-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 14px;
+}
+
+.workflow-v2-detail-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
+.workflow-v2-detail-head span,
+.workflow-v2-record span,
+.workflow-v2-call-row span,
+.workflow-v2-finding-row span {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.workflow-v2-section {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.workflow-v2-section h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+}
+
+.workflow-v2-record,
+.workflow-v2-call-row,
+.workflow-v2-finding-row {
+  min-height: 34px;
+  flex-wrap: wrap;
+}
+
+.workflow-v2-record strong,
+.workflow-v2-call-row strong,
+.workflow-v2-finding-row strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+}
+
+.workflow-v2-record small,
+.workflow-v2-call-row small {
+  width: 100%;
+  color: var(--danger-dark);
+  font-size: 10px;
+}
+
+.workflow-v2-counters {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.workflow-v2-counters span {
+  padding: 8px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.workflow-v2-muted {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.workflow-v2-blocker-card {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--warning-border, #f5d9a8);
+  border-radius: var(--radius-sm);
+  background: #fffaf1;
+}
+
+.workflow-v2-blocker-card > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.workflow-v2-blocker-card small {
+  color: var(--text-secondary);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .stage-track {
   display: grid;
-  grid-template-columns: repeat(6, minmax(36px, 1fr));
-  align-items: start;
-  gap: 0;
   min-width: 0;
+  grid-template-columns: repeat(4, minmax(44px, 1fr));
+  align-items: start;
 }
 
 .stage-step {
   position: relative;
   display: grid;
-  justify-items: center;
-  gap: 4px;
   min-width: 0;
+  justify-items: center;
+  gap: 3px;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 9px;
 }
 
 .stage-step::before {
   content: '';
   position: absolute;
-  top: 5px;
-  left: 0;
+  top: 4px;
   right: 0;
-  height: 2px;
-  background: var(--border-light);
+  left: 0;
+  height: 1px;
+  background: var(--border-color);
 }
 
 .stage-step:first-child::before {
@@ -2438,14 +3025,14 @@ onBeforeUnmount(() => {
 }
 
 .stage-step.done::before {
-  background: color-mix(in srgb, var(--success-color) 34%, var(--border-light));
+  background: rgb(46 139 87 / 0.38);
 }
 
 .stage-dot {
   position: relative;
   z-index: 1;
-  width: 11px;
-  height: 11px;
+  width: 9px;
+  height: 9px;
   border: 2px solid var(--border-color);
   border-radius: 50%;
   background: var(--bg-primary);
@@ -2457,7 +3044,7 @@ onBeforeUnmount(() => {
 }
 
 .stage-step.active .stage-dot {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 14%, transparent);
+  box-shadow: 0 0 0 3px var(--primary-ring);
 }
 
 .stage-step-label {
@@ -2467,40 +3054,48 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
-.quality-score {
-  align-self: center;
-  justify-self: end;
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--success-color) 12%, var(--bg-primary));
-  color: var(--success-dark);
-  font-size: 11px;
-  font-weight: 700;
-}
-
 .row-actions {
-  justify-content: flex-start;
-  gap: 6px;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
 }
 
 .row-actions :deep(.el-button) {
+  min-height: 30px;
   margin-left: 0 !important;
-  padding: 7px 10px !important;
-  border: 1px solid var(--border-light) !important;
-  box-shadow: none !important;
-}
-
-.row-actions :deep(.el-button--primary) {
-  border-color: transparent !important;
+  padding: 5px 9px !important;
 }
 
 .more-button {
-  width: 32px;
-  padding: 7px 0 !important;
+  width: 30px;
+  padding: 5px 0 !important;
+}
+
+.pagination-row {
+  display: flex;
+  min-height: 32px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.upload-icon {
+  color: var(--primary-color);
+  font-size: 38px;
+}
+
+.upload-progress {
+  margin-top: 14px;
+}
+
+.upload-error {
+  margin-top: 12px;
 }
 
 .metadata-drawer :deep(.el-drawer__body) {
-  padding: 0 20px 16px;
+  padding: 16px 20px;
 }
 
 .metadata-drawer :deep(.el-drawer__footer) {
@@ -2519,10 +3114,10 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px;
+  padding: 11px 12px;
   border: 1px solid var(--border-light);
-  border-radius: 8px;
-  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  background: #fafbfc;
 }
 
 .metadata-editor-head div {
@@ -2532,8 +3127,8 @@ onBeforeUnmount(() => {
 .metadata-editor-head span {
   display: block;
   color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 10px;
+  font-weight: 650;
 }
 
 .metadata-editor-head strong {
@@ -2541,7 +3136,8 @@ onBeforeUnmount(() => {
   overflow: hidden;
   margin-top: 3px;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 620;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2564,8 +3160,7 @@ onBeforeUnmount(() => {
 
 .metadata-evidence {
   display: grid;
-  gap: 10px;
-  padding-top: 2px;
+  gap: 9px;
 }
 
 .metadata-evidence header {
@@ -2577,55 +3172,54 @@ onBeforeUnmount(() => {
 
 .metadata-evidence header span {
   color: var(--text-primary);
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 650;
 }
 
 .metadata-evidence header small {
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .evidence-list {
   display: grid;
-  gap: 8px;
+  gap: 7px;
 }
 
 .evidence-list article {
-  padding: 10px 11px;
+  padding: 9px 10px;
   border: 1px solid var(--border-light);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg-primary);
 }
 
 .evidence-list article span {
-  color: var(--primary-color);
-  font-size: 12px;
-  font-weight: 700;
+  color: var(--primary-dark);
+  font-size: 11px;
+  font-weight: 650;
 }
 
 .evidence-list article p {
-  margin: 5px 0 4px;
+  margin: 4px 0;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
 .evidence-list article small {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .metadata-error {
-  padding: 10px 11px;
-  border: 1px solid color-mix(in srgb, var(--danger-color) 26%, var(--border-light));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--danger-color) 7%, var(--bg-primary));
+  padding: 9px 10px;
+  border-left: 3px solid var(--danger-color);
+  background: rgb(217 45 32 / 0.05);
   color: var(--danger-dark);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .metadata-drawer-footer {
@@ -2635,41 +3229,90 @@ onBeforeUnmount(() => {
   gap: 12px;
 }
 
-@media (max-width: 980px) {
-  .workspace-status {
-    grid-template-columns: 1fr;
+@media (max-width: 1180px) {
+  .metadata-filter-bar {
+    grid-template-columns: repeat(3, minmax(118px, 1fr));
   }
 
-  .recent-work {
-    padding-left: 0;
-    border-left: 0;
-  }
-
-  .workspace-actions {
-    justify-content: flex-start;
+  .year-filter {
+    grid-column: span 2;
   }
 }
 
-@media (max-width: 900px) {
-  .summary-band {
-    grid-template-columns: repeat(2, minmax(120px, 1fr));
+@media (max-width: 980px) {
+  .workspace-status {
+    grid-template-columns: 1fr auto;
   }
 
-  .filter-bar {
+  .recent-work {
+    grid-column: 1 / -1;
+    padding: 8px 0 0;
+    border-top: 1px solid var(--border-light);
+    border-left: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .materials-root {
+    overflow: auto;
+  }
+
+  .page-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .header-actions {
+    justify-content: flex-start;
+  }
+
+  .summary-band {
+    grid-template-columns: repeat(2, minmax(100px, 1fr));
+  }
+
+  .summary-tile:nth-child(2) {
+    border-right: 0;
+  }
+
+  .summary-tile:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--border-light);
+  }
+
+  .workspace-status,
+  .filter-bar,
+  .metadata-filter-bar {
     grid-template-columns: 1fr;
   }
 
-  .metadata-filter-bar {
-    grid-template-columns: 1fr 1fr;
+  .workspace-actions,
+  .filter-actions {
+    justify-content: flex-start;
   }
 
-  .stage-track {
-    grid-template-columns: repeat(3, minmax(56px, 1fr));
-    row-gap: 8px;
+  .recent-work {
+    grid-column: auto;
+  }
+
+  .stage-select {
+    width: 100%;
+  }
+
+  .year-filter {
+    grid-column: auto;
+  }
+
+  .table-shell {
+    min-height: 520px;
+    flex: none;
   }
 
   .metadata-form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .metadata-drawer-footer {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>

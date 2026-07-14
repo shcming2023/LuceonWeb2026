@@ -1,5 +1,6 @@
 import mimetypes
 import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import quote
 
@@ -12,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.material import CodexSkillJob, Material, PipelineEvent, PipelineRun
 from app.models.material_metadata import MaterialMetadata
+from app.models.user import User
 from app.services.clean_to_standard import CleanToStandardPreflightError, clean_to_standard_preflight, start_clean_to_standard_run
 from app.services.codex_skill_jobs import (
     CodexSkillJobError,
@@ -29,7 +31,9 @@ from app.services.material_inventory import (
     latest_pipeline_run,
     material_summary,
     minio_client,
+    run_popo_resume_preflight,
     run_pipeline_preflight,
+    start_popo_resume_run,
     start_pipeline_run,
     sync_material_inventory,
     upload_input_pdfs,
@@ -43,6 +47,7 @@ from app.services.material_metadata import (
     metadata_to_dict,
     upsert_manual_metadata,
 )
+from app.services.material_outputs import sync_material_outputs_for_material
 from app.services.popo_to_raw import (
     PopoToRawPreflightError,
     PopoToRawPublishError,
@@ -53,8 +58,9 @@ from app.services.popo_to_raw import (
 )
 from app.services.popo_to_raw_audit import audit_popo_to_raw_run
 from app.services.raw_to_clean import RawToCleanPreflightError, raw_to_clean_preflight, start_raw_to_clean_run
+from app.services.worker_v1_policy import v1_batch_enabled, v1_policy
 from app.utils.minio_client import get_presigned_url
-from app.utils.user_dep import get_user_id
+from app.utils.user_dep import get_user_id, require_pipeline_admin
 
 router = APIRouter()
 RUN_STAMP_PATTERN = re.compile(r"(20\d{12})")
@@ -73,8 +79,10 @@ CODEX_JOB_STATUS_PRIORITY = {
     "published": 10,
 }
 
+RECENT_UPLOAD_WINDOW = timedelta(hours=24)
 
-def _material_activity_sort_key(material: Material, codex_job: CodexSkillJob | None = None) -> tuple[int, str, str, str, str, int]:
+
+def _material_activity_sort_key(material: Material, codex_job: CodexSkillJob | None = None) -> tuple[int, str, int, int]:
     run_stamp = max(
         _run_stamp(material.latex_run_id),
         _run_stamp(material.standard_run_id),
@@ -83,11 +91,26 @@ def _material_activity_sort_key(material: Material, codex_job: CodexSkillJob | N
         _run_stamp(material.popo_run_id),
         _run_stamp(material.mineru_run_id),
     )
-    created = material.created_at.isoformat() if material.created_at else ""
-    synced = material.last_synced_at.isoformat() if material.last_synced_at else ""
+    created = material.created_at.strftime("%Y%m%d%H%M%S%f") if material.created_at else ""
     codex_priority = CODEX_JOB_STATUS_PRIORITY.get(codex_job.status, 0) if codex_job else 0
-    codex_created = codex_job.created_at.isoformat() if codex_job and codex_job.created_at else ""
-    return (codex_priority, codex_created, run_stamp, created, synced, int(material.id or 0))
+    codex_created = codex_job.created_at.strftime("%Y%m%d%H%M%S%f") if codex_job and codex_job.created_at else ""
+    activity_stamp = max(created, codex_created, f"{run_stamp}000000" if run_stamp else "")
+    job_status = codex_job.status if codex_job else ""
+    recent_upload = bool(
+        material.source_type == "uploaded"
+        and material.stage_status == "input"
+        and material.created_at
+        and material.created_at >= datetime.now(timezone.utc).replace(tzinfo=None) - RECENT_UPLOAD_WINDOW
+    )
+    if material.pipeline_status == "running" or job_status in {"running", "validating"}:
+        activity_priority = 3
+    elif recent_upload:
+        activity_priority = 2
+    elif job_status == "queued":
+        activity_priority = 1
+    else:
+        activity_priority = 0
+    return (activity_priority, activity_stamp, codex_priority, int(material.id or 0))
 
 
 def _latest_codex_jobs_for_materials(db: Session, user_id: str, material_ids: list[int]) -> dict[int, CodexSkillJob]:
@@ -111,12 +134,16 @@ class PipelineStartRequest(BaseModel):
     limit: int = 5
     material_id: str = ""
     input_object: str = ""
+    material_ids: list[str] = Field(default_factory=list)
+    input_objects: list[str] = Field(default_factory=list)
 
 
 class PipelinePreflightRequest(BaseModel):
     limit: int = 5
     material_id: str = ""
     input_object: str = ""
+    material_ids: list[str] = Field(default_factory=list)
+    input_objects: list[str] = Field(default_factory=list)
 
 
 class PopoToRawStartRequest(BaseModel):
@@ -175,6 +202,13 @@ class MaterialMetadataExtractRequest(BaseModel):
 
 def _material_or_404(material_pk: int, user_id: str, db: Session) -> Material:
     material = db.query(Material).filter(Material.id == material_pk, Material.user_id == user_id).first()
+    if not material:
+        raise HTTPException(status_code=404, detail="材料不存在")
+    return material
+
+
+def _admin_material_or_404(material_pk: int, db: Session) -> Material:
+    material = db.query(Material).filter(Material.id == material_pk, Material.ignored.is_(False)).first()
     if not material:
         raise HTTPException(status_code=404, detail="材料不存在")
     return material
@@ -473,6 +507,11 @@ def create_legacy_refresh_codex_jobs(
     user_id: str = Depends(get_user_id),
     db: Session = Depends(get_db),
 ):
+    if not v1_batch_enabled():
+        raise HTTPException(
+            status_code=409,
+            detail="Worker V1 批量刷新已冻结；黄金 10 组通过前仅保留历史审计。",
+        )
     try:
         summary = enqueue_legacy_refresh_codex_jobs(
             db,
@@ -485,6 +524,12 @@ def create_legacy_refresh_codex_jobs(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"创建旧产物刷新队列失败: {exc}")
     return summary
+
+
+@router.get("/materials/codex-jobs/v1-policy")
+def get_worker_v1_policy(user_id: str = Depends(get_user_id)):
+    _ = user_id
+    return v1_policy()
 
 
 @router.get("/materials/codex-jobs/{job_id}")
@@ -544,7 +589,13 @@ def pipeline_preflight(
 ):
     _ = user_id
     try:
-        return run_pipeline_preflight(payload.limit, material_id=payload.material_id, input_object=payload.input_object)
+        return run_pipeline_preflight(
+            payload.limit,
+            material_id=payload.material_id,
+            input_object=payload.input_object,
+            material_ids=payload.material_ids,
+            input_objects=payload.input_objects,
+        )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"解析预检失败: {exc}")
 
@@ -563,6 +614,8 @@ def start_pipeline(
             limit=payload.limit,
             material_id=payload.material_id,
             input_object=payload.input_object,
+            material_ids=payload.material_ids,
+            input_objects=payload.input_objects,
         )
     except PipelinePreflightError as exc:
         db.rollback()
@@ -570,6 +623,38 @@ def start_pipeline(
     except Exception as exc:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"启动解析任务失败: {exc}")
+    return run.to_dict()
+
+
+@router.post("/materials/{material_pk}/pipeline/resume-popo/preflight")
+def preflight_resume_popo(
+    material_pk: int,
+    admin_user: User = Depends(require_pipeline_admin),
+    db: Session = Depends(get_db),
+):
+    _ = admin_user
+    material = _admin_material_or_404(material_pk, db)
+    try:
+        return run_popo_resume_preflight(material)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Popo 恢复预检失败: {exc}")
+
+
+@router.post("/materials/{material_pk}/pipeline/resume-popo/start")
+def start_resume_popo(
+    material_pk: int,
+    admin_user: User = Depends(require_pipeline_admin),
+    db: Session = Depends(get_db),
+):
+    material = _admin_material_or_404(material_pk, db)
+    try:
+        run = start_popo_resume_run(db, str(material.user_id), material, requested_by_user_id=str(admin_user.id))
+    except PipelinePreflightError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail={"message": "Popo 恢复预检未通过", "preflight": exc.preflight})
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"启动 Popo 恢复失败: {exc}")
     return run.to_dict()
 
 
@@ -767,4 +852,10 @@ def material_review_target(
     material = _material_or_404(material_pk, user_id, db)
     if not material.review_asset_id:
         raise HTTPException(status_code=404, detail="审查资产尚未同步")
-    return {"review_asset_id": str(material.review_asset_id)}
+    outputs = sync_material_outputs_for_material(db, user_id, material)
+    db.commit()
+    selected = outputs[0] if outputs else None
+    return {
+        "review_asset_id": str(material.review_asset_id),
+        "output_id": str(selected.id) if selected and selected.id else "",
+    }

@@ -22,7 +22,14 @@
     </div>
 
     <div ref="scrollRef" class="pdf-source-scroll" @scroll="handleScroll" @wheel.prevent.stop="handleWheel">
-      <div v-if="loading" class="pdf-source-state">正在加载 PDF...</div>
+      <div v-if="loading" class="pdf-source-state">
+        <span>{{ loadingText }}</span>
+        <div class="pdf-load-progress" :class="{ indeterminate: !loadTotalBytes }">
+          <span :style="{ width: `${loadProgressPercent}%` }" />
+        </div>
+        <small v-if="loadTotalBytes">{{ formatBytes(loadLoadedBytes) }} / {{ formatBytes(loadTotalBytes) }}</small>
+        <small v-else>首次打开大文件时，服务端会先生成压缩审阅副本</small>
+      </div>
       <div v-else-if="error" class="pdf-source-state error">{{ error }}</div>
       <template v-else>
         <div v-if="topSpacerHeight" class="pdf-page-spacer" :style="{ height: `${topSpacerHeight}px` }" />
@@ -68,7 +75,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { Aim, Refresh, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
 import * as pdfjsLib from 'pdfjs-dist'
-import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist/types/src/display/api'
+import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist/types/src/display/api'
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url'
 import type { SourceBlock, SourceMap, SourcePage } from '@/types/file'
 import { sourceTypeLabel } from '@/utils/sourceTypes'
@@ -112,6 +119,8 @@ const zoom = ref(1)
 const currentPage = ref(1)
 const pdfPageTotal = ref(0)
 const pdfDoc = shallowRef<PDFDocumentProxy | null>(null)
+const loadLoadedBytes = ref(0)
+const loadTotalBytes = ref(0)
 const canvasRefs = new Map<number, HTMLCanvasElement>()
 const pageRefs = new Map<number, HTMLElement>()
 const blockRefs = new Map<string, HTMLElement>()
@@ -120,6 +129,7 @@ const VIRTUALIZE_PAGE_THRESHOLD = 80
 const VIRTUAL_WINDOW_RADIUS = 8
 const PAGE_VERTICAL_CHROME = 44
 let loadToken = 0
+let documentLoadingTask: PDFDocumentLoadingTask | null = null
 let pendingScrollPage: number | undefined
 let visibleRenderFrame: number | undefined
 
@@ -133,6 +143,16 @@ const pageLabel = computed(() => {
   const trace = sourceBlockCount.value ? `${sourceBlockCount.value} 个溯源框` : '无溯源数据'
   return total ? `第 ${activePage.value} / ${total} 页 · ${trace}` : trace
 })
+const loadProgressPercent = computed(() => {
+  if (!loadTotalBytes.value) return 35
+  return Math.min(100, Math.round((loadLoadedBytes.value / loadTotalBytes.value) * 100))
+})
+const loadingText = computed(() => loadTotalBytes.value ? `正在加载 PDF ${loadProgressPercent.value}%` : '正在准备审阅 PDF...')
+
+const formatBytes = (value: number) => {
+  if (value < 1024 * 1024) return `${Math.max(0, value / 1024).toFixed(0)} KB`
+  return `${(value / 1024 / 1024).toFixed(1)} MB`
+}
 
 const pageSource = (pageNumber: number): SourcePage | undefined => {
   return sourcePageMap.value.get(pageNumber)
@@ -243,7 +263,13 @@ const destroyDocument = async () => {
   }
   const doc = pdfDoc.value
   pdfDoc.value = null
-  if (doc) await doc.destroy()
+  const task = documentLoadingTask
+  documentLoadingTask = null
+  if (task) {
+    await task.destroy()
+  } else if (doc) {
+    await doc.destroy()
+  }
 }
 
 const targetPageWidth = () => {
@@ -394,6 +420,8 @@ const loadDocument = async () => {
   error.value = ''
   pages.value = []
   pdfPageTotal.value = 0
+  loadLoadedBytes.value = 0
+  loadTotalBytes.value = 0
   canvasRefs.clear()
   pageRefs.clear()
   blockRefs.clear()
@@ -401,17 +429,23 @@ const loadDocument = async () => {
 
   try {
     const sourceUrl = new URL(props.url, window.location.href).toString()
-    const doc = await pdfjsLib.getDocument({
+    const loadingTask = pdfjsLib.getDocument({
       url: sourceUrl,
       withCredentials: true,
       cMapUrl: `${pdfAssetBase}/cmaps/`,
       cMapPacked: true,
       standardFontDataUrl: `${pdfAssetBase}/standard_fonts/`,
-      rangeChunkSize: 1024 * 1024,
-      disableRange: false,
-      disableStream: true,
-      disableAutoFetch: true
-    }).promise
+      disableRange: true,
+      disableStream: false,
+      disableAutoFetch: false
+    })
+    documentLoadingTask = loadingTask
+    loadingTask.onProgress = ({ loaded, total }: { loaded: number; total: number }) => {
+      if (token !== loadToken) return
+      loadLoadedBytes.value = loaded || 0
+      loadTotalBytes.value = total || 0
+    }
+    const doc = await loadingTask.promise
     if (token !== loadToken) {
       await doc.destroy()
       return
@@ -672,10 +706,42 @@ defineExpose({ scrollToPage, scrollToBlock })
 .pdf-source-state {
   min-height: 360px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 10px;
   color: var(--text-muted);
   font-size: 14px;
+}
+
+.pdf-source-state small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.pdf-load-progress {
+  width: min(320px, 72%);
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+}
+
+.pdf-load-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary-color);
+  transition: width 160ms ease;
+}
+
+.pdf-load-progress.indeterminate span {
+  animation: pdf-load-indeterminate 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes pdf-load-indeterminate {
+  from { transform: translateX(-80%); }
+  to { transform: translateX(190%); }
 }
 
 .pdf-source-state.error {

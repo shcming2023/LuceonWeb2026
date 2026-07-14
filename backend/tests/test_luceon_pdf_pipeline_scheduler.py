@@ -128,6 +128,51 @@ class FakeS3:
         return f"{public_endpoint}/{bucket}/{obj}?expires={expires}"
 
 
+def test_reuse_frozen_mineru_requires_matching_manifest_and_marker():
+    material_id = "pdf-abc"
+    run_id = "mineru-run-1"
+    batch_id = "mineru-batch-1"
+    manifest_object = f"mineru/{material_id}/{run_id}/manifest.json"
+    marker_object = pipeline.status_marker_object(material_id, run_id, "mineru_done_frozen")
+    manifest = {
+        "status": "mineru_done_frozen",
+        "material_id": material_id,
+        "run_id": run_id,
+        "batch_id": batch_id,
+        "source_pdf": {
+            "input_object": "first.pdf",
+            "sha256": "abc123",
+            "size_bytes": 42,
+        },
+    }
+
+    class FrozenS3:
+        def list_objects(self, bucket: str, max_keys: int = 1000, prefix: str = ""):
+            return [{"Key": manifest_object, "LastModified": "2026-07-14T00:00:00Z"}]
+
+        def get_json(self, bucket: str, obj: str):
+            if obj == manifest_object:
+                return manifest
+            if obj == marker_object:
+                return {"status": "mineru_done_frozen"}
+            raise KeyError(obj)
+
+    cfg = SimpleNamespace(mineru_bucket="eduassets-mineru", input_bucket="eduassets-input")
+    doc = {
+        "material_id": material_id,
+        "object": "first.pdf",
+        "source_pdf_sha256": "abc123",
+        "source_pdf_size_bytes": 42,
+    }
+    doc_status = {"run_id": run_id, "status": "succeeded"}
+
+    result = pipeline.reuse_frozen_mineru_result(FrozenS3(), cfg, doc, doc_status, batch_id)
+
+    assert result["status"] == "PASS"
+    assert result["reused"] is True
+    assert result["manifest"] == {"bucket": "eduassets-mineru", "object": manifest_object}
+
+
 def test_existing_stage_status_maps_sanitized_filename_by_sha():
     data = b"%PDF-1.7 actual target bytes"
     source_sha = hashlib.sha256(data).hexdigest()
@@ -153,3 +198,71 @@ def test_existing_stage_status_maps_sanitized_filename_by_sha():
     assert doc["doc_id"] == "remote-doc-003"
     assert doc["source_pdf_sha256"] == source_sha
     assert doc["material_id"] == "pdf-" + source_sha[:16]
+
+
+def test_staged_completion_requires_every_selected_document_to_freeze_both_stages():
+    result = {
+        "selected_count": 3,
+        "mineru_freezes": [{}, {}],
+        "mineru_errors": [{"reason": "freeze failed"}],
+        "popo": {"freezes": [{}, {}], "errors": []},
+    }
+
+    assert pipeline.staged_completion_status(result) == "PARTIAL"
+
+
+def test_staged_completion_is_done_only_without_stage_or_freeze_errors():
+    result = {
+        "selected_count": 2,
+        "mineru_freezes": [{}, {}],
+        "mineru_errors": [],
+        "popo": {"freezes": [{}, {}], "errors": []},
+    }
+
+    assert pipeline.staged_completion_status(result) == "DONE"
+
+
+def test_cli_exit_code_rejects_partial_and_incomplete_results():
+    assert pipeline.cli_result_exit_code({"status": "DONE"}) == 0
+    assert pipeline.cli_result_exit_code({"status": "PARTIAL"}) != 0
+    assert pipeline.cli_result_exit_code({"status": "MINERU_WAIT_INCOMPLETE"}) != 0
+    assert pipeline.cli_result_exit_code({"status": "ERROR"}) != 0
+
+
+def test_freeze_error_marker_is_stage_specific_and_cleans_active_stage_markers():
+    class MarkerS3:
+        def __init__(self):
+            self.puts = []
+            self.deletes = []
+
+        def put_json(self, bucket, obj, value):
+            self.puts.append((bucket, obj, value))
+            return {"bucket": bucket, "object": obj}
+
+        def delete(self, bucket, obj):
+            self.deletes.append((bucket, obj))
+            return {"bucket": bucket, "object": obj}
+
+    s3 = MarkerS3()
+    cfg = SimpleNamespace(input_bucket="eduassets-input")
+    doc = {
+        "bucket": "eduassets-input",
+        "object": "book.pdf",
+        "material_id": "pdf-book",
+        "source_hash": "source-book",
+    }
+
+    result = pipeline.write_freeze_error(
+        s3,
+        cfg,
+        doc,
+        "mineru-run-1",
+        "mineru",
+        "mineru-batch-1",
+        {"status": "succeeded"},
+        RuntimeError("copy failed"),
+    )
+
+    assert result["reason"] == "mineru_freeze_failed"
+    assert all("mineru_freeze_error" in obj for _, obj, _ in s3.puts)
+    assert {obj.rsplit(".", 2)[-2] for _, obj in s3.deletes} == {"mineru_submitted", "mineru_running"}

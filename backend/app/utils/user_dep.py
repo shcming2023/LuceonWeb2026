@@ -18,6 +18,26 @@ def auth_disabled() -> bool:
     return os.getenv("LUCEON_AUTH_DISABLED", "true").lower() not in {"0", "false", "no", "off"}
 
 
+def pipeline_admin_emails() -> set[str]:
+    return {
+        value.strip().lower()
+        for value in os.getenv("LUCEON_PIPELINE_ADMIN_EMAILS", "").split(",")
+        if value.strip()
+    }
+
+
+def is_pipeline_admin(user: User) -> bool:
+    if auth_disabled():
+        return False
+    return str(user.email or "").strip().lower() in pipeline_admin_emails()
+
+
+def user_payload(user: User) -> dict:
+    payload = user.to_dict()
+    payload["capabilities"] = {"pipeline_admin": is_pipeline_admin(user)}
+    return payload
+
+
 def get_or_create_public_user(db: Session) -> User:
     public_id: int | None = None
     try:
@@ -93,3 +113,9 @@ async def get_user_id(
         db=db,
     )
     return str(current_user.id)
+
+
+async def require_pipeline_admin(current_user: User = Depends(get_current_user)) -> User:
+    if not is_pipeline_admin(current_user):
+        raise HTTPException(status_code=403, detail="仅管线管理员可执行异常恢复")
+    return current_user

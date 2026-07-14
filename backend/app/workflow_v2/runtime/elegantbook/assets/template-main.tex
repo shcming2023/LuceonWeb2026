@@ -1,0 +1,184 @@
+%==================================================
+% 0. 文档类
+%==================================================
+\documentclass[11pt,a4paper]{elegantbook}  % elegantbook.cls 已自带 ctex、hyperref、geometry 等
+
+%==================================================
+% 1. 数学与符号
+%==================================================
+% elegantbook 已加载 amsmath, amssymb, amsfonts, bm 等，此处仅补充缺失符号宏包
+\usepackage{pifont}            % \ding
+\usepackage{gensymb}           % \degree 等
+\usepackage{textcomp}          % 补充符号，与 gensymb 配合
+
+%==================================================
+% 2. 列表 / 表格 / 版面控制
+%==================================================
+\usepackage{enumitem}          % elegantbook 已载，但在此集中设置参数更直观
+  \setlist[itemize]{noitemsep,leftmargin=2em}
+\usepackage{array,tabularx,longtable,multirow}
+\usepackage{nicematrix}        % 高级矩阵 / 表格
+\usepackage{booktabs,colortbl}
+\usepackage{multicol}          % 多栏排版
+\usepackage{float}             % H 选项
+
+%==================================================
+% 3. 绘图 / 可视化
+%==================================================
+\usepackage{graphicx}
+\usepackage{tikz}
+  \usetikzlibrary{calc,angles,quotes,decorations.pathreplacing}
+\usepackage{pgfplots}
+  \pgfplotsset{compat=1.18}
+\usepackage{pgf-pie}
+\usepackage{longdivision,xlop} % 竖式运算
+
+%==================================================
+% 4. 页边距与边注（仅覆写旁注宽度）
+%==================================================
+\geometry{
+  marginparwidth = 3cm,
+  marginparsep   = 0.5cm
+}
+\usepackage{marginnote}
+
+%==================================================
+% 5. 颜色定义
+%==================================================
+\usepackage{xcolor}
+\definecolor{primaryblue}{RGB}{70,130,180}
+\definecolor{accentgreen}{RGB}{76,153,102}
+\definecolor{lightblue}{RGB}{240,248,255}
+\definecolor{lightgray}{RGB}{248,248,248}
+\definecolor{darkblue}{RGB}{25,25,112}
+\definecolor{tableblue}{RGB}{70,130,180}
+
+%==================================================
+% 6. 标题样式（基于 titlesec，elegantbook 已加载）
+%==================================================
+\usepackage{titlesec}
+\titleformat{\section}[block]
+  {\Large\bfseries\color{primaryblue}}{\thesection}{1em}{}
+\titleformat{\subsection}[block]
+  {\large\bfseries\color{primaryblue}}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}[block]
+  {\normalsize\bfseries\color{primaryblue}}{\thesubsubsection}{1em}{}
+
+%==================================================
+% 7. tcolorbox 全局样式
+%==================================================
+\usepackage{tcolorbox}
+\tcbset{
+  objectivebox/.style={
+    colback=primaryblue!15,colframe=primaryblue,
+    fonttitle=\bfseries,title=OBJECTIVES,boxrule=1pt,arc=3pt},
+  vocabbox/.style={
+    colback=accentgreen!10,colframe=accentgreen,
+    fonttitle=\bfseries,boxrule=1pt,arc=3pt,left=3mm,right=3mm},
+  notebox/.style={
+    colback=lightgray,colframe=gray!60,
+    fonttitle=\bfseries,boxrule=1pt,arc=3pt},
+  grammarbox/.style={
+    colback=primaryblue!8,colframe=primaryblue,
+    fonttitle=\bfseries,boxrule=1pt,arc=3pt},
+  paragraphbox/.style={
+    colback=white,colframe=accentgreen,
+    fonttitle=\bfseries,boxrule=2pt,arc=3pt,
+    left=5mm,right=5mm,top=3mm,bottom=3mm},
+  featurebox/.style={
+    colback=primaryblue!10,colframe=primaryblue,
+    fonttitle=\bfseries,boxrule=1pt,arc=3pt},
+  writingbox/.style={
+    colback=primaryblue!12,colframe=primaryblue,
+    fonttitle=\bfseries,boxrule=1pt,arc=3pt}
+}
+
+%==================================================
+% 8. 活动编号圆形盒
+%==================================================
+\newcommand{\activitynum}[1]{%
+  \begin{tcolorbox}[enhanced,width=1.2cm,height=1.2cm,
+    colback=primaryblue,coltext=white,
+    halign=center,valign=center,
+    arc=1.2cm,boxrule=0pt,fonttitle=\bfseries\large]
+    #1
+  \end{tcolorbox}
+}
+
+%==================================================
+% 9. 答案区环境（含显示开关）
+%==================================================
+\newtcolorbox{internalanswerbox}{
+  breakable,colframe=black!60,colback=yellow!5,
+  fonttitle=\bfseries,fontupper=\small,
+  title=Answer~Key~and~Explanations,
+  boxrule=0.5pt,arc=2pt,left=1em,right=1em,top=0.5em,bottom=0.5em
+}
+
+\newif\ifshowanswers
+%\showanswerstrue      % ← 需要时取消注释以显示答案
+\showanswersfalse
+\ifshowanswers
+  \makeatletter
+  \NewEnviron{answershow}{%
+    \trim@spaces@noexp{%
+      \begin{internalanswerbox}\setstretch{1.5}\BODY\end{internalanswerbox}}}
+  \makeatother
+\else
+  \excludecomment{answershow}
+\fi
+
+%==================================================
+% 10. 页眉页脚
+%==================================================
+\usepackage{fancyhdr}   % elegantbook 已载，此处仅覆写样式
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot[C]{\thepage}
+
+%==================================================
+% 11. 其余用户自定义命令 / 设置
+%==================================================
+% ...可在此继续补充
+\usepackage[AutoFakeBold]{xeCJK}
+
+\begin{document}
+
+
+
+
+\title{讲义模版}
+\subtitle{高阶班}
+
+\author{Emily\&Sunny\&Kuma}
+\institute{橡心国际}
+\date{June, 2025}
+
+\extrainfo{Victory won\rq t come to us unless we go to it. }
+
+\logo{logo.jpg}
+\cover{cover.jpg}
+
+% modify the color in the middle of titlepage
+\definecolor{customcolor}{RGB}{32,178,170}
+\colorlet{coverlinecolor}{customcolor}
+
+
+
+\maketitle
+
+%\frontmatter
+\tableofcontents
+\cleardoublepage 
+
+
+\pagenumbering{arabic} % 明确从这里开始使用阿拉伯数字页码
+\newpage
+
+
+% ———————————————————— 来自 Great Writing Paragraph————————————————————
+% ———————————————————— 正文内容从这里开始 ————————————————————
+
+\end{document}
+
+

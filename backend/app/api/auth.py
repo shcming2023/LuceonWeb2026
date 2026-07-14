@@ -13,7 +13,7 @@ from app.services.auth import (
     validate_password,
     verify_password,
 )
-from app.utils.user_dep import auth_disabled, get_current_user, get_or_create_public_user
+from app.utils.user_dep import auth_disabled, get_current_user, get_or_create_public_user, user_payload
 
 
 router = APIRouter()
@@ -26,7 +26,7 @@ class AuthRequest(BaseModel):
 
 def _auth_response(response: Response, user: User) -> dict:
     set_auth_cookie(response, create_session_token(user))
-    return {"user": user.to_dict()}
+    return {"user": user_payload(user)}
 
 
 @router.post("/auth/register")
@@ -34,7 +34,7 @@ def register(payload: AuthRequest, response: Response, db: Session = Depends(get
     if auth_disabled():
         user = get_or_create_public_user(db)
         clear_auth_cookie(response)
-        return {"user": user.to_dict(), "auth_disabled": True}
+        return {"user": user_payload(user), "auth_disabled": True}
 
     email = normalize_email(payload.email)
     password = validate_password(payload.password)
@@ -55,7 +55,7 @@ def login(payload: AuthRequest, response: Response, db: Session = Depends(get_db
     if auth_disabled():
         user = get_or_create_public_user(db)
         clear_auth_cookie(response)
-        return {"user": user.to_dict(), "auth_disabled": True}
+        return {"user": user_payload(user), "auth_disabled": True}
 
     email = normalize_email(payload.email)
     user = db.query(User).filter(User.email == email).first()
@@ -73,4 +73,4 @@ def logout(response: Response):
 
 @router.get("/auth/me")
 def me(current_user: User = Depends(get_current_user)):
-    return current_user.to_dict()
+    return user_payload(current_user)

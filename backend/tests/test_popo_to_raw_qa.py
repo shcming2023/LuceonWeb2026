@@ -1,6 +1,6 @@
 import pytest
 
-from app.services.popo_to_raw import build_image_semantics, heading_order_report, validate_outline_mechanical_qa
+from app.services.popo_to_raw import build_image_semantics, heading_order_report, validate_canonical_mechanical_qa, validate_outline_mechanical_qa
 
 
 def base_outline_summary(**overrides):
@@ -119,6 +119,35 @@ def test_heading_order_report_allows_numbered_units_under_structural_parent(tmp_
     assert report["nested_numbered_major_heading_count"] == 0
 
 
+def test_heading_order_report_accepts_english_chapter_nested_under_section(tmp_path):
+    clean_md = tmp_path / "clean.md"
+    clean_md.write_text(
+        "\n".join(
+            [
+                "# SECTION 2: APPLYING KEY SKILLS",
+                "## Chapter 8: Extended response",
+                "### 8.1 Understanding questions",
+                "### 8.2 Gathering information",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    report = heading_order_report(clean_md)
+
+    assert report["parent_order_violation_count"] == 0
+    assert report["parent_level_violation_count"] == 0
+
+
+def test_heading_order_report_still_blocks_numbered_child_without_chapter(tmp_path):
+    clean_md = tmp_path / "clean.md"
+    clean_md.write_text("# SECTION 2\n## 8.1 Orphan child\n", encoding="utf-8")
+
+    report = heading_order_report(clean_md)
+
+    assert report["parent_order_violation_count"] == 1
+
+
 def test_validate_outline_mechanical_qa_blocks_duplicate_same_parent_headings():
     summary = base_outline_summary(
         heading_order_report={
@@ -161,6 +190,36 @@ def test_validate_outline_mechanical_qa_blocks_extra_units_after_llm_outline():
 
     with pytest.raises(RuntimeError, match="raw_units_exceed_final_outline:4>3"):
         validate_outline_mechanical_qa(summary)
+
+
+def test_canonical_content_mode_does_not_require_legacy_llm_or_visual_outline(monkeypatch):
+    monkeypatch.setenv("LUCEON_RAW_OUTLINE_LLM", "1")
+    monkeypatch.setenv("LUCEON_RAW_OUTLINE_VISION", "1")
+    summary = base_outline_summary(
+        outline_decision={
+            "available": True,
+            "decision_method": "deterministic_candidate_outline",
+            "final_outline_count": 3,
+            "selected_count": 3,
+            "llm": {"call_count": 0},
+            "visual_application": {},
+        },
+        visual_decisions={"enabled": False, "error_count": 0},
+    )
+
+    validate_outline_mechanical_qa(summary, require_model_evidence=False)
+
+
+def test_canonical_mechanical_qa_ignores_outline_defects_but_keeps_media_closure():
+    summary = base_outline_summary(
+        heading_order_report={"duplicate_same_parent_count": 2},
+        outline_decision={"available": False},
+    )
+    validate_canonical_mechanical_qa(summary)
+
+    summary["image_closure_report"]["missing_image_count"] = 1
+    with pytest.raises(RuntimeError, match="missing_images:1"):
+        validate_canonical_mechanical_qa(summary)
 
 
 def test_build_image_semantics_derives_unit_path_and_local_context(tmp_path):

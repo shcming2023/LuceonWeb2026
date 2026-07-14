@@ -35,6 +35,8 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from app.database import SessionLocal
 from app.models.material import CodexSkillJob
+from app.services.codex_skill_jobs import retry_codex_skill_job
+from app.services.worker_v1_policy import v1_auto_retry_enabled
 
 
 TERMINAL_STATES = {"published", "failed"}
@@ -60,10 +62,11 @@ class WorkerTask:
 
 
 class WorkerController:
-    def __init__(self, *, staging_root: Path, log_root: Path, timeout: int) -> None:
+    def __init__(self, *, staging_root: Path, log_root: Path, timeout: int, max_quality_retries: int) -> None:
         self.staging_root = staging_root
         self.log_root = log_root
         self.timeout = timeout
+        self.max_quality_retries = max(0, max_quality_retries) if v1_auto_retry_enabled() else 0
         self.tasks: dict[int, WorkerTask] = {}
         self.lock = threading.Lock()
         self.log_root.mkdir(parents=True, exist_ok=True)
@@ -77,6 +80,7 @@ class WorkerController:
             "database_url": os.environ.get("DATABASE_URL", ""),
             "staging_root": str(self.staging_root),
             "timeout": self.timeout,
+            "max_quality_retries": self.max_quality_retries,
         }
 
     def get_status(self, job_id: int) -> dict:
@@ -132,6 +136,7 @@ class WorkerController:
             )
             self.tasks[job_id] = task
 
+        self._mark_db_running(job_id)
         thread = threading.Thread(target=self._run_task, args=(job_id,), daemon=True)
         thread.start()
         return self.get_status(job_id)
@@ -154,23 +159,31 @@ class WorkerController:
         try:
             with log_path.open("a", encoding="utf-8") as log:
                 self._write_log(log, f"start job {job_id}")
-                self._set_task(job_id, state="running", message="running Codex skill")
-                run_cmd = [*command_base, "--run-codex"]
-                if self.timeout > 0:
-                    run_cmd.extend(["--timeout", str(self.timeout)])
-                run_code = self._run_command(run_cmd, env, log)
-                if run_code != 0:
-                    self._set_task(job_id, state="failed", message=f"Codex run failed: {run_code}", returncode=run_code)
-                    return
+                for quality_pass in range(self.max_quality_retries + 1):
+                    label = "running Codex skill" if quality_pass == 0 else f"running quality repair {quality_pass}"
+                    self._set_task(job_id, state="running", message=label)
+                    run_cmd = [*command_base, "--run-codex"]
+                    if self.timeout > 0:
+                        run_cmd.extend(["--timeout", str(self.timeout)])
+                    run_code = self._run_command(run_cmd, env, log)
+                    if run_code != 0:
+                        self._set_task(job_id, state="failed", message=f"Codex run failed: {run_code}", returncode=run_code)
+                        return
 
-                self._set_task(job_id, state="publishing", message="publishing staging output")
-                publish_code = self._run_command([*command_base, "--publish-staging"], env, log)
-                if publish_code != 0:
-                    self._set_task(job_id, state="failed", message=f"publish failed: {publish_code}", returncode=publish_code)
-                    return
-
-                self._set_task(job_id, state="published", message="published", returncode=0)
-                self._write_log(log, f"job {job_id} published")
+                    self._set_task(job_id, state="publishing", message="validating and publishing staging output")
+                    publish_code = self._run_command([*command_base, "--publish-staging"], env, log)
+                    if publish_code == 0:
+                        self._set_task(job_id, state="published", message="published", returncode=0)
+                        self._write_log(log, f"job {job_id} published")
+                        return
+                    if quality_pass >= self.max_quality_retries:
+                        self._set_task(job_id, state="failed", message=f"publish failed: {publish_code}", returncode=publish_code)
+                        return
+                    self._run_deterministic_repair(job_id, env, log)
+                    if not self._retry_print_quality_failure(job_id):
+                        self._set_task(job_id, state="failed", message=f"publish failed: {publish_code}", returncode=publish_code)
+                        return
+                    self._write_log(log, f"print-quality gate blocked job {job_id}; starting repair pass {quality_pass + 1}")
         except Exception as exc:
             self._set_task(job_id, state="failed", message=str(exc), returncode=1)
         finally:
@@ -218,9 +231,50 @@ class WorkerController:
         finally:
             db.close()
 
+    def _mark_db_running(self, job_id: int) -> None:
+        db = SessionLocal()
+        try:
+            job = db.query(CodexSkillJob).filter(CodexSkillJob.id == job_id).first()
+            if not job or job.status == "published":
+                return
+            job.status = "running"
+            job.started_at = job.started_at or datetime.utcnow()
+            job.finished_at = None
+            db.commit()
+        finally:
+            db.close()
+
     def _material_output_id(self, db_job: dict) -> str:
         result = db_job.get("result") if isinstance(db_job.get("result"), dict) else {}
         return str(result.get("material_output_id") or "")
+
+    def _retry_print_quality_failure(self, job_id: int) -> bool:
+        db = SessionLocal()
+        try:
+            job = db.query(CodexSkillJob).filter(CodexSkillJob.id == job_id).first()
+            if not job or job.status != "failed":
+                return False
+            if not str(job.error_message or "").startswith("逐页打印质量审查未通过"):
+                return False
+            retry_codex_skill_job(job)
+            db.commit()
+            return True
+        finally:
+            db.close()
+
+    def _run_deterministic_repair(self, job_id: int, env: dict[str, str], log) -> None:
+        db_job = self._db_job(job_id) or {}
+        staging_dir = str(db_job.get("staging_dir") or (self.staging_root / f"job-{job_id}"))
+        command = [
+            sys.executable,
+            str(BACKEND_ROOT / "scripts" / "codex_workbook_repair.py"),
+            "--staging-dir",
+            staging_dir,
+        ]
+        self._set_task(job_id, state="running", message="applying deterministic workbook repairs")
+        code = self._run_command(command, env, log)
+        if code != 0:
+            self._write_log(log, f"deterministic workbook repair skipped after exit {code}")
 
     def _state_from_db(self, db_status: str) -> str:
         if db_status == "published":
@@ -297,6 +351,11 @@ def main() -> int:
     parser.add_argument("--staging-root", default=os.getenv("CODEX_WORKER_STAGING_ROOT", str(DEFAULT_STAGING_ROOT)))
     parser.add_argument("--log-root", default=os.getenv("CODEX_WORKER_LOG_ROOT", str(DEFAULT_LOG_ROOT)))
     parser.add_argument("--timeout", type=int, default=int(os.getenv("CODEX_WORKER_TIMEOUT", "1800")))
+    parser.add_argument(
+        "--max-quality-retries",
+        type=int,
+        default=int(os.getenv("CODEX_WORKER_QUALITY_RETRIES", "0")),
+    )
     parser.add_argument("--daemon", action="store_true", help="Detach and run in the background on the host.")
     parser.add_argument("--pid-file", default=os.getenv("CODEX_WORKER_PID_FILE", str(DEFAULT_LOG_ROOT / "server.pid")))
     args = parser.parse_args()
@@ -310,6 +369,7 @@ def main() -> int:
         staging_root=Path(args.staging_root),
         log_root=log_root,
         timeout=args.timeout,
+        max_quality_retries=args.max_quality_retries,
     )
     server = ThreadingHTTPServer((args.host, args.port), RequestHandler)
     print(f"codex worker controller listening on http://{args.host}:{args.port}", flush=True)

@@ -66,6 +66,7 @@ export interface LatexCompareResponse {
   manifest_json: Record<string, unknown>
   compile_report: Record<string, unknown>
   source_pdf_url: string
+  source_pdf_original_url?: string
   latex_pdf_url: string
   download_urls: Record<string, string>
 }

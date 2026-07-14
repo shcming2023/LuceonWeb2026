@@ -426,9 +426,15 @@ def infer_standard_profile(markdown: str, clean_manifest: dict[str, Any], reques
     if "workbook" in title_text or "exercise" in title_text:
         return "exercise_workbook"
 
-    instruction_count = sum(1 for line in markdown.splitlines() if WORKBOOK_INSTRUCTION_RE.match(line.strip()))
+    instruction_count = sum(
+        1
+        for line in markdown.splitlines()
+        if WORKBOOK_INSTRUCTION_RE.match(line.strip())
+        or WORKBOOK_UNNUMBERED_INSTRUCTION_RE.match(line.strip())
+        or WORKBOOK_NUMBERED_QUESTION_INSTRUCTION_RE.match(line.strip())
+    )
     answer_blank_count = len(ANSWER_BLANK_RE.findall(markdown))
-    if instruction_count >= 20 and answer_blank_count >= 20:
+    if instruction_count >= 1 and answer_blank_count >= 1:
         return "exercise_workbook"
     formula_delimiter_count = markdown.count("$")
     if formula_delimiter_count >= 500 or (
@@ -534,7 +540,7 @@ def classify_line(text: str, heading_level: int | None, in_passage: bool, profil
             layout["profile_intent"] = "figure_relation_candidate"
         return "captioned_figure", "", layout
     if TABLE_RE.match(stripped):
-        subtype = "table_question" if profile in WORKBOOK_PROFILES else ""
+        subtype = "table_question"
         return "table", subtype, {"keep_together": True, "profile_intent": subtype} if subtype else {"keep_together": True}
     if stripped.startswith("$$") or stripped.endswith("$$"):
         return "formula", "", {"keep_together": True}
@@ -3590,18 +3596,19 @@ def build_workbook_profile_report(
             "next_actions": [],
         }
 
+    relation_audit = workbook_relation_audit or {}
+    explanation_table_count = int((relation_audit.get("disposition_counts") or {}).get("explanation_artifact") or 0)
     profile_blockers: list[str] = []
     profile_review_reasons: list[str] = []
     if metrics["question_groups"] == 0:
         profile_blockers.append("no_question_groups_detected")
     if metrics["answer_blanks"] > 0 and metrics["questions"] == 0:
         profile_review_reasons.append("answer_blanks_without_question_items")
-    if int(block_type_counts.get("table", 0)) > 0 and metrics["table_questions"] == 0:
+    if int(block_type_counts.get("table", 0)) > metrics["table_questions"] + explanation_table_count:
         profile_review_reasons.append("tables_not_classified_as_table_questions")
 
     relation_review_reasons: list[str] = []
     relation_blockers: list[str] = []
-    relation_audit = workbook_relation_audit or {}
     real_profile_gap_count = int(relation_audit.get("real_profile_gap_count") or 0)
     relation_needs_review_count = int(relation_audit.get("review_item_count") or 0)
     if real_profile_gap_count:
@@ -3832,7 +3839,13 @@ def build_review_outcomes_html(review_outcomes: dict[str, Any]) -> str:
 """
 
 
-def profile_coverage_gate(profile: str, relation_summary: dict[str, Any], block_counts: Counter[str]) -> dict[str, Any]:
+def profile_coverage_gate(
+    profile: str,
+    relation_summary: dict[str, Any],
+    block_counts: Counter[str],
+    *,
+    explanation_table_count: int = 0,
+) -> dict[str, Any]:
     if profile in MATH_PROFILES:
         formula_blocks = int(block_counts.get("formula", 0))
         table_blocks = int(block_counts.get("table", 0))
@@ -3876,7 +3889,7 @@ def profile_coverage_gate(profile: str, relation_summary: dict[str, Any], block_
         blockers.append("no_question_groups_detected")
     if answer_blanks > 0 and questions == 0:
         review_reasons.append("answer_blanks_without_question_items")
-    if int(block_counts.get("table", 0)) > 0 and table_questions == 0:
+    if int(block_counts.get("table", 0)) > table_questions + explanation_table_count:
         review_reasons.append("tables_not_classified_as_table_questions")
 
     status = "fail" if blockers else "review" if review_reasons else "pass"
@@ -4236,7 +4249,7 @@ def build_package(
     content_table_evidence = load_content_table_evidence(raw_dir)
     content_text_evidence = load_content_text_evidence(raw_dir)
     source_pdf = find_source_pdf(raw_dir, source_pdf_path)
-    selected_profile = clean_standard_profile(clean_standard, profile) if clean_standard else "auto"
+    selected_profile = clean_standard_profile(clean_standard, profile) if clean_standard else profile
     selected_profile = infer_standard_profile(markdown, clean_manifest, selected_profile)
     clean_standard_canonical = load_clean_standard_canonical(clean_standard, selected_profile) if clean_standard else {}
     if require_clean_standard and not clean_standard_canonical:
@@ -4490,7 +4503,12 @@ def build_package(
         if not (item.get("vision_review") or item.get("reasons") or item.get("raw_semantics"))
     ]
     unknown_ratio = block_counts.get("unknown", 0) / max(1, len(blocks))
-    profile_gate = profile_coverage_gate(selected_profile, relation_summary, block_counts)
+    profile_gate = profile_coverage_gate(
+        selected_profile,
+        relation_summary,
+        block_counts,
+        explanation_table_count=sum(1 for block in blocks if block.get("subtype") == "explanation_table"),
+    )
     image_gate = image_relation_gate(selected_profile, image_relation_report)
     outcomes_gate = review_outcome_gate(review_outcomes)
     context_gate, review_threshold_gate = issue_candidate_gate_payloads(issue_disposition_audit)

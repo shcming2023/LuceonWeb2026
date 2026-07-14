@@ -1,0 +1,35 @@
+{
+  "id": "english_grammar_workbook",
+  "description": "Unit-based English grammar workbook.",
+  "auto_detect_rules": [
+    {"pattern": "^Grammar Point\\s*\\d*", "weight": 8},
+    {"pattern": "^Grammar Practice\\s*\\d*", "weight": 8},
+    {"pattern": "^(Grammar Extension|Grammar in Passage|Grammar in Use|Self Check)$", "weight": 6},
+    {"pattern": "^Unit\\s+\\d+", "weight": 1}
+  ],
+  "heading_patterns": {"unit": "^Unit\\s+\\d+", "review": "^Review\\s+\\d+", "test": "^(Mid-term Test|Final Test)$", "activity": "^[A-H]\\.\\s+"},
+  "section_role_rules": [
+    {"pattern": "^Unit\\s+\\d+", "role": "unit", "section_type": "unit"},
+    {"pattern": "^Grammar Point\\s*\\d*", "role": "concept_explanation", "section_type": "lesson_part"},
+    {"pattern": "^Grammar Practice\\s*\\d*", "role": "grammar_practice", "section_type": "practice"},
+    {"pattern": "^Grammar in Passage$", "role": "contextual_practice", "section_type": "reading_activity"},
+    {"pattern": "^Grammar in Use$", "role": "production_task", "section_type": "activity"},
+    {"pattern": "^Self Check$", "role": "self_assessment", "section_type": "self_check"},
+    {"pattern": ".+", "role": "grammar_topic", "section_type": "lesson_part"}
+  ],
+  "asset_role_rules": [
+    {"section_role": "concept_explanation", "asset_type": "concept", "role": "grammar_rule"},
+    {"section_role": "grammar_practice", "asset_type": "exercise", "role": "grammar_practice"},
+    {"section_role": "contextual_practice", "asset_type": "reading", "role": "passage_task"},
+    {"section_role": "production_task", "asset_type": "activity", "role": "production_task"},
+    {"section_role": "grammar_topic", "asset_type": "concept", "role": "grammar_topic"}
+  ],
+  "segmentation": {"item_start_pattern": "^\\d+[.．]\\s+", "choice_pattern": "^\\([a-d]\\)\\s+", "subitem_pattern": "^\\([0-9]+\\)\\s*"},
+  "task_type_rules": [
+    {"pattern": "choose|circle|correct words", "task_type": "choose_inline_option"},
+    {"pattern": "complete", "task_type": "fill_blank"},
+    {"pattern": "rewrite|correct", "task_type": "rewrite_or_correction"},
+    {"pattern": "write", "task_type": "short_production"}
+  ],
+  "answer_policy": "no_answer_in_source"
+}

@@ -431,8 +431,9 @@ def sync_downstream_stage(
     for manifest_object in list_two_level_manifests(bucket, prefix, limit=limit):
         material_id, run_id = infer_ids_from_manifest_path(manifest_object)
         manifest = read_json_object(bucket, manifest_object)
-        title = str(manifest.get("title") or manifest.get("filename") or material_id or Path(manifest_object).parent.name)
-        material = upsert_material(db, user_id, title, title, material_id=material_id)
+        material = material_query(db, user_id, material_id=material_id)
+        if not material:
+            continue
         if stage == "latex_done":
             material.latex_manifest_bucket = bucket
             material.latex_manifest_object = manifest_object
@@ -464,8 +465,9 @@ def sync_codex_elegantbook_outputs(db: Session, user_id: str, limit: int | None 
         output = output_from_ref(ref, probe, manifest)
         if not output or not output.material_id:
             continue
-        title = str(manifest.get("title") or manifest.get("filename") or output.material_id or Path(ref.object).parent.name)
-        material = upsert_material(db, user_id, title, title, material_id=output.material_id)
+        material = material_query(db, user_id, material_id=output.material_id)
+        if not material:
+            continue
         if output.popo_run_id and not material.popo_run_id:
             material.popo_run_id = output.popo_run_id
         material.latex_manifest_bucket = ref.bucket
@@ -600,19 +602,45 @@ def pipeline_limit(limit: int) -> int:
     return max(1, min(int(limit or 5), 5))
 
 
-def pipeline_target_args(material_id: str = "", input_object: str = "") -> list[str]:
+def _pipeline_target_values(single: str, multiple: list[str] | tuple[str, ...] | None) -> list[str]:
+    values: list[str] = []
+    for raw in [single, *(multiple or [])]:
+        value = str(raw or "").strip()
+        if value and value not in values:
+            values.append(value)
+    return values
+
+
+def pipeline_target_args(
+    material_id: str = "",
+    input_object: str = "",
+    *,
+    material_ids: list[str] | tuple[str, ...] | None = None,
+    input_objects: list[str] | tuple[str, ...] | None = None,
+) -> list[str]:
     args: list[str] = []
-    cleaned_material_id = str(material_id or "").strip()
-    cleaned_input_object = str(input_object or "").strip()
-    if cleaned_material_id:
-        args.extend(["--material-id", cleaned_material_id])
-    if cleaned_input_object:
-        args.extend(["--input-object", cleaned_input_object])
+    for value in _pipeline_target_values(material_id, material_ids):
+        args.extend(["--material-id", value])
+    for value in _pipeline_target_values(input_object, input_objects):
+        args.extend(["--input-object", value])
     return args
 
 
-def pipeline_command(apply: bool, limit: int, material_id: str = "", input_object: str = "") -> list[str]:
-    target_args = pipeline_target_args(material_id, input_object)
+def pipeline_command(
+    apply: bool,
+    limit: int,
+    material_id: str = "",
+    input_object: str = "",
+    *,
+    material_ids: list[str] | tuple[str, ...] | None = None,
+    input_objects: list[str] | tuple[str, ...] | None = None,
+) -> list[str]:
+    target_args = pipeline_target_args(
+        material_id,
+        input_object,
+        material_ids=material_ids,
+        input_objects=input_objects,
+    )
     if apply:
         command = ["python3", PIPELINE_SCRIPT, "run-staged", "--limit", str(pipeline_limit(limit))]
         if target_args:
@@ -627,9 +655,133 @@ def pipeline_command(apply: bool, limit: int, material_id: str = "", input_objec
     return command
 
 
-def pipeline_preflight_command(limit: int, material_id: str = "", input_object: str = "") -> list[str]:
+def popo_resume_command(
+    existing_mineru_batch_id: str,
+    material_id: str,
+    input_object: str,
+    *,
+    apply: bool,
+) -> list[str]:
+    command = ["python3", PIPELINE_SCRIPT, "run-staged", "--limit", "1", "--skip-sha", "--input-status-only"]
+    command.extend(pipeline_target_args(material_id, input_object))
+    command.extend(["--existing-mineru-batch-id", existing_mineru_batch_id, "--reuse-frozen-mineru"])
+    if apply:
+        command.extend(["--apply", "--wait"])
+    return command
+
+
+def frozen_mineru_resume_context(material: Material) -> dict[str, str]:
+    if material.popo_manifest_object:
+        raise ValueError("Popo 已冻结，无需恢复")
+    manifest_object = str(material.mineru_manifest_object or "")
+    manifest_bucket = str(material.mineru_manifest_bucket or MINERU_BUCKET)
+    if not manifest_object and material.material_id:
+        prefix = f"mineru/{material.material_id}/"
+        candidates = [
+            str(getattr(item, "object_name", "") or "")
+            for item in minio_client.list_objects(MINERU_BUCKET, prefix=prefix, recursive=True)
+            if str(getattr(item, "object_name", "") or "").endswith("/manifest.json")
+        ]
+        manifest_object = max(candidates, default="")
+        manifest_bucket = MINERU_BUCKET
+    if not manifest_object:
+        raise ValueError("缺少正式 MinerU manifest")
+    manifest = read_json_object(manifest_bucket, manifest_object)
+    source = manifest.get("source_pdf") if isinstance(manifest.get("source_pdf"), dict) else {}
+    expected = {
+        "status": "mineru_done_frozen",
+        "material_id": str(material.material_id or ""),
+        "input_object": str(material.input_object or ""),
+    }
+    actual = {
+        "status": str(manifest.get("status") or ""),
+        "material_id": str(manifest.get("material_id") or ""),
+        "input_object": str(source.get("input_object") or ""),
+    }
+    mismatches = [key for key, value in expected.items() if not value or value != actual[key]]
+    batch_id = str(manifest.get("batch_id") or "")
+    run_id = str(manifest.get("run_id") or "")
+    marker_object = f"_status/{expected['material_id']}/{run_id}.mineru_done_frozen.json"
+    marker = read_json_object(INPUT_BUCKET, marker_object) if run_id else {}
+    if mismatches or not batch_id or not run_id or str(marker.get("status") or "") != "mineru_done_frozen":
+        raise ValueError("MinerU 冻结身份、批次或状态标记不完整")
+    return {
+        "material_id": expected["material_id"],
+        "input_object": expected["input_object"],
+        "mineru_batch_id": batch_id,
+        "mineru_run_id": run_id,
+        "mineru_manifest_object": manifest_object,
+        "mineru_marker_object": marker_object,
+    }
+
+
+def run_popo_resume_preflight(material: Material) -> dict[str, Any]:
+    try:
+        context = frozen_mineru_resume_context(material)
+    except ValueError as exc:
+        return {
+            "ready": False,
+            "status": "FROZEN_MINERU_INVALID",
+            "checked_at": datetime.utcnow().isoformat(),
+            "selected_count": 0,
+            "active_marker_count": 0,
+            "gpu_ok": False,
+            "staged_api_ok": False,
+            "plan_status": "FROZEN_MINERU_INVALID",
+            "reason": str(exc),
+        }
+    command = popo_resume_command(
+        context["mineru_batch_id"],
+        context["material_id"],
+        context["input_object"],
+        apply=False,
+    )
+    completed = subprocess.run(
+        command,
+        cwd=PIPELINE_WORKDIR,
+        env=pipeline_env(),
+        text=True,
+        capture_output=True,
+        timeout=180,
+    )
+    payload = parse_pipeline_json(completed.stdout)
+    ready = completed.returncode == 0 and payload.get("status") == "DRY_RUN" and int(payload.get("selected_count") or 0) == 1
+    payload.update(
+        {
+            "ready": ready,
+            "checked_at": datetime.utcnow().isoformat(),
+            "returncode": completed.returncode,
+            "command_text": " ".join(command),
+            "plan_status": str(payload.get("status") or "ERROR"),
+            "active_marker_count": 0,
+            "resume_context": context,
+        }
+    )
+    health = payload.get("health") if isinstance(payload.get("health"), dict) else {}
+    staged = payload.get("staged_api_probe") if isinstance(payload.get("staged_api_probe"), dict) else {}
+    payload["gpu_ok"] = bool(health.get("ok"))
+    payload["staged_api_ok"] = bool(staged.get("available"))
+    if completed.returncode != 0:
+        payload["stdout_tail"] = (completed.stdout or "")[-4000:]
+        payload["stderr_tail"] = (completed.stderr or "")[-4000:]
+    return payload
+
+
+def pipeline_preflight_command(
+    limit: int,
+    material_id: str = "",
+    input_object: str = "",
+    *,
+    material_ids: list[str] | tuple[str, ...] | None = None,
+    input_objects: list[str] | tuple[str, ...] | None = None,
+) -> list[str]:
     command = ["python3", PIPELINE_SCRIPT, "preflight", "--limit", str(pipeline_limit(limit))]
-    target_args = pipeline_target_args(material_id, input_object)
+    target_args = pipeline_target_args(
+        material_id,
+        input_object,
+        material_ids=material_ids,
+        input_objects=input_objects,
+    )
     if target_args:
         command.extend(["--skip-sha", "--input-status-only"])
     command.extend(target_args)
@@ -677,8 +829,32 @@ def pipeline_result_counts(payload: dict[str, Any], fallback_total: int = 0) -> 
     return {"total": total, "processed": processed, "success": success, "failed": failed}
 
 
-def run_pipeline_preflight(limit: int = 5, material_id: str = "", input_object: str = "") -> dict[str, Any]:
-    command = pipeline_preflight_command(limit, material_id=material_id, input_object=input_object)
+def pipeline_run_outcome(payload: dict[str, Any], returncode: int, apply: bool) -> str:
+    status = str(payload.get("status") or "").upper()
+    if status == "PARTIAL":
+        return "partial"
+    if returncode != 0:
+        return "failed"
+    if apply and status != "DONE":
+        return "failed"
+    return "succeeded"
+
+
+def run_pipeline_preflight(
+    limit: int = 5,
+    material_id: str = "",
+    input_object: str = "",
+    *,
+    material_ids: list[str] | tuple[str, ...] | None = None,
+    input_objects: list[str] | tuple[str, ...] | None = None,
+) -> dict[str, Any]:
+    command = pipeline_preflight_command(
+        limit,
+        material_id=material_id,
+        input_object=input_object,
+        material_ids=material_ids,
+        input_objects=input_objects,
+    )
     completed = subprocess.run(
         command,
         cwd=PIPELINE_WORKDIR,
@@ -707,6 +883,8 @@ def start_pipeline_run(
     limit: int = 5,
     material_id: str = "",
     input_object: str = "",
+    material_ids: list[str] | tuple[str, ...] | None = None,
+    input_objects: list[str] | tuple[str, ...] | None = None,
 ) -> PipelineRun:
     active = (
         db.query(PipelineRun)
@@ -716,21 +894,46 @@ def start_pipeline_run(
     )
     if active:
         return active
-    preflight = run_pipeline_preflight(limit, material_id=material_id, input_object=input_object) if apply else None
+    preflight = (
+        run_pipeline_preflight(
+            limit,
+            material_id=material_id,
+            input_object=input_object,
+            material_ids=material_ids,
+            input_objects=input_objects,
+        )
+        if apply
+        else None
+    )
     if apply and not bool(preflight and preflight.get("ready")):
         raise PipelinePreflightError(preflight or {})
     run = PipelineRun(
         user_id=user_id,
         status="queued",
         mode="apply" if apply else "dry_run",
-        command=" ".join(pipeline_command(apply=apply, limit=limit, material_id=material_id, input_object=input_object)),
+        command=" ".join(
+            pipeline_command(
+                apply=apply,
+                limit=limit,
+                material_id=material_id,
+                input_object=input_object,
+                material_ids=material_ids,
+                input_objects=input_objects,
+            )
+        ),
         current_stage="queued",
         total=int(preflight.get("selected_count") or 0) if preflight else 0,
         summary_json=json.dumps(
-            {"preflight": preflight, "material_id": material_id, "input_object": input_object},
+            {
+                "preflight": preflight,
+                "material_id": material_id,
+                "input_object": input_object,
+                "material_ids": _pipeline_target_values(material_id, material_ids),
+                "input_objects": _pipeline_target_values(input_object, input_objects),
+            },
             ensure_ascii=False,
         )
-        if preflight or material_id or input_object
+        if preflight or material_id or input_object or material_ids or input_objects
         else None,
         created_at=datetime.utcnow(),
     )
@@ -746,7 +949,64 @@ def start_pipeline_run(
     db.commit()
     threading.Thread(
         target=run_pipeline_subprocess,
-        args=(run.id, apply, limit, material_id, input_object),
+        args=(run.id, apply, limit, material_id, input_object, material_ids, input_objects),
+        daemon=True,
+    ).start()
+    return run
+
+
+def start_popo_resume_run(
+    db: Session,
+    user_id: str,
+    material: Material,
+    *,
+    requested_by_user_id: str = "",
+) -> PipelineRun:
+    active = (
+        db.query(PipelineRun)
+        .filter(PipelineRun.user_id == user_id, PipelineRun.status.in_(["queued", "running"]))
+        .order_by(PipelineRun.created_at.desc())
+        .first()
+    )
+    if active:
+        return active
+    preflight = run_popo_resume_preflight(material)
+    if not preflight.get("ready"):
+        raise PipelinePreflightError(preflight)
+    context = preflight["resume_context"]
+    command = popo_resume_command(
+        context["mineru_batch_id"],
+        context["material_id"],
+        context["input_object"],
+        apply=True,
+    )
+    run = PipelineRun(
+        user_id=user_id,
+        status="queued",
+        mode="resume_popo",
+        command=" ".join(command),
+        current_stage="queued",
+        total=1,
+        summary_json=json.dumps(
+            {"preflight": preflight, "requested_by_user_id": requested_by_user_id, **context},
+            ensure_ascii=False,
+        ),
+        created_at=datetime.utcnow(),
+    )
+    db.add(run)
+    db.flush()
+    create_pipeline_event(
+        db,
+        run,
+        "已创建 Popo 恢复任务，将复用正式冻结的 MinerU 产物",
+        stage="queued",
+        payload={"preflight": preflight, "requested_by_user_id": requested_by_user_id},
+    )
+    db.commit()
+    threading.Thread(
+        target=run_pipeline_subprocess,
+        args=(run.id, True, 1),
+        kwargs={"command_override": command, "start_message": "开始从冻结 MinerU 恢复 Popo"},
         daemon=True,
     ).start()
     return run
@@ -758,6 +1018,10 @@ def run_pipeline_subprocess(
     limit: int,
     material_id: str = "",
     input_object: str = "",
+    material_ids: list[str] | tuple[str, ...] | None = None,
+    input_objects: list[str] | tuple[str, ...] | None = None,
+    command_override: list[str] | None = None,
+    start_message: str = "开始执行现有 Luceon first-stage 调度脚本",
 ) -> None:
     db = SessionLocal()
     try:
@@ -767,10 +1031,17 @@ def run_pipeline_subprocess(
         run.status = "running"
         run.started_at = datetime.utcnow()
         run.current_stage = "pipeline_command"
-        create_pipeline_event(db, run, "开始执行现有 Luceon first-stage 调度脚本", stage="pipeline_command")
+        create_pipeline_event(db, run, start_message, stage="pipeline_command")
         db.commit()
 
-        command = pipeline_command(apply=apply, limit=limit, material_id=material_id, input_object=input_object)
+        command = command_override or pipeline_command(
+            apply=apply,
+            limit=limit,
+            material_id=material_id,
+            input_object=input_object,
+            material_ids=material_ids,
+            input_objects=input_objects,
+        )
         completed = subprocess.run(
             command,
             cwd=PIPELINE_WORKDIR,
@@ -788,19 +1059,73 @@ def run_pipeline_subprocess(
         run.success = counts["success"]
         run.failed = counts["failed"]
         run.finished_at = datetime.utcnow()
-        run.summary_json = json.dumps({"returncode": completed.returncode, "stdout_tail": output, "stderr_tail": error}, ensure_ascii=False)
-        if completed.returncode == 0:
+        outcome = pipeline_run_outcome(payload, completed.returncode, apply)
+        summary = {"returncode": completed.returncode, "result": payload}
+        if completed.returncode != 0 or error:
+            summary.update({"stdout_tail": output, "stderr_tail": error})
+        run.summary_json = json.dumps(summary, ensure_ascii=False)
+        run.status = outcome
+        if outcome == "succeeded":
             run.status = "succeeded"
             run.current_stage = "finished"
-            create_pipeline_event(db, run, "解析任务执行完成", stage="finished", payload={"returncode": completed.returncode})
-            sync_material_inventory(db, run.user_id)
-            codex_queue = enqueue_new_pdf_codex_jobs(db, run.user_id, limit=limit)
-            create_pipeline_event(db, run, "已为新 Popo 产物创建 Codex 精修队列", stage="codex_queued", payload=codex_queue)
+            create_pipeline_event(
+                db,
+                run,
+                "解析任务执行完成",
+                stage="finished",
+                payload={"returncode": completed.returncode, "pipeline_status": payload.get("status")},
+            )
+        elif outcome == "partial":
+            run.current_stage = "partial"
+            run.error_message = f"批量解析部分完成：成功 {run.success}，失败 {run.failed}"
+            create_pipeline_event(
+                db,
+                run,
+                "批量解析部分完成；成功样本已独立冻结，失败样本保留错误证据",
+                stage="partial",
+                level="warning",
+                payload={"returncode": completed.returncode, "pipeline_status": payload.get("status"), **counts},
+            )
         else:
-            run.status = "failed"
             run.current_stage = "failed"
-            run.error_message = error or output or f"pipeline exited with {completed.returncode}"
-            create_pipeline_event(db, run, "解析任务执行失败", stage="failed", level="error", payload={"returncode": completed.returncode})
+            run.error_message = error or output or f"pipeline exited with {completed.returncode} ({payload.get('status') or 'unknown'})"
+            create_pipeline_event(
+                db,
+                run,
+                "解析任务执行失败",
+                stage="failed",
+                level="error",
+                payload={"returncode": completed.returncode, "pipeline_status": payload.get("status")},
+            )
+
+        try:
+            sync_material_inventory(db, run.user_id)
+        except Exception as sync_exc:
+            create_pipeline_event(
+                db,
+                run,
+                "终态任务的已冻结产物同步未完成",
+                stage="inventory_sync",
+                level="warning",
+                payload={"error": str(sync_exc)},
+            )
+        else:
+            if outcome in {"succeeded", "partial"}:
+                # The queue scanner only considers materials with a complete frozen Popo manifest.
+                # In a partial batch this preserves successful documents without advancing failed ones.
+                codex_queue = enqueue_new_pdf_codex_jobs(db, run.user_id, limit=limit)
+            else:
+                codex_queue = {}
+            if codex_queue.get("frozen"):
+                create_pipeline_event(
+                    db,
+                    run,
+                    "Worker V1 自动入队已冻结，等待 Worker V2.3 人工提交",
+                    stage="codex_v1_frozen",
+                    payload=codex_queue,
+                )
+            elif codex_queue:
+                create_pipeline_event(db, run, "已为新 Popo 产物创建 Codex 精修队列", stage="codex_queued", payload=codex_queue)
         db.commit()
     except Exception as exc:
         run = db.query(PipelineRun).filter(PipelineRun.id == run_id).first()
@@ -816,9 +1141,10 @@ def run_pipeline_subprocess(
 
 
 def material_summary(db: Session, user_id: str) -> dict[str, Any]:
-    total = db.query(Material).filter(Material.user_id == user_id).count()
+    visible = (Material.user_id == user_id, Material.ignored.is_(False))
+    total = db.query(Material).filter(*visible).count()
     stages = {
-        stage: db.query(Material).filter(Material.user_id == user_id, Material.stage_status == stage).count()
+        stage: db.query(Material).filter(*visible, Material.stage_status == stage).count()
         for stage in ["input", "mineru_done", "popo_done", "latex_done", "failed"]
     }
     latest = latest_pipeline_run(db, user_id)

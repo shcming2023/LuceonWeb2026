@@ -7,6 +7,7 @@ from .runtime_settings import router as runtime_settings_router
 from .settings import router as settings_router
 from .health import router as health_router
 from .auth import router as auth_router
+from .workflow_v2 import router as workflow_v2_router
 from . import stats
 
 routers = [
@@ -19,5 +20,6 @@ routers = [
     runtime_settings_router,
     settings_router,
     health_router,
+    workflow_v2_router,
     stats.router,  # 注册 stats 路由
 ]

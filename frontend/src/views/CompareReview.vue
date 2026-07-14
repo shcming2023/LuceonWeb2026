@@ -2,11 +2,14 @@
   <div class="compare-page">
     <header class="compare-header">
       <div>
+        <span class="page-kicker">审查工作台</span>
         <h1>PDF 比对审查</h1>
         <p>原 PDF · ElegantBook 编译 PDF</p>
       </div>
       <div class="compare-actions">
-        <el-button :icon="Refresh" :loading="loading" @click="refreshCurrent">刷新</el-button>
+        <el-tooltip content="刷新当前材料" placement="bottom">
+          <el-button :icon="Refresh" :loading="loading" aria-label="刷新当前材料" @click="refreshCurrent" />
+        </el-tooltip>
       </div>
     </header>
 
@@ -41,43 +44,47 @@
     </section>
 
     <section v-if="selectedAsset" class="selected-strip">
-      <div>
-        <strong>{{ displayFilename(selectedAsset) }}</strong>
-        <span>{{ selectedAsset.material_id || selectedAsset.run_id || '' }}</span>
+      <div class="selected-summary">
+        <div class="selected-copy">
+          <strong>{{ displayFilename(selectedAsset) }}</strong>
+          <span>{{ selectedAsset.material_id || selectedAsset.run_id || '' }}</span>
+        </div>
+        <div class="selected-tags">
+          <el-tag size="small" :type="outputOriginTagType">{{ outputOriginLabel }}</el-tag>
+          <el-tag v-if="compileStatus" size="small" :type="compileTagType">{{ compileStatus }}</el-tag>
+        </div>
       </div>
-      <div class="selected-tags">
-        <el-tag size="small" :type="outputOriginTagType">{{ outputOriginLabel }}</el-tag>
-        <el-tag v-if="compileStatus" size="small" :type="compileTagType">{{ compileStatus }}</el-tag>
-      </div>
-      <el-select
-        v-if="availableOutputs.length > 1"
-        v-model="selectedOutputId"
-        size="small"
-        class="output-select"
-        placeholder="输出版本"
-        @change="loadSelectedCompare"
-      >
-        <el-option
-          v-for="row in availableOutputs"
-          :key="outputOptionValue(row)"
-          :label="outputOptionLabel(row)"
-          :value="outputOptionValue(row)"
-        />
-      </el-select>
-      <div class="download-actions">
-        <el-button
-          v-if="canContinueCodex"
-          type="warning"
-          :loading="continueCodexStarting"
-          @click="continueCodexRefine"
+      <div class="selected-controls">
+        <el-select
+          v-if="availableOutputs.length > 1"
+          v-model="selectedOutputId"
+          size="small"
+          class="output-select"
+          placeholder="输出版本"
+          @change="loadSelectedCompare"
         >
-          继续精修
-        </el-button>
-        <el-button v-if="downloadUrls.package_zip" type="primary" :icon="Download" @click="openUrl(downloadUrls.package_zip)">
-          {{ zipButtonText }}
-        </el-button>
-        <el-button v-if="downloadUrls.compiled_pdf" :icon="Document" @click="openUrl(downloadUrls.compiled_pdf)">下载 PDF</el-button>
-        <el-button v-if="downloadUrls.compile_report" link type="primary" @click="openUrl(downloadUrls.compile_report)">编译报告</el-button>
+          <el-option
+            v-for="row in availableOutputs"
+            :key="outputOptionValue(row)"
+            :label="outputOptionLabel(row)"
+            :value="outputOptionValue(row)"
+          />
+        </el-select>
+        <div class="download-actions">
+          <el-button
+            v-if="canContinueCodex"
+            type="warning"
+            :loading="continueCodexStarting"
+            @click="continueCodexRefine"
+          >
+            继续精修
+          </el-button>
+          <el-button v-if="downloadUrls.package_zip" type="primary" :icon="Download" @click="openUrl(downloadUrls.package_zip)">
+            {{ zipButtonText }}
+          </el-button>
+          <el-button v-if="downloadUrls.compiled_pdf" :icon="Document" @click="openUrl(downloadUrls.compiled_pdf)">下载 PDF</el-button>
+          <el-button v-if="downloadUrls.compile_report" link type="primary" @click="openUrl(downloadUrls.compile_report)">编译报告</el-button>
+        </div>
       </div>
     </section>
 
@@ -85,7 +92,7 @@
       <article class="compare-panel source-panel">
         <header>
           <strong>原 PDF</strong>
-          <el-tag v-if="sourcePdfUrl" size="small" type="primary">Source</el-tag>
+          <el-tag v-if="sourcePdfUrl" size="small" type="primary">服务端审阅副本</el-tag>
         </header>
         <PdfSourceViewer
           v-if="sourcePdfUrl"
@@ -163,9 +170,11 @@ const outputOriginLabel = computed(() => {
 })
 const zipButtonText = computed(() => {
   if (outputOrigin.value === 'legacy_selfloop') return '导出 LaTeX ZIP'
+  if (outputOrigin.value === 'worker_v2') return '下载 LaTeX ZIP'
   return selectedQualityStatus.value === 'passed' ? '导出精修 LaTeX ZIP' : '导出候选 LaTeX ZIP'
 })
 const outputOriginTagType = computed(() => {
+  if (outputOrigin.value === 'worker_v2') return 'success'
   if (outputOrigin.value === 'codex_refined' && selectedQualityStatus.value === 'passed') return 'success'
   if (outputOrigin.value === 'codex_refined') return 'warning'
   if (outputOrigin.value === 'codex_elegantbook') return 'primary'
@@ -195,6 +204,7 @@ function outputOptionValue(row: NonNullable<LatexCompareResponse['available_outp
 }
 
 function outputOriginText(origin: string, qualityStatus = '') {
+  if (origin === 'worker_v2') return qualityStatus === 'passed' ? 'Worker V2.3 核心产物' : 'Worker V2.3 候选'
   if (origin === 'codex_refined') {
     if (qualityStatus === 'passed') return 'Codex 精修'
     if (qualityStatus === 'needs_fix') return 'Codex 候选（待修复）'
@@ -339,135 +349,246 @@ onMounted(loadAssets)
 <style scoped>
 .compare-page {
   display: flex;
-  flex-direction: column;
-  gap: 14px;
+  height: 100%;
   min-width: 0;
-}
-
-.compare-header,
-.compare-toolbar,
-.selected-strip,
-.compare-panel {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
 }
 
 .compare-header {
   display: flex;
-  align-items: flex-start;
+  min-height: 48px;
+  flex-shrink: 0;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
-  padding: 16px;
+}
+
+.page-kicker {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--primary-dark);
+  font-size: 10px;
+  font-weight: 650;
 }
 
 .compare-header h1 {
   margin: 0;
   color: var(--text-primary);
-  font-size: 24px;
+  font-size: 23px;
+  font-weight: 720;
+  line-height: 1.2;
+  letter-spacing: 0;
 }
 
 .compare-header p {
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 11px;
 }
 
-.compare-toolbar,
-.selected-strip {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-}
-
-.asset-select {
-  width: min(420px, 34vw);
-}
-
-.output-select {
-  width: min(320px, 26vw);
+.compare-actions {
   flex-shrink: 0;
 }
 
+.compare-actions :deep(.el-button) {
+  width: 34px;
+  padding: 6px 0 !important;
+}
+
+.compare-toolbar,
+.selected-strip,
+.compare-panel {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  background: var(--bg-primary);
+}
+
+.compare-toolbar {
+  display: grid;
+  flex-shrink: 0;
+  grid-template-columns: minmax(220px, 1fr) minmax(280px, 390px) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 9px;
+}
+
+.asset-select {
+  width: 100%;
+}
+
+.compare-toolbar :deep(.el-pagination) {
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+
 .selected-strip {
-  justify-content: space-between;
-}
-
-.selected-strip > div:first-child {
-  min-width: 0;
   display: flex;
+  flex-shrink: 0;
+  align-items: stretch;
   flex-direction: column;
-  gap: 3px;
+  gap: 7px;
+  padding: 8px 10px;
 }
 
-.selected-strip strong {
-  color: var(--text-primary);
+.selected-summary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.selected-copy {
+  display: grid;
+  min-width: 160px;
+  flex: 1;
+  gap: 1px;
+}
+
+.selected-copy strong {
   overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.selected-strip span {
+.selected-copy span {
+  overflow: hidden;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .selected-tags,
+.selected-controls,
 .download-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+}
+
+.selected-tags,
+.selected-controls {
   flex-shrink: 0;
+}
+
+.selected-controls {
+  min-width: 0;
+  width: 100%;
+  justify-content: space-between;
+  padding-top: 7px;
+  border-top: 1px solid var(--border-light);
+}
+
+.output-select {
+  width: min(390px, 35vw);
+  flex-shrink: 0;
+}
+
+.download-actions {
+  flex-wrap: nowrap;
+}
+
+.download-actions :deep(.el-button) {
+  min-height: 32px;
+  margin-left: 0;
+  padding: 5px 9px !important;
+  font-size: 12px;
 }
 
 .compare-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 14px;
   min-height: 0;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
 }
 
 .compare-panel {
+  display: flex;
   min-width: 0;
+  min-height: 0;
+  flex-direction: column;
   overflow: hidden;
 }
 
 .compare-panel > header {
   display: flex;
+  min-height: 40px;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 7px 10px;
   border-bottom: 1px solid var(--border-light);
+  background: #fafbfc;
   color: var(--text-primary);
 }
 
+.compare-panel > header strong {
+  font-size: 12px;
+  font-weight: 680;
+}
+
 .compare-panel :deep(.pdf-source-viewer) {
-  height: calc(100vh - 260px);
-  min-height: 520px;
-  border: none;
+  height: 100%;
+  min-height: 0;
+  flex: 1;
+  border: 0;
   border-radius: 0;
 }
 
-@media (max-width: 900px) {
-  .compare-toolbar,
-  .selected-strip,
-  .compare-header {
-    flex-direction: column;
-    align-items: stretch;
+.compare-panel :deep(.el-empty) {
+  min-height: 360px;
+  flex: 1;
+}
+
+@media (max-width: 1220px) {
+  .compare-toolbar {
+    grid-template-columns: minmax(220px, 1fr) minmax(260px, 360px);
   }
 
-  .asset-select {
-    width: 100%;
+  .compare-toolbar :deep(.el-pagination) {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
   }
 
   .output-select {
-    width: 100%;
+    width: min(380px, 36vw);
+  }
+}
+
+@media (max-width: 900px) {
+  .compare-page {
+    overflow: auto;
   }
 
-  .selected-strip {
+  .compare-header,
+  .compare-toolbar {
     align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .compare-header {
+    align-items: flex-start;
+  }
+
+  .compare-toolbar :deep(.el-pagination) {
+    grid-column: auto;
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+
+  .selected-summary,
+  .selected-controls {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .selected-tags,
@@ -475,8 +596,18 @@ onMounted(loadAssets)
     flex-wrap: wrap;
   }
 
+  .output-select {
+    width: 100%;
+  }
+
   .compare-grid {
+    min-height: 1100px;
+    flex: none;
     grid-template-columns: 1fr;
+  }
+
+  .compare-panel {
+    min-height: 540px;
   }
 }
 </style>

@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+previous=${1:?usage: rollback /path/to/previous-release-package}
+cd "$(dirname "$0")/.."
+docker compose --env-file .env.production -f compose.production.arm64.yml down
+cd "$previous"
+./scripts/preflight
+./scripts/migrate
+./scripts/start
+./scripts/verify

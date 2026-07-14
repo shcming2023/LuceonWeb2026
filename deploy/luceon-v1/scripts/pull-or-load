@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")/.."
+
+if ls images/*.tar >/dev/null 2>&1; then
+  for archive in images/*.tar; do
+    docker load --input "$archive"
+  done
+else
+  docker compose --env-file .env.production -f compose.production.arm64.yml pull
+fi

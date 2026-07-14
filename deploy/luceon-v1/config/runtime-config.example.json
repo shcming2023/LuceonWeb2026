@@ -1,0 +1,10 @@
+{
+  "minio": {
+    "endpoint": "https://minio.example.internal",
+    "secure": true,
+    "region": "us-east-1"
+  },
+  "gpu_wrapper": {
+    "url": "http://gpu-wrapper.example.internal:8083"
+  }
+}

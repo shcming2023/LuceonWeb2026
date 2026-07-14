@@ -15,8 +15,10 @@ from sqlalchemy.orm import Session
 
 from app.models.material import CodexSkillJob, Material
 from app.services.codex_elegantbook import output_from_ref
+from app.services.codex_print_quality import build_print_quality_report
 from app.services.luceon_review import ObjectRef, clean_path, minio_client, read_object
 from app.services.material_outputs import promote_material_output, register_elegantbook_output
+from app.services.worker_v1_policy import v1_batch_enabled
 
 
 DEFAULT_SKILL_NAME = "luceon-popo-to-refined-elegantbook"
@@ -25,6 +27,7 @@ DEFAULT_STAGING_ROOT = Path("/data/codex-skill-work")
 DEFAULT_PUBLISH_BUCKET = os.getenv("LUCEON_CODEX_PUBLISH_BUCKET", "eduassets-elegantbook")
 DEFAULT_PUBLISH_PREFIX = clean_path(os.getenv("LUCEON_CODEX_PUBLISH_PREFIX", "elegantbook")).rstrip("/")
 DEFAULT_CODEX_BIN = os.getenv("LUCEON_CODEX_BIN", "codex")
+DEFAULT_CODEX_MODEL = os.getenv("LUCEON_CODEX_MODEL", "gpt-5.5")
 ACTIVE_STATUSES = {"queued", "running", "dry_run_succeeded", "validating"}
 RETRYABLE_STATUSES = {"failed", "cancelled", "dry_run_succeeded"}
 
@@ -99,7 +102,9 @@ def latest_codex_skill_job_for_material(db: Session, user_id: str, material: Mat
     )
 
 
-def enqueue_new_pdf_codex_jobs(db: Session, user_id: str, *, limit: int | None = None) -> dict[str, int]:
+def enqueue_new_pdf_codex_jobs(db: Session, user_id: str, *, limit: int | None = None) -> dict[str, int | bool]:
+    if not v1_batch_enabled():
+        return {"selected": 0, "created": 0, "existing": 0, "failed": 0, "frozen": True}
     query = (
         db.query(Material)
         .filter(
@@ -242,6 +247,8 @@ def run_codex_skill_job(
     command = [
         codex_bin,
         "exec",
+        "--model",
+        DEFAULT_CODEX_MODEL,
         "--json",
         "--dangerously-bypass-approvals-and-sandbox",
         "--cd",
@@ -334,9 +341,29 @@ def publish_staging_job(
         raise CodexSkillJobError(job.error_message)
     final_review = _read_json_file(staging_dir / "final_review_report.json")
     compile_report = _read_json_file(staging_dir / "compile_report.json")
+    print_quality = build_print_quality_report(staging_dir, compiled_pdf, job.payload())
+    (staging_dir / "worker_quality_report.json").write_text(
+        json.dumps(print_quality, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     qa = final_review.get("qa") if isinstance(final_review.get("qa"), dict) else {}
     qa_status = str(qa.get("status") or final_review.get("status") or "needs_fix")
     quality_status = "passed" if qa_status == "passed" else "needs_fix"
+    validation_error = _candidate_validation_error(final_review, compile_report, print_quality)
+    if validation_error:
+        job.status = "failed"
+        job.error_message = validation_error
+        job.result_json = json.dumps(
+            {
+                **job.result(),
+                "published": False,
+                "staging_dir": str(staging_dir),
+                "validation": {"status": "blocked", "reason": validation_error},
+            },
+            ensure_ascii=False,
+        )
+        job.finished_at = datetime.utcnow()
+        raise CodexSkillJobError(validation_error)
 
     job.status = "validating"
     db.flush()
@@ -558,9 +585,40 @@ def _codex_exec_prompt(job: CodexSkillJob, material: Material, staging_dir: Path
             "- model_calls.jsonl",
             "- run_state.json",
             "- source_trace.json",
+            "- source_outline_ledger.json",
+            "- page_review.md",
+            "- page_review.json",
             "",
-            "Finish rule: once a valid PDF and ZIP exist in a work subdirectory, copy them to the staging root as compiled.pdf and refined-overleaf.zip, write the required root reports, then stop. Do not continue open-ended polishing after root deliverables are complete.",
-            "If the refined package cannot be fully improved within this run, use the best valid compiled PDF/ZIP as the candidate, set qa.status=needs_fix, record the reason, and finish.",
+            "Run the actual stage modules from $luceon-popo-to-refined-elegantbook: source-to-clean-material or the project cleaner, cleanlatex-to-elegantbook, and refine-elegantbook-latex. Do not replace these stages with an ad hoc script.",
+            "For compilation, invoke refine_elegantbook_latex.py with --compile --render. The project host may not have TeX in PATH; use the existing Overleaf Community Edition container sharelatex, whose TeX Live 2025 toolchain is the required compiler.",
+            "Do not create or use make_luceon_candidate.py. Do not use PyMuPDF, ReportLab, HTML-to-PDF, or plain-text rendering as a substitute for a compiled ElegantBook PDF.",
+            "Preserve source images and figures: materialize the image assets into the LaTeX project and reference them from chapters. Never replace missing images with textual descriptions just to make a PDF.",
+            "The final compile_report.json must report status=succeeded and a real engine containing xelatex, lualatex, or pdflatex. final_review_report.json must report qa.status=passed with no hard_blockers before you finish.",
+            "Only after those gates pass, copy the real compiled PDF and ZIP to the staging root as compiled.pdf and refined-overleaf.zip, then write the required root reports.",
+            "If the stages or real TeX compilation cannot complete, write run_state.json and final_review_report.json with qa.status=blocked and explain why. Do not publish a needs_fix candidate as a finished refinement.",
+            "",
+            "This output is a classroom exercise workbook. Passing compilation is not delivery acceptance. The PDF must be directly printable for teaching and student practice.",
+            "Before semantic annotation, inspect the source PDF table of contents and recurring material metadata. Write source_outline_ledger.json as {items:[{index,title,source_pages,output_chapter,status:'mapped'}]} with every source teaching item mapped exactly once. A source page may contain multiple teaching items.",
+            "Do not continue when metadata/title groups outnumber clean Markdown headings. Repair the clean Markdown outline first so no later material remains as an unstructured tail after the last chapter.",
+            "Remove QR-code images, scan-code prompts, subscription/audio/video access wording, repeated publisher running headers/footers, test strings, and OCR placeholder runs from the printable edition.",
+            "Keep content-bearing figures, but suppress inferred AI descriptions such as '(no text or symbols visible)' unless equivalent caption text is visibly present in the source.",
+            "Never place a figure between two fragments of the same sentence. Move it to the preceding paragraph boundary, preserve the joined sentence text, and use a source-appropriate width instead of forcing a dominant image.",
+            "Keep chapter metadata together: 语篇类型, 词数, 难度, 范围/范畴, and 教材链接 belong in one aligned Reading profile box. Format compact vocabulary lists as term/meaning rows, emphasize the source example sentence in Language tips, and keep simple word banks in a bordered row.",
+            "Preserve each question stem, blank, table, image, and A/B/C option identity. Count A/B/C option rows in the CleanLaTeX input and in the refined project; the refined counts must never decrease. Keep malformed but source-backed options for repair instead of deleting an uncertain matrix. Never convert every option or exercise line into repeated item number '1.'.",
+            "Run the 03.5 refiner with --print-layout classroom --answer-density workbook. Translation, dialogue completion, explanation, table-completion, note-taking, and other written-production tasks need practical answer room.",
+            "Never disable, relax, redefine, or empty \\clearpage or \\cleardoublepage. Doing so breaks ElegantBook chapter boundaries and can prevent the final buffered pages from reaching the PDF. Compact layout only with safe image sizing, ordinary spacing, and \\Needspace guards.",
+            "A chapter heading must not overlap any preceding body line and must not begin in the final 42 percent of a page. Use standard chapter page breaks, or for a compact short-unit workbook use titlesec's straight chapter class with positive title spacing plus a per-chapter \\Needspace guard; never trade content completeness for a page-count target.",
+            "Remove visible Markdown image syntax and editorial alt text such as ![Illustration ...] or 'Illustration of ...'. Keep the real source image when it exists, without printing its workflow description.",
+            "Do not enlarge low-resolution raster photos into a dominant half-page image. Keep informational diagrams legible, but cap decorative or low-resolution photos using both width and height with keepaspectratio.",
+            "Verify the final substantive tail of every source teaching item appears in the compiled PDF. Counting chapter headings is insufficient; a truncated last chapter is a hard blocker.",
+            "Avoid interior orphan pages and half-empty spill pages caused by one short fragment, footer, or answer token. Reflow related exercise content while preserving source order.",
+            "Render every output PDF page for final review, not only representative samples. Store those PNGs under 04-final-review/rendered-all/ and write page_review.json as {pdf_sha256,page_count,pages:[{page,image,status,findings}]}. The hash and page count must describe the final root compiled.pdf, every image must be a real render, and every page must pass before final QA can pass.",
+            "The Worker performs a second independent print-quality audit and will reject incomplete outline coverage or source tails, lost A/B/C options, missing cloze numbers, unsafe metadata lists, missing local translation answer space, unsafe page-flush suppression, chapter collisions or late starts, stale all-page review evidence, visible Markdown/editorial residue, QR/access residue, AI captions, broken numbering, ungrouped A/B/C choice matrices, OCR runs, missing answer space, low-resolution image enlargement, suspicious page inflation, and orphan pages.",
+            "If worker_quality_report.json already exists, this is a quality-repair pass. Read every hard_blocker and its page list first, reuse the already-correct stages, repair the copied LaTeX project, recompile, rerender all pages, and replace the root reports. Do not rerun stable upstream work unless a blocker is owned there.",
+            "If deterministic_repair_report.json exists with status=changed, its project_dir is the only allowed 03.5 repair baseline. The host Worker has already regrouped strict option matrices, capped low-resolution images, or removed duplicate image-label OCR while protecting chapter and exercise-heading counts and never reducing answer surfaces. Do not run a broad polish pass over that project. Compile it, inspect every newly rendered page, and package that exact project.",
+            "For broken_list_numbering, merge adjacent one-item enumerate environments into real sequential lists and rebuild cloze option matrices so each question keeps its A/B/C choices together. For ocr_placeholder_run, normalize malformed escaped blank tokens into ordinary answer rules without changing the surrounding words.",
+            "For unsafe_page_flush_suppression, restore the standard page-flush commands before recompiling. For chapter_heading_collision or late_chapter_start, repair chapter boundaries with real page breaks or \\Needspace. For source_tail_anchor_missing, restore the missing source-backed body before any layout tuning.",
+            "Do not mark every rendered page passed mechanically. A page record may pass only after checking its actual image for useful content density, correct numbering, legible text, retained question structure, and practical writing space.",
             "",
             "Do not publish to MinIO. Do not edit the LuceonWeb repo. Do not overwrite legacy outputs.",
             "Use the local input files below. Do not search the whole filesystem for this material.",
@@ -572,6 +630,7 @@ def _codex_exec_prompt(job: CodexSkillJob, material: Material, staging_dir: Path
             f"popo_run_id: {material.popo_run_id or ''}",
             f"source_popo_manifest: {job.source_popo_manifest_bucket}/{job.source_popo_manifest_object}",
             f"legacy_baseline_manifest: {job.baseline_manifest_bucket or ''}/{job.baseline_manifest_object or ''}",
+            f"job_payload: {json.dumps(job.payload(), ensure_ascii=False)}",
         ]
     )
 
@@ -623,12 +682,73 @@ def _read_json_file(path: Path) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _candidate_validation_error(
+    final_review: dict[str, Any],
+    compile_report: dict[str, Any],
+    print_quality: dict[str, Any] | None = None,
+) -> str:
+    """Keep existence-only or text-rendered candidates out of the published catalog."""
+    qa = final_review.get("qa") if isinstance(final_review.get("qa"), dict) else {}
+    qa_status = str(qa.get("status") or final_review.get("status") or "")
+    if qa_status != "passed":
+        return f"精修候选 QA 未通过，禁止发布: {qa_status or 'unknown'}"
+    hard_blockers = qa.get("hard_blockers")
+    if isinstance(hard_blockers, list) and hard_blockers:
+        return "精修候选存在硬阻塞项，禁止发布"
+    compile_status = str(compile_report.get("status") or "")
+    if compile_status not in {"succeeded", "passed"}:
+        return f"精修候选未通过真实 TeX 编译，禁止发布: {compile_status or 'unknown'}"
+    engine = str(compile_report.get("engine") or "").lower()
+    if not any(name in engine for name in ("xelatex", "lualatex", "pdflatex")):
+        return f"编译引擎不是 TeX 引擎，禁止发布: {engine or 'unknown'}"
+    if compile_report.get("tex_engine_available") is False:
+        return "报告明确标记 TeX 引擎不可用，禁止发布"
+    print_quality = print_quality or {}
+    if str(print_quality.get("status") or "") != "passed":
+        blockers = print_quality.get("hard_blockers") if isinstance(print_quality.get("hard_blockers"), list) else []
+        codes = [str(row.get("code") or "") for row in blockers if isinstance(row, dict)]
+        summary = ", ".join(code for code in codes if code) or "unknown"
+        return f"逐页打印质量审查未通过，禁止发布: {summary}"
+    return ""
+
+
 def _publishable_files(root: Path) -> list[Path]:
     allowed_suffixes = {".pdf", ".zip", ".json", ".md", ".tex", ".sty", ".cls", ".bib", ".png", ".jpg", ".jpeg"}
-    rows: list[Path] = []
-    for path in root.rglob("*"):
-        if path.is_file() and path.suffix.lower() in allowed_suffixes:
-            rows.append(path)
+    excluded_root_names = {"codex_exec_final.md", "codex_exec_prompt.md", "manifest.json"}
+    rows = {
+        path
+        for path in root.iterdir()
+        if path.is_file()
+        and path.name not in excluded_root_names
+        and path.suffix.lower() in allowed_suffixes
+    }
+    for directory_name in ("chapters", "images"):
+        directory = root / directory_name
+        if not directory.is_dir():
+            continue
+        rows.update(
+            path
+            for path in directory.rglob("*")
+            if path.is_file() and path.suffix.lower() in allowed_suffixes
+        )
+    page_review = _read_json_file(root / "page_review.json")
+    review_rows = page_review.get("pages") if isinstance(page_review.get("pages"), list) else []
+    resolved_root = root.resolve()
+    for row in review_rows:
+        if not isinstance(row, dict):
+            continue
+        value = str(row.get("image") or "").strip()
+        if not value:
+            continue
+        path = Path(value)
+        path = path if path.is_absolute() else root / path
+        try:
+            resolved = path.resolve(strict=True)
+            resolved.relative_to(resolved_root)
+        except (OSError, ValueError):
+            continue
+        if resolved.is_file() and resolved.suffix.lower() in allowed_suffixes:
+            rows.add(resolved)
     return sorted(rows)
 
 
@@ -713,6 +833,11 @@ def _manifest_objects(object_map: dict[str, str], compiled_pdf: Path, package_zi
         "model_calls": "model_calls.jsonl",
         "run_state": "run_state.json",
         "source_trace": "source_trace.json",
+        "source_outline_ledger": "source_outline_ledger.json",
+        "page_review": "page_review.md",
+        "page_review_json": "page_review.json",
+        "worker_quality_report": "worker_quality_report.json",
+        "deterministic_repair_report": "deterministic_repair_report.json",
     }
     for key, filename in optional_files.items():
         if filename in object_map:

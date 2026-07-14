@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")/.."
+
+docker compose --env-file .env.production -f compose.production.arm64.yml \
+  up -d --no-build --pull never

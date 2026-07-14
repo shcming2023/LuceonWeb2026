@@ -1,0 +1,133 @@
+name: ${COMPOSE_PROJECT_NAME:-luceonweb2026-production}
+
+services:
+  redis:
+    image: redis@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [luceon]
+
+  compiler-mongo:
+    image: mongo@sha256:5e3e87afd24d75e722884d777c5713d254f7e88ba65381b5d6484f75a21b73e3
+    restart: unless-stopped
+    volumes:
+      - compiler-mongo-data:/data/db
+    networks: [luceon]
+
+  compiler-redis:
+    image: redis@sha256:46884be93652d02a96a176ccf173d1040bef365c5706aa7b6a1931caec8bfeef
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "no"]
+    networks: [luceon]
+
+  texlive:
+    image: ghcr.io/lcpu-club/sharelatex@sha256:633e180fa9357c2b00e2fa9234b63460033fd2d4e4c441a5bb91c9697a08e145
+    container_name: ${LUCEON_TEX_CONTAINER:-luceonweb2026-production-texlive}
+    restart: unless-stopped
+    environment:
+      SHARELATEX_MONGO_URL: mongodb://compiler-mongo/sharelatex
+      SHARELATEX_REDIS_HOST: compiler-redis
+      REDIS_HOST: compiler-redis
+    depends_on:
+      - compiler-mongo
+      - compiler-redis
+    volumes:
+      - compiler-data:/var/lib/sharelatex
+    networks: [luceon]
+
+  backend:
+    image: __BACKEND_IMAGE__
+    restart: unless-stopped
+    env_file: [.env.production]
+    environment:
+      TZ: Asia/Shanghai
+      REDIS_HOST: redis
+      DATABASE_URL: sqlite:////data/mineru.db
+      LUCEON_RUNTIME_CONFIG: /data/runtime_config.json
+      LUCEON_BACKUP_ROOT: /backups
+      LUCEON_PIPELINE_WORK_ROOT: /data/pipeline-work
+      LUCEON_PIPELINE_SCRIPT: /app/scripts/luceon_pdf_pipeline.py
+      LUCEON_PIPELINE_WORKDIR: /app/scripts
+      LUCEON_POPO_RAW_SKILL: /app/app/workflow_v2/runtime/canonical
+      LUCEON_RAW_CLEAN_SKILL: /private/skills/eduassets-raw-cleaner
+      WORKFLOW_V2_SEMANTIC_SCRIPT: /app/app/workflow_v2/runtime/semantic/scripts/annotate_material.py
+      WORKFLOW_V2_CLEANLATEX_BRIDGE: /app/app/workflow_v2/runtime/elegantbook/scripts/semantic_markdown_to_cleanlatex.py
+      WORKFLOW_V2_ELEGANTBOOK_BUILDER: /app/app/workflow_v2/runtime/elegantbook/scripts/clean_to_elegantbook.py
+      WORKFLOW_V2_LATEX_REFINER: /private/skills/refine-elegantbook-latex/scripts/refine_elegantbook_latex.py
+      WORKFLOW_V2_TEX_CONTAINER: ${LUCEON_TEX_CONTAINER:-luceonweb2026-production-texlive}
+    ports:
+      - "127.0.0.1:${LUCEON_API_PORT:-15001}:8000"
+    volumes:
+      - ./state/backend:/data
+      - ./state/backups:/backups
+      - ./private/skills:/private/skills:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      redis:
+        condition: service_healthy
+      texlive:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/system/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 10
+    networks: [luceon]
+
+  workflow-v2-worker:
+    image: __BACKEND_IMAGE__
+    restart: unless-stopped
+    command: ["python", "scripts/workflow_v2_worker.py", "--loop", "--worker-id", "workflow-v2-production"]
+    env_file: [.env.production]
+    environment:
+      TZ: Asia/Shanghai
+      REDIS_HOST: redis
+      DATABASE_URL: sqlite:////data/mineru.db
+      LUCEON_PIPELINE_WORK_ROOT: /data/pipeline-work
+      LUCEON_POPO_RAW_SKILL: /app/app/workflow_v2/runtime/canonical
+      LUCEON_RAW_CLEAN_SKILL: /private/skills/eduassets-raw-cleaner
+      WORKFLOW_V2_SEMANTIC_SCRIPT: /app/app/workflow_v2/runtime/semantic/scripts/annotate_material.py
+      WORKFLOW_V2_CLEANLATEX_BRIDGE: /app/app/workflow_v2/runtime/elegantbook/scripts/semantic_markdown_to_cleanlatex.py
+      WORKFLOW_V2_ELEGANTBOOK_BUILDER: /app/app/workflow_v2/runtime/elegantbook/scripts/clean_to_elegantbook.py
+      WORKFLOW_V2_LATEX_REFINER: /private/skills/refine-elegantbook-latex/scripts/refine_elegantbook_latex.py
+      WORKFLOW_V2_TEX_CONTAINER: ${LUCEON_TEX_CONTAINER:-luceonweb2026-production-texlive}
+    volumes:
+      - ./state/backend:/data
+      - ./private/skills:/private/skills:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [luceon]
+
+  frontend:
+    image: __FRONTEND_IMAGE__
+    restart: unless-stopped
+    ports:
+      - "${LUCEON_WEB_PORT:-15000}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 15s
+      timeout: 5s
+      start_period: 15s
+      retries: 10
+    networks: [luceon]
+
+networks:
+  luceon:
+    name: ${LUCEON_NETWORK:-luceonweb2026-production-net}
+
+volumes:
+  compiler-data:
+  compiler-mongo-data:

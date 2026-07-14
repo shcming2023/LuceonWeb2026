@@ -1506,10 +1506,17 @@ def item_matches_target_filters(
     input_objects: tuple[str, ...],
     material_ids: tuple[str, ...],
 ) -> bool:
-    if input_objects and str(item.get("input_object") or item.get("object") or "") not in set(input_objects):
+    item_input_object = str(item.get("input_object") or item.get("object") or "")
+    if input_objects and item_input_object not in set(input_objects):
         return False
-    if material_ids and str(item.get("material_id") or "") not in set(material_ids):
-        return False
+    if material_ids:
+        item_material_id = str(item.get("material_id") or "")
+        # Newly uploaded inputs can be targeted by object before a status marker
+        # has materialized its derived material_id.
+        if item_material_id and item_material_id not in set(material_ids):
+            return False
+        if not item_material_id and not input_objects:
+            return False
     return True
 
 
@@ -2715,6 +2722,55 @@ def freeze_mineru_only_result(
     }
 
 
+def reuse_frozen_mineru_result(
+    s3: S3Client,
+    cfg: Config,
+    doc: dict[str, Any],
+    doc_status: dict[str, Any],
+    mineru_batch_id: str,
+) -> dict[str, Any]:
+    material_id = str(doc.get("material_id") or "")
+    run_id = run_id_from_doc_status(doc_status, "Frozen MinerU reuse")
+    manifest_object, manifest = latest_mineru_manifest_for_material(s3, cfg, material_id)
+    source = manifest.get("source_pdf") if isinstance(manifest.get("source_pdf"), dict) else {}
+    expected = {
+        "status": "mineru_done_frozen",
+        "material_id": material_id,
+        "run_id": run_id,
+        "batch_id": str(mineru_batch_id),
+        "input_object": str(doc.get("object") or ""),
+        "source_sha256": str(doc.get("source_pdf_sha256") or ""),
+    }
+    actual = {
+        "status": str(manifest.get("status") or ""),
+        "material_id": str(manifest.get("material_id") or ""),
+        "run_id": str(manifest.get("run_id") or ""),
+        "batch_id": str(manifest.get("batch_id") or ""),
+        "input_object": str(source.get("input_object") or ""),
+        "source_sha256": str(source.get("sha256") or ""),
+    }
+    mismatches = {key: {"expected": value, "actual": actual[key]} for key, value in expected.items() if value != actual[key]}
+    expected_size = doc.get("source_pdf_size_bytes")
+    if expected_size is not None and int(expected_size) != int(source.get("size_bytes") or -1):
+        mismatches["source_size_bytes"] = {"expected": int(expected_size), "actual": source.get("size_bytes")}
+    if mismatches:
+        raise ValueError(f"frozen MinerU manifest identity mismatch: {json.dumps(mismatches, ensure_ascii=False)}")
+    marker_object = status_marker_object(material_id, run_id, "mineru_done_frozen")
+    marker = s3.get_json(cfg.input_bucket, marker_object)
+    if str(marker.get("status") or "") != "mineru_done_frozen":
+        raise ValueError(f"missing frozen MinerU marker: {marker_object}")
+    return {
+        "schema": "luceon-staged-mineru-freeze-reuse/v1",
+        "status": "PASS",
+        "reused": True,
+        "material_id": material_id,
+        "run_id": run_id,
+        "batch_id": str(mineru_batch_id),
+        "manifest": {"bucket": cfg.mineru_bucket, "object": manifest_object},
+        "status_marker": {"bucket": cfg.input_bucket, "object": marker_object},
+    }
+
+
 def list_prefix_rows(s3: S3Client, bucket: str, prefix: str) -> list[dict[str, str]]:
     return sorted(
         [row for row in s3.list_objects(bucket, prefix=prefix) if str(row.get("Key") or "").startswith(prefix)],
@@ -3497,11 +3553,87 @@ def write_stage_error(
     return {"markers": markers, "active_marker_cleanup": cleanup}
 
 
+def write_freeze_error(
+    s3: S3Client,
+    cfg: Config,
+    doc: dict[str, Any],
+    run_id: str,
+    stage: str,
+    batch_id: str,
+    doc_status: dict[str, Any],
+    exc: Exception,
+) -> dict[str, Any]:
+    reason = f"{stage}_freeze_failed"
+    marker_run_id = run_id or f"{stage}-freeze-error-{utc_stamp()}"
+    marker_value = {
+        "workflow_stage": f"run_staged_{stage}_freeze",
+        "reason": reason,
+        "batch_id": batch_id,
+        "wrapper_status": json_safe(doc_status),
+        "error": {"type": type(exc).__name__, "message": str(exc)},
+    }
+    try:
+        markers = write_status_marker(s3, cfg, doc, marker_run_id, f"{stage}_freeze_error", marker_value)
+    except Exception as marker_exc:
+        markers = {"error": {"type": type(marker_exc).__name__, "message": str(marker_exc)}}
+    try:
+        cleanup = (
+            cleanup_stage_markers(s3, cfg, doc, run_id, (f"{stage}_submitted", f"{stage}_running"))
+            if run_id
+            else {}
+        )
+    except Exception as cleanup_exc:
+        cleanup = {"error": {"type": type(cleanup_exc).__name__, "message": str(cleanup_exc)}}
+    return {
+        "reason": reason,
+        "run_id": run_id,
+        "error": {"type": type(exc).__name__, "message": str(exc)},
+        "markers": markers,
+        "active_marker_cleanup": cleanup,
+    }
+
+
+def staged_completion_status(result: dict[str, Any]) -> str:
+    selected_count = int(result.get("selected_count") or 0)
+    mineru_freezes = len(result.get("mineru_freezes") or [])
+    mineru_errors = len(result.get("mineru_errors") or [])
+    popo = result.get("popo") if isinstance(result.get("popo"), dict) else {}
+    popo_freezes = len(popo.get("freezes") or [])
+    popo_errors = len(popo.get("errors") or [])
+    if (
+        selected_count > 0
+        and mineru_freezes == selected_count
+        and popo_freezes == selected_count
+        and mineru_errors == 0
+        and popo_errors == 0
+    ):
+        return "DONE"
+    if mineru_freezes or popo_freezes:
+        return "PARTIAL"
+    return "FAILED"
+
+
+def cli_result_exit_code(result: dict[str, Any]) -> int:
+    status = str(result.get("status") or "").upper()
+    if status in {"ERROR", "FAILED", "PARTIAL"}:
+        return 2
+    if status.startswith("BLOCKED") or status.endswith("INCOMPLETE") or status.endswith("NO_FREEZES"):
+        return 3
+    return 0
+
+
 def run_staged_command(args: argparse.Namespace) -> dict[str, Any]:
     apply_run_mode(args, "run-staged")
     cfg = cfg_from_args(args)
     s3 = S3Client(cfg.minio_endpoint, cfg.minio_access_key, cfg.minio_secret_key)
     input_objects, material_ids = target_filters_from_args(args)
+    if args.reuse_frozen_mineru and not args.existing_mineru_batch_id:
+        return {
+            "command": "run-staged",
+            "applied": False,
+            "status": "BLOCKED_REUSE_REQUIRES_EXISTING_MINERU_BATCH",
+            "reason": "--reuse-frozen-mineru requires --existing-mineru-batch-id",
+        }
     if args.apply and args.input_status_only and not (input_objects or material_ids or args.existing_mineru_batch_id or args.existing_popo_batch_id):
         return {
             "command": "run-staged",
@@ -3576,9 +3708,15 @@ def run_staged_command(args: argparse.Namespace) -> dict[str, Any]:
             "command": "run-staged",
             "applied": False,
             "status": "DRY_RUN",
-            "would_run": "mineru_then_freeze_per_pdf_then_popo_from_frozen_mineru_then_freeze_popo",
+            "would_run": (
+                "reuse_frozen_mineru_then_popo_then_freeze_popo"
+                if args.reuse_frozen_mineru
+                else "mineru_then_freeze_per_pdf_then_popo_from_frozen_mineru_then_freeze_popo"
+            ),
             "selected_count": len(docs),
             "docs": dry_docs,
+            "health": health,
+            "staged_api_probe": staged_probe,
             "plan_summary": {
                 "scheduler_state_counts": plan.get("scheduler_state_counts", {}),
                 "marker_reconciliation_summary": plan.get("marker_reconciliation_summary", {}),
@@ -3757,21 +3895,22 @@ def run_staged_command(args: argparse.Namespace) -> dict[str, Any]:
         run_id = run_id_from_doc_status(doc_status, "MinerU existing batch" if args.existing_mineru_batch_id else "MinerU submit")
         doc["run_id"] = run_id
         mineru_run_ids[str(doc["doc_id"])] = run_id
-        mineru_submitted_markers.append(
-            write_status_marker(
-                s3,
-                cfg,
-                doc,
-                run_id,
-                "mineru_submitted",
-                {
-                    "workflow_stage": "run_staged_mineru",
-                    "batch_id": mineru_batch_id,
-                    "wrapper_status": doc_status,
-                    "submitted_at": now_iso(),
-                },
+        if not args.reuse_frozen_mineru:
+            mineru_submitted_markers.append(
+                write_status_marker(
+                    s3,
+                    cfg,
+                    doc,
+                    run_id,
+                    "mineru_submitted",
+                    {
+                        "workflow_stage": "run_staged_mineru",
+                        "batch_id": mineru_batch_id,
+                        "wrapper_status": doc_status,
+                        "submitted_at": now_iso(),
+                    },
+                )
             )
-        )
 
     mineru_wait = wait_stage_batch(s3, cfg, wrapper, "mineru", mineru_batch_id, docs, mineru_run_ids, args)
     result: dict[str, Any] = {
@@ -3803,7 +3942,17 @@ def run_staged_command(args: argparse.Namespace) -> dict[str, Any]:
         if run_id:
             doc_status.setdefault("run_id", run_id)
         if stage_doc_success("mineru", doc_status):
-            freeze_result = freeze_mineru_only_result(s3, cfg, wrapper, doc, doc_status, mineru_final_status)
+            try:
+                freeze_result = (
+                    reuse_frozen_mineru_result(s3, cfg, doc, doc_status, mineru_batch_id)
+                    if args.reuse_frozen_mineru
+                    else freeze_mineru_only_result(s3, cfg, wrapper, doc, doc_status, mineru_final_status)
+                )
+            except Exception as exc:
+                result["mineru_errors"].append(
+                    write_freeze_error(s3, cfg, doc, run_id, "mineru", mineru_batch_id, doc_status, exc)
+                )
+                continue
             result["mineru_freezes"].append(freeze_result)
             frozen_docs.append({"doc": doc, "freeze": freeze_result})
         else:
@@ -3974,8 +4123,8 @@ def run_staged_command(args: argparse.Namespace) -> dict[str, Any]:
             if run_id:
                 doc_status.setdefault("run_id", run_id)
             if stage_doc_success("popo", doc_status):
-                popo_result["freezes"].append(
-                    freeze_popo_only_result(
+                try:
+                    freeze_result = freeze_popo_only_result(
                         s3,
                         cfg,
                         wrapper,
@@ -3985,13 +4134,18 @@ def run_staged_command(args: argparse.Namespace) -> dict[str, Any]:
                         row["mineru_manifest_object"],
                         row["mineru_manifest"],
                     )
-                )
+                except Exception as exc:
+                    popo_result["errors"].append(
+                        write_freeze_error(s3, cfg, doc, run_id, "popo", popo_batch_id, doc_status, exc)
+                    )
+                    continue
+                popo_result["freezes"].append(freeze_result)
             else:
                 popo_result["errors"].append(
                     write_stage_error(s3, cfg, doc, run_id, "popo", popo_batch_id, doc_status, "popo_stage_failed")
                 )
     result["popo"] = popo_result
-    result["status"] = "DONE" if len(popo_result.get("freezes") or []) == len(frozen_docs) else "PARTIAL"
+    result["status"] = staged_completion_status(result)
     return redact_presigned_urls(result)
 
 
@@ -4168,6 +4322,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--timeout-seconds", type=int, default=7200)
     p.add_argument("--client-batch-id", default="", help="Optional client batch id for the MinerU stage.")
     p.add_argument("--existing-mineru-batch-id", default="", help="Recover an already submitted staged MinerU batch instead of submitting a new one.")
+    p.add_argument(
+        "--reuse-frozen-mineru",
+        action="store_true",
+        help="Reuse the matching formal MinerU manifest and frozen marker without downloading or freezing MinerU again.",
+    )
     p.add_argument("--popo-client-batch-id", default="", help="Optional client batch id for the Popo stage.")
     p.add_argument("--existing-popo-batch-id", default="", help="Recover an already submitted staged Popo batch instead of submitting a new one.")
     p.add_argument("--mineru-only", action="store_true", help="Stop after MinerU is frozen; do not submit Popo.")
@@ -4236,6 +4395,7 @@ def main(argv: list[str] | None = None) -> int:
         result = {"status": "ERROR", "error": str(exc), "type": type(exc).__name__}
         print(dumps(result, pretty=True))
         return 2
+    exit_code = cli_result_exit_code(result)
     if getattr(args, "out", ""):
         with open(args.out, "w", encoding="utf-8") as f:
             f.write(dumps(result, pretty=True))
@@ -4264,9 +4424,9 @@ def main(argv: list[str] | None = None) -> int:
             if isinstance(wait, dict):
                 summary["popo_wait_status"] = wait.get("wait_status")
         print(dumps(summary, pretty=True))
-        return 0
+        return exit_code
     print(dumps(result, pretty=True))
-    return 0
+    return exit_code
 
 
 if __name__ == "__main__":

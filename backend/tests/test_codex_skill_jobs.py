@@ -6,8 +6,14 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import get_db
 from app.models.base import Base
-from app.models.material import Material, MaterialOutput
-from app.services.codex_skill_jobs import create_codex_skill_job, publish_staging_job, run_dry_run_job
+from app.models.material import CodexSkillJob, Material, MaterialOutput
+from app.services.codex_skill_jobs import (
+    _publishable_files,
+    create_codex_skill_job,
+    enqueue_new_pdf_codex_jobs,
+    publish_staging_job,
+    run_dry_run_job,
+)
 from app.utils.user_dep import get_user_id
 from main import app
 
@@ -156,16 +162,50 @@ def test_codex_skill_job_cancel_and_retry():
     assert retried.json()["attempt_count"] == 1
 
 
-def test_legacy_batch_refresh_enqueues_existing_latex_outputs():
+def test_legacy_batch_refresh_is_frozen_by_default(monkeypatch):
     client, _material_id = make_client()
+    monkeypatch.delenv("LUCEON_WORKER_V1_BATCH_ENABLED", raising=False)
+
+    first = client.post("/api/materials/codex-jobs/batch-refresh-legacy", json={"limit": 10})
+    assert first.status_code == 409
+    assert "批量刷新已冻结" in first.json()["detail"]
+
+
+def test_legacy_batch_refresh_can_be_explicitly_reenabled(monkeypatch):
+    client, _material_id = make_client()
+    monkeypatch.setenv("LUCEON_WORKER_V1_BATCH_ENABLED", "true")
 
     first = client.post("/api/materials/codex-jobs/batch-refresh-legacy", json={"limit": 10})
     assert first.status_code == 200
     assert first.json() == {"selected": 1, "created": 1, "existing": 0, "failed": 0}
 
-    second = client.post("/api/materials/codex-jobs/batch-refresh-legacy", json={"limit": 10})
-    assert second.status_code == 200
-    assert second.json() == {"selected": 1, "created": 0, "existing": 1, "failed": 0}
+
+def test_new_pdf_auto_enqueue_is_frozen_with_worker_v1_policy(monkeypatch):
+    db, material = make_session()
+    material.latex_manifest_bucket = None
+    material.latex_manifest_object = None
+    db.commit()
+    monkeypatch.delenv("LUCEON_WORKER_V1_BATCH_ENABLED", raising=False)
+
+    summary = enqueue_new_pdf_codex_jobs(db, "u1")
+
+    assert summary == {"selected": 0, "created": 0, "existing": 0, "failed": 0, "frozen": True}
+    assert db.query(CodexSkillJob).count() == 0
+    db.close()
+
+
+def test_new_pdf_auto_enqueue_can_be_explicitly_reenabled(monkeypatch):
+    db, material = make_session()
+    material.latex_manifest_bucket = None
+    material.latex_manifest_object = None
+    db.commit()
+    monkeypatch.setenv("LUCEON_WORKER_V1_BATCH_ENABLED", "true")
+
+    summary = enqueue_new_pdf_codex_jobs(db, "u1")
+
+    assert summary == {"selected": 1, "created": 1, "existing": 0, "failed": 0}
+    assert db.query(CodexSkillJob).one().status == "queued"
+    db.close()
 
 
 def test_materials_list_prioritizes_active_codex_jobs():
@@ -202,6 +242,16 @@ def test_publish_staging_job_registers_promoted_output(monkeypatch, tmp_path):
     db, material = make_session()
     fake_minio = FakeMinio()
     monkeypatch.setattr("app.services.codex_skill_jobs.minio_client", fake_minio)
+    monkeypatch.setattr(
+        "app.services.codex_skill_jobs.build_print_quality_report",
+        lambda _staging_dir, _compiled_pdf, _requirements: {
+            "schema": "luceon-worker-print-quality/v1",
+            "status": "passed",
+            "hard_blockers": [],
+            "metrics": {},
+            "pages": [],
+        },
+    )
 
     job = create_codex_skill_job(db, "u1", material, mode="refresh_legacy")
     run_dry_run_job(db, job, staging_root=tmp_path)
@@ -217,7 +267,7 @@ def test_publish_staging_job_registers_promoted_output(monkeypatch, tmp_path):
     (staging_dir / "source_trace.json").write_text(json.dumps({"status": "passed"}))
     (staging_dir / "final_review_report.json").write_text(json.dumps({"status": "passed", "qa": {"status": "passed", "hard_blockers": [], "review_status": "passed"}}))
     (staging_dir / "final_review_report.md").write_text("# passed")
-    (staging_dir / "compile_report.json").write_text(json.dumps({"status": "succeeded", "engine": "test", "pages": 1}))
+    (staging_dir / "compile_report.json").write_text(json.dumps({"status": "succeeded", "engine": "xelatex", "pages": 1}))
 
     publish_staging_job(db, job, target_bucket="eduassets-elegantbook", promote=True)
     db.commit()
@@ -238,7 +288,38 @@ def test_publish_staging_job_registers_promoted_output(monkeypatch, tmp_path):
     assert manifest["objects"]["final_review_report_json"] == "final_review_report.json"
     assert manifest["objects"]["run_state"] == "run_state.json"
     assert manifest["objects"]["source_trace"] == "source_trace.json"
+    assert manifest["objects"]["worker_quality_report"] == "worker_quality_report.json"
     output = db.query(MaterialOutput).filter(MaterialOutput.codex_job_id == job.id).one()
     assert output.is_current is True
     assert output.quality_status == "passed"
     assert material.latex_manifest_object == job.output_manifest_object
+    uploaded_objects = [object_name for bucket, object_name in fake_minio.objects if bucket == "eduassets-elegantbook"]
+    assert not any("/work/candidate/" in object_name for object_name in uploaded_objects)
+
+
+def test_publishable_files_excludes_scratch_and_keeps_review_evidence(tmp_path):
+    (tmp_path / "compiled.pdf").write_bytes(b"%PDF")
+    (tmp_path / "chapters").mkdir()
+    (tmp_path / "chapters" / "content.tex").write_text("content", encoding="utf-8")
+    (tmp_path / "images").mkdir()
+    (tmp_path / "images" / "figure.png").write_bytes(b"png")
+    review_image = tmp_path / "04-final-review" / "rendered-all" / "page-01.png"
+    review_image.parent.mkdir(parents=True)
+    review_image.write_bytes(b"review")
+    scratch = tmp_path / "03.5-old-attempt" / "compiled.pdf"
+    scratch.parent.mkdir()
+    scratch.write_bytes(b"%PDF-old")
+    (tmp_path / "page_review.json").write_text(
+        json.dumps({"pages": [{"page": 1, "image": review_image.relative_to(tmp_path).as_posix()}]}),
+        encoding="utf-8",
+    )
+
+    relative = {path.relative_to(tmp_path).as_posix() for path in _publishable_files(tmp_path)}
+
+    assert relative == {
+        "compiled.pdf",
+        "page_review.json",
+        "chapters/content.tex",
+        "images/figure.png",
+        "04-final-review/rendered-all/page-01.png",
+    }

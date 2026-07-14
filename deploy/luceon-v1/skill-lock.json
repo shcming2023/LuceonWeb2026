@@ -1,0 +1,20 @@
+{
+  "schema": "luceon-skill-lock/v1",
+  "distribution": "private-state-package-only",
+  "skills": [
+    {
+      "name": "eduassets-raw-cleaner",
+      "version": "snapshot-2026-07-14",
+      "source": "local Codex skill",
+      "license": "private; not redistributed publicly",
+      "tree_sha256": "8be0cc946f9170ed5eba76e1123936048c18b9d3f597948cfe346669e5effa5d"
+    },
+    {
+      "name": "refine-elegantbook-latex",
+      "version": "snapshot-2026-07-14",
+      "source": "local Codex skill",
+      "license": "private; not redistributed publicly",
+      "tree_sha256": "f7e1fbd40a2288c4f41bb94bb9a08e5c1ac39bc8dca572974852e14b53545e78"
+    }
+  ]
+}

@@ -3,6 +3,15 @@ from fastapi.testclient import TestClient
 from main import app
 
 
+def test_system_health_does_not_require_gpu():
+    client = TestClient(app)
+
+    response = client.get("/api/system/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "healthy", "database": "ok", "gpu_required": False}
+
+
 def test_mineru_health_endpoint(monkeypatch):
     class FakeClient:
         def health(self):

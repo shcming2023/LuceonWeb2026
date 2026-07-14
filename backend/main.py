@@ -12,10 +12,12 @@ from app.api import (
     runtime_settings_router,
     settings_router,
     upload_router,
+    workflow_v2_router,
 )
 from app.api import stats
 from app.services.pipeline_recovery import recover_interrupted_pipeline_runs
 from app.services.runtime_settings import start_backup_scheduler
+from app.workflow_v2 import initialize_workflow_database
 from contextlib import asynccontextmanager
 
 def clean_memory():
@@ -25,6 +27,7 @@ def clean_memory():
 async def life_span(app: FastAPI):
     app.state.predictor = None
     app.state.pipeline_recovery = recover_interrupted_pipeline_runs()
+    app.state.workflow_v2 = initialize_workflow_database()
     start_backup_scheduler()
     yield
     clean_memory()
@@ -53,6 +56,7 @@ app.include_router(review_router, prefix="/api", tags=["review"])
 app.include_router(runtime_settings_router, prefix="/api", tags=["runtime"])
 app.include_router(settings_router, prefix="/api", tags=["settings"])
 app.include_router(health_router, prefix="/api", tags=["health"])
+app.include_router(workflow_v2_router, prefix="/api", tags=["workflow-v2"])
 app.include_router(stats.router, prefix="/api", tags=["stats"])
 
 @app.get("/ping")

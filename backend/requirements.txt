@@ -5,7 +5,10 @@ loguru==0.7.3
 alembic==1.16.1
 minio==7.2.15
 SQLAlchemy==2.0.41
-redis
+PyMySQL==1.1.1
+cryptography==45.0.4
+redis==8.0.1
 httpx==0.28.1
 pytest==8.4.0
 PyMuPDF==1.26.1
+Pillow==11.2.1

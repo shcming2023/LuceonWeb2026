@@ -1,0 +1,30 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")/.."
+
+api_port=$(sed -n 's/^LUCEON_API_PORT=//p' .env.production | tail -1)
+web_port=$(sed -n 's/^LUCEON_WEB_PORT=//p' .env.production | tail -1)
+api_port=${api_port:-15001}
+web_port=${web_port:-15000}
+
+curl -fsS "http://127.0.0.1:${api_port}/api/system/health" >/dev/null
+curl -fsS "http://127.0.0.1:${web_port}/" >/dev/null
+
+docker compose --env-file .env.production -f compose.production.arm64.yml ps
+docker compose --env-file .env.production -f compose.production.arm64.yml images --format json > state/deployed-images.json
+
+python3 - <<'PY'
+from pathlib import Path
+import json, subprocess
+
+lock = json.loads(Path("images.lock.json").read_text())["images"]
+for key in ("backend_worker", "frontend", "redis", "compiler_mongo", "compiler_redis", "compiler"):
+    ref = lock[key]
+    subprocess.run(["docker", "image", "inspect", ref], check=True, stdout=subprocess.DEVNULL)
+PY
+
+if docker compose --env-file .env.production -f compose.production.arm64.yml ps --format json | grep -Eq '"OOMKilled":true|"RestartCount":[1-9]'; then
+  echo "restart or OOM evidence detected" >&2
+  exit 1
+fi
+echo "deployment verification passed"

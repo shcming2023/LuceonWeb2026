@@ -4,6 +4,9 @@ export interface CurrentUser {
   id: number
   email: string
   created_at?: string | null
+  capabilities?: {
+    pipeline_admin?: boolean
+  }
 }
 
 export interface AuthPayload {
