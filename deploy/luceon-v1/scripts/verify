@@ -7,7 +7,17 @@ web_port=$(sed -n 's/^LUCEON_WEB_PORT=//p' .env.production | tail -1)
 api_port=${api_port:-15001}
 web_port=${web_port:-15000}
 
-curl -fsS "http://127.0.0.1:${api_port}/api/system/health" >/dev/null
+probe=1
+while [ "$probe" -le 5 ]; do
+  curl -fsS "http://127.0.0.1:${api_port}/api/system/health" | python3 -c '
+import json, sys
+health = json.load(sys.stdin)
+if health.get("status") != "healthy" or health.get("database") != "ok" or health.get("gpu_required") is not False:
+    raise SystemExit(f"backend dependency gate failed: {health}")
+'
+  if [ "$probe" -lt 5 ]; then sleep 2; fi
+  probe=$((probe + 1))
+done
 curl -fsS "http://127.0.0.1:${web_port}/" >/dev/null
 
 docker compose --env-file .env.production -f compose.production.arm64.yml ps
@@ -39,4 +49,58 @@ for container_id in $container_ids; do
     exit 1
   fi
 done
+
+worker_id=$(docker compose --env-file .env.production -f compose.production.arm64.yml ps -q workflow-v2-worker)
+python3 - "$worker_id" <<'PY'
+import json
+import subprocess
+import sys
+
+worker_id = sys.argv[1]
+if not worker_id:
+    raise SystemExit("workflow worker gate failed: release worker is missing")
+
+
+def inspect(container_id: str) -> dict:
+    output = subprocess.run(
+        ["docker", "inspect", container_id],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    return json.loads(output)[0]
+
+
+def workflow_url(container: dict) -> str:
+    for item in container.get("Config", {}).get("Env") or []:
+        if item.startswith("WORKFLOW_DATABASE_URL="):
+            return item.split("=", 1)[1]
+    return ""
+
+
+release_worker = inspect(worker_id)
+expected_url = workflow_url(release_worker)
+if not expected_url:
+    raise SystemExit("workflow worker gate failed: WORKFLOW_DATABASE_URL is missing")
+
+running_ids = subprocess.run(
+    ["docker", "container", "ls", "-q"],
+    check=True,
+    capture_output=True,
+    text=True,
+).stdout.split()
+matching = []
+for container_id in running_ids:
+    container = inspect(container_id)
+    command = " ".join(container.get("Config", {}).get("Cmd") or [])
+    if "workflow_v2_worker.py" not in command or workflow_url(container) != expected_url:
+        continue
+    matching.append(container.get("Name", "").lstrip("/") or container_id)
+
+if matching != [release_worker.get("Name", "").lstrip("/")]:
+    raise SystemExit(
+        "workflow worker gate failed: expected exactly the release worker for this database; "
+        f"found={sorted(matching)}"
+    )
+PY
 echo "deployment verification passed"

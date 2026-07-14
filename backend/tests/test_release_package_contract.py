@@ -51,6 +51,17 @@ def test_release_verifier_reads_actual_container_runtime_state():
     assert "ps -aq" in text
 
 
+def test_release_verifier_requires_stable_database_health_and_one_worker_per_database():
+    text = (DEPLOY / "scripts" / "verify").read_text()
+
+    assert 'while [ "$probe" -le 5 ]' in text
+    assert 'health.get("database") != "ok"' in text
+    assert 'health.get("gpu_required") is not False' in text
+    assert 'item.startswith("WORKFLOW_DATABASE_URL=")' in text
+    assert '"workflow_v2_worker.py" not in command' in text
+    assert "expected exactly the release worker for this database" in text
+
+
 def test_release_start_waits_for_declared_healthchecks():
     text = (DEPLOY / "scripts" / "start").read_text()
 
