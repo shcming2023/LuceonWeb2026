@@ -51,6 +51,13 @@ def test_release_verifier_reads_actual_container_runtime_state():
     assert "ps -aq" in text
 
 
+def test_release_start_waits_for_declared_healthchecks():
+    text = (DEPLOY / "scripts" / "start").read_text()
+
+    assert "up -d --no-build --pull never" in text
+    assert "--wait --wait-timeout 180" in text
+
+
 def test_release_package_separates_private_skills_from_public_source():
     text = (DEPLOY / "skill-lock.json").read_text()
     compose = (DEPLOY / "compose.production.arm64.yml.tmpl").read_text()

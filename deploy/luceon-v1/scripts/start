@@ -3,4 +3,4 @@ set -eu
 cd "$(dirname "$0")/.."
 
 docker compose --env-file .env.production -f compose.production.arm64.yml \
-  up -d --no-build --pull never
+  up -d --no-build --pull never --wait --wait-timeout 180
