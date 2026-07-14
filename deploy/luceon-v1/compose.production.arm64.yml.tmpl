@@ -84,6 +84,8 @@ services:
     image: __BACKEND_IMAGE__
     restart: unless-stopped
     command: ["python", "scripts/workflow_v2_worker.py", "--loop", "--worker-id", "workflow-v2-production"]
+    healthcheck:
+      disable: true
     env_file: [.env.production]
     environment:
       TZ: Asia/Shanghai

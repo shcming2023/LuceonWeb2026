@@ -19,6 +19,13 @@ def test_production_compose_template_has_no_build_or_mutable_image_tags():
     assert text.count("__FRONTEND_IMAGE__") == 1
 
 
+def test_worker_does_not_inherit_backend_http_healthcheck():
+    text = (DEPLOY / "compose.production.arm64.yml.tmpl").read_text()
+    worker = text.split("  workflow-v2-worker:\n", 1)[1].split("\n  frontend:\n", 1)[0]
+
+    assert "healthcheck:\n      disable: true" in worker
+
+
 def test_release_package_separates_private_skills_from_public_source():
     text = (DEPLOY / "skill-lock.json").read_text()
     compose = (DEPLOY / "compose.production.arm64.yml.tmpl").read_text()
