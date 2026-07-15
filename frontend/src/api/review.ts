@@ -37,6 +37,7 @@ export interface FinalReviewDecisionPayload {
 
 export interface LatexCompareResponse {
   asset_id: string
+  material_pk: string
   material_id: string
   stage: string
   output_id?: string

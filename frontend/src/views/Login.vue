@@ -98,7 +98,7 @@ const submit = async () => {
     } else {
       await loginWithEmail({ email: trimmedEmail, password: password.value })
     }
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
+    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/assets'
     router.replace(redirect)
   } finally {
     submitting.value = false

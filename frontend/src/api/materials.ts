@@ -4,12 +4,16 @@ import type {
   CodexSkillJob,
   MaterialBookMetadata,
   MaterialListResponse,
+  MaterialArtifactCatalog,
+  MaterialLineage,
   MaterialMetadataOptions,
+  MetadataJob,
   MaterialSummary,
   MaterialSyncSummary,
   MaterialUploadResponse,
   PipelinePreflightResponse,
   PipelineRun,
+  PipelineRunListResponse,
   PipelineStatusResponse
 } from '@/types/material'
 
@@ -33,6 +37,7 @@ export interface PipelineTarget {
   input_object?: string
   material_ids?: string[]
   input_objects?: string[]
+  material_pks?: number[]
 }
 
 export interface CodexJobCreatePayload {
@@ -55,6 +60,11 @@ export interface WorkflowV2JobSummary {
   id: string
   material_pk: string
   material_id: string
+  filename: string
+  review_asset_id: string
+  source_popo_manifest: { bucket: string; object: string }
+  current_output_id: string
+  outputs: Array<Record<string, any>>
   workflow_version: string
   is_current_workflow: boolean
   status: string
@@ -103,6 +113,18 @@ export const materialsApi = {
       .then(res => res.data)
   },
 
+  createMetadataJob(materialId: string, force = false) {
+    return api.post<MetadataJob>(`/materials/${materialId}/metadata/jobs`, { force }).then(res => res.data)
+  },
+
+  getMetadataJobs(materialId: string, limit = 50) {
+    return api.get<{ jobs: MetadataJob[] }>(`/materials/${materialId}/metadata/jobs`, { params: { limit } }).then(res => res.data.jobs)
+  },
+
+  retryMetadataJob(materialId: string, jobId: string) {
+    return api.post<MetadataJob>(`/materials/${materialId}/metadata/jobs/${jobId}/retry`).then(res => res.data)
+  },
+
   sync(limit?: number) {
     return api.post<MaterialSyncSummary>('/materials/sync', null, { params: { limit } }).then(res => res.data)
   },
@@ -122,6 +144,14 @@ export const materialsApi = {
 
   getPipelineStatus() {
     return api.get<PipelineStatusResponse>('/materials/pipeline/status').then(res => res.data)
+  },
+
+  getPipelineRuns(params: { page: number; page_size: number; status?: string }) {
+    return api.get<PipelineRunListResponse>('/materials/pipeline/runs', { params }).then(res => res.data)
+  },
+
+  getPipelineRun(runId: string) {
+    return api.get<PipelineRun>(`/materials/pipeline/runs/${runId}`).then(res => res.data)
   },
 
   preflightPipeline(limit = 5, target: PipelineTarget = {}) {
@@ -152,6 +182,18 @@ export const materialsApi = {
     return `/api/materials/${materialId}/content`
   },
 
+  getArtifactCatalog(materialId: string) {
+    return api.get<MaterialArtifactCatalog>(`/materials/${materialId}/artifacts`).then(res => res.data)
+  },
+
+  getLineage(materialId: string) {
+    return api.get<MaterialLineage>(`/materials/${materialId}/lineage`).then(res => res.data)
+  },
+
+  getArtifactDownloadUrl(materialId: string, artifactId: string) {
+    return `/api/materials/${materialId}/artifacts/${encodeURIComponent(artifactId)}/download`
+  },
+
   createCodexJob(materialId: string, payload: CodexJobCreatePayload) {
     return api.post<CodexSkillJob>(`/materials/${materialId}/codex-jobs`, payload).then(res => res.data)
   },
@@ -164,12 +206,24 @@ export const materialsApi = {
     return api.get<{ jobs: WorkflowV2JobSummary[] }>('/workflow-v2/job-summaries', { params: { limit } }).then(res => res.data.jobs)
   },
 
+  getWorkflowV2JobSummaryPage(params: { page: number; page_size: number; status?: string }) {
+    return api.get<{ total: number; page: number; page_size: number; jobs: WorkflowV2JobSummary[] }>('/workflow-v2/job-summaries', { params }).then(res => res.data)
+  },
+
   getWorkflowV2Job(jobId: string) {
     return api.get<Record<string, any>>(`/workflow-v2/jobs/${jobId}`).then(res => res.data)
   },
 
   createWorkflowV2Job(materialId: string, source = 'files_row_action') {
     return api.post<WorkflowV2JobCreateResponse>(`/workflow-v2/materials/${materialId}/jobs`, {
+      priority: 100,
+      payload: { source }
+    }).then(res => res.data)
+  },
+
+  createWorkflowV2JobsBatch(materialPks: number[], source = 'refinement_tasks_batch') {
+    return api.post<Record<string, any>>('/workflow-v2/jobs/batch', {
+      material_pks: materialPks,
       priority: 100,
       payload: { source }
     }).then(res => res.data)

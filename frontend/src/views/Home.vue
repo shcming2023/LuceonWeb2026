@@ -7,7 +7,7 @@
         <p>材料处理与产物状态</p>
       </div>
       <div class="home-actions">
-        <el-button type="primary" :icon="Document" @click="$router.push('/files')">文件管理</el-button>
+        <el-button type="primary" :icon="Document" @click="$router.push('/assets')">PDF 资产</el-button>
         <el-button :icon="View" @click="$router.push('/review/compare')">PDF 比对</el-button>
       </div>
     </header>

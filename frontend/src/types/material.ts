@@ -9,7 +9,7 @@ export type MaterialStage =
   | 'standard_done'
   | 'failed'
 
-export type PipelineRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'idle' | string
+export type PipelineRunStatus = 'queued' | 'running' | 'succeeded' | 'partial' | 'failed' | 'idle' | string
 
 export interface ObjectRef {
   bucket: string
@@ -50,6 +50,7 @@ export interface MaterialItem {
   input_object: string
   input_sha256: string
   size: number
+  page_count: number
   content_type: string
   stage_status: MaterialStage
   pipeline_status: string
@@ -135,16 +136,133 @@ export interface PipelineRun {
   id: string
   status: PipelineRunStatus
   mode: string
+  idempotency_key: string
+  queue_slot: string
   current_stage: string
   total: number
   processed: number
   success: number
   failed: number
   summary: Record<string, unknown>
+  request: Record<string, unknown>
   error_message: string
+  worker_id: string
+  attempt_count: number
+  heartbeat_at: string | null
+  lease_expires_at: string | null
   started_at: string | null
   finished_at: string | null
   created_at: string | null
+  items?: PipelineRunItem[]
+}
+
+export interface PipelineStageAttempt {
+  id: string
+  run_item_id: string
+  stage: string
+  attempt: number
+  status: string
+  external_batch_id: string
+  external_run_id: string
+  input_manifest: ObjectRef
+  output_manifest: ObjectRef
+  error_code: string
+  error_message: string
+  evidence: Record<string, unknown>
+  created_at: string | null
+  started_at: string | null
+  finished_at: string | null
+}
+
+export interface PipelineRunItem {
+  id: string
+  run_id: string
+  material_pk: string
+  material_id: string
+  filename: string
+  input: ObjectRef & { sha256: string }
+  status: string
+  current_stage: string
+  mineru_run_id: string
+  mineru_manifest: ObjectRef
+  popo_run_id: string
+  popo_manifest: ObjectRef
+  error_code: string
+  error_message: string
+  created_at: string | null
+  started_at: string | null
+  finished_at: string | null
+  attempts: PipelineStageAttempt[]
+  metadata_jobs: MetadataJob[]
+}
+
+export interface PipelineRunListResponse {
+  total: number
+  page: number
+  page_size: number
+  runs: PipelineRun[]
+}
+
+export interface MetadataJob {
+  id: string
+  material_pk: string
+  material_id: string
+  status: string
+  idempotency_key: string
+  source_manifest: ObjectRef
+  source_manifest_sha256: string
+  model: string
+  prompt_version: string
+  force: boolean
+  attempt_count: number
+  worker_id: string
+  error_message: string
+  result: Record<string, unknown>
+  created_at: string | null
+  started_at: string | null
+  finished_at: string | null
+}
+
+export interface MaterialArtifact {
+  artifact_id: string
+  kind: string
+  stage: string
+  label: string
+  filename: string
+  status: string
+  verification_status: string
+  run_id: string
+  output_id: string
+  current: boolean
+  historical: boolean
+  candidate: boolean
+  frozen: boolean
+  download_available: boolean
+  size_bytes: number
+  sha256: string
+  etag: string
+  content_type: string
+  created_at: string
+}
+
+export interface MaterialArtifactCatalog {
+  material: {
+    material_pk: string
+    material_id: string
+    filename: string
+    input_sha256: string
+  }
+  artifacts: MaterialArtifact[]
+}
+
+export interface MaterialLineage {
+  material: MaterialItem
+  pipeline_items: Array<PipelineRunItem & { run: PipelineRun | null }>
+  metadata_jobs: MetadataJob[]
+  workflow_jobs: Array<Record<string, any>>
+  workflow_status: { available: boolean; error: string }
+  outputs: Array<Record<string, any>>
+  review: { asset_id: string; available: boolean }
 }
 
 export interface PipelineEvent {
@@ -186,12 +304,21 @@ export interface PipelinePreflightResponse {
   plan: Record<string, unknown>
   returncode: number
   command_text: string
+  snapshot?: Array<{
+    material_pk: number
+    material_id: string
+    filename: string
+    input_bucket: string
+    input_object: string
+    input_sha256: string
+  }>
 }
 
 export interface MaterialUploadResponse {
   total: number
   success: number
   failed: number
+  duplicates?: number
   files: Array<{
     filename: string
     status: string

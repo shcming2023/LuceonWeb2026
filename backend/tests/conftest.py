@@ -8,3 +8,4 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 os.environ.setdefault("AUTH_ALLOW_USER_HEADER", "true")
+os.environ.setdefault("LUCEON_ALLOW_PUBLIC_RAW_ASSET_DOWNLOADS", "true")

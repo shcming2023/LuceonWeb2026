@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+import argparse
+import json
+import socket
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.database import SessionLocal
+from app.services.material_inventory import popo_resume_command, run_pipeline_subprocess
+from app.services.material_task_queue import (
+    claim_next_metadata_job,
+    claim_next_pipeline_run,
+    execute_metadata_job,
+    recover_stale_tasks,
+)
+
+
+def consume_once(worker_id: str) -> dict | None:
+    db = SessionLocal()
+    try:
+        pipeline_run = claim_next_pipeline_run(db, worker_id)
+        if pipeline_run:
+            request = pipeline_run.request()
+            snapshot = request.get("snapshot") if isinstance(request.get("snapshot"), list) else []
+            material_ids = [str(row.get("material_id") or "") for row in snapshot if isinstance(row, dict)]
+            input_objects = [str(row.get("input_object") or "") for row in snapshot if isinstance(row, dict)]
+            command_override = None
+            start_message = "开始执行现有 Luceon first-stage 调度脚本"
+            if pipeline_run.mode == "resume_popo":
+                context = request.get("resume_context") if isinstance(request.get("resume_context"), dict) else {}
+                command_override = popo_resume_command(
+                    str(context.get("mineru_batch_id") or ""),
+                    str(context.get("material_id") or ""),
+                    str(context.get("input_object") or ""),
+                    apply=True,
+                )
+                start_message = "开始从冻结 MinerU 恢复 Popo"
+            run_pipeline_subprocess(
+                pipeline_run.id,
+                bool(request.get("apply")),
+                int(request.get("limit") or len(snapshot) or 1),
+                material_ids=material_ids,
+                input_objects=input_objects,
+                command_override=command_override,
+                start_message=start_message,
+                worker_id=worker_id,
+            )
+            return {"kind": "pipeline_run", "id": str(pipeline_run.id)}
+
+        metadata_job = claim_next_metadata_job(db, worker_id)
+        if metadata_job:
+            return {"kind": "metadata_job", **execute_metadata_job(metadata_job.id, worker_id)}
+        return None
+    finally:
+        db.close()
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Execute durable Luceon parse and metadata tasks.")
+    parser.add_argument("--worker-id", default=f"material-task-{socket.gethostname()}")
+    parser.add_argument("--loop", action="store_true")
+    parser.add_argument("--once", action="store_true")
+    args = parser.parse_args()
+    if not args.loop and not args.once:
+        parser.error("--loop or --once is required")
+
+    db = SessionLocal()
+    try:
+        recovered = recover_stale_tasks(db)
+    finally:
+        db.close()
+    if any(recovered.values()):
+        print(json.dumps({"recovered": recovered}, ensure_ascii=False), flush=True)
+
+    retry_delay = 1.0
+    while True:
+        try:
+            result = consume_once(args.worker_id)
+            retry_delay = 1.0
+            if result:
+                print(json.dumps(result, ensure_ascii=False), flush=True)
+        except Exception as exc:
+            print(
+                json.dumps(
+                    {
+                        "worker_loop_error": type(exc).__name__,
+                        "message": str(exc)[:1000],
+                        "retry_in_seconds": retry_delay,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+            if args.once:
+                return 2
+            time.sleep(retry_delay)
+            retry_delay = min(retry_delay * 2, 30.0)
+            continue
+        if args.once:
+            return 0
+        time.sleep(1 if not result else 0.2)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

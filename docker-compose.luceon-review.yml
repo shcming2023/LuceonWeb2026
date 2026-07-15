@@ -32,6 +32,7 @@ services:
       - LUCEON_WORKER_V1_BATCH_ENABLED=${LUCEON_WORKER_V1_BATCH_ENABLED:-false}
       - LUCEON_WORKER_V1_AUTO_RETRY_ENABLED=${LUCEON_WORKER_V1_AUTO_RETRY_ENABLED:-false}
       - LUCEON_AUTH_DISABLED=${LUCEON_AUTH_DISABLED:-true}
+      - LUCEON_ALLOW_PUBLIC_RAW_ASSET_DOWNLOADS=${LUCEON_ALLOW_PUBLIC_RAW_ASSET_DOWNLOADS:-true}
       - LUCEON_PUBLIC_WORKSPACE_USER_ID=${LUCEON_PUBLIC_WORKSPACE_USER_ID:-2}
       - LUCEON_PUBLIC_WORKSPACE_EMAIL=${LUCEON_PUBLIC_WORKSPACE_EMAIL:-workspace@luceon.local}
       - MINIO_ENDPOINT=${MINIO_ENDPOINT:?set MINIO_ENDPOINT}
@@ -97,6 +98,8 @@ services:
     image: ${LUCEON_REVIEW_BACKEND_IMAGE:-luceonweb2026-review-backend:local}
     restart: unless-stopped
     command: ["python", "scripts/workflow_v2_worker.py", "--loop", "--worker-id", "workflow-v2-local"]
+    healthcheck:
+      disable: true
     environment:
       - TZ=Asia/Shanghai
       - REDIS_HOST=redis
@@ -136,6 +139,36 @@ services:
     depends_on:
       - backend
       - redis
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - luceon-review-net
+
+  material-task-worker:
+    image: ${LUCEON_REVIEW_BACKEND_IMAGE:-luceonweb2026-review-backend:local}
+    restart: unless-stopped
+    command: ["python", "scripts/material_task_worker.py", "--loop", "--worker-id", "material-task-local"]
+    healthcheck:
+      disable: true
+    environment:
+      - TZ=Asia/Shanghai
+      - DATABASE_URL=sqlite:////data/mineru.db
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT:?set MINIO_ENDPOINT}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:?set MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:?set MINIO_SECRET_KEY}
+      - GPU_WRAPPER_URL=${GPU_WRAPPER_URL:-${MINERU_API_URL:-http://host.docker.internal:8083}}
+      - GPU_WRAPPER_API_KEY=${GPU_WRAPPER_API_KEY:-}
+      - LUCEON_PIPELINE_SCRIPT=/app/scripts/luceon_pdf_pipeline.py
+      - LUCEON_PIPELINE_WORKDIR=/app/scripts
+      - LUCEON_RUNTIME_CONFIG=/data/runtime_config.json
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      - DEEPSEEK_DEFAULT_MODEL=${DEEPSEEK_DEFAULT_MODEL:-deepseek-v4-flash}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-${DEEPSEEK_DEFAULT_MODEL:-deepseek-v4-flash}}
+    volumes:
+      - ./runtime/backend:/data
+    depends_on:
+      - backend
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:

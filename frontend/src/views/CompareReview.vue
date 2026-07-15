@@ -7,6 +7,7 @@
         <p>原 PDF · ElegantBook 编译 PDF</p>
       </div>
       <div class="compare-actions">
+        <el-button v-if="compare?.material_pk" @click="openMaterialLineage">查看材料谱系</el-button>
         <el-tooltip content="刷新当前材料" placement="bottom">
           <el-button :icon="Refresh" :loading="loading" aria-label="刷新当前材料" @click="refreshCurrent" />
         </el-tooltip>
@@ -230,6 +231,14 @@ function apiUrl(url: string) {
 function openUrl(url: string) {
   const target = apiUrl(url)
   if (target) window.open(target, '_blank', 'noopener,noreferrer')
+}
+
+function openMaterialLineage() {
+  if (!compare.value?.material_pk) return
+  router.push({
+    path: '/assets',
+    query: { material_pk: compare.value.material_pk, search: compare.value.material_id || '' }
+  })
 }
 
 function codexSkillVersion() {

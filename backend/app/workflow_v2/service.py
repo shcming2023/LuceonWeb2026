@@ -125,35 +125,61 @@ def list_workflow_jobs(db: Session, *, user_id: str, material_pk: int | None = N
     return [workflow_job_detail(db, job.public_id) for job in jobs]
 
 
+def _workflow_job_summary(db: Session, job: WorkflowJob) -> dict:
+    stages = db.query(StageRun).filter(StageRun.workflow_job_id == job.id).order_by(StageRun.id.asc()).all()
+    current = [stage for stage in stages if stage.stage_key == job.current_stage_key]
+    current_stage = max(current, key=lambda stage: stage.attempt) if current else None
+    return {
+        "id": job.public_id,
+        "material_pk": str(job.material_pk),
+        "material_id": job.material_id,
+        "source_popo_manifest": {"bucket": job.source_popo_bucket, "object": job.source_popo_object},
+        "workflow_version": job.workflow_version,
+        "is_current_workflow": job.workflow_version == WORKFLOW_VERSION,
+        "status": job.status,
+        "current_stage_key": job.current_stage_key,
+        "current_stage_status": current_stage.status if current_stage else "",
+        "current_attempt": current_stage.attempt if current_stage else 0,
+        "stages": [{"key": stage.stage_key, "attempt": stage.attempt, "status": stage.status} for stage in stages],
+        "event_count": db.query(StageEvent).filter(StageEvent.workflow_job_id == job.id).count(),
+        "artifact_count": db.query(ArtifactVersion).filter(ArtifactVersion.workflow_job_id == job.id).count(),
+        "model_call_count": db.query(ModelCall).filter(ModelCall.workflow_job_id == job.id).count(),
+        "open_finding_count": db.query(QaFinding).filter(QaFinding.workflow_job_id == job.id, QaFinding.status == "open").count(),
+        "error": {"code": job.error_code, "message": job.error_message},
+        "created_at": job.created_at.isoformat() if job.created_at else None,
+        "updated_at": job.updated_at.isoformat() if job.updated_at else None,
+    }
+
+
 def list_workflow_job_summaries(db: Session, *, user_id: str, limit: int = 200) -> list[dict]:
     jobs = db.query(WorkflowJob).filter(WorkflowJob.user_id == user_id).order_by(WorkflowJob.created_at.desc()).limit(min(max(limit, 1), 500)).all()
-    rows = []
-    for job in jobs:
-        stages = db.query(StageRun).filter(StageRun.workflow_job_id == job.id).order_by(StageRun.id.asc()).all()
-        current = [stage for stage in stages if stage.stage_key == job.current_stage_key]
-        current_stage = max(current, key=lambda stage: stage.attempt) if current else None
-        rows.append(
-            {
-                "id": job.public_id,
-                "material_pk": str(job.material_pk),
-                "material_id": job.material_id,
-                "workflow_version": job.workflow_version,
-                "is_current_workflow": job.workflow_version == WORKFLOW_VERSION,
-                "status": job.status,
-                "current_stage_key": job.current_stage_key,
-                "current_stage_status": current_stage.status if current_stage else "",
-                "current_attempt": current_stage.attempt if current_stage else 0,
-                "stages": [{"key": stage.stage_key, "attempt": stage.attempt, "status": stage.status} for stage in stages],
-                "event_count": db.query(StageEvent).filter(StageEvent.workflow_job_id == job.id).count(),
-                "artifact_count": db.query(ArtifactVersion).filter(ArtifactVersion.workflow_job_id == job.id).count(),
-                "model_call_count": db.query(ModelCall).filter(ModelCall.workflow_job_id == job.id).count(),
-                "open_finding_count": db.query(QaFinding).filter(QaFinding.workflow_job_id == job.id, QaFinding.status == "open").count(),
-                "error": {"code": job.error_code, "message": job.error_message},
-                "created_at": job.created_at.isoformat() if job.created_at else None,
-                "updated_at": job.updated_at.isoformat() if job.updated_at else None,
-            }
-        )
-    return rows
+    return [_workflow_job_summary(db, job) for job in jobs]
+
+
+def list_workflow_job_summary_page(
+    db: Session,
+    *,
+    user_id: str,
+    page: int = 1,
+    page_size: int = 20,
+    status: str = "",
+) -> dict:
+    query = db.query(WorkflowJob).filter(WorkflowJob.user_id == user_id)
+    if status:
+        query = query.filter(WorkflowJob.status == status)
+    total = query.count()
+    jobs = (
+        query.order_by(WorkflowJob.created_at.desc(), WorkflowJob.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "jobs": [_workflow_job_summary(db, job) for job in jobs],
+    }
 
 
 def _artifact_dict(row: ArtifactVersion) -> dict:

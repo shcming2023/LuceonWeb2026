@@ -6,6 +6,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.models.base import Base
 from app.models.material import Material
+from app.models.material_metadata import MaterialMetadata
 from app.workflow_v2.contracts import (
     LEGACY_STAGE_CONTRACTS,
     LEGACY_WORKFLOW_VERSION,
@@ -101,6 +102,26 @@ def test_stage_contracts_are_explicit_and_ordered():
     assert all(row["input_schema"] and row["output_schema"] for row in rows)
     assert all(row["acceptance_gates"] for row in rows)
     assert all(row["version"] for row in rows)
+
+
+def test_failed_ai_metadata_does_not_block_worker_for_frozen_popo():
+    old_db, workflow_db, material = make_sessions()
+    old_db.add(
+        MaterialMetadata(
+            user_id="u1",
+            material_pk=material.id,
+            status="failed",
+            source="ai",
+            extraction_error="temporary metadata failure",
+        )
+    )
+    old_db.commit()
+
+    job, created = create_workflow_job(workflow_db, user_id="u1", material=material)
+
+    assert created is True
+    assert job.status == "queued"
+    assert job.source_popo_object == material.popo_manifest_object
 
 
 def test_legacy_jobs_keep_their_original_five_stage_contract():

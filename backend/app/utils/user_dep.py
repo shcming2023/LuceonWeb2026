@@ -18,6 +18,10 @@ def auth_disabled() -> bool:
     return os.getenv("LUCEON_AUTH_DISABLED", "true").lower() not in {"0", "false", "no", "off"}
 
 
+def public_raw_asset_downloads_allowed() -> bool:
+    return os.getenv("LUCEON_ALLOW_PUBLIC_RAW_ASSET_DOWNLOADS", "false").lower() in {"1", "true", "yes", "on"}
+
+
 def pipeline_admin_emails() -> set[str]:
     return {
         value.strip().lower()
@@ -113,6 +117,12 @@ async def get_user_id(
         db=db,
     )
     return str(current_user.id)
+
+
+async def get_asset_download_user_id(user_id: str = Depends(get_user_id)) -> str:
+    if auth_disabled() and not public_raw_asset_downloads_allowed():
+        raise HTTPException(status_code=403, detail="认证关闭时不开放完整数字资产下载")
+    return user_id
 
 
 async def require_pipeline_admin(current_user: User = Depends(get_current_user)) -> User:

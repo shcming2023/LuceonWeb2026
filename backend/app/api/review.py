@@ -44,7 +44,7 @@ from app.services.popo_to_raw import latest_successful_popo_to_raw_dry_run
 from app.services.review_pdf_preview import ensure_review_pdf_preview_isolated
 from app.services.source_map import normalize_source_map, synthesize_page_markdown, synthesize_page_markdown_from_content_list
 from app.utils.minio_client import minio_client
-from app.utils.user_dep import get_user_id
+from app.utils.user_dep import get_asset_download_user_id, get_user_id
 
 router = APIRouter()
 
@@ -1565,6 +1565,7 @@ def review_asset_latex_compare(
 
     return {
         "asset_id": str(asset.id),
+        "material_pk": str(material.id),
         "material_id": material.material_id if material else asset.material_id or "",
         "stage": artifact_stage,
         "output_id": str(selected_registry_row.id) if selected_registry_row and selected_registry_row.id else "",
@@ -1669,7 +1670,7 @@ def download_review_report(
 def review_asset_content(
     request: Request,
     asset_id: int,
-    user_id: str = Depends(get_user_id),
+    user_id: str = Depends(get_asset_download_user_id),
     db: Session = Depends(get_db),
 ):
     asset = _asset_or_404(asset_id, user_id, db)
@@ -1709,7 +1710,7 @@ def review_asset_content(
 def review_asset_review_pdf(
     request: Request,
     asset_id: int,
-    user_id: str = Depends(get_user_id),
+    user_id: str = Depends(get_asset_download_user_id),
     db: Session = Depends(get_db),
 ):
     asset = _asset_or_404(asset_id, user_id, db)
@@ -1899,7 +1900,7 @@ def review_asset_artifact(
     stage: str = Query("mineru", description="资源阶段：mineru、popo、elegantbook、latex、raw、clean 或 standard"),
     path: str = Query(..., description="相对资源路径，如 images/a.jpg"),
     output_id: int | None = Query(None, description="material_outputs.id；仅 elegantbook 阶段使用"),
-    user_id: str = Depends(get_user_id),
+    user_id: str = Depends(get_asset_download_user_id),
     db: Session = Depends(get_db),
 ):
     asset = _asset_or_404(asset_id, user_id, db)

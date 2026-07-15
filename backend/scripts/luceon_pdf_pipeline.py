@@ -3550,7 +3550,14 @@ def write_stage_error(
         },
     )
     cleanup = cleanup_stage_markers(s3, cfg, doc, run_id, (f"{stage}_submitted", f"{stage}_running")) if run_id else {}
-    return {"markers": markers, "active_marker_cleanup": cleanup}
+    return {
+        "material_id": str(doc.get("material_id") or ""),
+        "run_id": run_id,
+        "stage": stage,
+        "reason": reason,
+        "markers": markers,
+        "active_marker_cleanup": cleanup,
+    }
 
 
 def write_freeze_error(
@@ -3585,6 +3592,8 @@ def write_freeze_error(
     except Exception as cleanup_exc:
         cleanup = {"error": {"type": type(cleanup_exc).__name__, "message": str(cleanup_exc)}}
     return {
+        "material_id": str(doc.get("material_id") or ""),
+        "stage": stage,
         "reason": reason,
         "run_id": run_id,
         "error": {"type": type(exc).__name__, "message": str(exc)},

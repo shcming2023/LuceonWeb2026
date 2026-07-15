@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { ensureCurrentUser } from '@/utils/user'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -6,7 +7,7 @@ const router = createRouter({
     {
       path: '/login',
       name: 'Login',
-      redirect: '/files'
+      component: () => import('../views/Login.vue')
     },
     {
       path: '/',
@@ -16,16 +17,30 @@ const router = createRouter({
     {
       path: '/upload',
       name: 'Upload',
-      redirect: '/files'
+      redirect: '/assets'
     },
     {
       path: '/cms/tasks',
-      redirect: '/files'
+      redirect: '/assets'
     },
     {
       path: '/files',
-      name: 'Files',
-      component: () => import('../views/Files.vue')
+      redirect: '/assets'
+    },
+    {
+      path: '/assets',
+      name: 'PdfAssets',
+      component: () => import('../views/PdfAssets.vue')
+    },
+    {
+      path: '/pipeline/runs',
+      name: 'PipelineTasks',
+      component: () => import('../views/PipelineTasks.vue')
+    },
+    {
+      path: '/workflow/jobs',
+      name: 'RefinementTasks',
+      component: () => import('../views/RefinementTasks.vue')
     },
     {
       path: '/files/preview/:id',
@@ -34,6 +49,13 @@ const router = createRouter({
       props: route => ({
         fileId: route.params.id,
         page: Number(route.query.page) || 1
+      })
+    },
+    {
+      path: '/assets/preview/:id',
+      redirect: route => ({
+        path: `/files/preview/${String(route.params.id)}`,
+        query: route.query
       })
     },
     {
@@ -78,6 +100,20 @@ const router = createRouter({
       component: () => import('../views/Settings.vue')
     }
   ]
+})
+
+router.beforeEach(async (to) => {
+  if (to.name === 'Login') return true
+
+  try {
+    await ensureCurrentUser()
+    return true
+  } catch {
+    return {
+      path: '/login',
+      query: { redirect: to.fullPath }
+    }
+  }
 })
 
 export default router 

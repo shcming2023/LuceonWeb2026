@@ -9,13 +9,15 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 
+import fitz
 from fastapi import UploadFile
+from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models.material import Material, MaterialOutput, PipelineEvent, PipelineRun
 from app.models.review_asset import ReviewAsset
-from app.services.codex_skill_jobs import enqueue_new_pdf_codex_jobs
 from app.services.codex_elegantbook import (
     ELEGANTBOOK_BUCKET,
     list_all_codex_elegantbook_manifest_refs,
@@ -32,6 +34,16 @@ from app.services.luceon_review import (
     resolve_manifest,
 )
 from app.services.material_outputs import sync_material_outputs_for_material
+from app.services.material_task_queue import (
+    MaterialTaskError,
+    add_pipeline_run_items,
+    mark_pipeline_items_running,
+    material_snapshot,
+    pipeline_idempotency_key,
+    pipeline_run_items,
+    project_pipeline_result,
+    touch_pipeline_lease,
+)
 from app.services.runtime_settings import pipeline_env
 
 
@@ -537,6 +549,28 @@ async def upload_input_pdfs(files: list[UploadFile], user_id: str, db: Session) 
         data = await file.read()
         sha256 = hashlib.sha256(data).hexdigest()
         material_id = material_id_from_sha256(sha256)
+        try:
+            with fitz.open(stream=data, filetype="pdf") as document:
+                page_count = int(document.page_count)
+        except Exception:
+            results.append({"filename": filename, "status": "failed", "error_message": "PDF 文件无法读取"})
+            continue
+        existing = (
+            db.query(Material)
+            .filter(
+                Material.user_id == user_id,
+                Material.ignored.is_(False),
+                (Material.input_sha256 == sha256) | (Material.material_id == material_id),
+            )
+            .order_by(Material.id.asc())
+            .first()
+        )
+        if existing:
+            existing.input_sha256 = existing.input_sha256 or sha256
+            existing.size_bytes = existing.size_bytes or len(data)
+            existing.page_count = existing.page_count or page_count
+            results.append({"filename": filename, "status": "duplicate", "material": existing.to_dict()})
+            continue
         object_name = filename
         if object_exists(INPUT_BUCKET, object_name):
             stem = Path(filename).stem
@@ -560,6 +594,7 @@ async def upload_input_pdfs(files: list[UploadFile], user_id: str, db: Session) 
         )
         material.input_sha256 = sha256
         material.size_bytes = len(data)
+        material.page_count = page_count
         material.content_type = file.content_type or "application/pdf"
         material.promote_stage("input")
         asset = ensure_input_review_asset(db, user_id, INPUT_BUCKET, object_name)
@@ -570,7 +605,8 @@ async def upload_input_pdfs(files: list[UploadFile], user_id: str, db: Session) 
     db.commit()
     return {
         "total": len(results),
-        "success": sum(1 for item in results if item["status"] == "success"),
+        "success": sum(1 for item in results if item["status"] in {"success", "duplicate"}),
+        "duplicates": sum(1 for item in results if item["status"] == "duplicate"),
         "failed": sum(1 for item in results if item["status"] == "failed"),
         "files": results,
     }
@@ -885,15 +921,42 @@ def start_pipeline_run(
     input_object: str = "",
     material_ids: list[str] | tuple[str, ...] | None = None,
     input_objects: list[str] | tuple[str, ...] | None = None,
+    material_pks: list[int] | tuple[int, ...] | None = None,
 ) -> PipelineRun:
+    resolved_pks = [int(value) for value in material_pks or []]
+    if not resolved_pks:
+        requested_material_ids = _pipeline_target_values(material_id, material_ids)
+        requested_input_objects = _pipeline_target_values(input_object, input_objects)
+        target_query = db.query(Material).filter(Material.user_id == user_id, Material.ignored.is_(False))
+        if requested_material_ids or requested_input_objects:
+            filters = []
+            if requested_material_ids:
+                filters.append(Material.material_id.in_(requested_material_ids))
+            if requested_input_objects:
+                filters.append(Material.input_object.in_(requested_input_objects))
+            target_query = target_query.filter(or_(*filters))
+            resolved_pks = [int(row.id) for row in target_query.order_by(Material.id.asc()).all()]
+    if apply and not resolved_pks:
+        raise MaterialTaskError("正式解析必须提交明确的材料快照")
+    snapshot = material_snapshot(db, user_id, resolved_pks) if resolved_pks else []
+    if snapshot:
+        material_ids = [str(row["material_id"]) for row in snapshot]
+        input_objects = [str(row["input_object"]) for row in snapshot]
+        material_id = ""
+        input_object = ""
+        limit = len(snapshot)
+    mode = "apply" if apply else "dry_run"
+    idempotency_key = pipeline_idempotency_key(user_id, mode, snapshot) if snapshot else ""
     active = (
         db.query(PipelineRun)
-        .filter(PipelineRun.user_id == user_id, PipelineRun.status.in_(["queued", "running"]))
+        .filter(PipelineRun.status.in_(["queued", "running"]))
         .order_by(PipelineRun.created_at.desc())
         .first()
     )
     if active:
-        return active
+        if active.user_id == user_id and idempotency_key and active.idempotency_key == idempotency_key:
+            return active
+        raise MaterialTaskError("已有解析任务占用串行GPU队列")
     preflight = (
         run_pipeline_preflight(
             limit,
@@ -910,7 +973,9 @@ def start_pipeline_run(
     run = PipelineRun(
         user_id=user_id,
         status="queued",
-        mode="apply" if apply else "dry_run",
+        mode=mode,
+        idempotency_key=idempotency_key or None,
+        queue_slot="gpu",
         command=" ".join(
             pipeline_command(
                 apply=apply,
@@ -922,7 +987,17 @@ def start_pipeline_run(
             )
         ),
         current_stage="queued",
-        total=int(preflight.get("selected_count") or 0) if preflight else 0,
+        total=len(snapshot) or (int(preflight.get("selected_count") or 0) if preflight else 0),
+        request_json=json.dumps(
+            {
+                "apply": apply,
+                "limit": limit,
+                "snapshot": snapshot,
+                "material_ids": list(material_ids or []),
+                "input_objects": list(input_objects or []),
+            },
+            ensure_ascii=False,
+        ),
         summary_json=json.dumps(
             {
                 "preflight": preflight,
@@ -938,7 +1013,24 @@ def start_pipeline_run(
         created_at=datetime.utcnow(),
     )
     db.add(run)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        active = (
+            db.query(PipelineRun)
+            .filter(PipelineRun.status.in_(["queued", "running"]))
+            .order_by(PipelineRun.created_at.desc(), PipelineRun.id.desc())
+            .first()
+        )
+        if active and active.user_id == user_id and active.idempotency_key == idempotency_key:
+            return active
+        raise MaterialTaskError("已有解析任务占用串行GPU队列") from exc
+    if snapshot:
+        add_pipeline_run_items(db, run, snapshot)
+        db.query(Material).filter(Material.id.in_([row["material_pk"] for row in snapshot])).update(
+            {Material.pipeline_status: "queued"}, synchronize_session=False
+        )
     create_pipeline_event(
         db,
         run,
@@ -947,11 +1039,6 @@ def start_pipeline_run(
         payload={"preflight": preflight} if preflight else None,
     )
     db.commit()
-    threading.Thread(
-        target=run_pipeline_subprocess,
-        args=(run.id, apply, limit, material_id, input_object, material_ids, input_objects),
-        daemon=True,
-    ).start()
     return run
 
 
@@ -964,12 +1051,12 @@ def start_popo_resume_run(
 ) -> PipelineRun:
     active = (
         db.query(PipelineRun)
-        .filter(PipelineRun.user_id == user_id, PipelineRun.status.in_(["queued", "running"]))
+        .filter(PipelineRun.status.in_(["queued", "running"]))
         .order_by(PipelineRun.created_at.desc())
         .first()
     )
     if active:
-        return active
+        raise MaterialTaskError("已有解析任务占用串行GPU队列")
     preflight = run_popo_resume_preflight(material)
     if not preflight.get("ready"):
         raise PipelinePreflightError(preflight)
@@ -980,11 +1067,25 @@ def start_popo_resume_run(
         context["input_object"],
         apply=True,
     )
+    resume_idempotency_key = hashlib.sha256(
+        f"{user_id}:resume_popo:{material.id}:{context['mineru_manifest_object']}".encode("utf-8")
+    ).hexdigest()
     run = PipelineRun(
         user_id=user_id,
         status="queued",
         mode="resume_popo",
+        idempotency_key=resume_idempotency_key,
+        queue_slot="gpu",
         command=" ".join(command),
+        request_json=json.dumps(
+            {
+                "apply": True,
+                "limit": 1,
+                "snapshot": material_snapshot(db, user_id, [material.id]),
+                "resume_context": context,
+            },
+            ensure_ascii=False,
+        ),
         current_stage="queued",
         total=1,
         summary_json=json.dumps(
@@ -994,7 +1095,21 @@ def start_popo_resume_run(
         created_at=datetime.utcnow(),
     )
     db.add(run)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        active = (
+            db.query(PipelineRun)
+            .filter(PipelineRun.status.in_(["queued", "running"]))
+            .order_by(PipelineRun.created_at.desc(), PipelineRun.id.desc())
+            .first()
+        )
+        if active and active.user_id == user_id and active.idempotency_key == resume_idempotency_key:
+            return active
+        raise MaterialTaskError("已有解析任务占用串行GPU队列") from exc
+    add_pipeline_run_items(db, run, material_snapshot(db, user_id, [material.id]))
+    material.pipeline_status = "queued"
     create_pipeline_event(
         db,
         run,
@@ -1003,12 +1118,6 @@ def start_popo_resume_run(
         payload={"preflight": preflight, "requested_by_user_id": requested_by_user_id},
     )
     db.commit()
-    threading.Thread(
-        target=run_pipeline_subprocess,
-        args=(run.id, True, 1),
-        kwargs={"command_override": command, "start_message": "开始从冻结 MinerU 恢复 Popo"},
-        daemon=True,
-    ).start()
     return run
 
 
@@ -1022,17 +1131,36 @@ def run_pipeline_subprocess(
     input_objects: list[str] | tuple[str, ...] | None = None,
     command_override: list[str] | None = None,
     start_message: str = "开始执行现有 Luceon first-stage 调度脚本",
+    worker_id: str = "",
 ) -> None:
     db = SessionLocal()
+    heartbeat_stop = threading.Event()
+    heartbeat_thread = None
     try:
         run = db.query(PipelineRun).filter(PipelineRun.id == run_id).first()
         if not run:
             return
+        if worker_id and (run.status != "running" or run.worker_id != worker_id):
+            raise RuntimeError("解析任务未被当前worker可靠领取")
         run.status = "running"
-        run.started_at = datetime.utcnow()
+        run.started_at = run.started_at or datetime.utcnow()
         run.current_stage = "pipeline_command"
+        mark_pipeline_items_running(db, run)
         create_pipeline_event(db, run, start_message, stage="pipeline_command")
         db.commit()
+
+        if worker_id:
+            def heartbeat_loop() -> None:
+                while not heartbeat_stop.wait(10):
+                    heartbeat_db = SessionLocal()
+                    try:
+                        if not touch_pipeline_lease(heartbeat_db, run_id, worker_id):
+                            return
+                    finally:
+                        heartbeat_db.close()
+
+            heartbeat_thread = threading.Thread(target=heartbeat_loop, daemon=True)
+            heartbeat_thread.start()
 
         command = command_override or pipeline_command(
             apply=apply,
@@ -1064,7 +1192,17 @@ def run_pipeline_subprocess(
         if completed.returncode != 0 or error:
             summary.update({"stdout_tail": output, "stderr_tail": error})
         run.summary_json = json.dumps(summary, ensure_ascii=False)
-        run.status = outcome
+        if pipeline_run_items(db, run.id, run.user_id):
+            outcome = project_pipeline_result(db, run, payload)
+            counts = {
+                "total": run.total,
+                "processed": run.processed,
+                "success": run.success,
+                "failed": run.failed,
+            }
+        else:
+            run.status = outcome
+            run.queue_slot = None
         if outcome == "succeeded":
             run.status = "succeeded"
             run.current_stage = "finished"
@@ -1109,34 +1247,30 @@ def run_pipeline_subprocess(
                 level="warning",
                 payload={"error": str(sync_exc)},
             )
-        else:
-            if outcome in {"succeeded", "partial"}:
-                # The queue scanner only considers materials with a complete frozen Popo manifest.
-                # In a partial batch this preserves successful documents without advancing failed ones.
-                codex_queue = enqueue_new_pdf_codex_jobs(db, run.user_id, limit=limit)
-            else:
-                codex_queue = {}
-            if codex_queue.get("frozen"):
-                create_pipeline_event(
-                    db,
-                    run,
-                    "Worker V1 自动入队已冻结，等待 Worker V2.3 人工提交",
-                    stage="codex_v1_frozen",
-                    payload=codex_queue,
-                )
-            elif codex_queue:
-                create_pipeline_event(db, run, "已为新 Popo 产物创建 Codex 精修队列", stage="codex_queued", payload=codex_queue)
         db.commit()
     except Exception as exc:
         run = db.query(PipelineRun).filter(PipelineRun.id == run_id).first()
         if run:
             run.status = "failed"
+            run.queue_slot = None
             run.current_stage = "failed"
             run.finished_at = datetime.utcnow()
             run.error_message = str(exc)
+            run.worker_id = None
+            run.lease_expires_at = None
+            for item in pipeline_run_items(db, run.id, run.user_id):
+                if item.status not in {"succeeded", "failed", "cancelled"}:
+                    item.status = "failed"
+                    item.current_stage = "worker_failed"
+                    item.error_code = "pipeline_worker_exception"
+                    item.error_message = str(exc)
+                    item.finished_at = datetime.utcnow()
             create_pipeline_event(db, run, "解析任务异常退出", stage="failed", level="error", payload={"error": str(exc)})
             db.commit()
     finally:
+        heartbeat_stop.set()
+        if heartbeat_thread:
+            heartbeat_thread.join(timeout=2)
         db.close()
 
 

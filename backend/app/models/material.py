@@ -35,6 +35,7 @@ class Material(Base):
     input_object = Column(String(1024), nullable=True)
     input_sha256 = Column(String(128), nullable=True, index=True)
     size_bytes = Column(Integer, nullable=True)
+    page_count = Column(Integer, nullable=True)
     content_type = Column(String(128), nullable=True)
 
     stage_status = Column(String(32), nullable=False, default="input", index=True)
@@ -95,6 +96,7 @@ class Material(Base):
             "input_object": self.input_object or "",
             "input_sha256": self.input_sha256 or "",
             "size": self.size_bytes or 0,
+            "page_count": self.page_count or 0,
             "content_type": self.content_type or "",
             "stage_status": self.stage_status or "input",
             "pipeline_status": self.pipeline_status or "idle",
@@ -290,7 +292,10 @@ class PipelineRun(Base):
     user_id = Column(String(64), nullable=False, index=True)
     status = Column(String(32), nullable=False, default="idle", index=True)
     mode = Column(String(32), nullable=False, default="full")
+    idempotency_key = Column(String(128), nullable=True, index=True)
+    queue_slot = Column(String(32), nullable=True)
     command = Column(Text, nullable=True)
+    request_json = Column(Text, nullable=True)
     current_stage = Column(String(64), nullable=True)
     total = Column(Integer, nullable=False, default=0)
     processed = Column(Integer, nullable=False, default=0)
@@ -298,10 +303,16 @@ class PipelineRun(Base):
     failed = Column(Integer, nullable=False, default=0)
     summary_json = Column(Text, nullable=True)
     error_message = Column(Text, nullable=True)
+    worker_id = Column(String(128), nullable=True, index=True)
+    attempt_count = Column(Integer, nullable=False, default=0)
+    heartbeat_at = Column(DateTime, nullable=True)
+    lease_expires_at = Column(DateTime, nullable=True, index=True)
     started_at = Column(DateTime, nullable=True)
     finished_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    __table_args__ = (UniqueConstraint("queue_slot", name="uq_pipeline_runs_queue_slot"),)
 
     def summary(self) -> dict:
         if not self.summary_json:
@@ -312,18 +323,34 @@ class PipelineRun(Base):
             return {}
         return value if isinstance(value, dict) else {}
 
+    def request(self) -> dict:
+        if not self.request_json:
+            return {}
+        try:
+            value = json.loads(self.request_json)
+        except json.JSONDecodeError:
+            return {}
+        return value if isinstance(value, dict) else {}
+
     def to_dict(self) -> dict:
         return {
             "id": str(self.id),
             "status": self.status,
             "mode": self.mode,
+            "idempotency_key": self.idempotency_key or "",
+            "queue_slot": self.queue_slot or "",
             "current_stage": self.current_stage or "",
             "total": self.total,
             "processed": self.processed,
             "success": self.success,
             "failed": self.failed,
             "summary": self.summary(),
+            "request": self.request(),
             "error_message": self.error_message or "",
+            "worker_id": self.worker_id or "",
+            "attempt_count": self.attempt_count,
+            "heartbeat_at": self.heartbeat_at.isoformat() if self.heartbeat_at else None,
+            "lease_expires_at": self.lease_expires_at.isoformat() if self.lease_expires_at else None,
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "finished_at": self.finished_at.isoformat() if self.finished_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
@@ -358,4 +385,179 @@ class PipelineEvent(Base):
             "message": self.message,
             "payload": payload,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class PipelineRunItem(Base):
+    __tablename__ = "pipeline_run_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    run_id = Column(Integer, nullable=False, index=True)
+    user_id = Column(String(64), nullable=False, index=True)
+    material_pk = Column(Integer, nullable=False, index=True)
+    material_id = Column(String(128), nullable=False, index=True)
+    input_bucket = Column(String(128), nullable=False)
+    input_object = Column(String(1024), nullable=False)
+    input_sha256 = Column(String(128), nullable=True, index=True)
+    filename = Column(String(512), nullable=False)
+    status = Column(String(32), nullable=False, default="queued", index=True)
+    current_stage = Column(String(64), nullable=False, default="queued", index=True)
+    mineru_run_id = Column(String(128), nullable=True, index=True)
+    mineru_manifest_bucket = Column(String(128), nullable=True)
+    mineru_manifest_object = Column(String(1024), nullable=True)
+    popo_run_id = Column(String(128), nullable=True, index=True)
+    popo_manifest_bucket = Column(String(128), nullable=True)
+    popo_manifest_object = Column(String(1024), nullable=True)
+    error_code = Column(String(128), nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("run_id", "material_pk", name="uq_pipeline_run_item_material"),
+        Index("idx_pipeline_run_item_status", "run_id", "status"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": str(self.id),
+            "run_id": str(self.run_id),
+            "material_pk": str(self.material_pk),
+            "material_id": self.material_id,
+            "filename": self.filename,
+            "input": {
+                "bucket": self.input_bucket,
+                "object": self.input_object,
+                "sha256": self.input_sha256 or "",
+            },
+            "status": self.status,
+            "current_stage": self.current_stage,
+            "mineru_run_id": self.mineru_run_id or "",
+            "mineru_manifest": Material._ref(self.mineru_manifest_bucket, self.mineru_manifest_object),
+            "popo_run_id": self.popo_run_id or "",
+            "popo_manifest": Material._ref(self.popo_manifest_bucket, self.popo_manifest_object),
+            "error_code": self.error_code or "",
+            "error_message": self.error_message or "",
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "finished_at": self.finished_at.isoformat() if self.finished_at else None,
+        }
+
+
+class PipelineStageAttempt(Base):
+    __tablename__ = "pipeline_stage_attempts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    run_item_id = Column(Integer, nullable=False, index=True)
+    user_id = Column(String(64), nullable=False, index=True)
+    stage = Column(String(64), nullable=False, index=True)
+    attempt = Column(Integer, nullable=False, default=1)
+    status = Column(String(32), nullable=False, default="queued", index=True)
+    external_batch_id = Column(String(128), nullable=True, index=True)
+    external_run_id = Column(String(128), nullable=True, index=True)
+    input_manifest_bucket = Column(String(128), nullable=True)
+    input_manifest_object = Column(String(1024), nullable=True)
+    output_manifest_bucket = Column(String(128), nullable=True)
+    output_manifest_object = Column(String(1024), nullable=True)
+    error_code = Column(String(128), nullable=True)
+    error_message = Column(Text, nullable=True)
+    evidence_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("run_item_id", "stage", "attempt", name="uq_pipeline_stage_attempt"),
+    )
+
+    def evidence(self) -> dict:
+        if not self.evidence_json:
+            return {}
+        try:
+            value = json.loads(self.evidence_json)
+        except json.JSONDecodeError:
+            return {}
+        return value if isinstance(value, dict) else {}
+
+    def to_dict(self) -> dict:
+        return {
+            "id": str(self.id),
+            "run_item_id": str(self.run_item_id),
+            "stage": self.stage,
+            "attempt": self.attempt,
+            "status": self.status,
+            "external_batch_id": self.external_batch_id or "",
+            "external_run_id": self.external_run_id or "",
+            "input_manifest": Material._ref(self.input_manifest_bucket, self.input_manifest_object),
+            "output_manifest": Material._ref(self.output_manifest_bucket, self.output_manifest_object),
+            "error_code": self.error_code or "",
+            "error_message": self.error_message or "",
+            "evidence": self.evidence(),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "finished_at": self.finished_at.isoformat() if self.finished_at else None,
+        }
+
+
+class MetadataJob(Base):
+    __tablename__ = "metadata_jobs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(64), nullable=False, index=True)
+    material_pk = Column(Integer, nullable=False, index=True)
+    material_id = Column(String(128), nullable=False, index=True)
+    status = Column(String(32), nullable=False, default="queued", index=True)
+    idempotency_key = Column(String(128), nullable=False, index=True)
+    source_manifest_bucket = Column(String(128), nullable=True)
+    source_manifest_object = Column(String(1024), nullable=True)
+    source_manifest_sha256 = Column(String(128), nullable=True, index=True)
+    model = Column(String(128), nullable=True)
+    prompt_version = Column(String(128), nullable=False, default="material-metadata-v1")
+    force = Column(Boolean, nullable=False, default=False)
+    attempt_count = Column(Integer, nullable=False, default=0)
+    worker_id = Column(String(128), nullable=True, index=True)
+    heartbeat_at = Column(DateTime, nullable=True)
+    lease_expires_at = Column(DateTime, nullable=True, index=True)
+    error_message = Column(Text, nullable=True)
+    result_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "idempotency_key", name="uq_metadata_job_idempotency"),
+    )
+
+    def result(self) -> dict:
+        if not self.result_json:
+            return {}
+        try:
+            value = json.loads(self.result_json)
+        except json.JSONDecodeError:
+            return {}
+        return value if isinstance(value, dict) else {}
+
+    def to_dict(self) -> dict:
+        return {
+            "id": str(self.id),
+            "material_pk": str(self.material_pk),
+            "material_id": self.material_id,
+            "status": self.status,
+            "idempotency_key": self.idempotency_key,
+            "source_manifest": Material._ref(self.source_manifest_bucket, self.source_manifest_object),
+            "source_manifest_sha256": self.source_manifest_sha256 or "",
+            "model": self.model or "",
+            "prompt_version": self.prompt_version,
+            "force": bool(self.force),
+            "attempt_count": self.attempt_count,
+            "worker_id": self.worker_id or "",
+            "error_message": self.error_message or "",
+            "result": self.result(),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "finished_at": self.finished_at.isoformat() if self.finished_at else None,
         }

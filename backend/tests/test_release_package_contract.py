@@ -13,9 +13,9 @@ def test_production_compose_template_has_no_build_or_mutable_image_tags():
     assert ":local" not in text
     assert "/Users/concm" not in text
     assert "~/.codex" not in text
-    assert text.count("image:") == 7
+    assert text.count("image:") == 8
     assert text.count("@sha256:") == 5
-    assert text.count("__BACKEND_IMAGE__") == 2
+    assert text.count("__BACKEND_IMAGE__") == 3
     assert text.count("__FRONTEND_IMAGE__") == 1
 
 
@@ -24,6 +24,11 @@ def test_worker_does_not_inherit_backend_http_healthcheck():
     worker = text.split("  workflow-v2-worker:\n", 1)[1].split("\n  frontend:\n", 1)[0]
 
     assert "healthcheck:\n      disable: true" in worker
+    assert "material-task-worker:" in worker
+
+    local_text = (ROOT / "docker-compose.luceon-review.yml").read_text()
+    local_workers = local_text.split("  workflow-v2-worker:\n", 1)[1].split("\n  redis:\n", 1)[0]
+    assert local_workers.count("healthcheck:\n      disable: true") == 2
 
 
 def test_compiler_uses_current_overleaf_data_path():

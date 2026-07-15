@@ -113,6 +113,28 @@ services:
         condition: service_healthy
     networks: [luceon]
 
+  material-task-worker:
+    image: __BACKEND_IMAGE__
+    restart: unless-stopped
+    command: ["python", "scripts/material_task_worker.py", "--loop", "--worker-id", "material-task-production"]
+    healthcheck:
+      disable: true
+    env_file: [.env.production]
+    environment:
+      TZ: Asia/Shanghai
+      DATABASE_URL: sqlite:////data/mineru.db
+      LUCEON_RUNTIME_CONFIG: /data/runtime_config.json
+      LUCEON_PIPELINE_WORK_ROOT: /data/pipeline-work
+      LUCEON_PIPELINE_SCRIPT: /app/scripts/luceon_pdf_pipeline.py
+      LUCEON_PIPELINE_WORKDIR: /app/scripts
+    volumes:
+      - ./state/backend:/data
+      - ./state/backups:/backups
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [luceon]
+
   frontend:
     image: __FRONTEND_IMAGE__
     restart: unless-stopped

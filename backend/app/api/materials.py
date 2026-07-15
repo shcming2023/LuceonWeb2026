@@ -4,14 +4,22 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.material import CodexSkillJob, Material, PipelineEvent, PipelineRun
+from app.models.material import (
+    CodexSkillJob,
+    Material,
+    MaterialOutput,
+    MetadataJob,
+    PipelineEvent,
+    PipelineRun,
+    PipelineRunItem,
+)
 from app.models.material_metadata import MaterialMetadata
 from app.models.user import User
 from app.services.clean_to_standard import CleanToStandardPreflightError, clean_to_standard_preflight, start_clean_to_standard_run
@@ -47,7 +55,25 @@ from app.services.material_metadata import (
     metadata_to_dict,
     upsert_manual_metadata,
 )
+from app.services.material_artifacts import (
+    ArtifactNotFoundError,
+    material_artifact_catalog,
+    open_artifact_stream,
+    parse_single_range,
+    resolve_material_artifact,
+    stream_response_body,
+)
+from app.services.luceon_review import ObjectRef
 from app.services.material_outputs import sync_material_outputs_for_material
+from app.services.material_task_queue import (
+    MaterialTaskError,
+    enqueue_metadata_job,
+    list_metadata_jobs,
+    list_pipeline_runs,
+    pipeline_attempts_for_items,
+    pipeline_run_detail,
+    retry_metadata_job,
+)
 from app.services.popo_to_raw import (
     PopoToRawPreflightError,
     PopoToRawPublishError,
@@ -60,7 +86,9 @@ from app.services.popo_to_raw_audit import audit_popo_to_raw_run
 from app.services.raw_to_clean import RawToCleanPreflightError, raw_to_clean_preflight, start_raw_to_clean_run
 from app.services.worker_v1_policy import v1_batch_enabled, v1_policy
 from app.utils.minio_client import get_presigned_url
-from app.utils.user_dep import get_user_id, require_pipeline_admin
+from app.utils.user_dep import get_asset_download_user_id, get_user_id, require_pipeline_admin
+from app.workflow_v2.database import workflow_session_factory
+from app.workflow_v2.service import list_workflow_jobs
 
 router = APIRouter()
 RUN_STAMP_PATTERN = re.compile(r"(20\d{12})")
@@ -136,6 +164,7 @@ class PipelineStartRequest(BaseModel):
     input_object: str = ""
     material_ids: list[str] = Field(default_factory=list)
     input_objects: list[str] = Field(default_factory=list)
+    material_pks: list[int] = Field(default_factory=list)
 
 
 class PipelinePreflightRequest(BaseModel):
@@ -144,6 +173,7 @@ class PipelinePreflightRequest(BaseModel):
     input_object: str = ""
     material_ids: list[str] = Field(default_factory=list)
     input_objects: list[str] = Field(default_factory=list)
+    material_pks: list[int] = Field(default_factory=list)
 
 
 class PopoToRawStartRequest(BaseModel):
@@ -361,6 +391,121 @@ def extract_material_metadata(
         raise HTTPException(status_code=409, detail=f"元数据提取失败：{exc}")
 
 
+@router.post("/materials/{material_pk}/metadata/jobs", status_code=202)
+def create_material_metadata_job(
+    material_pk: int,
+    payload: MaterialMetadataExtractRequest,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    material = _material_or_404(material_pk, user_id, db)
+    try:
+        job = enqueue_metadata_job(db, user_id, material, force=payload.force)
+        if not job:
+            raise MaterialTaskError("人工元数据已经确认，无需后台提取")
+        db.commit()
+        db.refresh(job)
+        return job.to_dict()
+    except MaterialTaskError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc))
+
+
+@router.get("/materials/{material_pk}/metadata/jobs")
+def get_material_metadata_jobs(
+    material_pk: int,
+    limit: int = Query(50, ge=1, le=200),
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    _material_or_404(material_pk, user_id, db)
+    return {"jobs": [job.to_dict() for job in list_metadata_jobs(db, user_id, material_pk=material_pk, limit=limit)]}
+
+
+@router.post("/materials/{material_pk}/metadata/jobs/{job_id}/retry", status_code=202)
+def retry_material_metadata_job(
+    material_pk: int,
+    job_id: int,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    _material_or_404(material_pk, user_id, db)
+    try:
+        job = retry_metadata_job(db, user_id, material_pk, job_id)
+        db.commit()
+        db.refresh(job)
+        return job.to_dict()
+    except MaterialTaskError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc))
+
+
+@router.get("/materials/{material_pk}/lineage")
+def get_material_lineage(
+    material_pk: int,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    material = _material_or_404(material_pk, user_id, db)
+    items = (
+        db.query(PipelineRunItem)
+        .filter(PipelineRunItem.user_id == user_id, PipelineRunItem.material_pk == material.id)
+        .order_by(PipelineRunItem.created_at.desc(), PipelineRunItem.id.desc())
+        .limit(100)
+        .all()
+    )
+    attempts = pipeline_attempts_for_items(db, items)
+    pipeline_items = []
+    for item in items:
+        run = db.query(PipelineRun).filter(PipelineRun.id == item.run_id, PipelineRun.user_id == user_id).first()
+        pipeline_items.append(
+            {
+                **item.to_dict(),
+                "run": run.to_dict() if run else None,
+                "attempts": attempts.get(item.id, []),
+            }
+        )
+
+    metadata_jobs = (
+        db.query(MetadataJob)
+        .filter(MetadataJob.user_id == user_id, MetadataJob.material_pk == material.id)
+        .order_by(MetadataJob.created_at.desc(), MetadataJob.id.desc())
+        .limit(100)
+        .all()
+    )
+    outputs = (
+        db.query(MaterialOutput)
+        .filter(MaterialOutput.user_id == user_id, MaterialOutput.material_pk == material.id)
+        .order_by(MaterialOutput.created_at.desc(), MaterialOutput.id.desc())
+        .limit(100)
+        .all()
+    )
+
+    workflow_status = {"available": True, "error": ""}
+    workflow_jobs: list[dict] = []
+    try:
+        workflow_db = workflow_session_factory()()
+        try:
+            workflow_jobs = list_workflow_jobs(workflow_db, user_id=user_id, material_pk=material.id, limit=100)
+        finally:
+            workflow_db.close()
+    except Exception as exc:
+        workflow_status = {"available": False, "error": str(exc)}
+
+    return {
+        "material": material.to_dict(),
+        "pipeline_items": pipeline_items,
+        "metadata_jobs": [job.to_dict() for job in metadata_jobs],
+        "workflow_jobs": workflow_jobs,
+        "workflow_status": workflow_status,
+        "outputs": [output.to_dict() for output in outputs],
+        "review": {
+            "asset_id": str(material.review_asset_id) if material.review_asset_id else "",
+            "available": bool(material.review_asset_id),
+        },
+    }
+
+
 @router.get("/materials/summary")
 def get_material_summary(
     user_id: str = Depends(get_user_id),
@@ -413,10 +558,33 @@ def pipeline_status(
             .all()
         )
     return {
-        "run": run.to_dict() if run else None,
+        "run": pipeline_run_detail(db, run) if run else None,
         "events": [event.to_dict() for event in events],
         "audit": audit_popo_to_raw_run(db, run) if run and run.mode == "popo2raw" else None,
     }
+
+
+@router.get("/materials/pipeline/runs")
+def get_pipeline_runs(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    status: str = Query(""),
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    return list_pipeline_runs(db, user_id, page=page, page_size=page_size, status=status)
+
+
+@router.get("/materials/pipeline/runs/{run_id}")
+def get_pipeline_run(
+    run_id: int,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
+):
+    run = db.query(PipelineRun).filter(PipelineRun.id == run_id, PipelineRun.user_id == user_id).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="解析任务不存在")
+    return pipeline_run_detail(db, run)
 
 
 @router.get("/materials/pipeline/runs/{run_id}/artifact")
@@ -586,16 +754,31 @@ def retry_material_codex_job(
 def pipeline_preflight(
     payload: PipelinePreflightRequest,
     user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db),
 ):
-    _ = user_id
     try:
-        return run_pipeline_preflight(
+        if payload.material_pks:
+            from app.services.material_task_queue import material_snapshot
+
+            snapshot = material_snapshot(db, user_id, payload.material_pks)
+            payload.material_ids = [str(row["material_id"]) for row in snapshot]
+            payload.input_objects = [str(row["input_object"]) for row in snapshot]
+            payload.material_id = ""
+            payload.input_object = ""
+            payload.limit = len(snapshot)
+        else:
+            snapshot = []
+        result = run_pipeline_preflight(
             payload.limit,
             material_id=payload.material_id,
             input_object=payload.input_object,
             material_ids=payload.material_ids,
             input_objects=payload.input_objects,
         )
+        result["snapshot"] = snapshot
+        return result
+    except MaterialTaskError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"解析预检失败: {exc}")
 
@@ -616,14 +799,18 @@ def start_pipeline(
             input_object=payload.input_object,
             material_ids=payload.material_ids,
             input_objects=payload.input_objects,
+            material_pks=payload.material_pks,
         )
     except PipelinePreflightError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail={"message": "综合预检未通过", "preflight": exc.preflight})
+    except MaterialTaskError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc))
     except Exception as exc:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"启动解析任务失败: {exc}")
-    return run.to_dict()
+    return pipeline_run_detail(db, run)
 
 
 @router.post("/materials/{material_pk}/pipeline/resume-popo/preflight")
@@ -652,10 +839,13 @@ def start_resume_popo(
     except PipelinePreflightError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail={"message": "Popo 恢复预检未通过", "preflight": exc.preflight})
+    except MaterialTaskError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc))
     except Exception as exc:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"启动 Popo 恢复失败: {exc}")
-    return run.to_dict()
+    return pipeline_run_detail(db, run)
 
 
 @router.post("/materials/{material_pk}/popo2latex/preflight")
@@ -774,7 +964,7 @@ def material_detail(
 @router.get("/materials/{material_pk}/download_url")
 def material_download_url(
     material_pk: int,
-    user_id: str = Depends(get_user_id),
+    user_id: str = Depends(get_asset_download_user_id),
     db: Session = Depends(get_db),
 ):
     material = _material_or_404(material_pk, user_id, db)
@@ -785,40 +975,71 @@ def material_download_url(
 
 @router.get("/materials/{material_pk}/content")
 def material_content(
+    request: Request,
     material_pk: int,
-    user_id: str = Depends(get_user_id),
+    user_id: str = Depends(get_asset_download_user_id),
+    db: Session = Depends(get_db),
+):
+    return material_artifact_download(request, material_pk, "source", user_id, db)
+
+
+@router.get("/materials/{material_pk}/artifacts")
+def material_artifacts(
+    material_pk: int,
+    user_id: str = Depends(get_asset_download_user_id),
     db: Session = Depends(get_db),
 ):
     material = _material_or_404(material_pk, user_id, db)
-    if not material.input_object:
-        raise HTTPException(status_code=404, detail="源 PDF 不存在")
+    return material_artifact_catalog(db, user_id, material)
 
+
+@router.get("/materials/{material_pk}/artifacts/{artifact_id}/download")
+def material_artifact_download(
+    request: Request,
+    material_pk: int,
+    artifact_id: str,
+    user_id: str = Depends(get_asset_download_user_id),
+    db: Session = Depends(get_db),
+):
+    material = _material_or_404(material_pk, user_id, db)
     try:
-        response = minio_client.get_object(material.input_bucket or INPUT_BUCKET, material.input_object)
+        artifact = resolve_material_artifact(db, user_id, material, artifact_id)
+    except ArtifactNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    ref_value = artifact.get("_ref") if isinstance(artifact.get("_ref"), dict) else {}
+    ref = ObjectRef(str(ref_value.get("bucket") or ""), str(ref_value.get("object") or ""))
+    size = int(artifact.get("size_bytes") or 0)
+    if not ref.bucket or not ref.object or size <= 0:
+        raise HTTPException(status_code=404, detail="数字资产对象不存在")
+    try:
+        byte_range = parse_single_range(request.headers.get("range"), size)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=416, detail="Range 无效", headers={"Content-Range": f"bytes */{size}"})
+    offset = byte_range[0] if byte_range else 0
+    length = byte_range[1] - byte_range[0] + 1 if byte_range else size
+    try:
+        response = open_artifact_stream(ref, offset=offset, length=length)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"读取源 PDF 失败: {exc}")
-
-    def iter_file():
-        try:
-            stream = getattr(response, "stream", None)
-            if stream:
-                yield from stream(32 * 1024)
-            else:
-                yield response.read()
-        finally:
-            close = getattr(response, "close", None)
-            if close:
-                close()
-            release_conn = getattr(response, "release_conn", None)
-            if release_conn:
-                release_conn()
-
-    media_type = mimetypes.guess_type(material.filename)[0] or "application/pdf"
-    encoded_filename = quote(material.filename)
+        raise HTTPException(status_code=404, detail=f"数字资产读取失败: {exc}")
+    encoded_filename = quote(str(artifact.get("filename") or "artifact.bin"))
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(length),
+        "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+    }
+    if artifact.get("etag"):
+        headers["ETag"] = f'"{artifact["etag"]}"'
+    if artifact.get("sha256"):
+        headers["X-Content-SHA256"] = str(artifact["sha256"])
+    status_code = 200
+    if byte_range:
+        status_code = 206
+        headers["Content-Range"] = f"bytes {byte_range[0]}-{byte_range[1]}/{size}"
     return StreamingResponse(
-        iter_file(),
-        media_type=media_type,
-        headers={"Content-Disposition": f"inline; filename*=UTF-8''{encoded_filename}"},
+        stream_response_body(response),
+        status_code=status_code,
+        media_type=str(artifact.get("content_type") or "application/octet-stream"),
+        headers=headers,
     )
 
 

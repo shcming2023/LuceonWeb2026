@@ -12,12 +12,19 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.material import Material
+from app.models.material import Material, MaterialOutput
 from app.services.luceon_review import read_object
-from app.utils.user_dep import get_user_id
+from app.utils.user_dep import get_asset_download_user_id, get_user_id
 from app.workflow_v2.contracts import stage_contracts
 from app.workflow_v2.database import get_workflow_db, workflow_database_health
-from app.workflow_v2.service import WORKFLOW_VERSION, create_workflow_job, list_workflow_job_summaries, list_workflow_jobs, workflow_job_detail
+from app.workflow_v2.service import (
+    WORKFLOW_VERSION,
+    create_workflow_job,
+    list_workflow_job_summaries,
+    list_workflow_job_summary_page,
+    list_workflow_jobs,
+    workflow_job_detail,
+)
 from app.workflow_v2.queue import enqueue, enqueue_codex_repair, worker_health
 from app.workflow_v2.runner import SUPPORTED_EXECUTORS
 from app.workflow_v2.golden_set import GOLDEN_COHORT_VERSION, list_golden_set
@@ -32,6 +39,12 @@ router = APIRouter(prefix="/workflow-v2")
 
 
 class WorkflowJobCreateRequest(BaseModel):
+    priority: int = Field(default=100, ge=0, le=1000)
+    payload: dict = Field(default_factory=dict)
+
+
+class WorkflowJobBatchCreateRequest(BaseModel):
+    material_pks: list[int] = Field(min_length=1, max_length=100)
     priority: int = Field(default=100, ge=0, le=1000)
     payload: dict = Field(default_factory=dict)
 
@@ -107,16 +120,89 @@ def create_job(
     return {"created": created, "job": detail}
 
 
+@router.post("/jobs/batch")
+def create_jobs_batch(
+    payload: WorkflowJobBatchCreateRequest,
+    user_id: str = Depends(get_user_id),
+    material_db: Session = Depends(get_db),
+    workflow_db: Session = Depends(workflow_db_dependency),
+):
+    ordered_ids = list(dict.fromkeys(int(value) for value in payload.material_pks))
+    materials = (
+        material_db.query(Material)
+        .filter(Material.user_id == user_id, Material.id.in_(ordered_ids), Material.ignored.is_(False))
+        .all()
+    )
+    by_id = {int(row.id): row for row in materials}
+    results = []
+    for material_pk in ordered_ids:
+        material = by_id.get(material_pk)
+        if not material:
+            results.append({"material_pk": str(material_pk), "status": "failed", "error": "材料不存在或无权访问"})
+            continue
+        try:
+            job, created = create_workflow_job(
+                workflow_db,
+                user_id=user_id,
+                material=material,
+                payload={**payload.payload, "source": payload.payload.get("source") or "refinement_tasks_batch"},
+                priority=payload.priority,
+            )
+            workflow_db.commit()
+            results.append(
+                {
+                    "material_pk": str(material_pk),
+                    "material_id": material.material_id or "",
+                    "status": "created" if created else "existing",
+                    "job": workflow_job_detail(workflow_db, job.public_id),
+                }
+            )
+        except ValueError as exc:
+            workflow_db.rollback()
+            results.append(
+                {
+                    "material_pk": str(material_pk),
+                    "material_id": material.material_id or "",
+                    "status": "failed",
+                    "error": str(exc),
+                }
+            )
+    return {
+        "total": len(results),
+        "created": sum(1 for row in results if row["status"] == "created"),
+        "existing": sum(1 for row in results if row["status"] == "existing"),
+        "failed": sum(1 for row in results if row["status"] == "failed"),
+        "results": results,
+    }
+
+
 @router.get("/jobs/{public_id}")
 def get_job(
     public_id: str,
     user_id: str = Depends(get_user_id),
+    material_db: Session = Depends(get_db),
     workflow_db: Session = Depends(workflow_db_dependency),
 ):
     detail = workflow_job_detail(workflow_db, public_id)
     if not detail or detail["user_id"] != user_id:
         raise HTTPException(status_code=404, detail="Worker V2.3 任务不存在")
-    return detail
+    material = (
+        material_db.query(Material)
+        .filter(Material.user_id == user_id, Material.id == int(detail["material_pk"]))
+        .first()
+    )
+    outputs = (
+        material_db.query(MaterialOutput)
+        .filter(MaterialOutput.user_id == user_id, MaterialOutput.material_pk == int(detail["material_pk"]))
+        .order_by(MaterialOutput.created_at.desc(), MaterialOutput.id.desc())
+        .all()
+    )
+    return {
+        **detail,
+        "filename": material.filename if material else "",
+        "review_asset_id": str(material.review_asset_id or "") if material else "",
+        "outputs": [output.to_dict() for output in outputs],
+    }
 
 
 def _review_candidate_artifact(workflow_db: Session, job: WorkflowJob) -> ArtifactVersion:
@@ -234,7 +320,7 @@ def get_review_candidate(
 def download_review_candidate_file(
     public_id: str,
     kind: str,
-    user_id: str = Depends(get_user_id),
+    user_id: str = Depends(get_asset_download_user_id),
     workflow_db: Session = Depends(workflow_db_dependency),
 ):
     job = workflow_db.query(WorkflowJob).filter(
@@ -361,11 +447,66 @@ def get_jobs(
 
 @router.get("/job-summaries")
 def get_job_summaries(
-    limit: int = 200,
+    limit: int | None = None,
+    page: int = 1,
+    page_size: int = 20,
+    status: str = "",
     user_id: str = Depends(get_user_id),
+    material_db: Session = Depends(get_db),
     workflow_db: Session = Depends(workflow_db_dependency),
 ):
-    return {"jobs": list_workflow_job_summaries(workflow_db, user_id=user_id, limit=limit)}
+    def enrich(payload: dict) -> dict:
+        jobs = payload.get("jobs") or []
+        material_pks = [int(job["material_pk"]) for job in jobs if str(job.get("material_pk") or "").isdigit()]
+        materials = (
+            material_db.query(Material)
+            .filter(Material.user_id == user_id, Material.id.in_(material_pks))
+            .all()
+            if material_pks
+            else []
+        )
+        by_id = {str(row.id): row for row in materials}
+        output_rows = (
+            material_db.query(MaterialOutput)
+            .filter(MaterialOutput.user_id == user_id, MaterialOutput.material_pk.in_(material_pks))
+            .order_by(MaterialOutput.created_at.desc(), MaterialOutput.id.desc())
+            .all()
+            if material_pks
+            else []
+        )
+        outputs_by_material: dict[str, list[dict]] = {}
+        for output in output_rows:
+            outputs_by_material.setdefault(str(output.material_pk), []).append(output.to_dict())
+        payload["jobs"] = [
+            {
+                **job,
+                "filename": by_id[job["material_pk"]].filename if job.get("material_pk") in by_id else "",
+                "review_asset_id": str(by_id[job["material_pk"]].review_asset_id or "") if job.get("material_pk") in by_id else "",
+                "outputs": outputs_by_material.get(job.get("material_pk") or "", []),
+                "current_output_id": next(
+                    (
+                        output["id"]
+                        for output in outputs_by_material.get(job.get("material_pk") or "", [])
+                        if output.get("is_current") and output.get("quality_status") == "passed"
+                    ),
+                    "",
+                ),
+            }
+            for job in jobs
+        ]
+        return payload
+
+    if limit is not None:
+        return enrich({"jobs": list_workflow_job_summaries(workflow_db, user_id=user_id, limit=limit)})
+    return enrich(
+        list_workflow_job_summary_page(
+            workflow_db,
+            user_id=user_id,
+            page=max(page, 1),
+            page_size=min(max(page_size, 1), 100),
+            status=status,
+        )
+    )
 
 
 @router.post("/jobs/{public_id}/cancel")

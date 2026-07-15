@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Document, HomeFilled, Setting, View } from '@element-plus/icons-vue'
+import { Collection, Document, HomeFilled, MagicStick, Setting, View } from '@element-plus/icons-vue'
 import { useRoute } from 'vue-router'
 import { computed } from 'vue'
 
@@ -7,28 +7,34 @@ const route = useRoute()
 
 const menuItems = [
   { icon: HomeFilled, path: '/', label: '工作概览' },
-  { icon: Document, path: '/files', label: '材料生产' },
-  { icon: View, path: '/review/compare', label: '比对审查' },
+  { icon: Document, path: '/assets', label: 'PDF 资产' },
+  { icon: Collection, path: '/pipeline/runs', label: '解析任务' },
+  { icon: MagicStick, path: '/workflow/jobs', label: '精修任务' },
+  { icon: View, path: '/review/compare', label: '比对审阅' },
   { icon: Setting, path: '/settings', label: '运行设置' }
 ]
 
 const activeMenu = computed(() => {
   const path = route.path
   if (path === '/') return '/'
-  if (path.startsWith('/files/preview')) return '/files'
+  if (path.startsWith('/files/preview') || path.startsWith('/assets/preview')) return '/assets'
   if (path.startsWith('/review/preview')) return '/review/compare'
   if (path.startsWith('/review') || path === '/review') return '/review/compare'
   if (path.startsWith('/settings')) return '/settings'
-  if (path.startsWith('/files')) return '/files'
+  if (path.startsWith('/assets') || path.startsWith('/files')) return '/assets'
+  if (path.startsWith('/pipeline')) return '/pipeline/runs'
+  if (path.startsWith('/workflow')) return '/workflow/jobs'
   return menuItems.find(item => path === item.path)?.path || path
 })
 
 const immersiveView = computed(() => route.name === 'FilePreview' || route.name === 'ReviewPreview')
-const workbenchView = computed(() => route.path === '/files' || route.path === '/review/compare')
+const workbenchView = computed(() => ['/assets', '/pipeline/runs', '/workflow/jobs', '/review/compare'].includes(route.path))
+const authView = computed(() => route.name === 'Login')
 </script>
 
 <template>
-  <div class="app-layout">
+  <router-view v-if="authView" />
+  <div v-else class="app-layout">
     <aside :class="['app-sidebar', { 'app-sidebar-compact': immersiveView }]">
       <router-link class="brand" to="/" aria-label="Luceon 首页">
         <span class="brand-mark">
