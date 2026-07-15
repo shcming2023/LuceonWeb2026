@@ -15,6 +15,7 @@ Formal target-host deployment remains gated by a writable external volume, targe
 - Every runtime settings, status, probe, MinIO maintenance, and backup-job endpoint requires `runtime_admin`.
 - Runtime and pipeline administrator capability is derived from the explicit email allowlist.
 - Public `/settings` without a session redirects to `/login?redirect=/settings`; the settings menu is hidden.
+- Authenticated administrator browser evidence: `/settings` rendered the runtime-admin navigation and all six tabs (`系统状态`, `目标环境`, `MinIO 资产`, `GPU 算力`, `模型配置`, `备份与告警`) without console warnings or errors.
 - Live API evidence: unauthenticated `/api/runtime/settings` and `/api/materials/1/download_url` returned HTTP 401.
 - Unit/API evidence covers unauthenticated HTTP 401 and ordinary-user HTTP 403 for settings and backup-job creation.
 
@@ -46,6 +47,8 @@ Formal target-host deployment remains gated by a writable external volume, targe
 - GPU probes run in parallel with bounded five-second requests.
 - During the user-controlled GPU uptime window, Wrapper health and all four authenticated staged endpoint probes passed; no MinerU or Popo job was submitted.
 - Live core dependencies after final deployment: SQLite, Redis, Workflow MySQL, material worker, Workflow V2 worker, backup worker, and Overleaf were 7/7 ready.
+- The authenticated settings page showed schema v2, the explicit internal/public MinIO endpoints, all nine current buckets present, on-demand GPU with zero active tasks, the two real model providers only, server-controlled backup paths, and no backup-job false success.
+- Saved model probes returned HTTP 200 for DeepSeek `deepseek-v4-flash` and DashScope `qwen3.7-plus`.
 - Final local containers: running, OOM false, restart count zero.
 
 ## Backup redesign
