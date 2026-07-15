@@ -31,10 +31,15 @@ services:
       - WORKFLOW_DATABASE_URL=${WORKFLOW_DATABASE_URL:-}
       - LUCEON_WORKER_V1_BATCH_ENABLED=${LUCEON_WORKER_V1_BATCH_ENABLED:-false}
       - LUCEON_WORKER_V1_AUTO_RETRY_ENABLED=${LUCEON_WORKER_V1_AUTO_RETRY_ENABLED:-false}
-      - LUCEON_AUTH_DISABLED=${LUCEON_AUTH_DISABLED:-true}
-      - LUCEON_ALLOW_PUBLIC_RAW_ASSET_DOWNLOADS=${LUCEON_ALLOW_PUBLIC_RAW_ASSET_DOWNLOADS:-true}
+      - LUCEON_AUTH_DISABLED=${LUCEON_AUTH_DISABLED:-false}
+      - LUCEON_ALLOW_PUBLIC_RAW_ASSET_DOWNLOADS=${LUCEON_ALLOW_PUBLIC_RAW_ASSET_DOWNLOADS:-false}
+      - LUCEON_PIPELINE_ADMIN_EMAILS=${LUCEON_PIPELINE_ADMIN_EMAILS:-admin@luceon.local}
       - LUCEON_PUBLIC_WORKSPACE_USER_ID=${LUCEON_PUBLIC_WORKSPACE_USER_ID:-2}
       - LUCEON_PUBLIC_WORKSPACE_EMAIL=${LUCEON_PUBLIC_WORKSPACE_EMAIL:-workspace@luceon.local}
+      - LUCEON_ENVIRONMENT=${LUCEON_ENVIRONMENT:-development}
+      - LUCEON_PUBLIC_APP_URL=${LUCEON_PUBLIC_APP_URL:-}
+      - MINIO_INTERNAL_ENDPOINT=${MINIO_INTERNAL_ENDPOINT:-${MINIO_ENDPOINT:?set MINIO_INTERNAL_ENDPOINT or MINIO_ENDPOINT}}
+      - MINIO_PUBLIC_ENDPOINT=${MINIO_PUBLIC_ENDPOINT:?set MINIO_PUBLIC_ENDPOINT}
       - MINIO_ENDPOINT=${MINIO_ENDPOINT:?set MINIO_ENDPOINT}
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:?set MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:?set MINIO_SECRET_KEY}
@@ -47,6 +52,7 @@ services:
       - LUCEON_PIPELINE_WORKDIR=/app/scripts
       - LUCEON_RUNTIME_CONFIG=/data/runtime_config.json
       - LUCEON_BACKUP_ROOT=/backups
+      - LUCEON_EXTERNAL_BACKUP_ROOT=/external-backups
       - LUCEON_PIPELINE_WORK_ROOT=/data/pipeline-work
       - WORKFLOW_V2_CANONICAL_OUTLINE_CACHE=/data/workflow-v2-model-cache/canonical-outline
       - LUCEON_PUBLIC_API_BASE_URL=${LUCEON_PUBLIC_API_BASE_URL:-}
@@ -71,19 +77,16 @@ services:
       - DEEPSEEK_FLASH_MODEL=${DEEPSEEK_FLASH_MODEL:-${DEEPSEEK_DEFAULT_MODEL:-deepseek-v4-flash}}
       - DEEPSEEK_REASONING_MODEL=${DEEPSEEK_REASONING_MODEL:-deepseek-v4-pro}
       - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-${DEEPSEEK_DEFAULT_MODEL:-deepseek-v4-flash}}
-      - DEEPSEEK_OUTLINE_DECISION_MAX_TOKENS=${DEEPSEEK_OUTLINE_DECISION_MAX_TOKENS:-24000}
       - DEEPSEEK_OUTLINE_DECISION_MAX_TOKENS=${DEEPSEEK_OUTLINE_DECISION_MAX_TOKENS:-16000}
       - DEEPSEEK_OUTLINE_GLOBAL_MAX_CANDIDATES=${DEEPSEEK_OUTLINE_GLOBAL_MAX_CANDIDATES:-500}
       - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
       - DASHSCOPE_BASE_URL=${DASHSCOPE_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
       - DASHSCOPE_VISION_MODEL=${DASHSCOPE_VISION_MODEL:-qwen3.7-plus}
       - VISION_MODEL=${VISION_MODEL:-${DASHSCOPE_VISION_MODEL:-qwen3.7-plus}}
-      - ASR_MODEL=${ASR_MODEL:-${DASHSCOPE_ASR_MODEL:-fun-asr-flash-2026-06-15}}
-      - TTS_MODEL=${TTS_MODEL:-${DASHSCOPE_TTS_MODEL:-qwen3-tts-instruct-flash-realtime}}
-      - IMAGE_GENERATION_MODEL=${IMAGE_GENERATION_MODEL:-${DASHSCOPE_IMAGE_MODEL:-qwen-image-2.0-pro}}
     volumes:
       - ./runtime/backend:/data
       - ./runtime/backups:/backups
+      - ${LUCEON_EXTERNAL_BACKUP_PATH:-./runtime/external-backups}:/external-backups
       - /var/run/docker.sock:/var/run/docker.sock
       - /Users/concm/.codex/skills/eduassets-raw-cleaner:/skills/eduassets-raw-cleaner:ro
       - /Users/concm/.codex/skills/refine-elegantbook-latex:/skills/refine-elegantbook-latex:ro
@@ -105,6 +108,9 @@ services:
       - REDIS_HOST=redis
       - DATABASE_URL=sqlite:////data/mineru.db
       - WORKFLOW_DATABASE_URL=${WORKFLOW_DATABASE_URL:-}
+      - LUCEON_RUNTIME_CONFIG=/data/runtime_config.json
+      - MINIO_INTERNAL_ENDPOINT=${MINIO_INTERNAL_ENDPOINT:-${MINIO_ENDPOINT:?set MINIO_INTERNAL_ENDPOINT or MINIO_ENDPOINT}}
+      - MINIO_PUBLIC_ENDPOINT=${MINIO_PUBLIC_ENDPOINT:?set MINIO_PUBLIC_ENDPOINT}
       - MINIO_ENDPOINT=${MINIO_ENDPOINT:?set MINIO_ENDPOINT}
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:?set MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:?set MINIO_SECRET_KEY}
@@ -152,7 +158,10 @@ services:
       disable: true
     environment:
       - TZ=Asia/Shanghai
+      - REDIS_HOST=redis
       - DATABASE_URL=sqlite:////data/mineru.db
+      - MINIO_INTERNAL_ENDPOINT=${MINIO_INTERNAL_ENDPOINT:-${MINIO_ENDPOINT:?set MINIO_INTERNAL_ENDPOINT or MINIO_ENDPOINT}}
+      - MINIO_PUBLIC_ENDPOINT=${MINIO_PUBLIC_ENDPOINT:?set MINIO_PUBLIC_ENDPOINT}
       - MINIO_ENDPOINT=${MINIO_ENDPOINT:?set MINIO_ENDPOINT}
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:?set MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:?set MINIO_SECRET_KEY}
@@ -169,6 +178,37 @@ services:
       - ./runtime/backend:/data
     depends_on:
       - backend
+      - redis
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - luceon-review-net
+
+  backup-task-worker:
+    image: ${LUCEON_REVIEW_BACKEND_IMAGE:-luceonweb2026-review-backend:local}
+    restart: unless-stopped
+    command: ["python", "scripts/backup_task_worker.py", "--loop", "--worker-id", "backup-local"]
+    healthcheck:
+      disable: true
+    environment:
+      - TZ=Asia/Shanghai
+      - REDIS_HOST=redis
+      - DATABASE_URL=sqlite:////data/mineru.db
+      - LUCEON_RUNTIME_CONFIG=/data/runtime_config.json
+      - LUCEON_BACKUP_ROOT=/backups
+      - LUCEON_EXTERNAL_BACKUP_ROOT=/external-backups
+      - MINIO_INTERNAL_ENDPOINT=${MINIO_INTERNAL_ENDPOINT:-${MINIO_ENDPOINT:?set MINIO_INTERNAL_ENDPOINT or MINIO_ENDPOINT}}
+      - MINIO_PUBLIC_ENDPOINT=${MINIO_PUBLIC_ENDPOINT:?set MINIO_PUBLIC_ENDPOINT}
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT:?set MINIO_ENDPOINT}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:?set MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:?set MINIO_SECRET_KEY}
+    volumes:
+      - ./runtime/backend:/data
+      - ./runtime/backups:/backups
+      - ${LUCEON_EXTERNAL_BACKUP_PATH:-./runtime/external-backups}:/external-backups
+    depends_on:
+      - backend
+      - redis
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:

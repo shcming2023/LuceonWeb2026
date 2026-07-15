@@ -27,7 +27,12 @@ if grep -Eq 'image:.*:(latest|local)([[:space:]]|$)' compose.production.arm64.ym
   exit 1
 fi
 image_count=$(grep -Ec '^[[:space:]]+image: [^ ]+@sha256:[0-9a-f]{64}$' compose.production.arm64.yml)
-test "$image_count" -eq 7
+test "$image_count" -eq 9
+
+external_backup_path=$(sed -n 's/^LUCEON_EXTERNAL_BACKUP_PATH=//p' .env.production | tail -1)
+test -n "$external_backup_path"
+test -d "$external_backup_path"
+test -w "$external_backup_path"
 
 python3 - <<'PY'
 from pathlib import Path

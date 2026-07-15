@@ -15,7 +15,7 @@ PUBLIC_WORKSPACE_PASSWORD_HASH = "public-workspace-auth-disabled"
 
 
 def auth_disabled() -> bool:
-    return os.getenv("LUCEON_AUTH_DISABLED", "true").lower() not in {"0", "false", "no", "off"}
+    return os.getenv("LUCEON_AUTH_DISABLED", "false").lower() not in {"0", "false", "no", "off"}
 
 
 def public_raw_asset_downloads_allowed() -> bool:
@@ -38,7 +38,8 @@ def is_pipeline_admin(user: User) -> bool:
 
 def user_payload(user: User) -> dict:
     payload = user.to_dict()
-    payload["capabilities"] = {"pipeline_admin": is_pipeline_admin(user)}
+    admin = is_pipeline_admin(user)
+    payload["capabilities"] = {"pipeline_admin": admin, "runtime_admin": admin}
     return payload
 
 
@@ -128,4 +129,10 @@ async def get_asset_download_user_id(user_id: str = Depends(get_user_id)) -> str
 async def require_pipeline_admin(current_user: User = Depends(get_current_user)) -> User:
     if not is_pipeline_admin(current_user):
         raise HTTPException(status_code=403, detail="仅管线管理员可执行异常恢复")
+    return current_user
+
+
+async def require_runtime_admin(current_user: User = Depends(get_current_user)) -> User:
+    if not is_pipeline_admin(current_user):
+        raise HTTPException(status_code=403, detail="仅运行管理员可查看或修改系统配置")
     return current_user

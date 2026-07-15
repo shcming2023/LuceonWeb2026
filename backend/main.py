@@ -16,7 +16,6 @@ from app.api import (
 )
 from app.api import stats
 from app.services.pipeline_recovery import recover_interrupted_pipeline_runs
-from app.services.runtime_settings import start_backup_scheduler
 from app.workflow_v2 import initialize_workflow_database
 from contextlib import asynccontextmanager
 
@@ -28,7 +27,6 @@ async def life_span(app: FastAPI):
     app.state.predictor = None
     app.state.pipeline_recovery = recover_interrupted_pipeline_runs()
     app.state.workflow_v2 = initialize_workflow_database()
-    start_backup_scheduler()
     yield
     clean_memory()
 

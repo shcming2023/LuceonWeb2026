@@ -62,7 +62,7 @@ docker compose --env-file .env -f docker-compose.mac.yml up -d --build
 - MinerU router：`http://SERVER_IP:8002`
 - MinIO 控制台：`http://SERVER_IP:9001`
 
-本地 review stack 默认使用公共工作区模式。需要邮箱/密码登录时设置 `LUCEON_AUTH_DISABLED=false`。
+本地 review stack 默认启用认证。只有白名单内的运行管理员能访问 `/settings`，公网原始资产下载默认关闭。
 
 Linux 服务器、macOS Apple Silicon、模型下载、MinerU Router、多 GPU、MinIO 地址和验证命令见：[部署文档](docs/deployment.md)。
 
@@ -112,11 +112,12 @@ luceonweb2026/
 
 常用项：
 
-- `MINIO_ENDPOINT`：浏览器和容器都能访问的 MinIO 地址。
+- `MINIO_INTERNAL_ENDPOINT`：容器访问 MinIO 的内部地址。
+- `MINIO_PUBLIC_ENDPOINT`：浏览器下载资产使用的公网地址。
 - `WORKER_REPLICAS` / `WORKER_CONCURRENCY`：worker 副本数和单 worker 并发数。
 - `MINERU_API_USE_ASYNC_TASKS`：是否使用 MinerU `/tasks` 异步接口。
 - `POPO_ENABLED`：是否启用 MinerU-Popo 后处理。
-- `LUCEON_AUTH_DISABLED`：为 true 时，本地审查台使用共享公共工作区用户。
+- `LUCEON_AUTH_DISABLED`：除明确隔离的开发会话外应保持 false。
 
 ## 测试
 

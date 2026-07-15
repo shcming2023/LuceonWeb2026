@@ -6,6 +6,7 @@ export interface CurrentUser {
   created_at?: string | null
   capabilities?: {
     pipeline_admin?: boolean
+    runtime_admin?: boolean
   }
 }
 

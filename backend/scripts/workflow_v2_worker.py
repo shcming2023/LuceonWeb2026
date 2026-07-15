@@ -12,6 +12,7 @@ from app.workflow_v2.runner import run_one_stage
 from app.workflow_v2.queue import consume_once, enqueue, execution_lease_active, reclaim_consumer_leases, record_worker_heartbeat
 from app.workflow_v2.database import initialize_workflow_database, workflow_engine, workflow_session_factory
 from app.workflow_v2.state_machine import recover_stale_stages
+from app.services.runtime_health import record_runtime_worker_heartbeat
 
 
 def main() -> int:
@@ -30,6 +31,7 @@ def main() -> int:
         database_ready = False
         while True:
             record_worker_heartbeat(args.worker_id)
+            record_runtime_worker_heartbeat("workflow_v2", args.worker_id)
             try:
                 if not database_ready:
                     database = initialize_workflow_database()

@@ -1,21 +1,22 @@
 import json
 import os
-import shutil
 import subprocess
-import threading
 import time
-from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
 import httpx
 from minio import Minio
+from sqlalchemy import text
 
 
 CONFIG_PATH = Path(os.getenv("LUCEON_RUNTIME_CONFIG", "/data/runtime_config.json"))
 BACKUP_ROOT = Path(os.getenv("LUCEON_BACKUP_ROOT", "/backups"))
-CONTRACT_BUCKETS = [
+EXTERNAL_BACKUP_ROOT = Path(os.getenv("LUCEON_EXTERNAL_BACKUP_ROOT", "/external-backups"))
+RUNTIME_CONFIG_SCHEMA_VERSION = 2
+CURRENT_ASSET_BUCKETS = (
     "eduassets-input",
     "eduassets-mineru",
     "eduassets-minerupopo",
@@ -23,9 +24,12 @@ CONTRACT_BUCKETS = [
     "eduassets-clean",
     "eduassets-standard",
     "eduassets-parsed",
-]
-SECRET_FIELDS = {"access_key", "secret_key", "api_key", "ssh_password"}
-_BACKUP_SCHEDULER_STARTED = False
+    "eduassets-elegantbook",
+    "eduassets-review",
+)
+LEGACY_ASSET_BUCKETS = ("eduassets-latex",)
+CONTRACT_BUCKETS = list(CURRENT_ASSET_BUCKETS)
+SECRET_FIELDS = {"access_key", "secret_key", "api_key"}
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -37,39 +41,50 @@ def _env_bool(name: str, default: bool = False) -> bool:
 
 def default_runtime_config() -> dict[str, Any]:
     return {
+        "schema_version": RUNTIME_CONFIG_SCHEMA_VERSION,
+        "environment": {
+            "name": os.getenv("LUCEON_ENVIRONMENT", "development"),
+            "public_app_url": os.getenv("LUCEON_PUBLIC_APP_URL", ""),
+        },
         "minio": {
-            "endpoint": os.getenv("MINIO_ENDPOINT", "127.0.0.1:9000"),
+            "endpoint": os.getenv("MINIO_INTERNAL_ENDPOINT") or os.getenv("MINIO_ENDPOINT", "host.docker.internal:9000"),
             "public_endpoint": os.getenv("MINIO_PUBLIC_ENDPOINT", ""),
             "secure": _env_bool("MINIO_SECURE", False),
             "access_key": os.getenv("MINIO_ACCESS_KEY", ""),
             "secret_key": os.getenv("MINIO_SECRET_KEY", ""),
             "region": os.getenv("MINIO_REGION", "us-east-1"),
-            "contract_buckets": list(CONTRACT_BUCKETS),
+            "contract_buckets": list(CURRENT_ASSET_BUCKETS),
         },
         "gpu": {
+            "mode": "on_demand",
             "wrapper_url": os.getenv("GPU_WRAPPER_URL", os.getenv("MINERU_API_URL", "")),
             "api_key": os.getenv("GPU_WRAPPER_API_KEY", ""),
-            "ssh_host": os.getenv("GPU_SSH_HOST", ""),
-            "ssh_port": int(os.getenv("GPU_SSH_PORT", "23") or "23"),
-            "ssh_user": os.getenv("GPU_SSH_USER", "root"),
-            "ssh_key_path": os.getenv("GPU_SSH_KEY_PATH", ""),
-            "ssh_password": "",
-            "service_root": os.getenv("GPU_SERVICE_ROOT", "/root/mineru-popo-service"),
         },
         "backup": {
             "enabled": False,
             "mode": "manifest",
             "schedule_enabled": False,
             "interval_hours": 24,
-            "include_auxiliary": False,
-            "max_objects": 50000,
+            "include_legacy": True,
+            "max_objects": 500000,
             "targets": [
-                {"id": "local", "label": "Local", "provider": "local", "path": str(BACKUP_ROOT / "local"), "enabled": True},
-                {"id": "onedrive", "label": "OneDrive", "provider": "onedrive", "path": "", "enabled": False},
-                {"id": "googledrive", "label": "Google Drive", "provider": "googledrive", "path": "", "enabled": False},
-                {"id": "icloud", "label": "iCloud", "provider": "icloud", "path": "", "enabled": False},
+                {
+                    "id": "snapshot",
+                    "label": "本机快照",
+                    "kind": "filesystem",
+                    "path": str(BACKUP_ROOT / "snapshots"),
+                    "enabled": True,
+                    "external": False,
+                },
+                {
+                    "id": "external",
+                    "label": "外部备份",
+                    "kind": "filesystem",
+                    "path": str(EXTERNAL_BACKUP_ROOT),
+                    "enabled": False,
+                    "external": True,
+                },
             ],
-            "last_backup": None,
         },
         "models": {
             "llm": {
@@ -105,11 +120,6 @@ def default_runtime_config() -> dict[str, Any]:
                 },
                 "outline_visual_max_candidates": int(os.getenv("LUCEON_RAW_OUTLINE_VISUAL_MAX_CANDIDATES", "40") or "40"),
             },
-            "asr": {"model": os.getenv("ASR_MODEL") or os.getenv("DASHSCOPE_ASR_MODEL") or "fun-asr-flash-2026-06-15"},
-            "tts": {"model": os.getenv("TTS_MODEL") or os.getenv("DASHSCOPE_TTS_MODEL") or "qwen3-tts-instruct-flash-realtime"},
-            "image_generation": {
-                "model": os.getenv("IMAGE_GENERATION_MODEL") or os.getenv("DASHSCOPE_IMAGE_MODEL") or "qwen-image-2.0-pro"
-            },
         },
     }
 
@@ -124,15 +134,71 @@ def _deep_merge(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _normalize_runtime_config(value: dict[str, Any] | None) -> dict[str, Any]:
+    defaults = default_runtime_config()
+    value = value if isinstance(value, dict) else {}
+
+    raw_minio = value.get("minio") if isinstance(value.get("minio"), dict) else {}
+    minio = _deep_merge(defaults["minio"], raw_minio)
+    minio["public_endpoint"] = str(minio.get("public_endpoint") or defaults["minio"]["public_endpoint"] or "")
+    minio["contract_buckets"] = list(CURRENT_ASSET_BUCKETS)
+
+    raw_gpu = value.get("gpu") if isinstance(value.get("gpu"), dict) else {}
+    gpu = {
+        "mode": "on_demand",
+        "wrapper_url": str(raw_gpu.get("wrapper_url") or defaults["gpu"]["wrapper_url"] or ""),
+        "api_key": str(raw_gpu.get("api_key") or defaults["gpu"]["api_key"] or ""),
+    }
+
+    raw_models = value.get("models") if isinstance(value.get("models"), dict) else {}
+    models = {
+        "llm": _deep_merge(defaults["models"]["llm"], raw_models.get("llm") if isinstance(raw_models.get("llm"), dict) else {}),
+        "vision": _deep_merge(
+            defaults["models"]["vision"],
+            raw_models.get("vision") if isinstance(raw_models.get("vision"), dict) else {},
+        ),
+    }
+
+    raw_backup = value.get("backup") if isinstance(value.get("backup"), dict) else {}
+    backup = {
+        key: raw_backup.get(key, defaults["backup"][key])
+        for key in ("enabled", "mode", "schedule_enabled", "interval_hours", "include_legacy", "max_objects")
+    }
+    if backup["mode"] not in {"manifest", "copy"}:
+        backup["mode"] = "manifest"
+    incoming_targets = {
+        str(row.get("id")): row
+        for row in raw_backup.get("targets", [])
+        if isinstance(row, dict) and row.get("id") in {"snapshot", "external"}
+    }
+    backup["targets"] = []
+    for target in defaults["backup"]["targets"]:
+        incoming = incoming_targets.get(target["id"], {})
+        backup["targets"].append({**target, "enabled": bool(incoming.get("enabled", target["enabled"]))})
+
+    raw_environment = value.get("environment") if isinstance(value.get("environment"), dict) else {}
+    environment = _deep_merge(defaults["environment"], raw_environment)
+
+    return {
+        "schema_version": RUNTIME_CONFIG_SCHEMA_VERSION,
+        "environment": environment,
+        "minio": minio,
+        "gpu": gpu,
+        "backup": backup,
+        "models": models,
+    }
+
+
 def load_runtime_config(include_secrets: bool = True) -> dict[str, Any]:
-    config = default_runtime_config()
+    stored: dict[str, Any] = {}
     if CONFIG_PATH.exists():
         try:
-            stored = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-            if isinstance(stored, dict):
-                config = _deep_merge(config, stored)
+            decoded = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+            if isinstance(decoded, dict):
+                stored = decoded
         except json.JSONDecodeError:
             pass
+    config = _normalize_runtime_config(stored)
     return config if include_secrets else sanitize_config(config)
 
 
@@ -152,11 +218,10 @@ def _strip_blank_secrets(incoming: Any, existing: Any) -> Any:
 def save_runtime_config(payload: dict[str, Any]) -> dict[str, Any]:
     current = load_runtime_config(include_secrets=True)
     cleaned = _strip_blank_secrets(payload, current)
-    merged = _deep_merge(current, cleaned)
+    merged = _normalize_runtime_config(_deep_merge(current, cleaned))
     merged.get("minio", {}).pop("access_key_configured", None)
     merged.get("minio", {}).pop("secret_key_configured", None)
     merged.get("gpu", {}).pop("api_key_configured", None)
-    merged.get("gpu", {}).pop("ssh_password_configured", None)
     merged.get("models", {}).get("llm", {}).get("deepseek", {}).pop("api_key_configured", None)
     merged.get("models", {}).get("vision", {}).get("dashscope", {}).pop("api_key_configured", None)
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -176,9 +241,7 @@ def sanitize_config(config: dict[str, Any]) -> dict[str, Any]:
     minio["secret_key"] = ""
     gpu = safe.get("gpu", {})
     gpu["api_key_configured"] = bool(config.get("gpu", {}).get("api_key"))
-    gpu["ssh_password_configured"] = bool(config.get("gpu", {}).get("ssh_password"))
     gpu["api_key"] = ""
-    gpu["ssh_password"] = ""
     models = safe.get("models", {})
     llm = models.get("llm", {}) if isinstance(models.get("llm"), dict) else {}
     deepseek = llm.get("deepseek", {}) if isinstance(llm.get("deepseek"), dict) else {}
@@ -197,7 +260,7 @@ def sanitize_config(config: dict[str, Any]) -> dict[str, Any]:
 
 def _parse_minio_endpoint(endpoint: str, secure: bool) -> tuple[str, bool]:
     parsed = urlparse(endpoint)
-    if parsed.scheme:
+    if "://" in endpoint:
         return parsed.netloc, parsed.scheme == "https"
     return endpoint, secure
 
@@ -264,15 +327,6 @@ def pipeline_env() -> dict[str, str]:
         env["DASHSCOPE_BASE_URL"] = str(dashscope["base_url"])
     if dashscope.get("api_key"):
         env["DASHSCOPE_API_KEY"] = str(dashscope["api_key"])
-    if models.get("asr", {}).get("model"):
-        env["ASR_MODEL"] = str(models["asr"]["model"])
-        env["DASHSCOPE_ASR_MODEL"] = str(models["asr"]["model"])
-    if models.get("tts", {}).get("model"):
-        env["TTS_MODEL"] = str(models["tts"]["model"])
-        env["DASHSCOPE_TTS_MODEL"] = str(models["tts"]["model"])
-    if models.get("image_generation", {}).get("model"):
-        env["IMAGE_GENERATION_MODEL"] = str(models["image_generation"]["model"])
-        env["DASHSCOPE_IMAGE_MODEL"] = str(models["image_generation"]["model"])
     return env
 
 
@@ -296,9 +350,6 @@ def check_model_runtime() -> dict[str, Any]:
             "api_key_configured": bool(env.get("DASHSCOPE_API_KEY", "").strip()),
             "base_url": env.get("DASHSCOPE_BASE_URL", ""),
         },
-        "asr_model": env.get("ASR_MODEL") or env.get("DASHSCOPE_ASR_MODEL") or "",
-        "tts_model": env.get("TTS_MODEL") or env.get("DASHSCOPE_TTS_MODEL") or "",
-        "image_generation_model": env.get("IMAGE_GENERATION_MODEL") or env.get("DASHSCOPE_IMAGE_MODEL") or "",
     }
 
 
@@ -431,6 +482,9 @@ def bucket_role(bucket: str) -> str:
         "eduassets-clean": "clean_candidate",
         "eduassets-standard": "standard_master",
         "eduassets-parsed": "archive_optional",
+        "eduassets-elegantbook": "elegantbook_output",
+        "eduassets-review": "review_evidence",
+        "eduassets-latex": "legacy_latex",
     }.get(bucket, "unknown")
 
 
@@ -442,72 +496,50 @@ def check_gpu_runtime() -> dict[str, Any]:
         "wrapper_url": wrapper_url,
         "wrapper_ok": False,
         "staged_api_ok": False,
-        "ssh_ok": False,
-        "ssh_status": "skipped",
+        "state": "offline",
         "health": {},
         "staged_api": {},
         "errors": [],
     }
     headers = {"Authorization": "Bearer " + str(gpu.get("api_key"))} if gpu.get("api_key") else {}
-    if wrapper_url:
-        try:
-            health = httpx.get(f"{wrapper_url}/api/v1/health", timeout=5)
-            result["health"] = {"status_code": health.status_code, "body": _safe_json(health)}
-            result["wrapper_ok"] = health.status_code == 200
-        except Exception as exc:
-            result["errors"].append(f"wrapper health: {exc}")
-        paths = {
-            "mineru_batches": "/api/v1/mineru/batches",
-            "mineru_results_probe": "/api/v1/mineru/results/__probe__",
-            "popo_batches": "/api/v1/popo/batches",
-            "popo_results_probe": "/api/v1/popo/results/__probe__",
-        }
-        codes = {}
-        for name, path in paths.items():
-            try:
-                resp = httpx.get(f"{wrapper_url}{path}", headers=headers, timeout=5)
-                codes[name] = resp.status_code
-            except Exception as exc:
-                codes[name] = None
-                result["errors"].append(f"{name}: {exc}")
-        result["staged_api"] = codes
-        result["staged_api_ok"] = (
-            codes.get("mineru_batches") in (200, 405)
-            and codes.get("popo_batches") in (200, 405)
-            and codes.get("mineru_results_probe") in (200, 404)
-            and codes.get("popo_results_probe") in (200, 404)
-        )
-    else:
+    if not wrapper_url:
         result["errors"].append("wrapper_url is empty")
-    ssh_host = str(gpu.get("ssh_host") or "")
-    ssh_user = str(gpu.get("ssh_user") or "root")
-    ssh_port = str(gpu.get("ssh_port") or "22")
-    ssh_key_path = str(gpu.get("ssh_key_path") or "")
-    if ssh_host and ssh_key_path:
-        command = [
-            "ssh",
-            "-p",
-            ssh_port,
-            "-o",
-            "BatchMode=yes",
-            "-o",
-            "ConnectTimeout=5",
-            "-i",
-            os.path.expanduser(ssh_key_path),
-            f"{ssh_user}@{ssh_host}",
-            "echo ok",
-        ]
+        return result
+
+    paths = {
+        "health": "/api/v1/health",
+        "mineru_batches": "/api/v1/mineru/batches",
+        "mineru_results_probe": "/api/v1/mineru/results/__probe__",
+        "popo_batches": "/api/v1/popo/batches",
+        "popo_results_probe": "/api/v1/popo/results/__probe__",
+    }
+
+    def probe(name: str, path: str) -> tuple[str, int | None, Any, str]:
         try:
-            completed = subprocess.run(command, text=True, capture_output=True, timeout=10)
-            result["ssh_ok"] = completed.returncode == 0 and "ok" in completed.stdout
-            result["ssh_status"] = "ok" if result["ssh_ok"] else "failed"
-            if not result["ssh_ok"]:
-                result["errors"].append("ssh key check failed")
+            response = httpx.get(f"{wrapper_url}{path}", headers=headers if name != "health" else {}, timeout=5)
+            return name, response.status_code, _safe_json(response) if name == "health" else None, ""
         except Exception as exc:
-            result["ssh_status"] = "failed"
-            result["errors"].append(f"ssh: {exc}")
-    elif ssh_host and gpu.get("ssh_password"):
-        result["ssh_status"] = "password_configured_not_tested"
+            return name, None, None, str(exc)
+
+    with ThreadPoolExecutor(max_workers=len(paths)) as pool:
+        rows = list(pool.map(lambda item: probe(*item), paths.items()))
+    codes = {}
+    for name, status_code, body, error in rows:
+        if name == "health":
+            result["health"] = {"status_code": status_code, "body": body}
+            result["wrapper_ok"] = status_code == 200
+        else:
+            codes[name] = status_code
+        if error:
+            result["errors"].append(f"{name}: {error}")
+    result["staged_api"] = codes
+    result["staged_api_ok"] = (
+        codes.get("mineru_batches") in (200, 405)
+        and codes.get("popo_batches") in (200, 405)
+        and codes.get("mineru_results_probe") in (200, 404)
+        and codes.get("popo_results_probe") in (200, 404)
+    )
+    result["state"] = "ready" if result["wrapper_ok"] and result["staged_api_ok"] else "degraded" if result["wrapper_ok"] else "offline"
     return result
 
 
@@ -529,7 +561,11 @@ def check_backup_targets() -> dict[str, Any]:
         row["writable"] = _is_writable(path) if enabled and row.get("path") else False
         row["status"] = "ready" if enabled and row["writable"] else "disabled" if not enabled else "unavailable"
         targets.append(row)
-    return {"targets": targets, "ready_count": sum(1 for item in targets if item["status"] == "ready")}
+    return {
+        "targets": targets,
+        "ready_count": sum(1 for item in targets if item["status"] == "ready"),
+        "external_ready_count": sum(1 for item in targets if item["status"] == "ready" and item.get("external")),
+    }
 
 
 def _is_writable(path: Path) -> bool:
@@ -543,144 +579,127 @@ def _is_writable(path: Path) -> bool:
         return False
 
 
-def classify_object(bucket: str, object_name: str) -> str:
-    if bucket == "eduassets-input" and object_name.lower().endswith(".pdf"):
-        return "official"
-    if bucket == "eduassets-input" and object_name.startswith("_status/"):
-        return "status_marker"
-    if bucket == "eduassets-mineru" and object_name.startswith("mineru/"):
-        return "official"
-    if bucket == "eduassets-minerupopo" and object_name.startswith("minerupopo/"):
-        return "official"
-    if bucket == "eduassets-raw" and object_name.startswith("raw/"):
-        return "official"
-    if bucket == "eduassets-clean" and object_name.startswith("clean/"):
-        return "official"
-    if object_name.endswith("manifest.json"):
-        return "manifest"
-    return "auxiliary"
-
-
-def run_manual_backup() -> dict[str, Any]:
+def runtime_config_validation() -> dict[str, Any]:
     config = load_runtime_config(include_secrets=True)
-    backup_cfg = config.get("backup", {})
-    client = minio_client_from_config(config)
-    mode = str(backup_cfg.get("mode") or "manifest")
-    include_auxiliary = bool(backup_cfg.get("include_auxiliary"))
-    max_objects = int(backup_cfg.get("max_objects") or 50000)
-    buckets = config.get("minio", {}).get("contract_buckets") or CONTRACT_BUCKETS
-    stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-    objects: list[dict[str, Any]] = []
-    truncated = False
-    for bucket in buckets:
-        try:
-            if not client.bucket_exists(bucket):
-                continue
-            for item in client.list_objects(bucket, recursive=True):
-                object_name = str(getattr(item, "object_name", "") or "")
-                classification = classify_object(bucket, object_name)
-                if classification == "auxiliary" and not include_auxiliary:
-                    continue
-                objects.append(
-                    {
-                        "bucket": bucket,
-                        "object": object_name,
-                        "size": int(getattr(item, "size", 0) or 0),
-                        "etag": str(getattr(item, "etag", "") or ""),
-                        "classification": classification,
-                    }
-                )
-                if len(objects) >= max_objects:
-                    truncated = True
-                    break
-        except Exception as exc:
-            objects.append({"bucket": bucket, "object": "", "classification": "error", "error": str(exc)})
-        if truncated:
-            break
-    targets = [row for row in backup_cfg.get("targets", []) if row.get("enabled") and row.get("path")]
-    written_targets = []
-    for target in targets:
-        root = Path(str(target["path"])) / f"luceon-backup-{stamp}"
-        root.mkdir(parents=True, exist_ok=True)
-        manifest = {
-            "schema": "luceon-backup-manifest/v1",
-            "created_at": datetime.utcnow().isoformat() + "Z",
-            "mode": mode,
-            "truncated": truncated,
-            "object_count": len(objects),
-            "objects": objects,
-        }
-        (root / "backup-manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-        copied = 0
-        if mode == "copy":
-            for obj in objects:
-                if obj.get("classification") == "error" or not obj.get("object"):
-                    continue
-                dest = root / "objects" / obj["bucket"] / str(obj["object"])
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                response = client.get_object(obj["bucket"], obj["object"])
-                try:
-                    with dest.open("wb") as fh:
-                        shutil.copyfileobj(response, fh)
-                    copied += 1
-                finally:
-                    close = getattr(response, "close", None)
-                    if close:
-                        close()
-                    release_conn = getattr(response, "release_conn", None)
-                    if release_conn:
-                        release_conn()
-        written_targets.append({"id": target.get("id"), "path": str(root), "manifest": str(root / "backup-manifest.json"), "copied": copied})
-    config["backup"]["last_backup"] = {"created_at": datetime.utcnow().isoformat() + "Z", "object_count": len(objects), "targets": written_targets}
-    save_runtime_config(config)
-    return {"mode": mode, "object_count": len(objects), "truncated": truncated, "targets": written_targets}
+    errors: list[str] = []
+    warnings: list[str] = []
+    minio = config.get("minio", {})
+    gpu = config.get("gpu", {})
+    backup = config.get("backup", {})
+    if int(config.get("schema_version") or 0) != RUNTIME_CONFIG_SCHEMA_VERSION:
+        errors.append("runtime_config_schema")
+    if not str(minio.get("endpoint") or "").strip():
+        errors.append("minio_internal_endpoint")
+    public_endpoint = str(minio.get("public_endpoint") or "").strip()
+    if not public_endpoint or urlparse(public_endpoint).scheme not in {"http", "https"}:
+        errors.append("minio_public_endpoint")
+    if not minio.get("access_key") or not minio.get("secret_key"):
+        errors.append("minio_credentials")
+    if list(minio.get("contract_buckets") or []) != list(CURRENT_ASSET_BUCKETS):
+        errors.append("minio_contract_schema")
+    if not str(gpu.get("wrapper_url") or "").strip():
+        warnings.append("gpu_wrapper_url")
+    if backup.get("enabled"):
+        if str(backup.get("mode") or "") == "manifest":
+            warnings.append("backup_manifest_only")
+        if not any(row.get("enabled") and row.get("external") for row in backup.get("targets", [])):
+            warnings.append("external_backup_disabled")
+    else:
+        warnings.append("backup_disabled")
+    return {"ok": not errors, "errors": errors, "warnings": warnings, "schema_version": RUNTIME_CONFIG_SCHEMA_VERSION}
 
 
-def start_backup_scheduler() -> None:
-    global _BACKUP_SCHEDULER_STARTED
-    if _BACKUP_SCHEDULER_STARTED:
-        return
-    _BACKUP_SCHEDULER_STARTED = True
-    thread = threading.Thread(target=_backup_scheduler_loop, daemon=True)
-    thread.start()
+def active_gpu_task_count() -> int:
+    from app.database import SessionLocal
+    from app.models.material import PipelineRun
 
-
-def _backup_scheduler_loop() -> None:
-    while True:
-        try:
-            config = load_runtime_config(include_secrets=True)
-            backup_cfg = config.get("backup", {})
-            if backup_cfg.get("enabled") and backup_cfg.get("schedule_enabled") and _backup_due(backup_cfg):
-                run_manual_backup()
-        except Exception:
-            pass
-        time.sleep(300)
-
-
-def _backup_due(backup_cfg: dict[str, Any]) -> bool:
-    interval_seconds = max(1, int(backup_cfg.get("interval_hours") or 24)) * 3600
-    last_backup = backup_cfg.get("last_backup") if isinstance(backup_cfg.get("last_backup"), dict) else {}
-    created_at = str(last_backup.get("created_at") or "")
-    if not created_at:
-        return True
+    db = SessionLocal()
     try:
-        last = datetime.fromisoformat(created_at.rstrip("Z"))
-    except ValueError:
-        return True
-    return (datetime.utcnow() - last).total_seconds() >= interval_seconds
+        return int(db.query(PipelineRun).filter(PipelineRun.status.in_(["queued", "running"])).count())
+    finally:
+        db.close()
+
+
+def _overleaf_health() -> dict[str, Any]:
+    container = os.getenv("WORKFLOW_V2_TEX_CONTAINER", "sharelatex").strip()
+    if not container:
+        return {"ready": False, "detail": "WORKFLOW_V2_TEX_CONTAINER is not configured"}
+    try:
+        completed = subprocess.run(
+            ["docker", "inspect", "--format", "{{.State.Running}}", container],
+            text=True,
+            capture_output=True,
+            timeout=4,
+        )
+        ready = completed.returncode == 0 and completed.stdout.strip().lower() == "true"
+        return {"ready": ready, "container": container, "detail": "running" if ready else "not_running"}
+    except Exception as exc:
+        return {"ready": False, "container": container, "detail": str(exc)[:200]}
+
+
+def check_runtime_dependencies() -> dict[str, Any]:
+    from app.database import engine
+    from app.services.runtime_health import runtime_worker_health
+    from app.utils.redis_client import redis_client
+    from app.workflow_v2.database import workflow_database_health
+
+    checks: dict[str, Any] = {}
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+        checks["sqlite"] = {"ready": True}
+    except Exception as exc:
+        checks["sqlite"] = {"ready": False, "detail": str(exc)[:200]}
+    try:
+        checks["redis"] = {"ready": bool(redis_client.client and redis_client.client.ping())}
+    except Exception as exc:
+        checks["redis"] = {"ready": False, "detail": str(exc)[:200]}
+    workflow = workflow_database_health()
+    checks["workflow_database"] = {**workflow, "ready": bool(workflow.get("ready"))}
+    checks["material_worker"] = runtime_worker_health("material_task")
+    checks["workflow_worker"] = runtime_worker_health("workflow_v2")
+    checks["backup_worker"] = runtime_worker_health("backup")
+    checks["overleaf"] = _overleaf_health()
+    return {"ready": all(bool(item.get("ready")) for item in checks.values()), "checks": checks}
 
 
 def runtime_status() -> dict[str, Any]:
-    minio = check_minio_contract(create_missing=False)
-    gpu = check_gpu_runtime()
-    backup = check_backup_targets()
-    models = check_model_runtime()
+    probes = {
+        "minio": lambda: check_minio_contract(create_missing=False),
+        "gpu": check_gpu_runtime,
+        "backup": check_backup_targets,
+        "models": check_model_runtime,
+        "dependencies": check_runtime_dependencies,
+        "config": runtime_config_validation,
+        "active_gpu_tasks": active_gpu_task_count,
+    }
+    with ThreadPoolExecutor(max_workers=len(probes)) as pool:
+        futures = {name: pool.submit(callback) for name, callback in probes.items()}
+        results = {name: future.result() for name, future in futures.items()}
+    minio = results["minio"]
+    gpu = results["gpu"]
+    backup = results["backup"]
+    models = results["models"]
+    dependencies = results["dependencies"]
+    config = results["config"]
+    active_tasks = int(results["active_gpu_tasks"] or 0)
     blockers = []
-    warnings = []
+    warnings = list(config.get("warnings") or [])
     if not minio.get("contract_ok"):
         blockers.append("minio_contract")
-    if not gpu.get("wrapper_ok"):
-        warnings.append("gpu_wrapper")
+    if not config.get("ok"):
+        blockers.extend(str(item) for item in config.get("errors") or [])
+    if not dependencies.get("ready"):
+        blockers.append("runtime_dependencies")
+    if active_tasks > 0:
+        if not gpu.get("wrapper_ok"):
+            blockers.append("gpu_wrapper")
+        if not gpu.get("staged_api_ok"):
+            blockers.append("gpu_staged_api")
+    elif not gpu.get("wrapper_ok"):
+        gpu["state"] = "expected_off"
+    elif not gpu.get("staged_api_ok"):
+        warnings.append("gpu_staged_api")
     if models.get("llm", {}).get("enabled") and not models.get("llm", {}).get("api_key_configured"):
         blockers.append("llm_model_key")
     if models.get("vision", {}).get("enabled") and not models.get("vision", {}).get("api_key_configured"):
@@ -688,4 +707,15 @@ def runtime_status() -> dict[str, Any]:
     if backup.get("ready_count", 0) <= 0:
         warnings.append("backup_target")
     status = "blocked" if blockers else "warning" if warnings else "ready"
-    return {"status": status, "blockers": blockers, "warnings": warnings, "minio": minio, "gpu": gpu, "backup": backup, "models": models}
+    return {
+        "status": status,
+        "blockers": sorted(set(blockers)),
+        "warnings": sorted(set(warnings)),
+        "minio": minio,
+        "gpu": {**gpu, "active_task_count": active_tasks},
+        "backup": backup,
+        "models": models,
+        "dependencies": dependencies,
+        "config": config,
+        "active_gpu_tasks": active_tasks,
+    }

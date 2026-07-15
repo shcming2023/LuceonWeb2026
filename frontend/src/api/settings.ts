@@ -44,16 +44,10 @@ export interface RuntimeMinioConfig {
 }
 
 export interface RuntimeGpuConfig {
+  mode: 'on_demand'
   wrapper_url: string
   api_key: string
-  ssh_host: string
-  ssh_port: number
-  ssh_user: string
-  ssh_key_path: string
-  ssh_password: string
-  service_root: string
   api_key_configured?: boolean
-  ssh_password_configured?: boolean
 }
 
 export interface RuntimeProviderConfig {
@@ -80,17 +74,15 @@ export interface RuntimeModelsConfig {
     dashscope: RuntimeProviderConfig
     outline_visual_max_candidates: number
   }
-  asr: { model: string }
-  tts: { model: string }
-  image_generation: { model: string }
 }
 
 export interface BackupTarget {
   id: string
   label: string
-  provider: string
+  kind: 'filesystem'
   path: string
   enabled: boolean
+  external: boolean
   exists?: boolean
   writable?: boolean
   status?: string
@@ -101,13 +93,17 @@ export interface RuntimeBackupConfig {
   mode: 'manifest' | 'copy'
   schedule_enabled: boolean
   interval_hours: number
-  include_auxiliary: boolean
+  include_legacy: boolean
   max_objects: number
   targets: BackupTarget[]
-  last_backup?: Record<string, unknown> | null
 }
 
 export interface RuntimeConfig {
+  schema_version: number
+  environment: {
+    name: string
+    public_app_url: string
+  }
   minio: RuntimeMinioConfig
   gpu: RuntimeGpuConfig
   models: RuntimeModelsConfig
@@ -124,11 +120,10 @@ export interface MinioCheckResult {
 }
 
 export interface GpuCheckResult {
+  state: 'ready' | 'degraded' | 'offline' | 'expected_off' | string
   wrapper_url: string
   wrapper_ok: boolean
   staged_api_ok: boolean
-  ssh_ok: boolean
-  ssh_status: string
   health: Record<string, unknown>
   staged_api: Record<string, number | null>
   errors: string[]
@@ -137,13 +132,31 @@ export interface GpuCheckResult {
 export interface BackupCheckResult {
   targets: BackupTarget[]
   ready_count: number
+  external_ready_count: number
 }
 
-export interface BackupRunResult {
-  mode: string
+export interface BackupJob {
+  id: string
+  parent_job_id: string
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | string
+  mode: 'manifest' | 'copy'
+  targets: BackupTarget[]
+  buckets: string[]
+  include_legacy: boolean
+  max_objects: number
+  attempt_count: number
+  worker_id: string
   object_count: number
+  copied_count: number
+  bytes_copied: number
   truncated: boolean
-  targets: Array<{ id: string; path: string; manifest: string; copied: number }>
+  result: { targets?: Array<{ id: string; path: string; manifest: string; copied_count: number; bytes_copied: number }> }
+  warnings: string[]
+  error_message: string
+  alert: { level: string; message: string; acknowledged: boolean }
+  created_at: string | null
+  started_at: string | null
+  finished_at: string | null
 }
 
 export interface ModelProbeResult {
@@ -186,11 +199,19 @@ export interface RuntimeStatus {
       api_key_configured: boolean
       base_url: string
     }
-    asr_model: string
-    tts_model: string
-    image_generation_model: string
   }
   backup: BackupCheckResult
+  dependencies: {
+    ready: boolean
+    checks: Record<string, { ready: boolean; detail?: string; reason?: string; worker_id?: string; age_seconds?: number }>
+  }
+  config: {
+    ok: boolean
+    errors: string[]
+    warnings: string[]
+    schema_version: number
+  }
+  active_gpu_tasks: number
 }
 
 // 设置 API
@@ -256,8 +277,23 @@ export const settingsApi = {
       .then(res => res.data)
   },
 
-  runBackup() {
-    return api.post<BackupRunResult>('/runtime/backup/run')
+  createBackupJob() {
+    return api.post<BackupJob>('/runtime/backup/jobs')
+      .then(res => res.data)
+  },
+
+  listBackupJobs() {
+    return api.get<{ items: BackupJob[] }>('/runtime/backup/jobs')
+      .then(res => res.data.items)
+  },
+
+  retryBackupJob(jobId: string) {
+    return api.post<BackupJob>(`/runtime/backup/jobs/${jobId}/retry`)
+      .then(res => res.data)
+  },
+
+  acknowledgeBackupAlert(jobId: string) {
+    return api.post<BackupJob>(`/runtime/backup/jobs/${jobId}/alerts/acknowledge`)
       .then(res => res.data)
   }
 }

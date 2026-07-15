@@ -147,7 +147,8 @@ def test_auth_required_for_current_user_and_files_when_legacy_auth_enabled(clien
     assert files_response.status_code == 401
 
 
-def test_public_workspace_available_without_session(client):
+def test_public_workspace_available_only_when_explicitly_enabled(client, monkeypatch):
+    monkeypatch.setenv("LUCEON_AUTH_DISABLED", "true")
     me_response = client.get("/api/auth/me")
     files_response = client.get("/api/files")
 

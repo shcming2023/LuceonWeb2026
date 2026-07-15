@@ -62,7 +62,7 @@ After startup, open:
 - MinerU router: `http://SERVER_IP:8002`
 - MinIO console: `http://SERVER_IP:9001`
 
-The local review stack defaults to public workspace mode. Set `LUCEON_AUTH_DISABLED=false` when email/password login is required.
+The local review stack defaults to authenticated mode. Only allowlisted runtime administrators can open `/settings`; public raw-asset downloads are disabled by default.
 
 For Linux server deployment, macOS Apple Silicon setup, model downloads, MinerU Router, multi-GPU scheduling, MinIO endpoint configuration, and verification commands, see [Deployment Guide](docs/deployment.md).
 
@@ -112,11 +112,12 @@ Common environment variables are listed in [.env.example](.env.example). Full de
 
 Frequently used options:
 
-- `MINIO_ENDPOINT`: MinIO address reachable by both browser and containers.
+- `MINIO_INTERNAL_ENDPOINT`: MinIO address used by containers.
+- `MINIO_PUBLIC_ENDPOINT`: MinIO address used by browser downloads.
 - `WORKER_REPLICAS` / `WORKER_CONCURRENCY`: worker replica count and per-worker concurrency.
 - `MINERU_API_USE_ASYNC_TASKS`: enable the MinerU `/tasks` asynchronous API.
 - `POPO_ENABLED`: enable MinerU-Popo postprocessing.
-- `LUCEON_AUTH_DISABLED`: when true, use the shared public workspace user for the local review station.
+- `LUCEON_AUTH_DISABLED`: keep false outside an explicitly isolated development session.
 
 ## Testing
 

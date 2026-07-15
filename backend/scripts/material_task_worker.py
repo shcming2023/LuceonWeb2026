@@ -16,6 +16,7 @@ from app.services.material_task_queue import (
     execute_metadata_job,
     recover_stale_tasks,
 )
+from app.services.runtime_health import record_runtime_worker_heartbeat
 
 
 def consume_once(worker_id: str) -> dict | None:
@@ -78,6 +79,7 @@ def main() -> int:
     retry_delay = 1.0
     while True:
         try:
+            record_runtime_worker_heartbeat("material_task", args.worker_id)
             result = consume_once(args.worker_id)
             retry_delay = 1.0
             if result:

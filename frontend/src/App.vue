@@ -2,17 +2,19 @@
 import { Collection, Document, HomeFilled, MagicStick, Setting, View } from '@element-plus/icons-vue'
 import { useRoute } from 'vue-router'
 import { computed } from 'vue'
+import { useCurrentUser } from '@/utils/user'
 
 const route = useRoute()
+const currentUser = useCurrentUser()
 
-const menuItems = [
+const menuItems = computed(() => [
   { icon: HomeFilled, path: '/', label: '工作概览' },
   { icon: Document, path: '/assets', label: 'PDF 资产' },
   { icon: Collection, path: '/pipeline/runs', label: '解析任务' },
   { icon: MagicStick, path: '/workflow/jobs', label: '精修任务' },
   { icon: View, path: '/review/compare', label: '比对审阅' },
-  { icon: Setting, path: '/settings', label: '运行设置' }
-]
+  ...(currentUser.value?.capabilities?.runtime_admin ? [{ icon: Setting, path: '/settings', label: '运行设置' }] : [])
+])
 
 const activeMenu = computed(() => {
   const path = route.path
@@ -24,7 +26,7 @@ const activeMenu = computed(() => {
   if (path.startsWith('/assets') || path.startsWith('/files')) return '/assets'
   if (path.startsWith('/pipeline')) return '/pipeline/runs'
   if (path.startsWith('/workflow')) return '/workflow/jobs'
-  return menuItems.find(item => path === item.path)?.path || path
+  return menuItems.value.find(item => path === item.path)?.path || path
 })
 
 const immersiveView = computed(() => route.name === 'FilePreview' || route.name === 'ReviewPreview')

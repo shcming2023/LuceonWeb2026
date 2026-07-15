@@ -13,9 +13,9 @@ def test_production_compose_template_has_no_build_or_mutable_image_tags():
     assert ":local" not in text
     assert "/Users/concm" not in text
     assert "~/.codex" not in text
-    assert text.count("image:") == 8
+    assert text.count("image:") == 9
     assert text.count("@sha256:") == 5
-    assert text.count("__BACKEND_IMAGE__") == 3
+    assert text.count("__BACKEND_IMAGE__") == 4
     assert text.count("__FRONTEND_IMAGE__") == 1
 
 
@@ -25,10 +25,24 @@ def test_worker_does_not_inherit_backend_http_healthcheck():
 
     assert "healthcheck:\n      disable: true" in worker
     assert "material-task-worker:" in worker
+    assert "backup-task-worker:" in worker
 
     local_text = (ROOT / "docker-compose.luceon-review.yml").read_text()
     local_workers = local_text.split("  workflow-v2-worker:\n", 1)[1].split("\n  redis:\n", 1)[0]
-    assert local_workers.count("healthcheck:\n      disable: true") == 2
+    assert local_workers.count("healthcheck:\n      disable: true") == 3
+
+
+def test_release_requires_explicit_minio_endpoints_and_external_backup_volume():
+    compose = (DEPLOY / "compose.production.arm64.yml.tmpl").read_text()
+    env = (DEPLOY / ".env.production.example").read_text()
+    preflight = (DEPLOY / "scripts" / "preflight").read_text()
+
+    assert "MINIO_INTERNAL_ENDPOINT=" in env
+    assert "MINIO_PUBLIC_ENDPOINT=" in env
+    assert "LUCEON_EXTERNAL_BACKUP_PATH=" in env
+    assert "LUCEON_EXTERNAL_BACKUP_ROOT: /external-backups" in compose
+    assert "backup_task_worker.py" in compose
+    assert 'test -w "$external_backup_path"' in preflight
 
 
 def test_compiler_uses_current_overleaf_data_path():

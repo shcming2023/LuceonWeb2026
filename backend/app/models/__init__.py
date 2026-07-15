@@ -1,6 +1,7 @@
 from .file import File, FileStatus
 from .final_review import FinalReviewAnnotation, FinalReviewDecision, FinalReviewSession, FinalReviewVerification
 from .material import (
+    BackupJob,
     CodexSkillJob,
     Material,
     MaterialOutput,

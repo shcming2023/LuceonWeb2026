@@ -53,6 +53,7 @@ services:
       DATABASE_URL: sqlite:////data/mineru.db
       LUCEON_RUNTIME_CONFIG: /data/runtime_config.json
       LUCEON_BACKUP_ROOT: /backups
+      LUCEON_EXTERNAL_BACKUP_ROOT: /external-backups
       LUCEON_PIPELINE_WORK_ROOT: /data/pipeline-work
       LUCEON_PIPELINE_SCRIPT: /app/scripts/luceon_pdf_pipeline.py
       LUCEON_PIPELINE_WORKDIR: /app/scripts
@@ -68,6 +69,7 @@ services:
     volumes:
       - ./state/backend:/data
       - ./state/backups:/backups
+      - ${LUCEON_EXTERNAL_BACKUP_PATH:?set LUCEON_EXTERNAL_BACKUP_PATH}:/external-backups
       - ./private/skills:/private/skills:ro
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
@@ -94,6 +96,7 @@ services:
       TZ: Asia/Shanghai
       REDIS_HOST: redis
       DATABASE_URL: sqlite:////data/mineru.db
+      LUCEON_RUNTIME_CONFIG: /data/runtime_config.json
       LUCEON_PIPELINE_WORK_ROOT: /data/pipeline-work
       LUCEON_POPO_RAW_SKILL: /app/app/workflow_v2/runtime/canonical
       LUCEON_RAW_CLEAN_SKILL: /private/skills/eduassets-raw-cleaner
@@ -122,6 +125,7 @@ services:
     env_file: [.env.production]
     environment:
       TZ: Asia/Shanghai
+      REDIS_HOST: redis
       DATABASE_URL: sqlite:////data/mineru.db
       LUCEON_RUNTIME_CONFIG: /data/runtime_config.json
       LUCEON_PIPELINE_WORK_ROOT: /data/pipeline-work
@@ -132,6 +136,33 @@ services:
       - ./state/backups:/backups
     depends_on:
       backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [luceon]
+
+  backup-task-worker:
+    image: __BACKEND_IMAGE__
+    restart: unless-stopped
+    command: ["python", "scripts/backup_task_worker.py", "--loop", "--worker-id", "backup-production"]
+    healthcheck:
+      disable: true
+    env_file: [.env.production]
+    environment:
+      TZ: Asia/Shanghai
+      REDIS_HOST: redis
+      DATABASE_URL: sqlite:////data/mineru.db
+      LUCEON_RUNTIME_CONFIG: /data/runtime_config.json
+      LUCEON_BACKUP_ROOT: /backups
+      LUCEON_EXTERNAL_BACKUP_ROOT: /external-backups
+    volumes:
+      - ./state/backend:/data
+      - ./state/backups:/backups
+      - ${LUCEON_EXTERNAL_BACKUP_PATH:?set LUCEON_EXTERNAL_BACKUP_PATH}:/external-backups
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks: [luceon]
 

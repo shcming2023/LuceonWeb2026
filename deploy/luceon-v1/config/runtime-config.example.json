@@ -1,10 +1,59 @@
 {
-  "minio": {
-    "endpoint": "https://minio.example.internal",
-    "secure": true,
-    "region": "us-east-1"
+  "schema_version": 2,
+  "environment": {
+    "name": "production-mac-mini",
+    "public_app_url": "http://TARGET_HOST:15000"
   },
-  "gpu_wrapper": {
-    "url": "http://gpu-wrapper.example.internal:8083"
+  "minio": {
+    "endpoint": "minio.example.internal:9000",
+    "public_endpoint": "https://assets.example.com",
+    "secure": false,
+    "region": "us-east-1",
+    "contract_buckets": [
+      "eduassets-input",
+      "eduassets-mineru",
+      "eduassets-minerupopo",
+      "eduassets-raw",
+      "eduassets-clean",
+      "eduassets-standard",
+      "eduassets-parsed",
+      "eduassets-elegantbook",
+      "eduassets-review"
+    ]
+  },
+  "gpu": {
+    "mode": "on_demand",
+    "wrapper_url": "http://gpu-wrapper.example.internal:8083"
+  },
+  "backup": {
+    "enabled": true,
+    "mode": "copy",
+    "schedule_enabled": true,
+    "interval_hours": 24,
+    "include_legacy": true,
+    "max_objects": 500000,
+    "targets": [
+      { "id": "snapshot", "enabled": true },
+      { "id": "external", "enabled": true }
+    ]
+  },
+  "models": {
+    "llm": {
+      "enabled": true,
+      "provider": "deepseek",
+      "default_model": "deepseek-v4-flash",
+      "reasoning_model": "deepseek-v4-pro",
+      "deepseek": { "base_url": "https://api.deepseek.com" },
+      "outline_decision_max_tokens": 16000,
+      "outline_global_max_candidates": 500,
+      "outline_max_risk_candidates": 120
+    },
+    "vision": {
+      "enabled": false,
+      "provider": "dashscope",
+      "model": "qwen3.7-plus",
+      "dashscope": { "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1" },
+      "outline_visual_max_candidates": 40
+    }
   }
 }

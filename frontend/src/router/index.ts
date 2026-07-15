@@ -97,7 +97,8 @@ const router = createRouter({
     {
       path: '/settings',
       name: 'Settings',
-      component: () => import('../views/Settings.vue')
+      component: () => import('../views/Settings.vue'),
+      meta: { requiresRuntimeAdmin: true }
     }
   ]
 })
@@ -106,7 +107,10 @@ router.beforeEach(async (to) => {
   if (to.name === 'Login') return true
 
   try {
-    await ensureCurrentUser()
+    const user = await ensureCurrentUser()
+    if (to.meta.requiresRuntimeAdmin && !user.capabilities?.runtime_admin) {
+      return { path: '/' }
+    }
     return true
   } catch {
     return {

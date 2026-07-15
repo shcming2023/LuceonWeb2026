@@ -1,347 +1,169 @@
 <template>
   <div class="settings-root">
     <div class="settings-shell">
-      <div class="page-header">
-        <div class="header-text">
+      <header class="page-header">
+        <div>
           <span class="page-kicker"><el-icon><Setting /></el-icon> 系统管理</span>
-          <h1 class="page-title">运行设置</h1>
-          <p class="page-subtitle">资产层、GPU 调度与备份</p>
+          <h1>运行设置</h1>
+          <p>{{ runtime.environment.name || 'development' }} · schema v{{ runtime.schema_version }}</p>
         </div>
-        <el-button :loading="loading.status" @click="refreshStatus">
-          <el-icon><RefreshRight /></el-icon>
-          <span>刷新状态</span>
-        </el-button>
-      </div>
+        <div class="header-actions">
+          <el-button :loading="loading.status" @click="refreshStatus"><el-icon><RefreshRight /></el-icon>刷新状态</el-button>
+          <el-button type="primary" :loading="loading.saving" @click="saveRuntime"><el-icon><Check /></el-icon>保存配置</el-button>
+        </div>
+      </header>
 
       <el-tabs v-model="activeTab" class="settings-tabs">
         <el-tab-pane label="系统状态" name="status">
-          <section class="settings-panel">
+          <section class="panel">
             <div class="panel-title">
-              <span>运行总览</span>
+              <span>真实运行态</span>
               <el-tag :type="runtimeTagType">{{ runtimeStatusText }}</el-tag>
             </div>
             <div class="status-grid">
-              <div class="status-cell">
-                <span class="status-label">MinIO 合约</span>
-                <strong>{{ status?.minio.contract_ok ? '正常' : '待处理' }}</strong>
-                <small>{{ status?.minio.endpoint || runtime.minio.endpoint || '-' }}</small>
-              </div>
-              <div class="status-cell">
-                <span class="status-label">GPU Wrapper</span>
-                <strong>{{ status?.gpu.wrapper_ok ? '可用' : '不可用' }}</strong>
-                <small>{{ status?.gpu.wrapper_url || runtime.gpu.wrapper_url || '-' }}</small>
-              </div>
-              <div class="status-cell">
-                <span class="status-label">Staged API</span>
-                <strong>{{ status?.gpu.staged_api_ok ? '可用' : '待确认' }}</strong>
-                <small>{{ status?.gpu.ssh_status || 'ssh skipped' }}</small>
-              </div>
-              <div class="status-cell">
-                <span class="status-label">备份目标</span>
-                <strong>{{ status?.backup.ready_count ?? 0 }} 个可写</strong>
-                <small>{{ lastBackupText }}</small>
-              </div>
+              <StatusCell label="MinIO 合约" :value="status?.minio.contract_ok ? '正常' : '异常'" :detail="status?.minio.endpoint || runtime.minio.endpoint" />
+              <StatusCell label="GPU" :value="gpuStateText" :detail="`${status?.active_gpu_tasks ?? 0} 个活动任务`" />
+              <StatusCell label="核心依赖" :value="status?.dependencies.ready ? '全部就绪' : '存在异常'" :detail="dependencySummary" />
+              <StatusCell label="外部备份" :value="status?.backup.external_ready_count ? '可写' : '未就绪'" :detail="latestBackupText" />
             </div>
-            <div v-if="status?.blockers.length || status?.warnings.length" class="issue-list">
+            <div v-if="status?.blockers.length || status?.warnings.length" class="issues">
               <el-tag v-for="item in status.blockers" :key="`b-${item}`" type="danger">{{ item }}</el-tag>
               <el-tag v-for="item in status.warnings" :key="`w-${item}`" type="warning">{{ item }}</el-tag>
+            </div>
+            <div class="dependency-table">
+              <div class="table-row table-head"><span>依赖</span><span>状态</span><span>证据</span></div>
+              <div v-for="row in dependencyRows" :key="row.name" class="table-row">
+                <span>{{ dependencyLabel(row.name) }}</span>
+                <el-tag :type="row.ready ? 'success' : 'danger'">{{ row.ready ? 'ready' : 'failed' }}</el-tag>
+                <small>{{ dependencyDetail(row) }}</small>
+              </div>
             </div>
           </section>
         </el-tab-pane>
 
-        <el-tab-pane label="MinIO 资产" name="minio">
-          <section class="settings-panel">
-            <div class="panel-title">
-              <span>MinIO</span>
-              <el-tag :type="minioReady ? 'success' : 'warning'">{{ minioReady ? '合约正常' : '需要检查' }}</el-tag>
-            </div>
-            <el-form :model="runtime.minio" label-position="top" class="settings-form">
-              <div class="form-grid">
-                <el-form-item label="Endpoint">
-                  <el-input v-model="runtime.minio.endpoint" placeholder="127.0.0.1:9000" />
-                </el-form-item>
-                <el-form-item label="Public Endpoint">
-                  <el-input v-model="runtime.minio.public_endpoint" placeholder="http://公网或内网地址:9000" />
-                </el-form-item>
-                <el-form-item label="Access Key">
-                  <el-input v-model="runtime.minio.access_key" placeholder="留空表示沿用已保存值" />
-                </el-form-item>
-                <el-form-item label="Secret Key">
-                  <el-input v-model="runtime.minio.secret_key" type="password" show-password placeholder="留空表示沿用已保存值" />
-                </el-form-item>
-                <el-form-item label="Region">
-                  <el-input v-model="runtime.minio.region" />
-                </el-form-item>
-                <el-form-item label="HTTPS">
-                  <el-switch v-model="runtime.minio.secure" />
-                </el-form-item>
-              </div>
+        <el-tab-pane label="目标环境" name="environment">
+          <section class="panel">
+            <div class="panel-title"><span>目标主机身份</span><el-tag>schema v{{ runtime.schema_version }}</el-tag></div>
+            <el-form label-position="top" class="form-grid">
+              <el-form-item label="环境名称"><el-input v-model="runtime.environment.name" placeholder="production-mac-mini" /></el-form-item>
+              <el-form-item label="公网应用 URL"><el-input v-model="runtime.environment.public_app_url" placeholder="http://152.136.183.144:15000" /></el-form-item>
             </el-form>
+            <p class="hint">此处描述部署目标，不代表当前开发机就是正式生产主机。</p>
+          </section>
+        </el-tab-pane>
 
+        <el-tab-pane label="MinIO 资产" name="minio">
+          <section class="panel">
+            <div class="panel-title"><span>MinIO</span><el-tag :type="minioReady ? 'success' : 'warning'">{{ minioReady ? '合约正常' : '待检查' }}</el-tag></div>
+            <el-form :model="runtime.minio" label-position="top" class="form-grid">
+              <el-form-item label="内部 Endpoint"><el-input v-model="runtime.minio.endpoint" placeholder="host.docker.internal:9000" /></el-form-item>
+              <el-form-item label="公网 Endpoint"><el-input v-model="runtime.minio.public_endpoint" placeholder="http://152.136.183.144:19000" /></el-form-item>
+              <el-form-item label="Access Key"><el-input v-model="runtime.minio.access_key" placeholder="留空沿用已保存值" /></el-form-item>
+              <el-form-item label="Secret Key"><el-input v-model="runtime.minio.secret_key" type="password" show-password placeholder="留空沿用已保存值" /></el-form-item>
+              <el-form-item label="Region"><el-input v-model="runtime.minio.region" /></el-form-item>
+              <el-form-item label="HTTPS"><el-switch v-model="runtime.minio.secure" /></el-form-item>
+            </el-form>
             <div class="bucket-table">
-              <div class="table-row table-head">
-                <span>篮子</span>
-                <span>角色</span>
-                <span>状态</span>
-              </div>
+              <div class="table-row table-head"><span>Bucket</span><span>角色</span><span>状态</span></div>
               <div v-for="bucket in bucketRows" :key="bucket.bucket" class="table-row">
-                <span>{{ bucket.bucket }}</span>
-                <span>{{ bucket.role }}</span>
+                <span>{{ bucket.bucket }}</span><span>{{ bucket.role }}</span>
                 <el-tag :type="bucket.exists ? 'success' : 'danger'">{{ bucket.exists ? '存在' : '缺失' }}</el-tag>
               </div>
             </div>
-
-            <div class="panel-actions">
-              <el-button :loading="loading.saving" @click="saveRuntime">
-                <el-icon><Check /></el-icon>
-                <span>保存</span>
-              </el-button>
-              <el-button :loading="loading.minio" @click="checkMinioNow">
-                <el-icon><Connection /></el-icon>
-                <span>检查 MinIO</span>
-              </el-button>
-              <el-button type="primary" :loading="loading.ensure" @click="ensureBuckets">
-                <el-icon><FolderChecked /></el-icon>
-                <span>维护篮子</span>
-              </el-button>
+            <div class="actions">
+              <el-button :loading="loading.minio" @click="checkMinioNow"><el-icon><Connection /></el-icon>检查已保存配置</el-button>
+              <el-button type="primary" :loading="loading.ensure" @click="ensureBuckets"><el-icon><FolderChecked /></el-icon>补齐合约 Bucket</el-button>
             </div>
           </section>
         </el-tab-pane>
 
         <el-tab-pane label="GPU 算力" name="gpu">
-          <section class="settings-panel">
-            <div class="panel-title">
-              <span>GPU Wrapper</span>
-              <el-tag :type="gpuReady ? 'success' : 'warning'">{{ gpuReady ? '可用' : '待确认' }}</el-tag>
-            </div>
-            <el-form :model="runtime.gpu" label-position="top" class="settings-form">
-              <div class="form-grid">
-                <el-form-item label="Wrapper URL">
-                  <el-input v-model="runtime.gpu.wrapper_url" placeholder="http://gpu-host:18080" />
-                </el-form-item>
-                <el-form-item label="API Key">
-                  <el-input v-model="runtime.gpu.api_key" type="password" show-password placeholder="留空表示沿用已保存值" />
-                </el-form-item>
-                <el-form-item label="SSH Host">
-                  <el-input v-model="runtime.gpu.ssh_host" placeholder="113.31.105.253" />
-                </el-form-item>
-                <el-form-item label="SSH Port">
-                  <el-input-number v-model="runtime.gpu.ssh_port" :min="1" :max="65535" controls-position="right" />
-                </el-form-item>
-                <el-form-item label="SSH User">
-                  <el-input v-model="runtime.gpu.ssh_user" />
-                </el-form-item>
-                <el-form-item label="SSH Key Path">
-                  <el-input v-model="runtime.gpu.ssh_key_path" placeholder="~/.ssh/id_ed25519" />
-                </el-form-item>
-                <el-form-item label="SSH Password">
-                  <el-input v-model="runtime.gpu.ssh_password" type="password" show-password placeholder="留空表示沿用已保存值" />
-                </el-form-item>
-                <el-form-item label="Service Root">
-                  <el-input v-model="runtime.gpu.service_root" />
-                </el-form-item>
-              </div>
+          <section class="panel">
+            <div class="panel-title"><span>GPU Wrapper</span><el-tag :type="gpuTagType">{{ gpuStateText }}</el-tag></div>
+            <el-form :model="runtime.gpu" label-position="top" class="form-grid">
+              <el-form-item label="运行语义"><el-input :model-value="'按需启动（无活动任务时离线属于正常）'" disabled /></el-form-item>
+              <el-form-item label="Wrapper URL"><el-input v-model="runtime.gpu.wrapper_url" placeholder="http://gpu-host:18080" /></el-form-item>
+              <el-form-item label="API Key"><el-input v-model="runtime.gpu.api_key" type="password" show-password placeholder="留空沿用已保存值" /></el-form-item>
             </el-form>
-
             <div v-if="gpuCheck" class="probe-grid">
-              <div class="probe-row">
-                <span>Wrapper Health</span>
-                <el-tag :type="gpuCheck.wrapper_ok ? 'success' : 'danger'">{{ gpuCheck.wrapper_ok ? 'OK' : 'FAIL' }}</el-tag>
-              </div>
-              <div class="probe-row">
-                <span>Staged API</span>
-                <el-tag :type="gpuCheck.staged_api_ok ? 'success' : 'warning'">{{ gpuCheck.staged_api_ok ? 'OK' : 'CHECK' }}</el-tag>
-              </div>
-              <div class="probe-row">
-                <span>SSH</span>
-                <el-tag :type="gpuCheck.ssh_ok ? 'success' : gpuCheck.ssh_status === 'skipped' ? 'info' : 'warning'">{{ gpuCheck.ssh_status }}</el-tag>
-              </div>
+              <div><span>Wrapper Health</span><el-tag :type="gpuCheck.wrapper_ok ? 'success' : 'danger'">{{ gpuCheck.wrapper_ok ? 'OK' : 'FAIL' }}</el-tag></div>
+              <div><span>MinerU + Popo Staged API</span><el-tag :type="gpuCheck.staged_api_ok ? 'success' : 'danger'">{{ gpuCheck.staged_api_ok ? 'OK' : 'FAIL' }}</el-tag></div>
             </div>
-
-            <div class="panel-actions">
-              <el-button :loading="loading.saving" @click="saveRuntime">
-                <el-icon><Check /></el-icon>
-                <span>保存</span>
-              </el-button>
-              <el-button type="primary" :loading="loading.gpu" @click="checkGpuNow">
-                <el-icon><Monitor /></el-icon>
-                <span>检查 GPU</span>
-              </el-button>
-            </div>
+            <div class="actions"><el-button type="primary" :loading="loading.gpu" @click="checkGpuNow"><el-icon><Monitor /></el-icon>检查已保存配置</el-button></div>
           </section>
         </el-tab-pane>
 
         <el-tab-pane label="模型配置" name="models">
-          <section class="settings-panel">
-            <div class="panel-title">
-              <span>模型配置</span>
-              <el-tag :type="modelConnectivityTag">{{ modelConnectivityText }}</el-tag>
+          <section class="panel">
+            <div class="panel-title"><span>实际使用的模型</span><el-tag :type="modelCheck?.ok ? 'success' : 'info'">{{ modelCheck?.ok ? '连通正常' : '未检查' }}</el-tag></div>
+            <div class="model-section">
+              <div class="section-title"><strong>目录重建 LLM</strong><el-switch v-model="runtime.models.llm.enabled" /></div>
+              <el-form label-position="top" class="form-grid">
+                <el-form-item label="Provider"><el-input v-model="runtime.models.llm.provider" disabled /></el-form-item>
+                <el-form-item label="默认模型"><el-input v-model="runtime.models.llm.default_model" /></el-form-item>
+                <el-form-item label="推理模型"><el-input v-model="runtime.models.llm.reasoning_model" /></el-form-item>
+                <el-form-item label="Base URL"><el-input v-model="runtime.models.llm.deepseek.base_url" /></el-form-item>
+                <el-form-item label="API Key"><el-input v-model="runtime.models.llm.deepseek.api_key" type="password" show-password placeholder="留空沿用已保存值" /></el-form-item>
+                <el-form-item label="输出 Token 上限"><el-input-number v-model="runtime.models.llm.outline_decision_max_tokens" :min="1000" :max="64000" :step="1000" /></el-form-item>
+                <el-form-item label="全局候选上限"><el-input-number v-model="runtime.models.llm.outline_global_max_candidates" :min="1" :max="5000" /></el-form-item>
+                <el-form-item label="风险候选上限"><el-input-number v-model="runtime.models.llm.outline_max_risk_candidates" :min="1" :max="1000" /></el-form-item>
+              </el-form>
             </div>
-            <el-form :model="runtime.models" label-position="top" class="settings-form">
-              <div class="model-section">
-                <div class="model-section-title">
-                  <strong>目录重建 LLM</strong>
-                  <el-switch v-model="runtime.models.llm.enabled" active-text="启用" inactive-text="停用" />
-                </div>
-                <div class="form-grid">
-                  <el-form-item label="Provider">
-                    <el-input v-model="runtime.models.llm.provider" disabled />
-                  </el-form-item>
-                  <el-form-item label="默认模型">
-                    <el-input v-model="runtime.models.llm.default_model" placeholder="deepseek-v4-flash" />
-                  </el-form-item>
-                  <el-form-item label="推理模型">
-                    <el-input v-model="runtime.models.llm.reasoning_model" placeholder="deepseek-v4-pro" />
-                  </el-form-item>
-                  <el-form-item label="DeepSeek Base URL">
-                    <el-input v-model="runtime.models.llm.deepseek.base_url" placeholder="https://api.deepseek.com" />
-                  </el-form-item>
-                  <el-form-item label="DeepSeek API Key">
-                    <el-input v-model="runtime.models.llm.deepseek.api_key" type="password" show-password placeholder="留空表示沿用已保存值" />
-                  </el-form-item>
-                  <el-form-item label="目录候选上限">
-                    <el-input-number v-model="runtime.models.llm.outline_max_risk_candidates" :min="1" :max="1000" controls-position="right" />
-                  </el-form-item>
-                  <el-form-item label="全局候选上限">
-                    <el-input-number v-model="runtime.models.llm.outline_global_max_candidates" :min="1" :max="5000" controls-position="right" />
-                  </el-form-item>
-                  <el-form-item label="输出 Token 上限">
-                    <el-input-number v-model="runtime.models.llm.outline_decision_max_tokens" :min="1000" :max="64000" :step="1000" controls-position="right" />
-                  </el-form-item>
-                </div>
-              </div>
-
-              <div class="model-section">
-                <div class="model-section-title">
-                  <strong>目录视觉核实</strong>
-                  <el-switch v-model="runtime.models.vision.enabled" active-text="启用" inactive-text="停用" />
-                </div>
-                <div class="form-grid">
-                  <el-form-item label="Provider">
-                    <el-input v-model="runtime.models.vision.provider" disabled />
-                  </el-form-item>
-                  <el-form-item label="视觉模型">
-                    <el-input v-model="runtime.models.vision.model" placeholder="qwen3.7-plus" />
-                  </el-form-item>
-                  <el-form-item label="DashScope Base URL">
-                    <el-input v-model="runtime.models.vision.dashscope.base_url" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1" />
-                  </el-form-item>
-                  <el-form-item label="DashScope API Key">
-                    <el-input v-model="runtime.models.vision.dashscope.api_key" type="password" show-password placeholder="留空表示沿用已保存值" />
-                  </el-form-item>
-                  <el-form-item label="视觉候选上限">
-                    <el-input-number v-model="runtime.models.vision.outline_visual_max_candidates" :min="1" :max="1000" controls-position="right" />
-                  </el-form-item>
-                </div>
-              </div>
-
-              <div class="model-section">
-                <div class="model-section-title">
-                  <strong>预留模型</strong>
-                </div>
-                <div class="form-grid">
-                  <el-form-item label="ASR 模型">
-                    <el-input v-model="runtime.models.asr.model" placeholder="fun-asr-flash-2026-06-15" />
-                  </el-form-item>
-                  <el-form-item label="TTS 模型">
-                    <el-input v-model="runtime.models.tts.model" placeholder="qwen3-tts-instruct-flash-realtime" />
-                  </el-form-item>
-                  <el-form-item label="图片生成模型">
-                    <el-input v-model="runtime.models.image_generation.model" placeholder="qwen-image-2.0-pro" />
-                  </el-form-item>
-                </div>
-              </div>
-            </el-form>
-
-            <div class="probe-grid">
-              <div class="probe-row">
-                <span>LLM</span>
-                <el-tag :type="modelProbeType(modelCheck?.checks.llm, runtime.models.llm.enabled && llmKeyReady)">
-                  {{ modelProbeText(modelCheck?.checks.llm, runtime.models.llm.enabled && llmKeyReady) }}
-                </el-tag>
-              </div>
-              <div class="probe-row">
-                <span>Vision</span>
-                <el-tag :type="modelProbeType(modelCheck?.checks.vision, visionKeyReady)">
-                  {{ modelProbeText(modelCheck?.checks.vision, visionKeyReady) }}
-                </el-tag>
-              </div>
+            <div class="model-section">
+              <div class="section-title"><strong>目录视觉核实</strong><el-switch v-model="runtime.models.vision.enabled" /></div>
+              <el-form label-position="top" class="form-grid">
+                <el-form-item label="Provider"><el-input v-model="runtime.models.vision.provider" disabled /></el-form-item>
+                <el-form-item label="模型"><el-input v-model="runtime.models.vision.model" /></el-form-item>
+                <el-form-item label="Base URL"><el-input v-model="runtime.models.vision.dashscope.base_url" /></el-form-item>
+                <el-form-item label="API Key"><el-input v-model="runtime.models.vision.dashscope.api_key" type="password" show-password placeholder="留空沿用已保存值" /></el-form-item>
+                <el-form-item label="视觉候选上限"><el-input-number v-model="runtime.models.vision.outline_visual_max_candidates" :min="1" :max="1000" /></el-form-item>
+              </el-form>
             </div>
-            <div v-if="modelCheck" class="model-test-detail">
-              <span>{{ modelProbeDetail(modelCheck.checks.llm) }}</span>
-              <span>{{ modelProbeDetail(modelCheck.checks.vision) }}</span>
+            <div v-if="modelCheck" class="probe-grid">
+              <div v-for="(probe, name) in modelCheck.checks" :key="name"><span>{{ name }}</span><el-tag :type="probe.ok ? 'success' : probe.skipped ? 'info' : 'danger'">{{ probe.ok ? 'OK' : probe.skipped ? 'SKIP' : 'FAIL' }} · {{ probe.latency_ms }}ms</el-tag></div>
             </div>
-
-            <div class="panel-actions">
-              <el-button :loading="loading.saving" @click="saveRuntime">
-                <el-icon><Check /></el-icon>
-                <span>保存</span>
-              </el-button>
-              <el-button type="primary" :loading="loading.models" @click="checkModelsNow">
-                <el-icon><Connection /></el-icon>
-                <span>测试模型</span>
-              </el-button>
-            </div>
+            <div class="actions"><el-button type="primary" :loading="loading.models" @click="checkModelsNow"><el-icon><Connection /></el-icon>测试已保存配置</el-button></div>
           </section>
         </el-tab-pane>
 
-        <el-tab-pane label="备份策略" name="backup">
-          <section class="settings-panel">
-            <div class="panel-title">
-              <span>资产备份</span>
-              <el-tag :type="backupReady ? 'success' : 'warning'">{{ backupReady ? '目标可写' : '待检查' }}</el-tag>
-            </div>
-            <el-form :model="runtime.backup" label-position="top" class="settings-form">
-              <div class="form-grid">
-                <el-form-item label="启用备份">
-                  <el-switch v-model="runtime.backup.enabled" />
-                </el-form-item>
-                <el-form-item label="备份模式">
-                  <el-segmented v-model="runtime.backup.mode" :options="backupModes" />
-                </el-form-item>
-                <el-form-item label="定时策略">
-                  <el-switch v-model="runtime.backup.schedule_enabled" />
-                </el-form-item>
-                <el-form-item label="间隔小时">
-                  <el-input-number v-model="runtime.backup.interval_hours" :min="1" :max="720" controls-position="right" />
-                </el-form-item>
-                <el-form-item label="包含辅助对象">
-                  <el-switch v-model="runtime.backup.include_auxiliary" />
-                </el-form-item>
-                <el-form-item label="对象上限">
-                  <el-input-number v-model="runtime.backup.max_objects" :min="100" :max="500000" :step="1000" controls-position="right" />
-                </el-form-item>
-              </div>
+        <el-tab-pane label="备份与告警" name="backup">
+          <section class="panel">
+            <div class="panel-title"><span>持久化备份作业</span><el-tag :type="backupReady ? 'success' : 'warning'">{{ backupReady ? '目标可写' : '目标未就绪' }}</el-tag></div>
+            <el-form :model="runtime.backup" label-position="top" class="form-grid">
+              <el-form-item label="启用定时备份"><el-switch v-model="runtime.backup.enabled" /></el-form-item>
+              <el-form-item label="模式"><el-segmented v-model="runtime.backup.mode" :options="backupModes" /></el-form-item>
+              <el-form-item label="开启调度"><el-switch v-model="runtime.backup.schedule_enabled" /></el-form-item>
+              <el-form-item label="间隔小时"><el-input-number v-model="runtime.backup.interval_hours" :min="1" :max="720" /></el-form-item>
+              <el-form-item label="包含历史 eduassets-latex"><el-switch v-model="runtime.backup.include_legacy" /></el-form-item>
+              <el-form-item label="对象上限"><el-input-number v-model="runtime.backup.max_objects" :min="100" :max="1000000" :step="1000" /></el-form-item>
             </el-form>
-
+            <p class="hint">“仅清单”不会复制资产；“完整复制”遇到对象上限或任一目标失败时会失败并产生告警，不会假成功。</p>
             <div class="target-list">
               <div v-for="target in runtime.backup.targets" :key="target.id" class="target-row">
                 <el-switch v-model="target.enabled" />
-                <span class="target-label">{{ target.label }}</span>
-                <el-input v-model="target.path" placeholder="/Volumes/.../LuceonBackup" />
-                <el-tag :type="targetStatusType(target.status)">{{ target.status || 'unknown' }}</el-tag>
+                <strong>{{ target.label }}</strong>
+                <el-input :model-value="target.path" disabled />
+                <el-tag :type="target.status === 'ready' ? 'success' : target.enabled ? 'warning' : 'info'">{{ target.status || (target.enabled ? '未检查' : 'disabled') }}</el-tag>
               </div>
             </div>
-
-            <div v-if="backupRun" class="backup-result">
-              <span>最近手动备份</span>
-              <strong>{{ backupRun.object_count }} 个对象</strong>
-              <small>{{ backupRun.targets.map(target => target.path).join(' / ') || '-' }}</small>
+            <div class="actions">
+              <el-button :loading="loading.backup" @click="checkBackupNow"><el-icon><FolderChecked /></el-icon>检查固定目标</el-button>
+              <el-button type="primary" :loading="loading.backupRun" @click="createBackupJob"><el-icon><Upload /></el-icon>创建备份作业</el-button>
             </div>
 
-            <div class="panel-actions">
-              <el-button :loading="loading.saving" @click="saveRuntime">
-                <el-icon><Check /></el-icon>
-                <span>保存</span>
-              </el-button>
-              <el-button :loading="loading.backup" @click="checkBackupNow">
-                <el-icon><FolderChecked /></el-icon>
-                <span>检查路径</span>
-              </el-button>
-              <el-button type="primary" :loading="loading.backupRun" @click="runBackupNow">
-                <el-icon><Upload /></el-icon>
-                <span>手动备份</span>
-              </el-button>
+            <div class="job-list">
+              <div class="table-row table-head job-row"><span>任务</span><span>模式/范围</span><span>结果</span><span>告警/操作</span></div>
+              <div v-for="job in backupJobs" :key="job.id" class="table-row job-row">
+                <span>#{{ job.id }} · {{ job.status }}</span>
+                <small>{{ job.mode === 'manifest' ? '仅清单' : '完整复制' }} · {{ job.buckets.length }} buckets</small>
+                <small>{{ job.object_count }} 对象 / {{ job.copied_count }} 次复制<span v-if="job.error_message"> · {{ job.error_message }}</span></small>
+                <div class="job-actions">
+                  <el-tag v-if="job.alert.level" :type="job.alert.acknowledged ? 'info' : 'danger'">{{ job.alert.acknowledged ? '已确认' : job.alert.level }}</el-tag>
+                  <el-button v-if="job.alert.level && !job.alert.acknowledged" link type="primary" @click="acknowledgeAlert(job.id)">确认</el-button>
+                  <el-button v-if="job.status === 'failed' || job.status === 'succeeded'" link type="primary" @click="retryBackup(job.id)">重试</el-button>
+                </div>
+              </div>
+              <el-empty v-if="!backupJobs.length" description="尚无备份作业" :image-size="64" />
             </div>
           </section>
         </el-tab-pane>
@@ -351,686 +173,111 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, defineComponent, h, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Check, Connection, FolderChecked, Monitor, RefreshRight, Setting, Upload } from '@element-plus/icons-vue'
 import { settingsApi } from '@/api/settings'
-import type {
-  BackupRunResult,
-  BackupTarget,
-  GpuCheckResult,
-  ModelCheckResult,
-  MinioCheckResult,
-  RuntimeConfig,
-  RuntimeStatus
-} from '@/api/settings'
+import type { BackupJob, BackupTarget, GpuCheckResult, ModelCheckResult, MinioCheckResult, RuntimeConfig, RuntimeStatus } from '@/api/settings'
 
-const backupModes = [
-  { label: '清单', value: 'manifest' },
-  { label: '复制', value: 'copy' }
-]
-
-const defaultRuntime = (): RuntimeConfig => ({
-  minio: {
-    endpoint: '',
-    public_endpoint: '',
-    secure: false,
-    access_key: '',
-    secret_key: '',
-    region: 'us-east-1',
-    contract_buckets: ['eduassets-input', 'eduassets-mineru', 'eduassets-minerupopo', 'eduassets-raw', 'eduassets-clean', 'eduassets-parsed']
-  },
-  gpu: {
-    wrapper_url: '',
-    api_key: '',
-    ssh_host: '',
-    ssh_port: 23,
-    ssh_user: 'root',
-    ssh_key_path: '',
-    ssh_password: '',
-    service_root: '/root/mineru-popo-service'
-  },
-  models: {
-    llm: {
-      enabled: true,
-      provider: 'deepseek',
-      default_model: 'deepseek-v4-flash',
-      reasoning_model: 'deepseek-v4-pro',
-      deepseek: {
-        base_url: 'https://api.deepseek.com',
-        api_key: ''
-      },
-      outline_decision_max_tokens: 16000,
-      outline_global_max_candidates: 500,
-      outline_max_risk_candidates: 120
-    },
-    vision: {
-      enabled: false,
-      provider: 'dashscope',
-      model: 'qwen3.7-plus',
-      dashscope: {
-        base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        api_key: ''
-      },
-      outline_visual_max_candidates: 40
-    },
-    asr: { model: 'fun-asr-flash-2026-06-15' },
-    tts: { model: 'qwen3-tts-instruct-flash-realtime' },
-    image_generation: { model: 'qwen-image-2.0-pro' }
-  },
-  backup: {
-    enabled: false,
-    mode: 'manifest',
-    schedule_enabled: false,
-    interval_hours: 24,
-    include_auxiliary: false,
-    max_objects: 50000,
-    targets: []
-  }
+const StatusCell = defineComponent({
+  props: { label: String, value: String, detail: String },
+  setup: props => () => h('div', { class: 'status-cell' }, [h('span', props.label), h('strong', props.value), h('small', props.detail || '-')])
 })
 
+const currentBuckets = ['eduassets-input', 'eduassets-mineru', 'eduassets-minerupopo', 'eduassets-raw', 'eduassets-clean', 'eduassets-standard', 'eduassets-parsed', 'eduassets-elegantbook', 'eduassets-review']
+const defaultRuntime = (): RuntimeConfig => ({
+  schema_version: 2,
+  environment: { name: 'development', public_app_url: '' },
+  minio: { endpoint: '', public_endpoint: '', secure: false, access_key: '', secret_key: '', region: 'us-east-1', contract_buckets: currentBuckets },
+  gpu: { mode: 'on_demand', wrapper_url: '', api_key: '' },
+  models: {
+    llm: { enabled: true, provider: 'deepseek', default_model: 'deepseek-v4-flash', reasoning_model: 'deepseek-v4-pro', deepseek: { base_url: 'https://api.deepseek.com', api_key: '' }, outline_decision_max_tokens: 16000, outline_global_max_candidates: 500, outline_max_risk_candidates: 120 },
+    vision: { enabled: false, provider: 'dashscope', model: 'qwen3.7-plus', dashscope: { base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', api_key: '' }, outline_visual_max_candidates: 40 }
+  },
+  backup: { enabled: false, mode: 'manifest', schedule_enabled: false, interval_hours: 24, include_legacy: true, max_objects: 500000, targets: [] }
+})
+
+const backupModes = [{ label: '仅清单（不复制）', value: 'manifest' }, { label: '完整复制', value: 'copy' }]
 const activeTab = ref('status')
 const runtime = ref<RuntimeConfig>(defaultRuntime())
 const status = ref<RuntimeStatus | null>(null)
 const minioCheck = ref<MinioCheckResult | null>(null)
 const gpuCheck = ref<GpuCheckResult | null>(null)
 const modelCheck = ref<ModelCheckResult | null>(null)
-const backupRun = ref<BackupRunResult | null>(null)
-const loading = reactive({
-  initial: false,
-  saving: false,
-  status: false,
-  minio: false,
-  ensure: false,
-  gpu: false,
-  models: false,
-  backup: false,
-  backupRun: false
-})
+const backupJobs = ref<BackupJob[]>([])
+const loading = reactive({ initial: false, saving: false, status: false, minio: false, ensure: false, gpu: false, models: false, backup: false, backupRun: false })
 
-const runtimeTagType = computed(() => {
-  if (status.value?.status === 'ready') return 'success'
-  if (status.value?.status === 'blocked') return 'danger'
-  return 'warning'
-})
-
-const runtimeStatusText = computed(() => {
-  if (!status.value) return '未检查'
-  return status.value.status === 'ready' ? '就绪' : status.value.status === 'blocked' ? '阻断' : '警告'
-})
-
+const runtimeTagType = computed(() => status.value?.status === 'ready' ? 'success' : status.value?.status === 'blocked' ? 'danger' : 'warning')
+const runtimeStatusText = computed(() => !status.value ? '未检查' : status.value.status === 'ready' ? '就绪' : status.value.status === 'blocked' ? '阻断' : '警告')
 const minioReady = computed(() => Boolean(minioCheck.value?.contract_ok || status.value?.minio.contract_ok))
-const gpuReady = computed(() => Boolean(gpuCheck.value?.wrapper_ok || status.value?.gpu.wrapper_ok))
-const llmKeyReady = computed(() => Boolean(runtime.value.models.llm.deepseek.api_key || runtime.value.models.llm.deepseek.api_key_configured || status.value?.models.llm.api_key_configured))
-const visionKeyReady = computed(() => Boolean(runtime.value.models.vision.dashscope.api_key || runtime.value.models.vision.dashscope.api_key_configured || status.value?.models.vision.api_key_configured))
-const modelsReady = computed(() => {
-  const llmOk = !runtime.value.models.llm.enabled || llmKeyReady.value
-  const visionOk = !runtime.value.models.vision.enabled || visionKeyReady.value
-  return llmOk && visionOk
+const gpuStateText = computed(() => {
+  const state = gpuCheck.value?.state || status.value?.gpu.state
+  if (state === 'expected_off') return '按需关闭（正常）'
+  if (state === 'ready') return '在线可用'
+  if (state === 'degraded') return '服务降级'
+  return state === 'offline' ? '离线' : '未检查'
 })
-const modelConnectivityText = computed(() => {
-  if (modelCheck.value?.checks.llm.ok && modelCheck.value?.checks.vision.ok) return '连通正常'
-  if (modelCheck.value && !modelCheck.value.ok) return '连通异常'
-  return modelsReady.value ? '配置完整' : '待配置'
-})
-const modelConnectivityTag = computed(() => {
-  if (modelCheck.value?.checks.llm.ok && modelCheck.value?.checks.vision.ok) return 'success'
-  if (modelCheck.value && !modelCheck.value.ok) return 'danger'
-  return modelsReady.value ? 'warning' : 'info'
-})
+const gpuTagType = computed(() => ['ready', 'expected_off'].includes(gpuCheck.value?.state || status.value?.gpu.state || '') ? 'success' : 'warning')
 const backupReady = computed(() => Boolean(status.value?.backup.ready_count || runtime.value.backup.targets.some(target => target.status === 'ready')))
+const latestBackupText = computed(() => backupJobs.value[0] ? `#${backupJobs.value[0].id} ${backupJobs.value[0].status}` : '无作业记录')
+const dependencyRows = computed(() => Object.entries(status.value?.dependencies.checks || {}).map(([name, value]) => ({ name, ...value })))
+const dependencySummary = computed(() => `${dependencyRows.value.filter(row => row.ready).length}/${dependencyRows.value.length || 0} ready`)
+const bucketRows = computed(() => minioCheck.value?.buckets?.length ? minioCheck.value.buckets : runtime.value.minio.contract_buckets.map(bucket => ({ bucket, role: bucketRole(bucket), exists: false, created: false })))
 
-const bucketRows = computed(() => {
-  if (minioCheck.value?.buckets?.length) return minioCheck.value.buckets
-  return runtime.value.minio.contract_buckets.map(bucket => ({
-    bucket,
-    role: bucketRole(bucket),
-    exists: false,
-    created: false
-  }))
-})
+const bucketRole = (bucket: string) => ({
+  'eduassets-input': 'source_pdf', 'eduassets-mineru': 'mineru_official', 'eduassets-minerupopo': 'popo_official',
+  'eduassets-raw': 'raw_master', 'eduassets-clean': 'clean_candidate', 'eduassets-standard': 'standard_master',
+  'eduassets-parsed': 'archive_optional', 'eduassets-elegantbook': 'elegantbook_output', 'eduassets-review': 'review_evidence'
+}[bucket] || 'unknown')
+const dependencyLabel = (name: string) => ({ sqlite: 'SQLite', redis: 'Redis', workflow_database: 'Workflow MySQL', material_worker: '解析 Worker', workflow_worker: '精修 Worker', backup_worker: '备份 Worker', overleaf: 'Overleaf/XeLaTeX' }[name] || name)
+const dependencyDetail = (row: { detail?: string; reason?: string; worker_id?: string; age_seconds?: number }) => row.detail || row.reason || (row.worker_id ? `${row.worker_id} · ${row.age_seconds ?? '-'}s` : '-')
 
-const lastBackupText = computed(() => {
-  const last = runtime.value.backup.last_backup
-  if (!last || typeof last !== 'object') return '未记录'
-  const createdAt = (last as Record<string, unknown>).created_at
-  return typeof createdAt === 'string' ? createdAt : '已记录'
-})
+const loadRuntime = async () => { loading.initial = true; try { runtime.value = await settingsApi.getRuntimeSettings() } catch { ElMessage.error('加载运行设置失败') } finally { loading.initial = false } }
+const loadBackupJobs = async () => { try { backupJobs.value = await settingsApi.listBackupJobs() } catch { ElMessage.error('加载备份作业失败') } }
+const refreshStatus = async () => { loading.status = true; try { status.value = await settingsApi.getRuntimeStatus(); minioCheck.value = status.value.minio; gpuCheck.value = status.value.gpu; applyBackupCheck(status.value.backup.targets); await loadBackupJobs() } catch { ElMessage.error('刷新运行状态失败') } finally { loading.status = false } }
+const saveRuntime = async () => { loading.saving = true; try { runtime.value = await settingsApi.updateRuntimeSettings(runtime.value); ElMessage.success('运行设置已保存') } catch { ElMessage.error('保存运行设置失败') } finally { loading.saving = false } }
+const checkMinioNow = async () => { loading.minio = true; try { minioCheck.value = await settingsApi.checkMinio(); ElMessage[minioCheck.value.contract_ok ? 'success' : 'warning'](minioCheck.value.contract_ok ? 'MinIO 合约正常' : 'MinIO 合约异常') } catch { ElMessage.error('检查 MinIO 失败') } finally { loading.minio = false } }
+const ensureBuckets = async () => { loading.ensure = true; try { minioCheck.value = await settingsApi.ensureMinioBuckets(); ElMessage[minioCheck.value.contract_ok ? 'success' : 'warning'](minioCheck.value.contract_ok ? 'Bucket 合约已满足' : '仍有 Bucket 不可用') } catch { ElMessage.error('维护 Bucket 失败') } finally { loading.ensure = false } }
+const checkGpuNow = async () => { loading.gpu = true; try { gpuCheck.value = await settingsApi.checkGpu(); ElMessage[gpuCheck.value.wrapper_ok && gpuCheck.value.staged_api_ok ? 'success' : 'warning'](gpuCheck.value.wrapper_ok && gpuCheck.value.staged_api_ok ? 'GPU Wrapper 与 Staged API 可用' : 'GPU 服务未完全就绪') } catch { ElMessage.error('检查 GPU 失败') } finally { loading.gpu = false } }
+const checkModelsNow = async () => { loading.models = true; try { modelCheck.value = await settingsApi.checkModels(); ElMessage[modelCheck.value.ok ? 'success' : 'warning'](modelCheck.value.ok ? '模型连通正常' : '模型连通检查异常') } catch { ElMessage.error('测试模型失败') } finally { loading.models = false } }
+const checkBackupNow = async () => { loading.backup = true; try { const result = await settingsApi.checkBackupTargets(); applyBackupCheck(result.targets); ElMessage[result.ready_count ? 'success' : 'warning'](result.ready_count ? '备份目标可写' : '没有可写备份目标') } catch { ElMessage.error('检查备份目标失败') } finally { loading.backup = false } }
+const createBackupJob = async () => { loading.backupRun = true; try { const job = await settingsApi.createBackupJob(); await loadBackupJobs(); ElMessage.success(`备份作业 #${job.id} 已入队`) } catch { ElMessage.error('创建备份作业失败，请先保存并启用目标') } finally { loading.backupRun = false } }
+const retryBackup = async (jobId: string) => { await settingsApi.retryBackupJob(jobId); await loadBackupJobs(); ElMessage.success('重试作业已入队') }
+const acknowledgeAlert = async (jobId: string) => { await settingsApi.acknowledgeBackupAlert(jobId); await loadBackupJobs(); ElMessage.success('告警已确认') }
+const applyBackupCheck = (targets: BackupTarget[]) => { const byId = new Map(targets.map(target => [target.id, target])); runtime.value.backup.targets = runtime.value.backup.targets.map(target => ({ ...target, ...byId.get(target.id), path: byId.get(target.id)?.path ?? target.path })) }
 
-const loadRuntime = async () => {
-  loading.initial = true
-  try {
-    runtime.value = await settingsApi.getRuntimeSettings()
-  } catch {
-    ElMessage.error('加载运行设置失败')
-  } finally {
-    loading.initial = false
-  }
-}
-
-const refreshStatus = async () => {
-  loading.status = true
-  try {
-    status.value = await settingsApi.getRuntimeStatus()
-    minioCheck.value = status.value.minio
-    gpuCheck.value = status.value.gpu
-    applyBackupCheck(status.value.backup.targets)
-  } catch {
-    ElMessage.error('刷新运行状态失败')
-  } finally {
-    loading.status = false
-  }
-}
-
-const saveRuntime = async () => {
-  loading.saving = true
-  try {
-    runtime.value = await settingsApi.updateRuntimeSettings(runtime.value)
-    ElMessage.success('运行设置已保存')
-  } catch {
-    ElMessage.error('保存运行设置失败')
-  } finally {
-    loading.saving = false
-  }
-}
-
-const saveRuntimeQuietly = async () => {
-  runtime.value = await settingsApi.updateRuntimeSettings(runtime.value)
-}
-
-const checkMinioNow = async () => {
-  loading.minio = true
-  try {
-    await saveRuntimeQuietly()
-    minioCheck.value = await settingsApi.checkMinio()
-    ElMessage[minioCheck.value.contract_ok ? 'success' : 'warning'](minioCheck.value.contract_ok ? 'MinIO 合约正常' : 'MinIO 合约需要处理')
-  } catch {
-    ElMessage.error('检查 MinIO 失败')
-  } finally {
-    loading.minio = false
-  }
-}
-
-const ensureBuckets = async () => {
-  loading.ensure = true
-  try {
-    await saveRuntimeQuietly()
-    minioCheck.value = await settingsApi.ensureMinioBuckets()
-    ElMessage[minioCheck.value.contract_ok ? 'success' : 'warning'](minioCheck.value.contract_ok ? '篮子合约已维护' : '仍有篮子不可用')
-  } catch {
-    ElMessage.error('维护篮子失败')
-  } finally {
-    loading.ensure = false
-  }
-}
-
-const checkGpuNow = async () => {
-  loading.gpu = true
-  try {
-    await saveRuntimeQuietly()
-    gpuCheck.value = await settingsApi.checkGpu()
-    ElMessage[gpuCheck.value.wrapper_ok ? 'success' : 'warning'](gpuCheck.value.wrapper_ok ? 'GPU Wrapper 可用' : 'GPU Wrapper 不可用')
-  } catch {
-    ElMessage.error('检查 GPU 失败')
-  } finally {
-    loading.gpu = false
-  }
-}
-
-const checkModelsNow = async () => {
-  loading.models = true
-  try {
-    await saveRuntimeQuietly()
-    modelCheck.value = await settingsApi.checkModels()
-    const llmOk = Boolean(modelCheck.value.checks.llm.ok)
-    const visionOk = Boolean(modelCheck.value.checks.vision.ok)
-    ElMessage[llmOk && visionOk ? 'success' : 'warning'](llmOk && visionOk ? '模型连通正常' : '模型连通检查未全部通过')
-  } catch {
-    ElMessage.error('测试模型失败')
-  } finally {
-    loading.models = false
-  }
-}
-
-const checkBackupNow = async () => {
-  loading.backup = true
-  try {
-    await saveRuntimeQuietly()
-    const result = await settingsApi.checkBackupTargets()
-    applyBackupCheck(result.targets)
-    ElMessage[result.ready_count > 0 ? 'success' : 'warning'](result.ready_count > 0 ? '备份路径可用' : '没有可写备份路径')
-  } catch {
-    ElMessage.error('检查备份路径失败')
-  } finally {
-    loading.backup = false
-  }
-}
-
-const runBackupNow = async () => {
-  loading.backupRun = true
-  try {
-    await saveRuntimeQuietly()
-    backupRun.value = await settingsApi.runBackup()
-    await loadRuntime()
-    ElMessage.success('手动备份已完成')
-  } catch {
-    ElMessage.error('手动备份失败')
-  } finally {
-    loading.backupRun = false
-  }
-}
-
-const applyBackupCheck = (targets: BackupTarget[]) => {
-  const byId = new Map(targets.map(target => [target.id, target]))
-  runtime.value.backup.targets = runtime.value.backup.targets.map(target => ({
-    ...target,
-    ...byId.get(target.id),
-    path: byId.get(target.id)?.path ?? target.path
-  }))
-}
-
-const bucketRole = (bucket: string) => {
-  const roles: Record<string, string> = {
-    'eduassets-input': 'source_pdf',
-    'eduassets-mineru': 'mineru_official',
-    'eduassets-minerupopo': 'popo_official',
-    'eduassets-raw': 'raw_master',
-    'eduassets-clean': 'clean_candidate',
-    'eduassets-parsed': 'archive_optional'
-  }
-  return roles[bucket] || 'unknown'
-}
-
-const targetStatusType = (statusText?: string) => {
-  if (statusText === 'ready') return 'success'
-  if (statusText === 'disabled') return 'info'
-  return 'warning'
-}
-
-const modelProbeType = (probe: ModelCheckResult['checks']['llm'] | undefined, configured: boolean) => {
-  if (probe?.ok) return 'success'
-  if (probe && !probe.skipped) return 'danger'
-  return configured ? 'warning' : 'info'
-}
-
-const modelProbeText = (probe: ModelCheckResult['checks']['llm'] | undefined, configured: boolean) => {
-  if (probe?.ok) return '连通正常'
-  if (probe?.skipped) return '跳过'
-  if (probe) return '连通异常'
-  return configured ? '待测试' : '未配置'
-}
-
-const modelProbeDetail = (probe: ModelCheckResult['checks']['llm']) => {
-  const latency = probe.latency_ms ? `${probe.latency_ms}ms` : ''
-  const status = probe.status_code ? `HTTP ${probe.status_code}` : ''
-  const error = probe.error ? ` · ${probe.error}` : ''
-  return `${probe.provider}/${probe.model || '-'} ${status} ${latency}${error}`.trim()
-}
-
-onMounted(async () => {
-  await loadRuntime()
-  await refreshStatus()
-})
+onMounted(async () => { await loadRuntime(); await refreshStatus() })
 </script>
 
 <style scoped>
-.settings-root {
-  width: 100%;
-  height: 100%;
-  overflow: auto;
-}
-
-.settings-shell {
-  display: flex;
-  width: 100%;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.page-header {
-  display: flex;
-  min-height: 58px;
-  align-items: flex-end;
-  gap: 16px;
-}
-
-.header-text {
-  min-width: 0;
-  flex: 1;
-}
-
-.page-kicker {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-bottom: 4px;
-  color: var(--primary-dark);
-  font-size: 10px;
-  font-weight: 650;
-}
-
-.page-title {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 24px;
-  font-weight: 720;
-  line-height: 1.2;
-  letter-spacing: 0;
-}
-
-.page-subtitle {
-  margin: 4px 0 0;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
-.settings-tabs {
-  min-height: 500px;
-  padding: 0 20px 20px;
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-  background: var(--bg-primary);
-}
-
-.settings-tabs :deep(.el-tabs__nav-wrap::after) {
-  height: 1px;
-  background: var(--border-light);
-}
-
-.settings-tabs :deep(.el-tabs__content) {
-  overflow: visible;
-}
-
-.settings-panel {
-  display: flex;
-  min-height: 420px;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.panel-title {
-  display: flex;
-  min-height: 32px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  color: var(--text-primary);
-  font-size: 15px;
-  font-weight: 680;
-}
-
-.status-grid {
-  display: grid;
-  overflow: hidden;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-}
-
-.status-cell {
-  display: flex;
-  min-width: 0;
-  min-height: 118px;
-  flex-direction: column;
-  gap: 7px;
-  padding: 16px;
-  border-right: 1px solid var(--border-light);
-  background: #fafbfc;
-}
-
-.status-cell:last-child {
-  border-right: 0;
-}
-
-.status-label,
-.table-head,
-.probe-row span,
-.target-label,
-.backup-result span {
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-.status-cell strong,
-.backup-result strong {
-  color: var(--text-primary);
-  font-size: 17px;
-  font-weight: 680;
-}
-
-.status-cell small,
-.backup-result small {
-  overflow-wrap: anywhere;
-  color: var(--text-secondary);
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.issue-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  padding: 11px;
-  border-left: 3px solid var(--warning-color);
-  background: rgb(179 107 0 / 0.045);
-}
-
-.settings-form {
-  max-width: 980px;
-}
-
-.settings-form :deep(.el-form-item) {
-  margin-bottom: 0;
-}
-
-.settings-form :deep(.el-form-item__label) {
-  height: auto;
-  padding-bottom: 5px;
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 620;
-  line-height: 1.3;
-}
-
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 15px 18px;
-}
-
-.bucket-table,
-.probe-grid,
-.target-list {
-  overflow: hidden;
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-}
-
-.table-row {
-  display: grid;
-  min-height: 42px;
-  grid-template-columns: minmax(220px, 1fr) 180px 96px;
-  align-items: center;
-  gap: 12px;
-  padding: 0 13px;
-  border-bottom: 1px solid var(--border-light);
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.table-row:last-child {
-  border-bottom: 0;
-}
-
-.table-head {
-  min-height: 38px;
-  background: #f3f4f6;
-  font-weight: 650;
-}
-
-.probe-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.probe-row {
-  display: flex;
-  min-height: 48px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 13px;
-  border-right: 1px solid var(--border-light);
-  background: #fafbfc;
-}
-
-.probe-row:last-child {
-  border-right: 0;
-}
-
-.model-section {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 15px;
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-  background: #fafbfc;
-}
-
-.model-section-title {
-  display: flex;
-  min-height: 30px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border-light);
-  color: var(--text-primary);
-}
-
-.model-section-title strong {
-  font-size: 13px;
-  font-weight: 680;
-}
-
-.model-test-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  overflow-wrap: anywhere;
-  color: var(--text-secondary);
-  font-size: 11px;
-}
-
-.target-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.target-row {
-  display: grid;
-  min-height: 54px;
-  grid-template-columns: 44px 120px minmax(0, 1fr) 96px;
-  align-items: center;
-  gap: 12px;
-  padding: 7px 13px;
-  border-bottom: 1px solid var(--border-light);
-}
-
-.target-row:last-child {
-  border-bottom: 0;
-}
-
-.backup-result {
-  display: grid;
-  min-height: 44px;
-  grid-template-columns: 120px 140px minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-  padding: 0 13px;
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-  background: #fafbfc;
-}
-
-.panel-actions {
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: auto;
-  padding: 12px 0 2px;
-  border-top: 1px solid var(--border-light);
-  background: var(--bg-primary);
-}
-
-@media (max-width: 920px) {
-  .page-header {
-    align-items: stretch;
-    flex-wrap: wrap;
-  }
-
-  .status-grid,
-  .form-grid,
-  .probe-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .status-cell,
-  .probe-row {
-    border-right: 0;
-    border-bottom: 1px solid var(--border-light);
-  }
-
-  .status-cell:last-child,
-  .probe-row:last-child {
-    border-bottom: 0;
-  }
-
-  .table-row {
-    grid-template-columns: minmax(0, 1fr) 120px 80px;
-  }
-
-  .target-row {
-    grid-template-columns: 44px 92px minmax(0, 1fr);
-  }
-
-  .target-row .el-tag {
-    grid-column: 2 / 4;
-    width: fit-content;
-  }
-
-  .backup-result {
-    grid-template-columns: 1fr;
-    padding: 12px 13px;
-  }
-
-  .panel-actions {
-    flex-wrap: wrap;
-    justify-content: stretch;
-  }
-}
-
-@media (max-width: 620px) {
-  .settings-tabs {
-    padding: 0 12px 14px;
-  }
-
-  .settings-tabs :deep(.el-tabs__nav-wrap) {
-    overflow-x: auto;
-  }
-
-  .table-row {
-    grid-template-columns: 1fr;
-    gap: 5px;
-    padding: 10px 12px;
-  }
-
-  .table-head {
-    display: none;
-  }
-}
+.settings-root { width: 100%; min-height: 100%; background: var(--bg-secondary); }
+.settings-shell { max-width: 1240px; margin: 0 auto; padding: 28px; }
+.page-header, .panel-title, .actions, .header-actions, .section-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.page-header { margin-bottom: 20px; }
+.page-header h1 { margin: 5px 0; font-size: 28px; }
+.page-header p, .hint { margin: 0; color: var(--text-muted); }
+.page-kicker { display: flex; align-items: center; gap: 6px; color: var(--primary-color); font-size: 13px; font-weight: 650; }
+.panel { padding: 22px; border: 1px solid var(--border-light); border-radius: 10px; background: var(--bg-primary); }
+.panel-title { margin-bottom: 20px; font-size: 17px; font-weight: 650; }
+.status-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.status-cell { display: flex; min-height: 112px; flex-direction: column; gap: 8px; padding: 16px; border: 1px solid var(--border-light); border-radius: 8px; }
+.status-cell span, .status-cell small, .table-row small { color: var(--text-muted); }
+.status-cell strong { font-size: 17px; }
+.issues { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; }
+.bucket-table, .dependency-table, .job-list { margin-top: 20px; border: 1px solid var(--border-light); border-radius: 8px; overflow: hidden; }
+.table-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr; align-items: center; gap: 14px; min-height: 48px; padding: 8px 14px; border-bottom: 1px solid var(--border-light); }
+.table-row:last-child { border-bottom: 0; }
+.table-head { background: var(--bg-secondary); color: var(--text-muted); font-size: 12px; font-weight: 650; }
+.actions { justify-content: flex-end; margin-top: 20px; }
+.probe-grid { display: grid; gap: 8px; margin-top: 16px; }
+.probe-grid > div { display: flex; align-items: center; justify-content: space-between; padding: 12px; border: 1px solid var(--border-light); border-radius: 7px; }
+.model-section { padding: 18px 0; border-top: 1px solid var(--border-light); }
+.model-section:first-of-type { border-top: 0; }
+.target-list { display: grid; gap: 10px; margin-top: 18px; }
+.target-row { display: grid; grid-template-columns: auto 130px 1fr auto; align-items: center; gap: 12px; }
+.job-row { grid-template-columns: 120px 1fr 1.6fr 170px; }
+.job-actions { display: flex; align-items: center; gap: 4px; }
+.hint { margin-top: 8px; font-size: 13px; }
+@media (max-width: 900px) { .status-grid, .form-grid { grid-template-columns: 1fr; } .target-row, .job-row { grid-template-columns: 1fr; } .page-header { align-items: flex-start; flex-direction: column; } }
 </style>

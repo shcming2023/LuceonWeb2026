@@ -202,6 +202,96 @@ class MaterialOutput(Base):
         return {"bucket": bucket or "", "object": object_name or ""}
 
 
+class BackupJob(Base):
+    __tablename__ = "backup_jobs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    requested_by_user_id = Column(String(64), nullable=False, index=True)
+    parent_job_id = Column(Integer, nullable=True, index=True)
+    status = Column(String(32), nullable=False, default="queued", index=True)
+    mode = Column(String(16), nullable=False, default="manifest", index=True)
+    idempotency_key = Column(String(128), nullable=False, unique=True, index=True)
+    target_snapshot_json = Column(Text, nullable=False)
+    bucket_scope_json = Column(Text, nullable=False)
+    include_legacy = Column(Boolean, nullable=False, default=True)
+    max_objects = Column(Integer, nullable=False, default=500000)
+    worker_id = Column(String(128), nullable=True, index=True)
+    attempt_count = Column(Integer, nullable=False, default=0)
+    heartbeat_at = Column(DateTime, nullable=True)
+    lease_expires_at = Column(DateTime, nullable=True, index=True)
+    object_count = Column(Integer, nullable=False, default=0)
+    copied_count = Column(Integer, nullable=False, default=0)
+    bytes_copied = Column(Integer, nullable=False, default=0)
+    truncated = Column(Boolean, nullable=False, default=False)
+    result_json = Column(Text, nullable=True)
+    warnings_json = Column(Text, nullable=True)
+    error_message = Column(Text, nullable=True)
+    alert_level = Column(String(16), nullable=True)
+    alert_message = Column(Text, nullable=True)
+    alert_acknowledged_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    def targets(self) -> list[dict]:
+        return self._list(self.target_snapshot_json)
+
+    def buckets(self) -> list[str]:
+        return [str(item) for item in self._list(self.bucket_scope_json)]
+
+    def result(self) -> dict:
+        return self._dict(self.result_json)
+
+    def warnings(self) -> list[str]:
+        return [str(item) for item in self._list(self.warnings_json)]
+
+    def to_dict(self) -> dict:
+        return {
+            "id": str(self.id),
+            "parent_job_id": str(self.parent_job_id) if self.parent_job_id else "",
+            "status": self.status,
+            "mode": self.mode,
+            "targets": self.targets(),
+            "buckets": self.buckets(),
+            "include_legacy": bool(self.include_legacy),
+            "max_objects": self.max_objects,
+            "attempt_count": self.attempt_count,
+            "worker_id": self.worker_id or "",
+            "object_count": self.object_count,
+            "copied_count": self.copied_count,
+            "bytes_copied": self.bytes_copied,
+            "truncated": bool(self.truncated),
+            "result": self.result(),
+            "warnings": self.warnings(),
+            "error_message": self.error_message or "",
+            "alert": {
+                "level": self.alert_level or "",
+                "message": self.alert_message or "",
+                "acknowledged": bool(self.alert_acknowledged_at),
+            },
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "finished_at": self.finished_at.isoformat() if self.finished_at else None,
+        }
+
+    @staticmethod
+    def _list(raw: str | None) -> list:
+        try:
+            value = json.loads(raw or "[]")
+        except json.JSONDecodeError:
+            return []
+        return value if isinstance(value, list) else []
+
+    @staticmethod
+    def _dict(raw: str | None) -> dict:
+        try:
+            value = json.loads(raw or "{}")
+        except json.JSONDecodeError:
+            return {}
+        return value if isinstance(value, dict) else {}
+
+
 class CodexSkillJob(Base):
     __tablename__ = "codex_skill_jobs"
 
