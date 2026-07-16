@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
 import socket
+import sqlite3
 import time
 import uuid
 from datetime import datetime, timedelta
@@ -201,12 +203,60 @@ def _record_backup_worker_heartbeat(worker_id: str) -> None:
         pass
 
 
+def _sqlite_path(database_url: str) -> Path | None:
+    prefix = "sqlite:///"
+    if not database_url.startswith(prefix):
+        return None
+    path = Path(database_url[len(prefix):])
+    return path if path.is_absolute() else path.resolve()
+
+
+def _runtime_sqlite_databases() -> dict[str, Path]:
+    databases = {}
+    for name, variable in (("application", "DATABASE_URL"), ("workflow", "WORKFLOW_DATABASE_URL")):
+        path = _sqlite_path(os.getenv(variable, ""))
+        if path and path.is_file():
+            databases[name] = path
+    return databases
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _snapshot_sqlite_database(source: Path, destination: Path) -> dict[str, Any]:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    source_db = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
+    target_db = sqlite3.connect(destination)
+    try:
+        source_db.backup(target_db)
+        integrity = [str(row[0]) for row in target_db.execute("PRAGMA integrity_check")]
+        if integrity != ["ok"]:
+            raise RuntimeError(f"SQLite 备份完整性失败: {source} {integrity[:5]}")
+    finally:
+        target_db.close()
+        source_db.close()
+    destination.chmod(0o600)
+    return {
+        "source": str(source),
+        "file": str(destination.name),
+        "size_bytes": destination.stat().st_size,
+        "sha256": _sha256(destination),
+        "integrity_check": "ok",
+    }
+
+
 def execute_backup_job(
     job_id: int,
     worker_id: str,
     *,
     client: Any | None = None,
     session_factory: Callable[[], Session] | None = None,
+    database_paths: dict[str, Path] | None = None,
 ) -> dict[str, Any]:
     session_factory = session_factory or SessionLocal
     db = session_factory()
@@ -264,6 +314,7 @@ def execute_backup_job(
         }
         copied_count = 0
         bytes_copied = 0
+        sqlite_sources = database_paths if database_paths is not None else _runtime_sqlite_databases()
         for target in job.targets():
             target_root = Path(str(target["path"]))
             final_root = target_root / f"luceon-backup-job-{job.id}"
@@ -274,6 +325,7 @@ def execute_backup_job(
             partial_roots.append(partial_root)
             target_copied = 0
             target_bytes = 0
+            database_snapshots = []
             if job.mode == "copy":
                 for row in objects:
                     destination = _safe_destination(partial_root, row["bucket"], row["object"])
@@ -300,8 +352,14 @@ def execute_backup_job(
                         db.commit()
                         _record_backup_worker_heartbeat(worker_id)
                         last_heartbeat = time.monotonic()
+                for name, source in sqlite_sources.items():
+                    snapshot = _snapshot_sqlite_database(source, partial_root / "databases" / f"{name}.db")
+                    snapshot["name"] = name
+                    database_snapshots.append(snapshot)
+                    target_bytes += int(snapshot["size_bytes"])
+            target_manifest = {**manifest, "databases": database_snapshots}
             manifest_path = partial_root / "backup-manifest.json"
-            manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+            manifest_path.write_text(json.dumps(target_manifest, ensure_ascii=False, indent=2), encoding="utf-8")
             partial_root.rename(final_root)
             partial_roots.remove(partial_root)
             copied_count += target_copied
@@ -313,6 +371,8 @@ def execute_backup_job(
                     "manifest": str(final_root / "backup-manifest.json"),
                     "copied_count": target_copied,
                     "bytes_copied": target_bytes,
+                    "database_count": len(database_snapshots),
+                    "databases": database_snapshots,
                 }
             )
 

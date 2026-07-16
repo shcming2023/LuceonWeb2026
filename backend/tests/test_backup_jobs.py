@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import sqlite3
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
@@ -148,6 +149,40 @@ def test_copy_job_copies_every_object_to_each_target(sessions, tmp_path):
         job_root = root / f"luceon-backup-job-{queued.id}" / "objects"
         assert (job_root / "eduassets-input/nested/book.pdf").read_bytes() == b"pdf"
         assert (job_root / "eduassets-standard/m/standard-final/main.tex").read_bytes() == b"latex"
+
+
+def test_copy_job_includes_integrity_checked_sqlite_snapshot(sessions, tmp_path):
+    source = tmp_path / "application.db"
+    source_db = sqlite3.connect(source)
+    source_db.execute("CREATE TABLE evidence (value TEXT NOT NULL)")
+    source_db.execute("INSERT INTO evidence VALUES ('restorable')")
+    source_db.commit()
+    source_db.close()
+    db = sessions()
+    try:
+        config = runtime_config(tmp_path, "copy")
+        config["backup"]["targets"][0]["enabled"] = False
+        queued = enqueue_backup_job(db, "7", config=config)
+        assert claim_next_backup_job(db, "worker-1")
+    finally:
+        db.close()
+
+    result = execute_backup_job(
+        queued.id,
+        "worker-1",
+        client=FakeMinio(complete_objects({})),
+        session_factory=sessions,
+        database_paths={"application": source},
+    )
+
+    target = result["result"]["targets"][0]
+    assert target["database_count"] == 1
+    snapshot = tmp_path / "external" / f"luceon-backup-job-{queued.id}" / "databases/application.db"
+    restored = sqlite3.connect(snapshot)
+    assert restored.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    assert restored.execute("SELECT value FROM evidence").fetchone()[0] == "restorable"
+    restored.close()
+    assert snapshot.stat().st_mode & 0o777 == 0o600
 
 
 def test_truncated_copy_fails_and_records_acknowledgeable_alert(sessions, tmp_path):
