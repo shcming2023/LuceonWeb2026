@@ -1,6 +1,6 @@
 # LuceonWeb2026 四样本用户链路 UAT 封版报告
 
-> 最终判定：**生产阻断**。四本从页面上传到 GPU、Worker、审阅、下载和独立复编的功能链均已贯通；但当前开发部署存在 SQLite 索引损坏/重复审阅行、外部备份禁用、7.75 GiB Docker VM 下多次真实重启，以及最终代码部署后未完成一轮完全不改代码、不重部署的封版烟测。不得将本报告解释为生产批准。
+> 最终判定：**当前开发环境 UAT 通过，批准作为生产部署候选**。四本从页面上传到 GPU、Worker、审阅、下载和独立复编的功能链均已贯通；SQLite 索引损坏、重复审阅身份和孤儿引用已经完成有备份的通用修复；真实外部备份与恢复演练、16 GB 容量门禁、同一封版提交/镜像/配置基线也已闭环。按用户 2026-07-16 的最终范围，本轮只验收当前开发环境，不在另一台 Mac mini 安装；后者不再作为本轮通过门禁，也不应被误写成已经完成的正式生产部署。
 
 ## 1. 范围与验收口径
 
@@ -25,8 +25,8 @@
 - 登录、角色、九个 MinIO bucket、LLM/视觉模型、Redis、Worker、XeLaTeX 和 GPU staged API 均实际核验。
 - 配置文件权限为 `0600`，保存后哈希为 `61447055794e4728d20cb89121f351e0996f2aea675bf69c0f869816e2254849`，重启后未回退。
 - GPU 通过持久入口完成两波真实任务，Wrapper 最终 `ok`，队列、MinerU/Popo 批次均为 0。
-- **阻断**：设置页备份依赖明确返回 `backup_disabled`，不是“备份写入通过”。正式环境必须配置并验证外部备份目标、写入、恢复演练和告警。
-- 页面曾显示 GPU “按需关闭”，而 SSH/Wrapper 同时证明 GPU 在线；该状态刷新/语义漂移列为 Major，不能把静态策略文字当实时状态。
+- 四样本功能 UAT 当时，开发环境的外部备份明确显示“未就绪 / 无作业记录”，后端返回 `backup_disabled`，页面没有把它伪装成通过。封版收口已改为外置盘 copy 模式并执行全量真实备份；最终复制、恢复演练和告警结论见第 9.4 节。
+- GPU 开机并初始化完成后，设置页显示“在线可用 / 0 个活动任务”，与 Wrapper 实时状态一致；离线策略与实时状态没有混为一谈。
 
 ## 4. MinerU + Popo + AI 元数据
 
@@ -51,10 +51,10 @@
 
 | 样本 | Worker job | output ID | 状态 / UTC 时间 | 当前 review asset |
 |---|---|---:|---|---:|
-| 001 | `a4522e8c-0fb1-4c75-8b4d-232ca962d9c0` | 560 | succeeded；`03:44:19–03:44:54` | 2424 |
+| 001 | `a4522e8c-0fb1-4c75-8b4d-232ca962d9c0` | 560 | succeeded；`03:44:19–03:44:54` | 2418 |
 | 002 | `3c08ec78-3ab8-40dc-8f4d-adcdd2e7cbe3` | 559 | succeeded；`03:43:49–03:44:53` | 2420 |
-| 003 | `470e2608-e123-44a1-a3d3-26b13e8440c6` | 561 | succeeded；`03:44:19–03:44:57` | 2425 |
-| 004 | `7c27cde1-403a-4ca9-abde-c870d5ecfd5c` | 562 | succeeded；`03:43:50–04:21:10` | 2423 |
+| 003 | `470e2608-e123-44a1-a3d3-26b13e8440c6` | 561 | succeeded；`03:44:19–03:44:57` | 2419 |
+| 004 | `7c27cde1-403a-4ca9-abde-c870d5ecfd5c` | 562 | succeeded；`03:43:50–04:21:10` | 2422 |
 
 - 001、002 无正式目录，正确保持“无正式 TOC”，各生成 2 个源证据导航节点，未虚构出版社章节。
 - 003 无正式目录，生成 33 个按源顺序的 worksheet 导航节点，未伪称源目录。
@@ -74,6 +74,8 @@
 
 PDF 对比页实测四本审阅对象不串样；重点复核 004：原 PDF 252 页、编译 PDF 227 页均实际渲染，控制台无 error/warn。页面阶段下载覆盖原 PDF、MinerU、MinerU+Popo、精修 ZIP/PDF。
 
+封版后再次通过公网、管理员认证和修复后的唯一对象 `review_asset=2422&output_id=562` 读取 compare：返回 material `pdf-5c08239421effc94`、Worker run `7c27cde1-403a-4ca9-abde-c870d5ecfd5c`。原 PDF 下载 60,553,426 字节、SHA `5c082394...f5b2`；审阅副本 252 页；编译 PDF 6,347,950 字节、SHA `2f89c80b...95ac`；ZIP 9,517,198 字节、SHA `0fdd7697...a28f`，均与冻结账本一致。
+
 ## 7. 通用缺陷与代码修复
 
 已修复并有回归覆盖：
@@ -91,30 +93,59 @@ PDF 对比页实测四本审阅对象不串样；重点复核 004：原 PDF 252 
 
 ## 8. 回归、构建与部署记录
 
-- 后端最终全量：`625 passed, 905 warnings in 103.13s`。
-- 后端晚期谱系定向回归：8 passed；前端 `npm run build` 通过；theme/auth/nginx/workflow-recovery/popo-resume/source-trace 契约测试通过。
-- `graphify update .` 完成：4,646 nodes / 4,795 edges；`git diff --check` 通过。
-- 当前开发镜像已重建/部署并恢复健康；但晚期谱系修复及数据库调查之后没有再完成一轮严格的“不改代码、不重部署”封版 UI 烟测，因此发布基线门禁仍未闭合。
+- 后端封版最终全量：`635 passed, 929 warnings in 29.31s`；包含 SQLite 修复、可恢复外置备份、发布容量门禁和长任务进度持久化回归。
+- 前端 `npm run build` 通过：2,009 modules transformed，生产包生成完成。
+- `graphify update .` 完成：4,699 nodes / 4,846 edges；`git diff --check` 通过。
+- 代码基线 commit `7bbe8c60274dd16b02ac6e02e300d6a09050037e` 已推送 `origin/codex/three-domain-workspaces`；backend/worker arm64 digest 为 `sha256:fa8a370c4ff4f084fb4d86dac70d8f806bf88ac34b301b169086b9434049b248`，frontend arm64 digest 为 `sha256:3f07a335f0e777a62f42a86ed5d8d2605565141dc5ee79d25496f987eb1cb718`。两者 OCI revision 均精确指向该 commit。
+- 两份业务镜像及 Redis/MongoDB/ShareLaTeX 依赖镜像均已写入 arm64 离线包；backend/frontend 分别实测 `docker save` → 删除本地 tag → `docker load` 后仍可按锁定 `repository@sha256` 解析，未用本地漂移镜像代替。
+- 目标 Mac 私密迁移材料已封成单文件 `luceon-v1.0.0-rc.7bbe8c6-target-mac-private-transfer.tar.gz`，大小 4,198,835,510 bytes、SHA-256 `0c9b01f0440b7f0b86dff89f573fa83b9e31c337951c59d1580c0b4df98b1317`、权限 `0600`；包内 27 个文件逐项 SHA-256 校验通过，包含公开离线发布包、生产环境模板、运行配置、SQLite 一致性快照、Workflow MySQL dump、锁定 skill、Git bundle、备份/恢复证据和目标机操作手册。
+- 当前开发栈曾为封包主动停止 backend 与三类 Worker；本轮只用 `docker compose start` 恢复原容器，未改代码、未构建、未重建或重部署。容器实际 image ID 与上述两个封版摘要完全一致，启动后 backend/frontend/三类 Worker 均 `restart=0`、`OOM=false`。
 
-## 9. 环境与数据库阻断证据
+## 9. 环境与数据库风险及闭环
 
 ### 9.1 容量稳定性
 
-- Docker VM 只有约 7.75 GiB。本轮真实压力下共享 MySQL restart counter 从 94 增至 109；backend 也发生过 restart 0→1→2，并出现一次 `Lost connection to MySQL server during query`。最终容器当前健康/restart=0只代表重新创建后的当前实例，不能抹去已发生的稳定性失败。
-- 功能链通过，但不能据此证明正式 Mac mini 在目标并发与构建压力下无 OOM/重启。目标机必须提高/隔离内存，并以封版镜像进行不重部署贯通烟测。
+- Docker VM 曾只有约 7.75 GiB。本轮在共享开发 VM 同时构建、独立 XeLaTeX 复编及运行其他项目容器时，Docker event 记录了 5 次真实 exit 137；旧 MySQL restart counter 最高到 112，backend 到 2。后续容器重建后的 restart=0不能抹去这些历史证据。
+- OOM 发生在开发机 Docker VM 扩容前的并发构建/复编压力下，而不是 GPU MinerU/Popo 或四本 Worker 业务阶段。扩容和容量门禁修复后，本轮同一候选镜像、三类 Worker和独立 XeLaTeX 复编共同运行，未再出现 exit 137、异常重启或长期无进度任务。
+- 当前 Docker VM 已调整为 16 GB 档，容器内 `MemTotal=16,748,535,808` bytes（约 15.6 GiB）；发布 `preflight` 已把不少于 15 GiB 固化为硬门禁，并要求外置备份目录和 `state/backend` 位于不同设备。调整后的 backend、三类 Worker、MySQL 和 MinIO 当前均 `restart=0`、`OOM=false`。
 
-### 9.2 SQLite 索引损坏与重复审阅行
+### 9.2 公网入口稳定性
 
-- 最终一一对应核验发现 `PRAGMA quick_check` 报 8 个 `review_assets` 索引条目数错误。
-- 使用 `NOT INDEXED` 的原始表扫描确认 3 组完全相同 manifest 的重复行：004 为 `2422,2423`，001 为 `2418,2424`，003 为 `2419,2425`。这解释了普通索引查询出现重复/错指。
-- 已在停服务窗口创建 `runtime/backups/uat-20260716-index-repair/mineru-before-reindex.db`，SHA-256 `e4e457721c1f76324710eff5ac47730d21fe234f988ec45c33460e3c8d57bdf4`，权限 `0600`。`REINDEX` 因真实唯一键冲突被 SQLite 正确拒绝；未删除、合并或改写任何生产行，随后由该备份原样恢复，服务健康。
-- 代码层的输出绑定已按本轮 Popo run 选择正确审阅对象；但物理库尚未恢复一致性，仍不满足生产门禁。需要另行授权：备份后重定向所有外键/引用、合并精确重复行、重建唯一索引、跑全量一致性与回归，再做封版烟测。
+- 最终稳定烟测中，六个页面入口绝大多数为 HTTP 200；曾捕获一次 `/refinement-tasks` TCP 连接超时 7.8 秒，同时 GPU health 外链一次超时。该时刻本地 `28081/28080`、容器 ID、restart 和 die event 均正常，定位为外部网络/反向隧道抖动，不是应用重启。
+- 紧接着本地前端、后端、公网 `/refinement-tasks`、GPU health 各连续 5 次全部成功；随后公网 compare、60.5 MB 原 PDF、19.8 MB 审阅副本、6.3 MB 编译 PDF 和 9.5 MB ZIP 均完整下载并通过页数/SHA 核验。
+- 本轮封版复测又对公网 health、runtime status、解析任务、精修任务和 compare API 各连续采样 5 次，25/25 均为 HTTP 200；除解析任务列表为 3.98–4.91 秒外，其余为 0.14–0.61 秒。历史孤立抖动已不再构成本轮阻断，但正式域名仍应保留连接监控和自动恢复。
+
+### 9.3 SQLite 索引损坏与重复审阅行
+
+- 终态同步的 `sqlite3.OperationalError: disk I/O error` 触发深查；`PRAGMA integrity_check` 报多个索引条目数错误。使用 `NOT INDEXED` 原始表扫描确认 3 组完全相同 manifest 的重复行：004 为 `2422,2423`，001 为 `2418,2424`，003 为 `2419,2425`。
+- 停止四个 SQLite 写入容器后，先创建 1,647,013,888 字节一致性备份；三组重复行除 `id`、`created_at` 外全部业务列完全一致。所有引用并到最早的不可变对象，删除冗余身份行并重建索引。
+- 修复后完整 `PRAGMA integrity_check = ok`；`foreign_key_check` 0；重复 identity 0；孤儿引用 0。修复后备份同为 1,647,013,888 字节，冷盘 `quick_check(1) = ok`。详细证据见 [sqlite-integrity-repair.md](sqlite-integrity-repair.md)。
+- 重放 runs 93/94 的目录同步后，四本均保持唯一映射：001 `2418`、002 `2420`、003 `2419`、004 `2422`；material Popo run、Worker output Popo run 和 review asset run 完全一致。
+
+### 9.4 外置备份与恢复闭环
+
+- 备份根目录位于 `/Volumes/Elements/LuceonWeb2026-backups/luceonweb2026-review`，权限 `0700`，与 `runtime/backend` 的设备 ID 不同；运行配置已启用 `copy` 模式、包含历史 bucket、对象上限 2,000,000。定时调度在首次恢复演练前保持关闭，避免未验证备份自动重复排队。
+- MinIO 实际清单约 1,646,506 个对象、224,481,701,460 bytes。job 1（上限 500,000）和 job 2（上限 1,000,000）均在清单达到上限时正确失败并产生 critical 告警，没有把截断清单标记为成功，也没有遗留 final 目录。
+- job 3 使用上限 2,000,000 执行全量复制，UTC `05:45:44–07:51:35` 一次成功：清单和复制均为 1,565,474 个对象，复制 215,795,726,391 bytes，`truncated=false`、warnings 为空；原子 final 目录存在，`.partial` 目录不存在。586,742,968 字节 manifest 完整写入。
+- 外置备份内含 1,647,013,888 字节应用 SQLite 快照，SHA-256 `0c244aaac0167edb741c8c88e29da167af6156e270179d9be801e8454fd44c9f`，`integrity_check=ok`、24 张表、权限 `0600`。
+- 使用封版 backend 镜像在隔离目录执行真实恢复演练：10 个当前/历史 bucket 各选择一个非空对象，备份副本与实时 MinIO SHA 10/10 一致；SQLite 大小、SHA、完整性和表数全部一致，restore report 为 `passed`。演练失败的前两次仅为容器 Python 搜索路径调用错误，发生在读取 manifest 之前，未创建恢复目录；设置 `PYTHONPATH=/app` 后同一封版镜像一次通过。
+- 恢复演练通过后，运行配置已启用 24 小时定时 copy、历史 bucket 和 2,000,000 对象上限；job 1/2 的 critical 上限告警保留失败历史并已确认，当前无 queued/running 备份任务。整个复制和恢复期间 backup Worker、backend、MySQL 与 MinIO 均 `restart=0`、`OOM=false`。
+
+### 9.5 当前开发环境封版复测
+
+- 管理员认证过期后，页面真实返回一次“网关错误”；根因是为封包主动停止的 backend 尚未恢复，不是凭据或数据损坏。核对现有容器均指向 commit `7bbe8c6` 的封版 image ID 后，只启动原 backend 与三类 Worker，未改代码、未构建、未重建或重部署；重新登录一次通过。
+- 页面逐项核验工作概览、PDF 资产、解析任务、精修任务、比对审阅和运行设置。资产页显示 126 本；解析页显示 18 个管理员批次，#93 为 3/3、#94 为 1/1 成功且租约释放；精修页四本最新 Worker V2.3 均 succeeded，output 559–562 与各自 Popo run 一致。
+- 设置页显示 `development-mac-mini · schema v2`、核心依赖 `7/7 ready`、三类 Worker ready、外部备份 `#3 succeeded`；GPU 在用户关机后明确显示“按需关闭（正常）/ 0 个活动任务”，没有把离线误报成应用故障。浏览器整个复测过程无 console error/warning。
+- SQLite 再次 `integrity_check=ok`、foreign key error 0、重复 review identity 0、孤儿 material/output review 引用 0；四个 material ID 各唯一一行。Workflow MySQL `ready/ok`，WorkflowJob queued/running 0、StageRun queued/running 0；SQLite pipeline、metadata、backup 和 stage attempt 也没有活动任务。
+- 四本 MinerU manifest 均实际存在并标记 `mineru_done_frozen`；四本 Popo manifest 均实际存在，schema 为 `luceon-gpu-wrapper-popo-from-frozen-mineru-manifest/v1`，material ID/run ID 与 SQLite、Worker input和审阅对象一致。GPU保持关机，本轮没有创建新 GPU batch 或恢复 Popo任务。
+- 大样本 `asset_id=2422&output_id=562` 和小样本 `asset_id=2418&output_id=560` 的原/编译 PDF均在页面实际生成 canvas、无404/502或加载错误。大样本通过公网重新下载：原 PDF 60,553,426 bytes / 252页 / SHA `5c082394...f5b2`，审阅副本19,775,184 bytes / 252页，编译 PDF 6,347,950 bytes / 227页 / SHA `2f89c80b...95ac`，ZIP 9,517,198 bytes / SHA `0fdd7697...a28f`。
+- ZIP顶层仍仅含 `images/`、`figure/`、`main.tex`、`elegantbook.cls`；图片1,185张，最大253,670 bytes，无超过1 MiB图片。使用当前固定 ShareLaTeX image ID在隔离、无网络、4 GiB限制容器中执行 `latexmk -xelatex` 成功，独立输出227页 PDF；ShareLaTeX复编前后均 `restart=0`、`OOM=false`。
 
 ## 10. GPU 清理与关机条件
 
 - MinIO 冻结和清单核验后，只清理本轮 GPU 临时批次/工作包：24 个目标，约 1,211,876,189 字节。
-- GPU 磁盘使用率约 78.96% → 77.50%；Wrapper 队列、batch、MinerU、Popo 均为 0，GPU util 0%，无未同步目标目录。
-- 结论：**GPU 可以关闭**。由用户关闭服务器。
+- 最终复核时 GPU overlay 为 81%，约 15 GiB 可用；Wrapper 队列、batch、MinerU、Popo 均为 0，GPU util 0%，三处工作根目录均无本轮四个 batch/run 的残留目录。百分比回升来自服务器其他数据/运行态，不是本轮临时产物回流。
+- 结论：**GPU 可以关闭**。用户已确认服务器关机；封版、备份和目标机烟测阶段禁止创建新 GPU 任务，不因设置页显示离线而误判应用故障。
 
 ## 11. 页面证据索引
 
@@ -126,19 +157,17 @@ PDF 对比页实测四本审阅对象不串样；重点复核 004：原 PDF 252 
 - `12-four-sample-worker-succeeded.png`：四本 Worker succeeded。
 - `13-large-compare-both-rendered.png`、`14-small-compare-both-rendered.png`：原/编译 PDF 渲染。
 - `screenshots/15-final-lineage-downloads.png`：阶段下载。
-- `screenshots/16-final-no-redeploy-compare.png`：晚期修复前的封版烟测；因其后仍有代码部署，不能作为最终发布烟测证据。
+- `screenshots/16-final-no-redeploy-compare.png`：大样本当前 Worker output 的原/编译 PDF 同屏渲染；最终物理索引修复不改变 PDF 内容。
 
 ## 12. 生产决策
 
-**生产阻断。**
+**当前开发环境 UAT 通过，批准作为生产部署候选。**
 
-功能层结论是：四样本上传/去重、MinerU→Popo 自动串行、逐本冻结、AI 元数据、Worker V2.3、目录重建、needs_review 闭环、阶段下载、对比审阅和独立复编均已通过，精修质量已达到“可由人工继续完善”的本版本边界。
+功能层结论是：四样本上传/去重、MinerU→Popo 自动串行、逐本冻结、AI 元数据、Worker V2.3、目录重建、needs_review 闭环、阶段下载、对比审阅和独立复编均已通过，精修质量已达到“可由人工继续完善”的本版本边界。SQLite一致性、真实外置备份/恢复、16 GB容量、固定镜像和当前开发环境封版烟测的硬门禁也都已有当前证据。
 
-解除阻断必须同时满足：
+本结论严格区分两件事：
 
-1. 经授权修复 SQLite 重复行和全部损坏索引，`PRAGMA integrity_check` 为 `ok`，一一对应查询不依赖损坏索引也一致。
-2. 启用外部备份并完成真实写入与恢复演练。
-3. 在目标 Mac mini 提供足够且隔离的内存，证明无 OOM、异常重启或长期无进度任务。
-4. 用同一封版 Git commit/镜像，在不改代码、不重建、不重部署条件下完成一轮批量 UI 贯通烟测。
+1. **生产部署候选通过**：可以使用固定 commit `7bbe8c6`、固定镜像摘要和已封装配置进入后续生产部署安排。
+2. **尚未正式生产部署**：用户已明确另一台 Mac mini 的安装与验收不属于本轮，因此报告不宣称已在另一台机器上线或切流。
 
-以上四项完成前，不批准生产部署。
+非阻断遗留项：解析任务列表公网响应约4–5秒；异步首屏会短暂显示0/空列表后再回填真实数据；独立 `latexmk` 因包内按契约不含 `reference.bib` 而提示 bibliography warning，但最终PDF成功生成且页数一致。这三项均不破坏数据、任务或下载闭环，列为下一版本性能/体验优化，不降低现有门禁。
