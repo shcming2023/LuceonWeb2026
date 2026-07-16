@@ -269,6 +269,11 @@ def execute_backup_job(
         job = get_backup_job(db, job_id)
         if not job or job.status != "running" or job.worker_id != worker_id:
             raise ValueError("备份任务未被当前 Worker 持有")
+        job.object_count = 0
+        job.copied_count = 0
+        job.bytes_copied = 0
+        job.truncated = False
+        db.commit()
         _record_backup_worker_heartbeat(worker_id)
         minio = client or minio_client_from_config()
         last_heartbeat = time.monotonic()
@@ -292,6 +297,7 @@ def execute_backup_job(
                 )
                 if time.monotonic() - last_heartbeat >= 10:
                     now = datetime.utcnow()
+                    job.object_count = len(objects)
                     job.heartbeat_at = now
                     job.lease_expires_at = now + timedelta(seconds=BACKUP_LEASE_SECONDS)
                     db.commit()
@@ -319,8 +325,13 @@ def execute_backup_job(
             target_root = Path(str(target["path"]))
             final_root = target_root / f"luceon-backup-job-{job.id}"
             partial_root = target_root / f".luceon-backup-job-{job.id}.partial"
-            if final_root.exists() or partial_root.exists():
+            if final_root.exists():
                 raise FileExistsError(f"备份目标已存在: {final_root}")
+            if partial_root.exists():
+                if job.attempt_count <= 1:
+                    raise FileExistsError(f"备份临时目标已存在: {partial_root}")
+                shutil.rmtree(partial_root)
+                warnings.append(f"已清理同一任务上一次 attempt 的未完成目录: {partial_root.name}")
             partial_root.mkdir(parents=True, exist_ok=False)
             partial_roots.append(partial_root)
             target_copied = 0
@@ -347,6 +358,9 @@ def execute_backup_job(
                         _close_response(response)
                     if time.monotonic() - last_heartbeat >= 10:
                         now = datetime.utcnow()
+                        job.object_count = len(objects)
+                        job.copied_count = copied_count + target_copied
+                        job.bytes_copied = bytes_copied + target_bytes
                         job.heartbeat_at = now
                         job.lease_expires_at = now + timedelta(seconds=BACKUP_LEASE_SECONDS)
                         db.commit()

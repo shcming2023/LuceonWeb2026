@@ -12,6 +12,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.models.base import Base
 from app.models.material import BackupJob
+from app.services import backup_jobs
 from app.services.backup_jobs import (
     acknowledge_backup_alert,
     claim_next_backup_job,
@@ -183,6 +184,75 @@ def test_copy_job_includes_integrity_checked_sqlite_snapshot(sessions, tmp_path)
     assert restored.execute("SELECT value FROM evidence").fetchone()[0] == "restorable"
     restored.close()
     assert snapshot.stat().st_mode & 0o777 == 0o600
+
+
+def test_copy_job_persists_inventory_and_copy_progress(sessions, tmp_path, monkeypatch):
+    ticks = iter(range(0, 1000, 11))
+    monkeypatch.setattr(backup_jobs.time, "monotonic", lambda: next(ticks))
+    observations = []
+
+    class ObservingMinio(FakeMinio):
+        def get_object(self, bucket, object_name):
+            db = sessions()
+            try:
+                job = db.query(BackupJob).one()
+                observations.append((job.object_count, job.copied_count, job.bytes_copied))
+            finally:
+                db.close()
+            return super().get_object(bucket, object_name)
+
+    db = sessions()
+    try:
+        config = runtime_config(tmp_path, "copy")
+        config["backup"]["targets"][0]["enabled"] = False
+        queued = enqueue_backup_job(db, "7", config=config)
+        assert claim_next_backup_job(db, "worker-1")
+    finally:
+        db.close()
+
+    execute_backup_job(
+        queued.id,
+        "worker-1",
+        client=ObservingMinio(complete_objects({"eduassets-input": {"a.pdf": b"one", "b.pdf": b"two"}})),
+        session_factory=sessions,
+        database_paths={},
+    )
+
+    assert observations[0][0] == 2
+    assert observations[1] == (2, 1, 3)
+
+
+def test_retried_job_removes_only_its_stale_partial_directory(sessions, tmp_path):
+    db = sessions()
+    try:
+        config = runtime_config(tmp_path, "copy")
+        config["backup"]["targets"][0]["enabled"] = False
+        queued = enqueue_backup_job(db, "7", config=config)
+        first = claim_next_backup_job(db, "worker-1")
+        assert first and first.attempt_count == 1
+        partial = tmp_path / "external" / f".luceon-backup-job-{queued.id}.partial"
+        partial.mkdir(parents=True)
+        (partial / "incomplete").write_text("partial")
+        first.status = "queued"
+        first.worker_id = None
+        db.commit()
+        second = claim_next_backup_job(db, "worker-2")
+        assert second and second.attempt_count == 2
+    finally:
+        db.close()
+
+    result = execute_backup_job(
+        queued.id,
+        "worker-2",
+        client=FakeMinio(complete_objects({"eduassets-input": {"book.pdf": b"pdf"}})),
+        session_factory=sessions,
+        database_paths={},
+    )
+
+    assert result["status"] == "succeeded"
+    assert any("上一次 attempt" in warning for warning in result["warnings"])
+    assert not partial.exists()
+    assert (tmp_path / "external" / f"luceon-backup-job-{queued.id}").is_dir()
 
 
 def test_truncated_copy_fails_and_records_acknowledgeable_alert(sessions, tmp_path):
