@@ -3,6 +3,8 @@ import io
 import asyncio
 from pathlib import Path
 
+import pytest
+from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -10,7 +12,8 @@ from starlette.datastructures import UploadFile
 
 from app.api import materials as materials_api
 from app.models.base import Base
-from app.models.material import Material, MaterialOutput, MetadataJob, PipelineRun, PipelineRunItem, PipelineStageAttempt
+from app.models.material import CodexSkillJob, Material, MaterialOutput, MetadataJob, PipelineRun, PipelineRunItem, PipelineStageAttempt
+from app.models.user import User
 from app.services.material_inventory import material_id_from_sha256, upload_input_pdfs
 
 
@@ -101,5 +104,79 @@ def test_upload_deduplicates_by_sha_before_minio_write_and_records_pages(monkeyp
     assert result["duplicates"] == 1
     assert result["success"] == 1
     assert result["files"][0]["status"] == "duplicate"
+    assert result["files"][0]["filename"] == "same-content-renamed.pdf"
+    assert result["files"][0]["material"]["filename"] == material.filename
+    assert result["files"][0]["material"]["material_id"] == material.material_id
     assert material.page_count and material.page_count > 0
     assert db.query(Material).count() == 1
+
+
+def test_refinement_status_keeps_frozen_output_when_latest_job_was_cancelled():
+    material = Material(
+        user_id="u1",
+        title="Book",
+        filename="book.pdf",
+        latex_manifest_bucket="eduassets-elegantbook",
+        latex_manifest_object="worker-v2/pdf-1/run/manifest.json",
+    )
+    job = CodexSkillJob(user_id="u1", status="cancelled", mode="new_pdf", requested_skill="test")
+
+    assert materials_api._refinement_status(material, job) == "succeeded"
+
+
+def test_refinement_status_surfaces_active_new_attempt_over_frozen_output():
+    material = Material(
+        user_id="u1",
+        title="Book",
+        filename="book.pdf",
+        latex_manifest_bucket="eduassets-elegantbook",
+        latex_manifest_object="worker-v2/pdf-1/run/manifest.json",
+    )
+    job = CodexSkillJob(user_id="u1", status="running", mode="new_pdf", requested_skill="test")
+
+    assert materials_api._refinement_status(material, job) == "running"
+
+
+def test_completed_reprocess_preflight_requires_pipeline_admin(monkeypatch):
+    db = make_session()
+    user = User(email="reader@example.com", password_hash="test")
+    db.add(user)
+    db.flush()
+    material = add_material(db, user_id=str(user.id))
+    db.commit()
+    monkeypatch.setenv("LUCEON_AUTH_DISABLED", "false")
+    monkeypatch.setenv("LUCEON_PIPELINE_ADMIN_EMAILS", "admin@example.com")
+
+    with pytest.raises(HTTPException) as exc:
+        materials_api.pipeline_preflight(
+            materials_api.PipelinePreflightRequest(material_pks=[material.id], reprocess_completed=True),
+            user_id=str(user.id),
+            db=db,
+        )
+
+    assert exc.value.status_code == 403
+
+
+def test_pipeline_admin_can_preflight_new_immutable_parse_version(monkeypatch):
+    db = make_session()
+    user = User(email="admin@example.com", password_hash="test")
+    db.add(user)
+    db.flush()
+    material = add_material(db, user_id=str(user.id))
+    db.commit()
+    monkeypatch.setenv("LUCEON_AUTH_DISABLED", "false")
+    monkeypatch.setenv("LUCEON_PIPELINE_ADMIN_EMAILS", "admin@example.com")
+    monkeypatch.setattr(
+        materials_api,
+        "run_pipeline_preflight",
+        lambda *_args, **kwargs: {"ready": kwargs.get("reprocess_completed") is True, "status": "READY"},
+    )
+
+    result = materials_api.pipeline_preflight(
+        materials_api.PipelinePreflightRequest(material_pks=[material.id], reprocess_completed=True),
+        user_id=str(user.id),
+        db=db,
+    )
+
+    assert result["ready"] is True
+    assert result["snapshot"][0]["material_pk"] == material.id

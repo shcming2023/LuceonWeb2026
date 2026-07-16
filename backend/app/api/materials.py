@@ -86,7 +86,7 @@ from app.services.popo_to_raw_audit import audit_popo_to_raw_run
 from app.services.raw_to_clean import RawToCleanPreflightError, raw_to_clean_preflight, start_raw_to_clean_run
 from app.services.worker_v1_policy import v1_batch_enabled, v1_policy
 from app.utils.minio_client import get_presigned_url
-from app.utils.user_dep import get_asset_download_user_id, get_user_id, require_pipeline_admin
+from app.utils.user_dep import get_asset_download_user_id, get_user_id, is_pipeline_admin, require_pipeline_admin
 from app.workflow_v2.database import workflow_session_factory
 from app.workflow_v2.service import list_workflow_jobs
 
@@ -157,6 +157,15 @@ def _latest_codex_jobs_for_materials(db: Session, user_id: str, material_ids: li
     return latest
 
 
+def _refinement_status(material: Material, codex_job: CodexSkillJob | None) -> str:
+    job_status = str(codex_job.status or "") if codex_job else ""
+    if job_status in {"queued", "running", "validating", "retrying", "needs_review"}:
+        return job_status
+    if material.latex_manifest_bucket and material.latex_manifest_object:
+        return "succeeded"
+    return job_status or "idle"
+
+
 class PipelineStartRequest(BaseModel):
     apply: bool = False
     limit: int = 5
@@ -165,6 +174,7 @@ class PipelineStartRequest(BaseModel):
     material_ids: list[str] = Field(default_factory=list)
     input_objects: list[str] = Field(default_factory=list)
     material_pks: list[int] = Field(default_factory=list)
+    reprocess_completed: bool = False
 
 
 class PipelinePreflightRequest(BaseModel):
@@ -174,6 +184,7 @@ class PipelinePreflightRequest(BaseModel):
     material_ids: list[str] = Field(default_factory=list)
     input_objects: list[str] = Field(default_factory=list)
     material_pks: list[int] = Field(default_factory=list)
+    reprocess_completed: bool = False
 
 
 class PopoToRawStartRequest(BaseModel):
@@ -328,6 +339,7 @@ def list_materials(
         data["raw_dry_run_id"] = str(dry_run.id) if dry_run else ""
         latest_codex_job = latest_codex_jobs.get(int(row.id or 0)) or latest_codex_skill_job_for_material(db, user_id, row)
         data["codex_job"] = latest_codex_job.to_dict() if latest_codex_job else None
+        data["refinement_status"] = _refinement_status(row, latest_codex_job)
         material_rows.append(data)
     return {"total": total, "page": page, "page_size": page_size, "materials": material_rows}
 
@@ -757,6 +769,10 @@ def pipeline_preflight(
     db: Session = Depends(get_db),
 ):
     try:
+        if payload.reprocess_completed:
+            user = db.query(User).filter(User.id == int(user_id)).first()
+            if not user or not is_pipeline_admin(user):
+                raise HTTPException(status_code=403, detail="仅管线管理员可创建已完成资产的新解析版本")
         if payload.material_pks:
             from app.services.material_task_queue import material_snapshot
 
@@ -774,9 +790,12 @@ def pipeline_preflight(
             input_object=payload.input_object,
             material_ids=payload.material_ids,
             input_objects=payload.input_objects,
+            reprocess_completed=payload.reprocess_completed,
         )
         result["snapshot"] = snapshot
         return result
+    except HTTPException:
+        raise
     except MaterialTaskError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
     except Exception as exc:
@@ -790,6 +809,10 @@ def start_pipeline(
     db: Session = Depends(get_db),
 ):
     try:
+        if payload.reprocess_completed:
+            user = db.query(User).filter(User.id == int(user_id)).first()
+            if not user or not is_pipeline_admin(user):
+                raise HTTPException(status_code=403, detail="仅管线管理员可创建已完成资产的新解析版本")
         run = start_pipeline_run(
             db,
             user_id,
@@ -800,7 +823,10 @@ def start_pipeline(
             material_ids=payload.material_ids,
             input_objects=payload.input_objects,
             material_pks=payload.material_pks,
+            reprocess_completed=payload.reprocess_completed,
         )
+    except HTTPException:
+        raise
     except PipelinePreflightError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail={"message": "综合预检未通过", "preflight": exc.preflight})

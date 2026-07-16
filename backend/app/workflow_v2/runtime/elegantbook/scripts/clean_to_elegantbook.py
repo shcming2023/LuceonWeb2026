@@ -11496,7 +11496,7 @@ def replace_circled_equation_tags(text: str) -> str:
 def repair_textcircled_math_symbols(text: str) -> str:
     """Replace a text-mode circled circle with its standard math equivalent."""
     return re.sub(
-        r"\\textcircled\s*\{\s*\\circ\s*\}",
+        r"\\textcircled\s*\{\s*\\(?:circ|circledcirc)\s*\}",
         r"\\ensuremath{\\circledcirc}",
         text,
     )

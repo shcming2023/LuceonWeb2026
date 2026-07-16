@@ -110,3 +110,27 @@ export function formatDateTime(dateStr: string): string {
     hour12: false
   })
 }
+
+const PipelineStageText: Record<string, string> = {
+  queued: '等待 Worker',
+  pipeline_command: 'GPU 串行处理中（MinerU → Popo）',
+  mineru: 'MinerU 解析',
+  mineru_frozen: 'MinerU 已冻结',
+  mineru_failed: 'MinerU 失败',
+  popo: 'Popo 解析',
+  popo_frozen: 'Popo 已冻结',
+  popo_failed: 'Popo 失败',
+  metadata: 'AI 元数据',
+  finished: '全部阶段完成',
+  partial: '部分材料失败',
+  failed: '批次失败',
+  interrupted: '任务中断',
+  recovered_after_worker_loss: 'Worker 丢失后已恢复',
+  recovery_done: '异常恢复完成',
+  worker_failed: 'Worker 执行失败'
+}
+
+export function formatPipelineStage(stage?: string | null): string {
+  const value = String(stage || '').trim()
+  return PipelineStageText[value] || value || '—'
+}

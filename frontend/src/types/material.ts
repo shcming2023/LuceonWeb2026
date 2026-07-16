@@ -68,6 +68,7 @@ export interface MaterialItem {
   standard_available: boolean
   raw_dry_run_available?: boolean
   codex_job?: CodexSkillJob | null
+  refinement_status: string
   mineru_run_id: string
   popo_run_id: string
   latex_run_id: string

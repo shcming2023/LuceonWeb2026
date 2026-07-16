@@ -136,7 +136,10 @@ def output_from_ref(ref: ObjectRef, material: Material, manifest: dict[str, Any]
 def infer_ids(object_name: str, manifest: dict[str, Any], material: Material) -> tuple[str, str, str]:
     parts = clean_path(object_name).split("/")
     material_id = str(manifest.get("material_id") or material.material_id or "").strip()
-    popo_run_id = str(manifest.get("popo_run_id") or material.popo_run_id or "").strip()
+    source_popo = manifest.get("source_popo_manifest") if isinstance(manifest.get("source_popo_manifest"), dict) else {}
+    source_popo_parts = clean_path(str(source_popo.get("object") or "")).split("/")
+    source_popo_run_id = source_popo_parts[-2] if len(source_popo_parts) >= 4 and source_popo_parts[-1] == "manifest.json" else ""
+    popo_run_id = str(manifest.get("popo_run_id") or source_popo_run_id or material.popo_run_id or "").strip()
     output_run_id = str(manifest.get("workflow_job_id") or manifest.get("codex_run_id") or manifest.get("output_run_id") or manifest.get("run_id") or "").strip()
     if len(parts) >= 5 and parts[-1] == "manifest.json":
         material_id = material_id or parts[-4]

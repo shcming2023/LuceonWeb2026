@@ -558,12 +558,16 @@ def test_elegantbook_final_display_math_repairs_are_compile_safe() -> None:
 
 
 def test_elegantbook_textcircled_math_symbol_is_compile_safe() -> None:
-    source = r"\begin{array}{r}4 \textcircled {\circ} \\ 5 \textcircled{2}\end{array}"
+    source = (
+        r"\begin{array}{r}4 \textcircled {\circ} \\ "
+        r"5 \textcircled {\circledcirc} \\ 6 \textcircled{2}\end{array}"
+    )
 
     repaired = repair_textcircled_math_symbols(source)
 
     assert r"4 \ensuremath{\circledcirc}" in repaired
-    assert r"5 \textcircled{2}" in repaired
+    assert r"5 \ensuremath{\circledcirc}" in repaired
+    assert r"6 \textcircled{2}" in repaired
 
 
 def test_elegantbook_hline_drops_ocr_alignment_token_before_rule() -> None:

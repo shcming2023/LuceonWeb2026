@@ -1,4 +1,6 @@
+import json
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import create_engine
@@ -183,6 +185,166 @@ def test_expired_pipeline_lease_is_requeued_and_claimed_after_restart():
     assert claimed.attempt_count == 1
 
 
+def test_running_items_use_honest_opaque_gpu_stage():
+    db = make_session()
+    material = add_material(db, 8)
+    run = add_run(db, [material])
+
+    material_inventory.mark_pipeline_items_running(db, run)
+
+    item = db.query(PipelineRunItem).one()
+    attempt = db.query(PipelineStageAttempt).one()
+    assert item.current_stage == "pipeline_command"
+    assert attempt.stage == "mineru"
+    assert attempt.status == "running"
+
+
+def test_terminal_freeze_is_committed_before_inventory_sync(monkeypatch, tmp_path):
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'pipeline.db'}",
+        connect_args={"check_same_thread": False},
+    )
+    Base.metadata.create_all(bind=engine)
+    factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    setup = factory()
+    material = add_material(setup, 10)
+    run = add_run(setup, [material])
+    payload = {
+        "status": "DONE",
+        "mineru_batch_id": "mineru-batch",
+        "mineru_freezes": [freeze(material, "mineru")],
+        "mineru_errors": [],
+        "popo": {
+            "batch_id": "popo-batch",
+            "freezes": [freeze(material, "popo")],
+            "errors": [],
+        },
+    }
+    run_id = run.id
+    setup.commit()
+    setup.close()
+    observed = {}
+
+    def inspect_committed_terminal_state(_db, _user_id, _run_id):
+        independent = factory()
+        try:
+            stored = independent.query(PipelineRun).filter_by(id=run_id).one()
+            observed.update(status=stored.status, success=stored.success, worker_id=stored.worker_id)
+        finally:
+            independent.close()
+        raise RuntimeError("inventory scan failed")
+
+    monkeypatch.setattr(material_inventory, "SessionLocal", factory)
+    monkeypatch.setattr(material_inventory.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(material_inventory, "sync_pipeline_run_inventory", inspect_committed_terminal_state)
+    monkeypatch.setattr(
+        material_inventory.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(stdout=json.dumps(payload), stderr="", returncode=0),
+    )
+
+    material_inventory.run_pipeline_subprocess(
+        run_id,
+        apply=True,
+        limit=1,
+        command_override=["pipeline"],
+    )
+
+    verify = factory()
+    try:
+        stored = verify.query(PipelineRun).filter_by(id=run_id).one()
+        assert observed == {"status": "succeeded", "success": 1, "worker_id": None}
+        assert stored.status == "succeeded"
+        assert stored.success == 1
+        assert stored.current_stage == "finished"
+    finally:
+        verify.close()
+
+
+def test_terminal_inventory_sync_retries_transient_failure(monkeypatch, tmp_path):
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'pipeline.db'}",
+        connect_args={"check_same_thread": False},
+    )
+    Base.metadata.create_all(bind=engine)
+    factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    setup = factory()
+    material = add_material(setup, 13)
+    run = add_run(setup, [material])
+    payload = {
+        "status": "DONE",
+        "mineru_batch_id": "mineru-batch",
+        "mineru_freezes": [freeze(material, "mineru")],
+        "mineru_errors": [],
+        "popo": {"batch_id": "popo-batch", "freezes": [freeze(material, "popo")], "errors": []},
+    }
+    run_id = run.id
+    setup.commit()
+    setup.close()
+    attempts = []
+
+    def flaky_sync(_db, _user_id, _run_id):
+        attempts.append(_run_id)
+        if len(attempts) == 1:
+            raise OSError("temporary disk I/O error")
+
+    monkeypatch.setattr(material_inventory, "SessionLocal", factory)
+    monkeypatch.setattr(material_inventory.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(material_inventory, "sync_pipeline_run_inventory", flaky_sync)
+    monkeypatch.setattr(
+        material_inventory.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(stdout=json.dumps(payload), stderr="", returncode=0),
+    )
+
+    material_inventory.run_pipeline_subprocess(
+        run_id,
+        apply=True,
+        limit=1,
+        command_override=["pipeline"],
+    )
+
+    verify = factory()
+    try:
+        stored = verify.query(PipelineRun).filter_by(id=run_id).one()
+        warnings = verify.query(material_inventory.PipelineEvent).filter_by(run_id=run_id, level="warning").all()
+        assert attempts == [run_id, run_id]
+        assert stored.status == "succeeded"
+        assert warnings == []
+    finally:
+        verify.close()
+
+
+def test_pipeline_inventory_sync_only_touches_current_run_materials(monkeypatch):
+    db = make_session()
+    selected = add_material(db, 11)
+    unselected = add_material(db, 12)
+    run = add_run(db, [selected])
+    item = db.query(PipelineRunItem).one()
+    item.popo_manifest_bucket = "eduassets-minerupopo"
+    item.popo_manifest_object = f"minerupopo/{selected.material_id}/popo-run/manifest.json"
+    touched = []
+
+    monkeypatch.setattr(material_inventory, "resolve_manifest", lambda *_args, **_kwargs: SimpleNamespace())
+    monkeypatch.setattr(
+        material_inventory,
+        "ensure_resolved_review_asset",
+        lambda *_args, **_kwargs: SimpleNamespace(id=321),
+    )
+    monkeypatch.setattr(
+        material_inventory,
+        "sync_material_outputs_for_material",
+        lambda _db, _user_id, material: touched.append(material.id),
+    )
+
+    result = material_inventory.sync_pipeline_run_inventory(db, "u1", run.id)
+
+    assert result == {"materials": 1}
+    assert touched == [selected.id]
+    assert selected.review_asset_id == 321
+    assert unselected.review_asset_id is None
+
+
 def test_automatic_metadata_job_never_overwrites_manual_override():
     db = make_session()
     material = add_material(db, 9)
@@ -223,6 +385,40 @@ def test_duplicate_submit_reuses_active_run_and_global_gpu_slot(monkeypatch):
     assert db.query(PipelineRun).count() == 1
     with pytest.raises(MaterialTaskError, match="串行GPU队列"):
         material_inventory.start_pipeline_run(db, "u1", apply=True, material_pks=[second.id])
+
+
+def test_versioned_reprocess_is_recorded_without_mutating_existing_frozen_refs(monkeypatch):
+    db = make_session()
+    material = add_material(db, 24)
+    material.mineru_run_id = "mineru-old"
+    material.mineru_manifest_bucket = "eduassets-mineru"
+    material.mineru_manifest_object = f"mineru/{material.material_id}/mineru-old/manifest.json"
+    material.popo_run_id = "popo-old"
+    material.popo_manifest_bucket = "eduassets-minerupopo"
+    material.popo_manifest_object = f"minerupopo/{material.material_id}/popo-old/manifest.json"
+    monkeypatch.setattr(
+        material_inventory,
+        "run_pipeline_preflight",
+        lambda *_args, **kwargs: {
+            "ready": kwargs.get("reprocess_completed") is True,
+            "status": "READY",
+            "selected_count": 1,
+        },
+    )
+
+    run = material_inventory.start_pipeline_run(
+        db,
+        "u1",
+        apply=True,
+        material_pks=[material.id],
+        reprocess_completed=True,
+    )
+
+    assert run.mode == "reprocess"
+    assert '"reprocess_completed": true' in run.request_json
+    assert "--reprocess-completed" in run.command
+    assert material.mineru_run_id == "mineru-old"
+    assert material.popo_run_id == "popo-old"
 
 
 def test_failed_metadata_job_retries_but_manual_override_remains_protected():

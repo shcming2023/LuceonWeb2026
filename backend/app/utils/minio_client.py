@@ -13,7 +13,7 @@ MINIO_REGION = os.getenv('MINIO_REGION', 'us-east-1')
 
 def _parse_endpoint(endpoint: str) -> tuple[str, bool]:
     parsed = urlparse(endpoint)
-    if parsed.scheme:
+    if "://" in endpoint:
         return parsed.netloc, parsed.scheme == 'https'
     return endpoint, os.getenv('MINIO_SECURE', 'false').lower() == 'true'
 

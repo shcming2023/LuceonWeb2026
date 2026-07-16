@@ -140,6 +140,73 @@ def test_one_level_outline_is_preserved_but_blocked(tmp_path):
     assert json.loads((tmp_path / "output" / "outline.json").read_text())["nodes"][0]["title"] == "Chapter 1"
 
 
+def test_source_visible_chinese_toc_replaces_invalid_outline_with_printed_page_mapping(tmp_path):
+    canonical = _canonical(
+        tmp_path,
+        [{"title": "Noisy heading", "level": 1, "parent_title": "", "page": 3, "source": "fallback"}],
+    )
+    _write_json(canonical / "popo_outline.json", {"last_front_page": 1, "outline": []})
+    _write_json(
+        canonical / "blocks.json",
+        {
+            "blocks": [
+                {"block_id": "toc-marker", "source_order": 1, "type": "text", "content": "目录", "page_idx": 0},
+                {"block_id": "toc-root-1", "source_order": 2, "type": "text", "content": "一、数与运算", "page_idx": 0},
+                {"block_id": "toc-list-1", "source_order": 3, "type": "list", "content": "1 整数 1\n2 小数 …… 4", "page_idx": 0},
+                {"block_id": "toc-root-2", "source_order": 4, "type": "text", "content": "二、方程", "page_idx": 0},
+                {"block_id": "toc-list-2", "source_order": 5, "type": "list", "content": "1 方程 10\n第 1 课时 等量关系 10", "page_idx": 1},
+                {"block_id": "body-1", "source_order": 6, "type": "text", "content": "1 整数", "page_idx": 2},
+                {"block_id": "body-2", "source_order": 7, "type": "text", "content": "2 小数", "page_idx": 5},
+                {"block_id": "body-3", "source_order": 8, "type": "text", "content": "1 方程", "page_idx": 11},
+            ]
+        },
+    )
+    (canonical / "clean.md").write_text("<!-- page_idx: 2 -->\n# 1 整数\n", encoding="utf-8")
+
+    result = build_outline_artifact(canonical, tmp_path / "output")
+    document = json.loads((tmp_path / "output" / "outline.json").read_text())
+
+    assert result["status"] == "passed"
+    assert document["source_visible_toc_reconstruction"]["applied"] is True
+    assert document["source_visible_toc_reconstruction"]["printed_page_offset"] == 2
+    assert [(row["level"], row["title"], row.get("printed_page")) for row in document["nodes"]] == [
+        (1, "一、数与运算", None),
+        (2, "1 整数", 1),
+        (2, "2 小数", 4),
+        (1, "二、方程", None),
+        (2, "1 方程", 10),
+        (3, "第 1 课时 等量关系", 10),
+    ]
+    assert document["nodes"][-1]["source_page"] == 12
+
+
+def test_body_contents_heading_after_front_matter_is_not_treated_as_source_toc(tmp_path):
+    outline = [
+        {"title": "Workbook", "level": 1, "parent_title": "", "page": 1, "source": "body"},
+        {"title": "Practice", "level": 2, "parent_title": "Workbook", "page": 2, "source": "body"},
+    ]
+    canonical = _canonical(tmp_path, outline)
+    _write_json(canonical / "popo_outline.json", {"last_front_page": 0, "outline": outline})
+    _write_json(
+        canonical / "blocks.json",
+        {"blocks": [
+            {"block_id": "body-contents", "source_order": 1, "type": "text", "content": "目录", "page_idx": 3},
+            {"block_id": "body-root", "source_order": 2, "type": "text", "content": "一、练习", "page_idx": 3},
+            {"block_id": "body-child", "source_order": 3, "type": "list", "content": "1 题目 1\n2 答案 2", "page_idx": 3},
+        ]},
+    )
+
+    result = build_outline_artifact(canonical, tmp_path / "output")
+    document = json.loads((tmp_path / "output" / "outline.json").read_text())
+
+    assert result["status"] == "passed"
+    assert document["source_visible_toc_reconstruction"] == {
+        "applied": False,
+        "reason": "source_visible_toc_marker_not_found",
+    }
+    assert [row["title"] for row in document["nodes"]] == ["Workbook", "Practice"]
+
+
 def test_invalid_decision_hierarchy_uses_traceable_canonical_headings(tmp_path):
     outline = [
         {"title": "Default Title", "level": 1, "parent_title": "", "page": 1, "source": "fallback"},

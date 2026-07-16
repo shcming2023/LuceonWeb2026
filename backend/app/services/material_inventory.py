@@ -4,6 +4,7 @@ import os
 import posixpath
 import subprocess
 import threading
+import time
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
@@ -539,6 +540,23 @@ def sync_material_inventory(db: Session, user_id: str, limit: int | None = None)
     return {"total": total, "scanned": summary, "stages": stages, "availability": material_availability(db, user_id)}
 
 
+def sync_pipeline_run_inventory(db: Session, user_id: str, run_id: int) -> dict[str, int]:
+    synced = 0
+    for item in pipeline_run_items(db, run_id, user_id):
+        material = db.query(Material).filter(Material.id == item.material_pk, Material.user_id == user_id).first()
+        if not material:
+            continue
+        manifest_bucket = item.popo_manifest_bucket or item.mineru_manifest_bucket or ""
+        manifest_object = item.popo_manifest_object or item.mineru_manifest_object or ""
+        if manifest_bucket and manifest_object:
+            resolved = resolve_manifest(manifest_bucket, manifest_object, check_fallbacks=False)
+            asset = ensure_resolved_review_asset(db, user_id, resolved)
+            material.review_asset_id = asset.id
+        sync_material_outputs_for_material(db, user_id, material)
+        synced += 1
+    return {"materials": synced}
+
+
 async def upload_input_pdfs(files: list[UploadFile], user_id: str, db: Session) -> dict[str, Any]:
     results = []
     for file in files:
@@ -670,6 +688,7 @@ def pipeline_command(
     *,
     material_ids: list[str] | tuple[str, ...] | None = None,
     input_objects: list[str] | tuple[str, ...] | None = None,
+    reprocess_completed: bool = False,
 ) -> list[str]:
     target_args = pipeline_target_args(
         material_id,
@@ -681,6 +700,8 @@ def pipeline_command(
         command = ["python3", PIPELINE_SCRIPT, "run-staged", "--limit", str(pipeline_limit(limit))]
         if target_args:
             command.extend(["--skip-sha", "--input-status-only"])
+        if reprocess_completed:
+            command.append("--reprocess-completed")
         command.extend(target_args)
         command.extend(["--apply", "--wait"])
     else:
@@ -810,6 +831,7 @@ def pipeline_preflight_command(
     *,
     material_ids: list[str] | tuple[str, ...] | None = None,
     input_objects: list[str] | tuple[str, ...] | None = None,
+    reprocess_completed: bool = False,
 ) -> list[str]:
     command = ["python3", PIPELINE_SCRIPT, "preflight", "--limit", str(pipeline_limit(limit))]
     target_args = pipeline_target_args(
@@ -820,6 +842,8 @@ def pipeline_preflight_command(
     )
     if target_args:
         command.extend(["--skip-sha", "--input-status-only"])
+    if reprocess_completed:
+        command.append("--reprocess-completed")
     command.extend(target_args)
     return command
 
@@ -883,6 +907,7 @@ def run_pipeline_preflight(
     *,
     material_ids: list[str] | tuple[str, ...] | None = None,
     input_objects: list[str] | tuple[str, ...] | None = None,
+    reprocess_completed: bool = False,
 ) -> dict[str, Any]:
     command = pipeline_preflight_command(
         limit,
@@ -890,6 +915,7 @@ def run_pipeline_preflight(
         input_object=input_object,
         material_ids=material_ids,
         input_objects=input_objects,
+        reprocess_completed=reprocess_completed,
     )
     completed = subprocess.run(
         command,
@@ -922,6 +948,7 @@ def start_pipeline_run(
     material_ids: list[str] | tuple[str, ...] | None = None,
     input_objects: list[str] | tuple[str, ...] | None = None,
     material_pks: list[int] | tuple[int, ...] | None = None,
+    reprocess_completed: bool = False,
 ) -> PipelineRun:
     resolved_pks = [int(value) for value in material_pks or []]
     if not resolved_pks:
@@ -945,7 +972,7 @@ def start_pipeline_run(
         material_id = ""
         input_object = ""
         limit = len(snapshot)
-    mode = "apply" if apply else "dry_run"
+    mode = "reprocess" if apply and reprocess_completed else ("apply" if apply else "dry_run")
     idempotency_key = pipeline_idempotency_key(user_id, mode, snapshot) if snapshot else ""
     active = (
         db.query(PipelineRun)
@@ -964,6 +991,7 @@ def start_pipeline_run(
             input_object=input_object,
             material_ids=material_ids,
             input_objects=input_objects,
+            reprocess_completed=reprocess_completed,
         )
         if apply
         else None
@@ -984,6 +1012,7 @@ def start_pipeline_run(
                 input_object=input_object,
                 material_ids=material_ids,
                 input_objects=input_objects,
+                reprocess_completed=reprocess_completed,
             )
         ),
         current_stage="queued",
@@ -995,6 +1024,7 @@ def start_pipeline_run(
                 "snapshot": snapshot,
                 "material_ids": list(material_ids or []),
                 "input_objects": list(input_objects or []),
+                "reprocess_completed": reprocess_completed,
             },
             ensure_ascii=False,
         ),
@@ -1005,6 +1035,7 @@ def start_pipeline_run(
                 "input_object": input_object,
                 "material_ids": _pipeline_target_values(material_id, material_ids),
                 "input_objects": _pipeline_target_values(input_object, input_objects),
+                "reprocess_completed": reprocess_completed,
             },
             ensure_ascii=False,
         )
@@ -1129,6 +1160,7 @@ def run_pipeline_subprocess(
     input_object: str = "",
     material_ids: list[str] | tuple[str, ...] | None = None,
     input_objects: list[str] | tuple[str, ...] | None = None,
+    reprocess_completed: bool = False,
     command_override: list[str] | None = None,
     start_message: str = "开始执行现有 Luceon first-stage 调度脚本",
     worker_id: str = "",
@@ -1156,6 +1188,8 @@ def run_pipeline_subprocess(
                     try:
                         if not touch_pipeline_lease(heartbeat_db, run_id, worker_id):
                             return
+                    except Exception:
+                        heartbeat_db.rollback()
                     finally:
                         heartbeat_db.close()
 
@@ -1169,6 +1203,7 @@ def run_pipeline_subprocess(
             input_object=input_object,
             material_ids=material_ids,
             input_objects=input_objects,
+            reprocess_completed=reprocess_completed,
         )
         completed = subprocess.run(
             command,
@@ -1236,18 +1271,42 @@ def run_pipeline_subprocess(
                 payload={"returncode": completed.returncode, "pipeline_status": payload.get("status")},
             )
 
-        try:
-            sync_material_inventory(db, run.user_id)
-        except Exception as sync_exc:
+        # Persist the per-book frozen result before the potentially long full
+        # inventory scan. A scan failure must never roll back a reliable GPU
+        # terminal state or hold its lease heartbeat inside one SQLite write
+        # transaction.
+        db.commit()
+        heartbeat_stop.set()
+        if heartbeat_thread:
+            heartbeat_thread.join(timeout=2)
+            heartbeat_thread = None
+
+        sync_exc = None
+        for sync_attempt in range(1, 4):
+            sync_db = SessionLocal()
+            try:
+                sync_pipeline_run_inventory(sync_db, run.user_id, run.id)
+                sync_db.commit()
+                sync_exc = None
+                break
+            except Exception as exc:
+                sync_db.rollback()
+                sync_exc = exc
+                if sync_attempt < 3:
+                    time.sleep(sync_attempt)
+            finally:
+                sync_db.close()
+        if sync_exc is not None:
+            run = db.query(PipelineRun).filter(PipelineRun.id == run_id).first()
             create_pipeline_event(
                 db,
                 run,
                 "终态任务的已冻结产物同步未完成",
                 stage="inventory_sync",
                 level="warning",
-                payload={"error": str(sync_exc)},
+                payload={"error": str(sync_exc), "attempts": 3},
             )
-        db.commit()
+            db.commit()
     except Exception as exc:
         run = db.query(PipelineRun).filter(PipelineRun.id == run_id).first()
         if run:

@@ -54,10 +54,25 @@ def build_outline_artifact(canonical_dir: Path, output_dir: Path) -> dict:
             }
         )
 
-    canonical_heading_reconstruction = _reconstruct_invalid_outline_from_canonical_headings(canonical_dir, nodes)
+    source_visible_toc = _reconstruct_source_visible_toc(canonical_dir, popo)
+    if source_visible_toc["applied"]:
+        nodes = source_visible_toc.pop("nodes")
+        canonical_heading_reconstruction = {
+            "applied": False,
+            "reason": "source_visible_toc_reconstruction_applied",
+        }
+    else:
+        canonical_heading_reconstruction = _reconstruct_invalid_outline_from_canonical_headings(canonical_dir, nodes)
 
     numbered_reconstruction = _reconstruct_numbered_chapter_topics(canonical_dir)
-    if numbered_reconstruction["applied"]:
+    if source_visible_toc["applied"]:
+        numbered_reconstruction = {"applied": False, "reason": "source_visible_toc_reconstruction_applied"}
+        question_heading_filter = {"applied": False, "reason": "source_visible_toc_reconstruction_applied", "removed_count": 0}
+        root_restoration = {"applied": False, "reason": "source_visible_toc_reconstruction_applied"}
+        running_root_reconciliation = {"applied": False, "reason": "source_visible_toc_reconstruction_applied"}
+        metadata_title_augmentation = {"applied": False, "reason": "source_visible_toc_reconstruction_applied", "added_count": 0}
+        augmentation = {"applied": False, "reason": "source_visible_toc_reconstruction_applied"}
+    elif numbered_reconstruction["applied"]:
         nodes = numbered_reconstruction.pop("nodes")
         coverage_units = numbered_reconstruction.pop("coverage_units")
         question_heading_filter = {"applied": False, "reason": "numbered_chapter_topic_reconstruction_applied", "removed_count": 0}
@@ -119,6 +134,7 @@ def build_outline_artifact(canonical_dir: Path, output_dir: Path) -> dict:
         "self_nested_root_filter": self_nested_root_filter,
         "duplicate_filter": duplicate_filter,
         "numbered_chapter_topic_reconstruction": numbered_reconstruction,
+        "source_visible_toc_reconstruction": source_visible_toc,
         "canonical_heading_reconstruction": canonical_heading_reconstruction,
     }
     validation = {
@@ -278,6 +294,196 @@ def _metadata_title_fragment(value: str) -> bool:
         return False
     tokens = re.findall(r"[A-Za-z]+(?:'[A-Za-z]+)?|[\u4e00-\u9fff]", text)
     return 1 <= len(tokens) <= 20
+
+
+TOC_MARKER_RE = re.compile(r"^(?:目录|contents|table\s+of\s+contents)$", re.I)
+CHINESE_TOC_ROOT_RE = re.compile(r"^[一二三四五六七八九十百零〇]+[、.．]\s*\S")
+ENGLISH_TOC_ROOT_RE = re.compile(r"^(?:chapter|unit|part)\s+(?:\d+|[ivxlcdm]+)\b", re.I)
+TOC_TRAILING_PAGE_RE = re.compile(r"^(?P<title>.+?)(?:\s*[.．·…]{2,}\s*|\s+)(?P<page>\d{1,4})\s*$")
+TOC_CHILD_RE = re.compile(r"^(?:\d{1,2}\s+\S|第\s*\d+\s*课时\s+\S|第[一二三四五六七八九十百零〇]+单元(?:知识导图|综合练习)\b)")
+
+
+def _reconstruct_source_visible_toc(canonical_dir: Path, popo: dict) -> dict:
+    """Recover a high-confidence hierarchy from source-visible TOC blocks."""
+    blocks_path = canonical_dir / "blocks.json"
+    if not blocks_path.is_file():
+        return {"applied": False, "reason": "source_blocks_unavailable"}
+    blocks = _read_json(blocks_path).get("blocks") or []
+    reported_last_front_page = _nonnegative_int(popo.get("last_front_page"))
+    marker_blocks = [
+        row for row in blocks
+        if TOC_MARKER_RE.fullmatch(str(row.get("content") or "").strip())
+        and _nonnegative_int(row.get("page_idx")) is not None
+        and (reported_last_front_page is None or int(row["page_idx"]) <= reported_last_front_page)
+    ]
+    if not marker_blocks:
+        return {"applied": False, "reason": "source_visible_toc_marker_not_found"}
+
+    toc_start = min(int(row["page_idx"]) for row in marker_blocks)
+    toc_end = reported_last_front_page if reported_last_front_page is not None and reported_last_front_page >= toc_start else toc_start
+    toc_blocks = [
+        row for row in blocks
+        if toc_start <= int(row.get("page_idx") if row.get("page_idx") is not None else -1) <= toc_end
+        and str(row.get("type") or "") != "page_number"
+    ]
+    toc_blocks.sort(key=lambda row: (int(row.get("page_idx") or 0), int(row.get("source_order") or 0)))
+
+    nodes = []
+    roots = []
+    current_root = None
+    current_level_two = None
+    for block in toc_blocks:
+        block_id = block.get("block_id")
+        toc_page_idx = int(block.get("page_idx") or 0)
+        for block_line, raw_line in enumerate(str(block.get("content") or "").splitlines(), 1):
+            line = re.sub(r"\s+", " ", raw_line).strip()
+            if not line or TOC_MARKER_RE.fullmatch(line):
+                continue
+            if CHINESE_TOC_ROOT_RE.match(line) or ENGLISH_TOC_ROOT_RE.match(line):
+                current_root = _toc_node(
+                    title=line,
+                    level=1,
+                    parent_title="",
+                    printed_page=None,
+                    toc_page_idx=toc_page_idx,
+                    block_id=block_id,
+                    block_line=block_line,
+                )
+                nodes.append(current_root)
+                roots.append(current_root)
+                current_level_two = None
+                continue
+            if current_root is None:
+                continue
+            entry = TOC_TRAILING_PAGE_RE.fullmatch(line)
+            if not entry:
+                continue
+            title = entry.group("title").strip(" .．·…")
+            if not TOC_CHILD_RE.match(title):
+                continue
+            printed_page = int(entry.group("page"))
+            is_lesson = bool(re.match(r"^第\s*\d+\s*课时\s+\S", title))
+            level = 3 if is_lesson and current_level_two is not None else 2
+            parent = current_level_two if level == 3 else current_root
+            node = _toc_node(
+                title=title,
+                level=level,
+                parent_title=parent["title"],
+                printed_page=printed_page,
+                toc_page_idx=toc_page_idx,
+                block_id=block_id,
+                block_line=block_line,
+            )
+            nodes.append(node)
+            if level == 2:
+                current_level_two = node
+
+    child_count = sum(row["level"] > 1 for row in nodes)
+    if not roots or child_count < 2:
+        return {
+            "applied": False,
+            "reason": "source_visible_toc_has_insufficient_hierarchy_evidence",
+            "root_count": len(roots),
+            "child_count": child_count,
+            "toc_pages": [toc_start, toc_end],
+        }
+
+    page_offset, offset_evidence = _infer_toc_printed_page_offset(blocks, nodes, toc_end, canonical_dir)
+    if page_offset is None:
+        return {
+            "applied": False,
+            "reason": "source_visible_toc_page_mapping_unresolved",
+            "root_count": len(roots),
+            "child_count": child_count,
+            "toc_pages": [toc_start, toc_end],
+        }
+    for node in nodes:
+        printed_page = node.get("printed_page")
+        if printed_page is not None:
+            node["source_page"] = int(printed_page) + page_offset
+            node["evidence"][0]["source_page"] = node["source_page"]
+            node["evidence"][0]["printed_page_offset"] = page_offset
+    for root in roots:
+        # Paths are normalized later; the next root boundary is the stable source ordering signal here.
+        root_index = nodes.index(root)
+        next_root_index = next((index for index in range(root_index + 1, len(nodes)) if nodes[index]["level"] == 1), len(nodes))
+        descendants = [row for row in nodes[root_index + 1:next_root_index] if row.get("source_page") is not None]
+        root["source_page"] = min((row["source_page"] for row in descendants), default=toc_start + 1)
+        root["evidence"][0]["source_page"] = root["source_page"]
+        root["evidence"][0]["printed_page_offset"] = page_offset
+    for order, node in enumerate(nodes):
+        node["id"] = f"outline-{order + 1:04d}"
+        node["order"] = order
+    _normalize_parent_links(nodes)
+    return {
+        "applied": True,
+        "reason": "source_visible_toc_blocks_with_resolved_printed_page_mapping",
+        "toc_pages": [toc_start, toc_end],
+        "root_count": len(roots),
+        "child_count": child_count,
+        "node_count": len(nodes),
+        "printed_page_offset": page_offset,
+        "offset_evidence": offset_evidence,
+        "nodes": nodes,
+    }
+
+
+def _toc_node(*, title: str, level: int, parent_title: str, printed_page: int | None, toc_page_idx: int, block_id, block_line: int) -> dict:
+    return {
+        "id": "",
+        "order": 0,
+        "title": title,
+        "normalized_title": _normalize_title(title),
+        "level": level,
+        "parent_title": parent_title,
+        "printed_page": printed_page,
+        "source_page": None,
+        "source": "source_visible_toc_block",
+        "candidate_ids": [],
+        "evidence": [{
+            "method": "source_visible_toc_block",
+            "source_block_id": block_id,
+            "source_block_line": block_line,
+            "toc_page_idx": toc_page_idx,
+            "printed_page": printed_page,
+        }],
+    }
+
+
+def _infer_toc_printed_page_offset(blocks: list[dict], nodes: list[dict], toc_end: int, canonical_dir: Path) -> tuple[int | None, list[dict]]:
+    body_titles: dict[str, list[int]] = defaultdict(list)
+    for block in blocks:
+        page_idx = block.get("page_idx")
+        if page_idx is None or int(page_idx) <= toc_end:
+            continue
+        for raw_line in str(block.get("content") or "").splitlines():
+            normalized = _normalize_title(raw_line)
+            if normalized:
+                body_titles[normalized].append(int(page_idx) + 1)
+    evidence = []
+    offsets = []
+    for node in nodes:
+        printed_page = node.get("printed_page")
+        matches = body_titles.get(node["normalized_title"]) or []
+        if printed_page is None or not matches:
+            continue
+        source_page = min(matches)
+        offset = source_page - int(printed_page)
+        offsets.append(offset)
+        evidence.append({"title": node["title"], "printed_page": printed_page, "source_page": source_page, "offset": offset})
+    if offsets:
+        return Counter(offsets).most_common(1)[0][0], evidence
+
+    clean_path = canonical_dir / "clean.md"
+    if clean_path.is_file():
+        first_page = next(
+            (int(match.group(1)) + 1 for line in clean_path.read_text(encoding="utf-8").splitlines() if (match := re.fullmatch(r"<!--\s*page_idx:\s*(\d+)\s*-->", line.strip()))),
+            None,
+        )
+        printed_pages = [int(row["printed_page"]) for row in nodes if row.get("printed_page") is not None]
+        if first_page is not None and printed_pages:
+            return first_page - min(printed_pages), [{"method": "first_clean_body_page", "source_page": first_page, "printed_page": min(printed_pages)}]
+    return None, []
 
 
 def _reconstruct_invalid_outline_from_canonical_headings(canonical_dir: Path, nodes: list[dict]) -> dict:
@@ -660,7 +866,8 @@ def _body_coverage_units(nodes: list[dict]) -> list[dict]:
             anchors.append(f"candidate:{candidate_id}")
         for evidence in node.get("evidence") or []:
             if evidence.get("source_block_id"):
-                anchors.append(f"source-block:{evidence['source_block_id']}")
+                suffix = f":line:{evidence['source_block_line']}" if evidence.get("source_block_line") else ""
+                anchors.append(f"source-block:{evidence['source_block_id']}{suffix}")
             if evidence.get("marker_block_id"):
                 anchors.append(f"source-block:{evidence['marker_block_id']}")
             if evidence.get("clean_line"):
@@ -1245,6 +1452,14 @@ def _positive_int(value) -> int | None:
     except (TypeError, ValueError):
         return None
     return number if number > 0 else None
+
+
+def _nonnegative_int(value) -> int | None:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number >= 0 else None
 
 
 def _write_json(path: Path, value: dict) -> None:

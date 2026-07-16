@@ -107,6 +107,44 @@ def test_existing_recovery_can_select_active_marker_items(tmp_path):
     assert recovery["selected"][0]["input_object"] == "cambridge-igcse.pdf"
 
 
+def test_completed_asset_is_selected_only_for_explicit_versioned_reprocess(tmp_path):
+    lineage_file = write_lineage(
+        tmp_path,
+        [
+            {
+                "input_object": "completed.pdf",
+                "input_size_bytes": 1024,
+                "material_id": "pdf-completed",
+                "scheduler_state": "gpu_done",
+            }
+        ],
+    )
+
+    ordinary = pipeline.build_next_batch_plan(
+        None,
+        None,
+        limit=1,
+        sort_by="smallest",
+        with_sha=False,
+        lineage_file=lineage_file,
+        material_ids=("pdf-completed",),
+    )
+    versioned = pipeline.build_next_batch_plan(
+        None,
+        None,
+        limit=1,
+        sort_by="smallest",
+        with_sha=False,
+        lineage_file=lineage_file,
+        material_ids=("pdf-completed",),
+        candidate_states={"eligible_for_submit", "gpu_done"},
+    )
+
+    assert ordinary["status"] == "TARGET_NOT_ELIGIBLE"
+    assert versioned["status"] == "READY"
+    assert versioned["selected"][0]["material_id"] == "pdf-completed"
+
+
 class FakeS3:
     def __init__(self, objects: dict[str, bytes]):
         self.objects = objects

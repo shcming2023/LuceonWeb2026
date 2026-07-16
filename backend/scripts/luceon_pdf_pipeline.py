@@ -3364,6 +3364,7 @@ def preflight_command(args: argparse.Namespace) -> dict[str, Any]:
             input_objects=input_objects,
             material_ids=material_ids,
             allow_active=args.allow_active,
+            candidate_states={"eligible_for_submit", "gpu_done"} if args.reprocess_completed else None,
         )
     except Exception as exc:
         plan = {"status": "ERROR", "error": str(exc), "type": type(exc).__name__}
@@ -3400,6 +3401,7 @@ def preflight_command(args: argparse.Namespace) -> dict[str, Any]:
         "plan_status": plan_status,
         "selected_count": int(plan.get("selected_count") or 0),
         "active_marker_count": int(plan.get("active_marker_count") or 0),
+        "reprocess_completed": bool(args.reprocess_completed),
         "selected": plan.get("selected") or [],
         "active_marker_samples": plan.get("active_marker_samples") or [],
         "scheduler_state_counts": plan.get("scheduler_state_counts") or {},
@@ -3690,6 +3692,8 @@ def run_staged_command(args: argparse.Namespace) -> dict[str, Any]:
         candidate_states = {"eligible_for_submit"}
         if args.existing_popo_batch_id:
             candidate_states = {"mineru_only_resume_popo"}
+        elif args.reprocess_completed:
+            candidate_states.add("gpu_done")
         plan = build_next_batch_plan(
             s3,
             cfg,
@@ -4291,6 +4295,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Use only eduassets-input status markers for fast planning; intended for quick UI preflight.",
     )
+    p.add_argument(
+        "--reprocess-completed",
+        action="store_true",
+        help="Explicitly include gpu_done targets in a new immutable MinerU/Popo version. Reserved for administrator-controlled validation.",
+    )
     add_target_filters(p)
     p.set_defaults(func=preflight_command)
     p = sub.add_parser("report", help="Sanitized read-only first-stage report with queues and bucket contract audit.")
@@ -4324,6 +4333,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--input-status-only",
         action="store_true",
         help="Use only eduassets-input status markers for fast retry selection; final completion still requires lineage audit.",
+    )
+    p.add_argument(
+        "--reprocess-completed",
+        action="store_true",
+        help="Explicitly include gpu_done targets in a new immutable MinerU/Popo version. Reserved for administrator-controlled validation.",
     )
     add_target_filters(p)
     p.add_argument("--wait", action="store_true", help="Wait for MinerU and Popo completion and freeze outputs.")

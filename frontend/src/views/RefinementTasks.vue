@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
@@ -30,24 +30,27 @@ const detailOpen = ref(false)
 const detailLoading = ref(false)
 const selectedJob = ref<Record<string, any> | null>(null)
 const candidate = ref<Record<string, any> | null>(null)
+const candidateError = ref('')
+const terminalStatuses = new Set(['succeeded', 'needs_review', 'failed', 'cancelled'])
+let refreshTimer: number | undefined
 
 function updateQuery() {
   router.replace({ query: { ...(status.value ? { status: status.value } : {}), ...(page.value > 1 ? { page: String(page.value) } : {}), ...(selectedJob.value ? { job_id: selectedJob.value.id } : {}) } })
 }
 
-async function load() {
-  loading.value = true
+async function load(showLoading = true) {
+  if (showLoading) loading.value = true
   try {
     const result = await materialsApi.getWorkflowV2JobSummaryPage({ page: page.value, page_size: pageSize.value, status: status.value })
     rows.value = result.jobs
     total.value = result.total
     const requested = String(route.query.job_id || '')
-    if (requested) await openDetail(requested)
+    if (requested && selectedJob.value?.id !== requested) await openDetail(requested)
     updateQuery()
   } catch (error: any) {
-    ElMessage.error(error?.response?.data?.detail || '精修任务加载失败')
+    if (showLoading) ElMessage.error(error?.response?.data?.detail || '精修任务加载失败')
   } finally {
-    loading.value = false
+    if (showLoading) loading.value = false
   }
 }
 
@@ -83,7 +86,13 @@ async function createJobs() {
   creating.value = true
   try {
     const result = await materialsApi.createWorkflowV2JobsBatch(selectedMaterials.value.map(row => Number(row.id)))
-    ElMessage.success(`已创建 ${result.created || 0} 个任务，复用 ${result.existing || 0} 个现有任务，失败 ${result.failed || 0} 个`)
+    const queuedJobs = (result.results || []).filter((row: Record<string, any>) => row.job?.status === 'queued')
+    const queueResults = await Promise.allSettled(queuedJobs.map((row: Record<string, any>) => materialsApi.runWorkflowV2Job(row.job.id)))
+    const enqueued = queueResults.filter(row => row.status === 'fulfilled').length
+    const enqueueFailed = queueResults.length - enqueued
+    const summary = `已创建 ${result.created || 0} 个任务，复用 ${result.existing || 0} 个现有任务；提交 Worker ${enqueued} 个，失败 ${(result.failed || 0) + enqueueFailed} 个`
+    if ((result.failed || 0) + enqueueFailed) ElMessage.warning(summary)
+    else ElMessage.success(summary)
     createOpen.value = false
     await load()
   } catch (error: any) {
@@ -118,10 +127,15 @@ async function openDetail(jobId: string) {
   detailOpen.value = true
   detailLoading.value = true
   candidate.value = null
+  candidateError.value = ''
   try {
     selectedJob.value = await materialsApi.getWorkflowV2Job(jobId)
     if (selectedJob.value.status === 'needs_review') {
-      candidate.value = await materialsApi.getWorkflowV2ReviewCandidate(jobId)
+      try {
+        candidate.value = await materialsApi.getWorkflowV2ReviewCandidate(jobId)
+      } catch (error: any) {
+        candidateError.value = error?.response?.data?.detail || '当前阶段没有可下载的排版候选件'
+      }
     }
     updateQuery()
   } catch (error: any) {
@@ -131,12 +145,41 @@ async function openDetail(jobId: string) {
   }
 }
 
+async function refreshActiveState() {
+  await load(false)
+  if (!selectedJob.value || terminalStatuses.has(selectedJob.value.status)) return
+  try {
+    const job = await materialsApi.getWorkflowV2Job(selectedJob.value.id)
+    selectedJob.value = job
+    if (job.status === 'needs_review') {
+      try {
+        candidate.value = await materialsApi.getWorkflowV2ReviewCandidate(job.id)
+        candidateError.value = ''
+      } catch (error: any) {
+        candidate.value = null
+        candidateError.value = error?.response?.data?.detail || '当前阶段没有可下载的排版候选件'
+      }
+    }
+  } catch { /* keep the last visible snapshot until the next refresh */ }
+}
+
 function closeDetail() {
   selectedJob.value = null
   candidate.value = null
+  candidateError.value = ''
   const query = { ...route.query }
   delete query.job_id
   router.replace({ query })
+}
+
+function currentStageStatus(job: Record<string, any>) {
+  if (job.current_stage_status) return job.current_stage_status
+  return [...(job.stages || [])].reverse().find((row: Record<string, any>) => row.stage_key === job.current_stage_key)?.status || '—'
+}
+
+function jobErrorMessage(job: Record<string, any>) {
+  if (job.error?.message || job.error_message) return job.error?.message || job.error_message
+  return [...(job.stages || [])].reverse().find((row: Record<string, any>) => row.error_message)?.error_message || '—'
 }
 
 async function handoff() {
@@ -162,6 +205,23 @@ async function revalidate() {
   }
 }
 
+async function restartBlockedStage() {
+  if (!selectedJob.value) return
+  await ElMessageBox.confirm(
+    `从 ${selectedJob.value.current_stage_key} 重新验证？已通过的上游冻结产物不会重跑。`,
+    '重新验证阻断阶段',
+    { type: 'warning', confirmButtonText: '重新验证', cancelButtonText: '取消' },
+  )
+  try {
+    await materialsApi.restartWorkflowV2Job(selectedJob.value.id, selectedJob.value.current_stage_key)
+    ElMessage.success(`已从 ${selectedJob.value.current_stage_key} 创建新尝试并提交 Worker`)
+    detailOpen.value = false
+    await load()
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.detail || '阻断阶段重新验证失败')
+  }
+}
+
 function openReview(job: WorkflowV2JobSummary) {
   if (job.review_asset_id) router.push({ path: '/review/compare', query: { asset_id: job.review_asset_id } })
 }
@@ -170,7 +230,7 @@ function openMaterial(job: WorkflowV2JobSummary) {
   router.push({ path: '/assets', query: { material_pk: job.material_pk, search: job.material_id } })
 }
 
-watch(page, load)
+watch(page, () => load())
 onMounted(async () => {
   const linkedMaterialPk = String(route.query.material_pk || '')
   const linkedMaterialId = String(route.query.material_id || '')
@@ -181,6 +241,14 @@ onMounted(async () => {
     const requested = eligibleMaterials.value.find(row => row.id === linkedMaterialPk)
     if (requested) selectedMaterials.value = [requested]
   }
+  refreshTimer = window.setInterval(() => {
+    if (rows.value.some(job => !terminalStatuses.has(job.status)) || (selectedJob.value && !terminalStatuses.has(selectedJob.value.status))) {
+      void refreshActiveState()
+    }
+  }, 10_000)
+})
+onUnmounted(() => {
+  if (refreshTimer !== undefined) window.clearInterval(refreshTimer)
 })
 </script>
 
@@ -246,7 +314,7 @@ onMounted(async () => {
       </el-table>
       <template #footer>
         <el-button @click="createOpen = false">取消</el-button>
-        <el-button type="primary" :disabled="!selectedMaterials.length" :loading="creating" @click="createJobs">创建 {{ selectedMaterials.length }} 个任务</el-button>
+        <el-button type="primary" :disabled="!selectedMaterials.length" :loading="creating" @click="createJobs">创建并提交 {{ selectedMaterials.length }} 个任务</el-button>
       </template>
     </el-dialog>
 
@@ -255,22 +323,30 @@ onMounted(async () => {
         <el-descriptions v-if="selectedJob" :column="3" border class="detail-section">
           <el-descriptions-item label="状态"><StageStatusBadge :status="selectedJob.status" /></el-descriptions-item>
           <el-descriptions-item label="教材">#{{ selectedJob.material_pk }} · {{ selectedJob.material_id }}</el-descriptions-item>
-          <el-descriptions-item label="当前阶段">{{ selectedJob.current_stage_key }} / {{ selectedJob.current_stage_status }}</el-descriptions-item>
+          <el-descriptions-item label="当前阶段">{{ selectedJob.current_stage_key }} / {{ currentStageStatus(selectedJob) }}</el-descriptions-item>
           <el-descriptions-item label="输入 Popo" :span="3"><span class="mono-note">{{ selectedJob.source_popo_manifest?.bucket }}/{{ selectedJob.source_popo_manifest?.object }}</span></el-descriptions-item>
-          <el-descriptions-item label="错误" :span="3"><span class="error-note">{{ selectedJob.error_message || '—' }}</span></el-descriptions-item>
+          <el-descriptions-item label="错误" :span="3"><span class="error-note">{{ jobErrorMessage(selectedJob) }}</span></el-descriptions-item>
         </el-descriptions>
 
-        <section v-if="candidate" class="detail-section">
+        <section v-if="selectedJob?.status === 'needs_review'" class="detail-section">
           <h3>needs_review 人工闭环</h3>
-          <el-alert type="warning" :closable="false" title="needs_review 不是完成状态：必须检查候选 PDF 与证据、下载待修复 ZIP、登记交接并重新验证。" />
-          <div class="inline-actions" style="margin-top: 12px">
-            <el-button tag="a" target="_blank" :href="candidate.files?.pdf">查看候选 PDF</el-button>
-            <el-button tag="a" :href="candidate.files?.latex">下载待修复 ZIP</el-button>
-            <el-button tag="a" :href="candidate.files?.validation">下载问题证据</el-button>
-            <el-button type="warning" @click="handoff">登记人工接手</el-button>
-            <el-button type="primary" @click="revalidate">重新验证</el-button>
-          </div>
-          <pre class="candidate-blockers">{{ JSON.stringify(candidate.blockers, null, 2) }}</pre>
+          <template v-if="candidate">
+            <el-alert type="warning" :closable="false" title="needs_review 不是完成状态：必须检查候选 PDF 与证据、下载待修复 ZIP、登记交接并重新验证。" />
+            <div class="inline-actions" style="margin-top: 12px">
+              <el-button tag="a" target="_blank" :href="candidate.files?.pdf">查看候选 PDF</el-button>
+              <el-button tag="a" :href="candidate.files?.latex_zip">下载待修复 ZIP</el-button>
+              <el-button tag="a" :href="candidate.files?.validation">下载问题证据</el-button>
+              <el-button type="warning" @click="handoff">登记人工接手</el-button>
+              <el-button type="primary" @click="revalidate">重新验证</el-button>
+            </div>
+            <pre class="candidate-blockers">{{ JSON.stringify(candidate.blockers, null, 2) }}</pre>
+          </template>
+          <template v-else>
+            <el-alert type="error" :closable="false" :title="`${selectedJob.current_stage_key} 阶段已阻断，尚未生成排版 PDF/ZIP。${candidateError ? ` ${candidateError}` : ''}`" />
+            <div class="inline-actions" style="margin-top: 12px">
+              <el-button type="warning" @click="restartBlockedStage">从当前阻断阶段重新验证</el-button>
+            </div>
+          </template>
         </section>
 
         <section v-if="selectedJob" class="detail-section">

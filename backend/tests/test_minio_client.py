@@ -22,3 +22,16 @@ def test_get_presigned_url_uses_configured_endpoint_for_browser(monkeypatch):
     url = minio_module.get_presigned_url("mineru-files", "sample.pdf", expires=600)
 
     assert url == "http://localhost:9000/mineru-files/sample.pdf?signed=1"
+
+
+def test_parse_endpoint_keeps_internal_host_port_intact(monkeypatch):
+    monkeypatch.setenv("MINIO_SECURE", "false")
+
+    assert minio_module._parse_endpoint("host.docker.internal:9000") == (
+        "host.docker.internal:9000",
+        False,
+    )
+    assert minio_module._parse_endpoint("https://assets.example.com:9443") == (
+        "assets.example.com:9443",
+        True,
+    )

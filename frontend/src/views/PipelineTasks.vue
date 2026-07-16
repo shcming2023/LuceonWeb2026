@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import { materialsApi } from '@/api/materials'
 import type { PipelineRun, PipelineRunItem } from '@/types/material'
 import { ensureCurrentUser, useCurrentUser } from '@/utils/user'
-import { formatDateTime } from '@/utils/status'
+import { formatDateTime, formatPipelineStage } from '@/utils/status'
 import StageStatusBadge from '@/components/StageStatusBadge.vue'
 import PipelineRunItems from '@/components/PipelineRunItems.vue'
 import './workspace.css'
@@ -25,13 +25,26 @@ const selectedRun = ref<PipelineRun | null>(null)
 const detailOpen = ref(false)
 const detailLoading = ref(false)
 const recovering = ref(false)
+const terminalStatuses = new Set(['succeeded', 'partial', 'failed', 'cancelled'])
+let refreshTimer: number | undefined
+
+function modeLabel(mode: string) {
+  if (mode === 'resume_popo') return '管理员异常恢复'
+  if (mode === 'reprocess') return '新版本重解析'
+  return '完整解析'
+}
+
+function workerLeaseLabel(run: PipelineRun) {
+  if (terminalStatuses.has(run.status)) return '已结束 · 租约已释放'
+  return run.worker_id || '等待 Worker 领取'
+}
 
 function updateQuery() {
   router.replace({ query: { ...(status.value ? { status: status.value } : {}), ...(page.value > 1 ? { page: String(page.value) } : {}), ...(selectedRun.value ? { run_id: selectedRun.value.id } : {}) } })
 }
 
-async function load() {
-  loading.value = true
+async function load(showLoading = true) {
+  if (showLoading) loading.value = true
   try {
     const result = await materialsApi.getPipelineRuns({ page: page.value, page_size: pageSize.value, status: status.value })
     rows.value = result.runs
@@ -50,7 +63,7 @@ async function load() {
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.detail || '解析任务加载失败')
   } finally {
-    loading.value = false
+    if (showLoading) loading.value = false
   }
 }
 
@@ -108,10 +121,18 @@ async function retryMetadata(item: PipelineRunItem) {
   }
 }
 
-watch(page, load)
+watch(page, () => load())
 onMounted(async () => {
   try { await ensureCurrentUser() } catch { /* API will enforce authorization */ }
   await load()
+  refreshTimer = window.setInterval(() => {
+    if (rows.value.some(run => !terminalStatuses.has(run.status)) || (selectedRun.value && !terminalStatuses.has(selectedRun.value.status))) {
+      void load(false)
+    }
+  }, 10_000)
+})
+onUnmounted(() => {
+  if (refreshTimer !== undefined) window.clearInterval(refreshTimer)
 })
 </script>
 
@@ -148,11 +169,11 @@ onMounted(async () => {
       </div>
       <el-table v-loading="loading" :data="rows" height="calc(100vh - 330px)" empty-text="暂无解析任务">
         <el-table-column label="批次" width="105"><template #default="{ row }"><el-button link @click="openDetail(row)">#{{ row.id }}</el-button></template></el-table-column>
-        <el-table-column label="模式" width="130"><template #default="{ row }">{{ row.mode === 'popo_resume' ? '异常恢复' : '完整解析' }}</template></el-table-column>
+        <el-table-column label="模式" width="145"><template #default="{ row }">{{ modeLabel(row.mode) }}</template></el-table-column>
         <el-table-column label="状态" width="120"><template #default="{ row }"><StageStatusBadge :status="row.status" /></template></el-table-column>
-        <el-table-column prop="current_stage" label="当前阶段" min-width="145" />
+        <el-table-column label="当前阶段" min-width="145"><template #default="{ row }">{{ formatPipelineStage(row.current_stage) }}</template></el-table-column>
         <el-table-column label="逐本结果" width="190"><template #default="{ row }">共 {{ row.total }} · 成功 {{ row.success }} · 失败 {{ row.failed }}</template></el-table-column>
-        <el-table-column label="Worker / 租约" min-width="185"><template #default="{ row }"><span class="mono-note">{{ row.worker_id || '尚未领取' }}</span><span class="identity-meta">尝试 {{ row.attempt_count }}</span></template></el-table-column>
+        <el-table-column label="Worker / 租约" min-width="195"><template #default="{ row }"><span class="mono-note">{{ workerLeaseLabel(row) }}</span><span class="identity-meta">尝试 {{ row.attempt_count }}</span></template></el-table-column>
         <el-table-column label="创建时间" width="170"><template #default="{ row }">{{ formatDateTime(row.created_at || '') }}</template></el-table-column>
         <el-table-column label="操作" width="100" fixed="right"><template #default="{ row }"><el-button link @click="openDetail(row)">查看</el-button></template></el-table-column>
       </el-table>
@@ -163,8 +184,8 @@ onMounted(async () => {
       <div v-loading="detailLoading || recovering">
         <el-descriptions v-if="selectedRun" :column="3" border class="detail-section">
           <el-descriptions-item label="状态"><StageStatusBadge :status="selectedRun.status" /></el-descriptions-item>
-          <el-descriptions-item label="模式">{{ selectedRun.mode }}</el-descriptions-item>
-          <el-descriptions-item label="当前阶段">{{ selectedRun.current_stage || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="模式">{{ modeLabel(selectedRun.mode) }}</el-descriptions-item>
+          <el-descriptions-item label="当前阶段">{{ formatPipelineStage(selectedRun.current_stage) }}</el-descriptions-item>
           <el-descriptions-item label="幂等键"><span class="mono-note">{{ selectedRun.idempotency_key || '历史任务未登记' }}</span></el-descriptions-item>
           <el-descriptions-item label="心跳">{{ formatDateTime(selectedRun.heartbeat_at || '') || '—' }}</el-descriptions-item>
           <el-descriptions-item label="错误"><span class="error-note">{{ selectedRun.error_message }}</span></el-descriptions-item>

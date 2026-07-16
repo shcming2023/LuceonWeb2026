@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.models.material import Material, MaterialOutput
+from app.models.review_asset import ReviewAsset
 from app.services.codex_elegantbook import ElegantBookOutput, list_elegantbook_outputs, normalize_workflow_artifact_manifest, output_priority
 from app.services.luceon_review import ObjectRef, read_object
 
@@ -38,7 +39,19 @@ def register_elegantbook_output(
         db.add(row)
     row.material_pk = material.id
     row.material_id = output.material_id or material.material_id or ""
-    row.review_asset_id = material.review_asset_id
+    review_asset = None
+    if output.popo_run_id:
+        review_asset = (
+            db.query(ReviewAsset)
+            .filter(
+                ReviewAsset.user_id == user_id,
+                ReviewAsset.material_id == row.material_id,
+                ReviewAsset.run_id == output.popo_run_id,
+            )
+            .order_by(ReviewAsset.id.desc())
+            .first()
+        )
+    row.review_asset_id = review_asset.id if review_asset else material.review_asset_id
     row.output_type = "elegantbook"
     row.origin = output.origin
     row.status = status or row.status or _default_status(output.origin)

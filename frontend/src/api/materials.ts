@@ -38,6 +38,7 @@ export interface PipelineTarget {
   material_ids?: string[]
   input_objects?: string[]
   material_pks?: number[]
+  reprocess_completed?: boolean
 }
 
 export interface CodexJobCreatePayload {

@@ -1,5 +1,6 @@
 import hashlib
 import json
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -139,13 +140,36 @@ def test_frozen_popo_image_inventory_is_restored_without_renaming(monkeypatch, t
     assert (tmp_path / "images" / "a.jpg").read_bytes() == b"a"
 
 
-def test_core_gate_requires_handoff_after_any_prior_needs_review_attempt():
+def test_core_gate_requires_handoff_only_after_reviewable_candidate_exists():
     _old_db, db, material = make_sessions()
     job, _ = create_workflow_job(db, user_id="u1", material=material)
-    review_stage = db.query(StageRun).filter_by(workflow_job_id=job.id).first()
-    review_stage.status = "needs_review"
+    started = datetime.utcnow()
+    outline_stage = db.query(StageRun).filter_by(workflow_job_id=job.id, stage_key="outline_reconstruction").one()
+    outline_stage.status = "needs_review"
+    outline_stage.finished_at = started
+    candidate_stage = db.query(StageRun).filter_by(workflow_job_id=job.id, stage_key="deterministic_elegantbook").one()
+    db.add(
+        ArtifactVersion(
+            workflow_job_id=job.id,
+            stage_run_id=candidate_stage.id,
+            artifact_kind="elegantbook-candidate",
+            bucket="test",
+            object_name="candidate/manifest.json",
+            object_identity_hash="c" * 64,
+            sha256="d" * 64,
+            size_bytes=1,
+            metadata_json="{}",
+            created_at=started + timedelta(seconds=1),
+        )
+    )
     db.commit()
 
+    assert _manual_review_handoff_blocker(db, job) is None
+
+    review_stage = db.query(StageRun).filter_by(workflow_job_id=job.id, stage_key="bounded_deepseek_polish_qa").one()
+    review_stage.status = "needs_review"
+    review_stage.finished_at = started + timedelta(seconds=2)
+    db.commit()
     blocker = _manual_review_handoff_blocker(db, job)
     assert blocker == {
         "code": "manual_review_handoff_missing",

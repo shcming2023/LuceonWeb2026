@@ -628,9 +628,25 @@ def _restore_locked_empty_directories(project_dir: Path) -> list[str]:
 
 
 def _manual_review_handoff_blocker(db, job: WorkflowJob) -> dict | None:
+    first_candidate = (
+        db.query(ArtifactVersion)
+        .filter(
+            ArtifactVersion.workflow_job_id == job.id,
+            ArtifactVersion.artifact_kind == "elegantbook-candidate",
+        )
+        .order_by(ArtifactVersion.created_at.asc(), ArtifactVersion.id.asc())
+        .first()
+    )
+    if not first_candidate:
+        return None
     review_count = (
         db.query(StageRun)
-        .filter(StageRun.workflow_job_id == job.id, StageRun.status == "needs_review")
+        .filter(
+            StageRun.workflow_job_id == job.id,
+            StageRun.status == "needs_review",
+            StageRun.finished_at.is_not(None),
+            StageRun.finished_at >= first_candidate.created_at,
+        )
         .count()
     )
     if not review_count:

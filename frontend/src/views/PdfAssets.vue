@@ -4,9 +4,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Download, Refresh, Search, UploadFilled } from '@element-plus/icons-vue'
 import { materialsApi } from '@/api/materials'
-import type { MaterialArtifactCatalog, MaterialItem, MaterialLineage, PipelinePreflightResponse } from '@/types/material'
+import type { MaterialArtifactCatalog, MaterialItem, MaterialLineage, MaterialUploadResponse, PipelinePreflightResponse } from '@/types/material'
 import { formatFileSize } from '@/utils/format'
 import { formatDateTime } from '@/utils/status'
+import { ensureCurrentUser, useCurrentUser } from '@/utils/user'
 import MaterialIdentity from '@/components/MaterialIdentity.vue'
 import StageStatusBadge from '@/components/StageStatusBadge.vue'
 import ArtifactDownloadPanel from '@/components/ArtifactDownloadPanel.vue'
@@ -15,9 +16,12 @@ import './workspace.css'
 
 const route = useRoute()
 const router = useRouter()
+const currentUser = useCurrentUser()
+const isAdmin = computed(() => Boolean(currentUser.value?.capabilities?.pipeline_admin))
 const loading = ref(false)
 const uploading = ref(false)
 const uploadProgress = ref(0)
+const uploadResults = ref<MaterialUploadResponse['files']>([])
 const rows = ref<MaterialItem[]>([])
 const total = ref(0)
 const page = ref(Number(route.query.page) || 1)
@@ -31,6 +35,7 @@ const batchDialog = ref(false)
 const preflightLoading = ref(false)
 const submitting = ref(false)
 const preflight = ref<PipelinePreflightResponse | null>(null)
+const reprocessCompleted = ref(false)
 
 const detailOpen = ref(false)
 const detailLoading = ref(false)
@@ -39,6 +44,18 @@ const catalog = ref<MaterialArtifactCatalog | null>(null)
 const lineage = ref<MaterialLineage | null>(null)
 
 const selectionValid = computed(() => selected.value.length > 0 && selected.value.length <= 5)
+
+function metadataDisplayStatus(material: MaterialItem) {
+  const status = material.book_metadata?.status || 'missing'
+  return material.book_metadata?.manual_override || status === 'manual' || status === 'ai_extracted' ? 'succeeded' : status
+}
+
+function metadataDisplayLabel(material: MaterialItem) {
+  const status = material.book_metadata?.status || 'missing'
+  if (material.book_metadata?.manual_override || status === 'manual') return '人工已编目'
+  if (status === 'ai_extracted') return 'AI 已编目'
+  return '待编目'
+}
 
 function updateQuery() {
   router.replace({ query: { ...(search.value ? { search: search.value } : {}), ...(stage.value ? { stage: stage.value } : {}), ...(page.value > 1 ? { page: String(page.value) } : {}), ...(detailOpen.value && detailMaterial.value ? { material_pk: detailMaterial.value.id } : {}) } })
@@ -77,8 +94,10 @@ async function uploadFiles(event: Event) {
   }
   uploading.value = true
   uploadProgress.value = 0
+  uploadResults.value = []
   try {
     const result = await materialsApi.upload(files, value => { uploadProgress.value = value })
+    uploadResults.value = result.files || []
     const duplicateText = result.duplicates ? `，${result.duplicates} 个已存在并去重` : ''
     ElMessage.success(`上传处理完成：${result.success} 个成功${duplicateText}`)
     await load()
@@ -102,15 +121,19 @@ function onSelectionChange(value: MaterialItem[]) {
 function openBatch() {
   if (!selectionValid.value) return
   preflight.value = null
+  reprocessCompleted.value = false
   batchDialog.value = true
 }
 
 async function runPreflight() {
   preflightLoading.value = true
   try {
-    preflight.value = await materialsApi.preflightPipeline(selected.value.length, { material_pks: selected.value.map(row => Number(row.id)) })
+    preflight.value = await materialsApi.preflightPipeline(selected.value.length, {
+      material_pks: selected.value.map(row => Number(row.id)),
+      reprocess_completed: reprocessCompleted.value
+    })
     if (preflight.value.ready) ElMessage.success('预检通过，可提交解析批次')
-    else ElMessage.warning('预检未通过；本轮 GPU 关闭时这是预期结果')
+    else ElMessage.warning(`预检未通过：${preflight.value.status || preflight.value.plan_status || '请检查运行状态'}`)
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.detail || '预检失败')
   } finally {
@@ -123,7 +146,10 @@ async function submitBatch() {
   await ElMessageBox.confirm('提交后将按快照执行 MinerU 批量 → 逐本冻结 → Popo 批量 → 逐本冻结。是否继续？', '提交解析批次', { type: 'warning' })
   submitting.value = true
   try {
-    const run = await materialsApi.startPipeline(true, selected.value.length, { material_pks: selected.value.map(row => Number(row.id)) })
+    const run = await materialsApi.startPipeline(true, selected.value.length, {
+      material_pks: selected.value.map(row => Number(row.id)),
+      reprocess_completed: reprocessCompleted.value
+    })
     ElMessage.success(`解析批次 #${run.id} 已进入持久队列`)
     batchDialog.value = false
     router.push(`/pipeline/runs?run_id=${run.id}`)
@@ -180,7 +206,10 @@ function openRefinement(material: MaterialItem) {
 }
 
 watch(page, load)
-onMounted(load)
+onMounted(async () => {
+  try { await ensureCurrentUser() } catch { /* API will enforce authorization */ }
+  await load()
+})
 </script>
 
 <template>
@@ -199,6 +228,37 @@ onMounted(load)
     </header>
 
     <el-progress v-if="uploading" :percentage="uploadProgress" :stroke-width="5" />
+
+    <section v-if="uploadResults.length" class="workspace-panel">
+      <div class="workspace-toolbar">
+        <div>
+          <strong>本次上传结果</strong>
+          <p class="mono-note">逐文件显示本次提交名与系统规范资产；“已去重”表示复用既有数字资产，没有重复创建材料。</p>
+        </div>
+      </div>
+      <el-table :data="uploadResults" size="small" max-height="240">
+        <el-table-column prop="filename" label="本次提交文件名" min-width="220" />
+        <el-table-column label="处理结果" width="110">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'failed' ? 'danger' : row.status === 'duplicate' ? 'warning' : 'success'">
+              {{ row.status === 'duplicate' ? '已去重' : row.status === 'success' ? '已新建' : '失败' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="系统规范资产" min-width="330">
+          <template #default="{ row }">
+            <MaterialIdentity
+              v-if="row.material"
+              :filename="row.material.filename"
+              :material-id="row.material.material_id"
+              :material-pk="row.material.id"
+              :sha256="row.material.input_sha256"
+            />
+            <span v-else class="error-note">{{ row.error_message || '未生成资产' }}</span>
+          </template>
+        </el-table-column>
+      </el-table>
+    </section>
 
     <section class="workspace-panel">
       <div class="workspace-toolbar">
@@ -226,8 +286,8 @@ onMounted(load)
           </el-table-column>
           <el-table-column label="规格" width="135"><template #default="{ row }"><span>{{ formatFileSize(row.size) }}</span><span class="identity-meta">{{ row.page_count || '—' }} 页</span></template></el-table-column>
           <el-table-column label="解析就绪" width="120"><template #default="{ row }"><StageStatusBadge :status="row.popo_available ? 'succeeded' : row.stage_status" :label="row.popo_available ? '已就绪' : '未就绪'" /></template></el-table-column>
-          <el-table-column label="编目状态" width="120"><template #default="{ row }"><StageStatusBadge :status="row.book_metadata?.status || 'missing'" :label="row.book_metadata?.status === 'succeeded' || row.book_metadata?.manual_override ? '已编目' : '待编目'" /></template></el-table-column>
-          <el-table-column label="精修状态" width="130"><template #default="{ row }"><StageStatusBadge :status="row.codex_job?.status || (row.latex_available ? 'succeeded' : 'idle')" /></template></el-table-column>
+          <el-table-column label="编目状态" width="130"><template #default="{ row }"><StageStatusBadge :status="metadataDisplayStatus(row)" :label="metadataDisplayLabel(row)" /></template></el-table-column>
+          <el-table-column label="精修状态" width="130"><template #default="{ row }"><StageStatusBadge :status="row.refinement_status" /></template></el-table-column>
           <el-table-column label="更新时间" width="166"><template #default="{ row }">{{ formatDateTime(row.last_synced_at || row.created_at || '') }}</template></el-table-column>
           <el-table-column label="操作" width="260" fixed="right">
             <template #default="{ row }">
@@ -247,6 +307,14 @@ onMounted(load)
       <ul class="snapshot-list">
         <li v-for="row in selected" :key="row.id"><MaterialIdentity :filename="row.filename" :material-id="row.material_id" :material-pk="row.id" :sha256="row.input_sha256" /></li>
       </ul>
+      <el-alert
+        v-if="selected.some(row => row.popo_available)"
+        type="warning"
+        :closable="false"
+        show-icon
+        title="所选资产已有冻结解析结果。普通提交会保持幂等且不重刷；只有管理员明确创建新版本时才会重新运行 MinerU 与 Popo，历史版本不会删除。"
+      />
+      <el-checkbox v-if="isAdmin" v-model="reprocessCompleted" @change="preflight = null">管理员：为已完成资产创建新的不可变解析版本</el-checkbox>
       <el-alert v-if="preflight" :type="preflight.ready ? 'success' : 'warning'" :closable="false" :title="preflight.ready ? '预检通过' : `预检未通过：${preflight.status || preflight.plan_status}`" />
       <template #footer>
         <el-button @click="batchDialog = false">取消</el-button>

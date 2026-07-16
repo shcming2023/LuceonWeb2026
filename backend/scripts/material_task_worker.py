@@ -30,6 +30,9 @@ def consume_once(worker_id: str) -> dict | None:
             input_objects = [str(row.get("input_object") or "") for row in snapshot if isinstance(row, dict)]
             command_override = None
             start_message = "开始执行现有 Luceon first-stage 调度脚本"
+            reprocess_completed = bool(request.get("reprocess_completed"))
+            if reprocess_completed:
+                start_message = "开始为已完成资产创建新的不可变 MinerU/Popo 版本"
             if pipeline_run.mode == "resume_popo":
                 context = request.get("resume_context") if isinstance(request.get("resume_context"), dict) else {}
                 command_override = popo_resume_command(
@@ -45,6 +48,7 @@ def consume_once(worker_id: str) -> dict | None:
                 int(request.get("limit") or len(snapshot) or 1),
                 material_ids=material_ids,
                 input_objects=input_objects,
+                reprocess_completed=reprocess_completed,
                 command_override=command_override,
                 start_message=start_message,
                 worker_id=worker_id,

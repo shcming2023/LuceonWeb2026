@@ -306,7 +306,7 @@ def mark_pipeline_items_running(db: Session, run: PipelineRun) -> None:
         if item.status in TERMINAL_ITEM_STATUSES:
             continue
         item.status = "running"
-        item.current_stage = "mineru"
+        item.current_stage = "pipeline_command"
         item.started_at = item.started_at or now
         _attempt_for_stage(db, item, "mineru")
     db.commit()
@@ -635,6 +635,8 @@ def execute_metadata_job(job_id: int, worker_id: str) -> dict[str, Any]:
                 try:
                     if not touch_metadata_lease(heartbeat_db, job_id, worker_id):
                         return
+                except Exception:
+                    heartbeat_db.rollback()
                 finally:
                     heartbeat_db.close()
 
