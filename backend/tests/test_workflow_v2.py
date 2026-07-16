@@ -340,6 +340,40 @@ def test_succeeded_job_can_be_manually_rebuilt_from_an_explicit_stage():
     assert target.input_manifest_sha256 == "3" * 64
 
 
+def test_successful_workflow_supersedes_queued_repairs():
+    _old_db, db, material = make_sessions()
+    job, _ = create_workflow_job(db, user_id="u1", material=material)
+    repair = RepairAttempt(
+        workflow_job_id=job.id,
+        repair_kind="codex_sidecar_patch",
+        status="queued",
+        allowed_scope_json="{}",
+        invariants_json="{}",
+        result_json="{}",
+        error_message="",
+    )
+    db.add(repair)
+    db.commit()
+
+    for index, _contract in enumerate(STAGE_CONTRACTS, start=1):
+        claim_current_stage(db, job.public_id, "worker-a")
+        complete_current_stage(
+            db,
+            job.public_id,
+            output_bucket="v2",
+            output_object=f"immutable/{index}/manifest.json",
+            output_sha256=str(index) * 64,
+        )
+        db.commit()
+
+    assert job.status == "succeeded"
+    assert repair.status == "failed"
+    assert repair.finished_at == job.finished_at
+    assert repair.error_message == "superseded by successful workflow completion"
+    event = db.query(StageEvent).filter_by(workflow_job_id=job.id, event_type="job_succeeded").one()
+    assert event.load(event.payload_json, {})["superseded_repair_count"] == 1
+
+
 def test_queued_job_can_be_cancelled_without_execution():
     _old_db, db, material = make_sessions()
     job, _ = create_workflow_job(db, user_id="u1", material=material)

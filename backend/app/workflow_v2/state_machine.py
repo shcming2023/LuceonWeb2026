@@ -79,9 +79,26 @@ def complete_current_stage(
         job.status = "queued"
         _event(db, job.id, next_stage.id, "stage_queued", f"Stage {next_contract.key} is ready.", {"upstream_sha256": output_sha256})
     else:
+        finished_at = datetime.utcnow()
+        queued_repairs = (
+            db.query(RepairAttempt)
+            .filter(RepairAttempt.workflow_job_id == job.id, RepairAttempt.status == "queued")
+            .all()
+        )
+        for repair in queued_repairs:
+            repair.status = "failed"
+            repair.finished_at = finished_at
+            repair.error_message = "superseded by successful workflow completion"
         job.status = "succeeded"
-        job.finished_at = datetime.utcnow()
-        _event(db, job.id, stage.id, "job_succeeded", "All Worker V2.3 stages passed independent gates.", {})
+        job.finished_at = finished_at
+        _event(
+            db,
+            job.id,
+            stage.id,
+            "job_succeeded",
+            "All Worker V2.3 stages passed independent gates.",
+            {"superseded_repair_count": len(queued_repairs)},
+        )
     db.flush()
     return job, stage
 
