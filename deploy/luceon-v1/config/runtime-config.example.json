@@ -31,7 +31,7 @@
     "schedule_enabled": true,
     "interval_hours": 24,
     "include_legacy": true,
-    "max_objects": 500000,
+    "max_objects": 2000000,
     "targets": [
       { "id": "snapshot", "enabled": true },
       { "id": "external", "enabled": true }

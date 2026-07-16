@@ -61,7 +61,7 @@ Formal target-host deployment remains gated by a writable external volume, targe
 - Missing current buckets, traversal-like object names, an object-limit truncation, or any partial target failure fail the job and record a critical alert; incomplete work cannot be marked succeeded.
 - Scope includes all nine current buckets and optionally the historical `eduassets-latex` bucket.
 - Paths are fixed by server-side roots; the settings payload cannot inject arbitrary filesystem paths.
-- Development backup scheduling remains disabled intentionally. Production example uses full-copy mode, current + legacy scope, snapshot plus external target, and a 500,000-object safety gate.
+- Development backup scheduling remains disabled intentionally. Production example uses full-copy mode, current + legacy scope, snapshot plus external target, and a 2,000,000-object safety gate. The four-sample closure later measured 1,646,506 live MinIO objects and proved the previous 500,000/1,000,000 limits too small; truncated inventories continue to fail closed.
 
 ## Migration and rollback evidence
 

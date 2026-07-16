@@ -80,7 +80,7 @@ def enqueue_backup_job(
         target_snapshot_json=_json(targets),
         bucket_scope_json=_json(buckets),
         include_legacy=include_legacy,
-        max_objects=max(1, int(backup.get("max_objects") or 500000)),
+        max_objects=max(1, int(backup.get("max_objects") or 2000000)),
         warnings_json="[]",
         result_json="{}",
     )

@@ -135,7 +135,7 @@
               <el-form-item label="开启调度"><el-switch v-model="runtime.backup.schedule_enabled" /></el-form-item>
               <el-form-item label="间隔小时"><el-input-number v-model="runtime.backup.interval_hours" :min="1" :max="720" /></el-form-item>
               <el-form-item label="包含历史 eduassets-latex"><el-switch v-model="runtime.backup.include_legacy" /></el-form-item>
-              <el-form-item label="对象上限"><el-input-number v-model="runtime.backup.max_objects" :min="100" :max="1000000" :step="1000" /></el-form-item>
+              <el-form-item label="对象上限"><el-input-number v-model="runtime.backup.max_objects" :min="100" :max="5000000" :step="1000" /></el-form-item>
             </el-form>
             <p class="hint">“仅清单”不会复制资产；“完整复制”遇到对象上限或任一目标失败时会失败并产生告警，不会假成功。</p>
             <div class="target-list">
@@ -194,7 +194,7 @@ const defaultRuntime = (): RuntimeConfig => ({
     llm: { enabled: true, provider: 'deepseek', default_model: 'deepseek-v4-flash', reasoning_model: 'deepseek-v4-pro', deepseek: { base_url: 'https://api.deepseek.com', api_key: '' }, outline_decision_max_tokens: 16000, outline_global_max_candidates: 500, outline_max_risk_candidates: 120 },
     vision: { enabled: false, provider: 'dashscope', model: 'qwen3.7-plus', dashscope: { base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', api_key: '' }, outline_visual_max_candidates: 40 }
   },
-  backup: { enabled: false, mode: 'manifest', schedule_enabled: false, interval_hours: 24, include_legacy: true, max_objects: 500000, targets: [] }
+  backup: { enabled: false, mode: 'manifest', schedule_enabled: false, interval_hours: 24, include_legacy: true, max_objects: 2000000, targets: [] }
 })
 
 const backupModes = [{ label: '仅清单（不复制）', value: 'manifest' }, { label: '完整复制', value: 'copy' }]

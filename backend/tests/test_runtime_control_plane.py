@@ -87,6 +87,7 @@ def test_runtime_config_v2_is_explicit_and_drops_dead_fields(monkeypatch, tmp_pa
     assert set(config["models"]) == {"llm", "vision"}
     assert [target["id"] for target in config["backup"]["targets"]] == ["snapshot", "external"]
     assert config["backup"]["include_legacy"] is True
+    assert config["backup"]["max_objects"] == 2_000_000
     assert "last_backup" not in config["backup"]
 
 

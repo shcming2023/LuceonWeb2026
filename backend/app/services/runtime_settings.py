@@ -66,7 +66,7 @@ def default_runtime_config() -> dict[str, Any]:
             "schedule_enabled": False,
             "interval_hours": 24,
             "include_legacy": True,
-            "max_objects": 500000,
+            "max_objects": 2000000,
             "targets": [
                 {
                     "id": "snapshot",

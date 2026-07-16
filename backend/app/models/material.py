@@ -214,7 +214,7 @@ class BackupJob(Base):
     target_snapshot_json = Column(Text, nullable=False)
     bucket_scope_json = Column(Text, nullable=False)
     include_legacy = Column(Boolean, nullable=False, default=True)
-    max_objects = Column(Integer, nullable=False, default=500000)
+    max_objects = Column(Integer, nullable=False, default=2000000)
     worker_id = Column(String(128), nullable=True, index=True)
     attempt_count = Column(Integer, nullable=False, default=0)
     heartbeat_at = Column(DateTime, nullable=True)
