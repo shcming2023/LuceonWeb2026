@@ -228,12 +228,43 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _snapshot_sqlite_database(source: Path, destination: Path) -> dict[str, Any]:
+def _snapshot_sqlite_database(
+    source: Path,
+    destination: Path,
+    *,
+    completed_backup: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     destination.parent.mkdir(parents=True, exist_ok=True)
     source_db = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
     target_db = sqlite3.connect(destination)
     try:
         source_db.backup(target_db)
+        if completed_backup:
+            table_exists = target_db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='backup_jobs'"
+            ).fetchone()
+            if table_exists:
+                finished_at = datetime.utcnow()
+                target_db.execute(
+                    """
+                    UPDATE backup_jobs
+                    SET status = 'succeeded', object_count = ?, copied_count = ?, bytes_copied = ?,
+                        truncated = 0, heartbeat_at = ?, lease_expires_at = NULL, finished_at = ?,
+                        error_message = NULL, alert_level = NULL, alert_message = NULL,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        int(completed_backup["object_count"]),
+                        int(completed_backup["copied_count"]),
+                        int(completed_backup["bytes_copied"]) + destination.stat().st_size,
+                        finished_at,
+                        finished_at,
+                        finished_at,
+                        int(completed_backup["job_id"]),
+                    ),
+                )
+                target_db.commit()
         integrity = [str(row[0]) for row in target_db.execute("PRAGMA integrity_check")]
         if integrity != ["ok"]:
             raise RuntimeError(f"SQLite 备份完整性失败: {source} {integrity[:5]}")
@@ -367,7 +398,18 @@ def execute_backup_job(
                         _record_backup_worker_heartbeat(worker_id)
                         last_heartbeat = time.monotonic()
                 for name, source in sqlite_sources.items():
-                    snapshot = _snapshot_sqlite_database(source, partial_root / "databases" / f"{name}.db")
+                    snapshot = _snapshot_sqlite_database(
+                        source,
+                        partial_root / "databases" / f"{name}.db",
+                        completed_backup={
+                            "job_id": job.id,
+                            "object_count": len(objects),
+                            "copied_count": target_copied,
+                            "bytes_copied": target_bytes,
+                        }
+                        if name == "application"
+                        else None,
+                    )
                     snapshot["name"] = name
                     database_snapshots.append(snapshot)
                     target_bytes += int(snapshot["size_bytes"])
@@ -433,6 +475,35 @@ def enqueue_scheduled_backup_if_due(db: Session, now: datetime | None = None) ->
     if not backup.get("enabled") or not backup.get("schedule_enabled"):
         return None
     interval_hours = max(1, int(backup.get("interval_hours") or 24))
+    include_legacy = bool(backup.get("include_legacy", True))
+    buckets = list(CURRENT_ASSET_BUCKETS)
+    if include_legacy:
+        buckets.extend(LEGACY_ASSET_BUCKETS)
+    recent_successes = (
+        db.query(BackupJob)
+        .filter(
+            BackupJob.status == "succeeded",
+            BackupJob.truncated.is_(False),
+            BackupJob.finished_at >= now - timedelta(hours=interval_hours),
+            BackupJob.mode == str(backup.get("mode") or "manifest"),
+            BackupJob.bucket_scope_json == _json(buckets),
+            BackupJob.include_legacy == include_legacy,
+            BackupJob.max_objects == max(1, int(backup.get("max_objects") or 2000000)),
+        )
+        .all()
+    )
+    target_fields = ("id", "kind", "path", "external")
+    expected_targets = [
+        {field: target[field] for field in target_fields}
+        for target in _enabled_targets(config)
+    ]
+    for recent_success in recent_successes:
+        actual_targets = [
+            {field: target.get(field) for field in target_fields}
+            for target in recent_success.targets()
+        ]
+        if actual_targets == expected_targets:
+            return None
     window = int(now.timestamp()) // (interval_hours * 3600)
     return enqueue_backup_job(
         db,

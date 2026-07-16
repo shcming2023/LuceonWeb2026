@@ -4,6 +4,7 @@ import io
 import json
 import sqlite3
 from datetime import datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -186,6 +187,40 @@ def test_copy_job_includes_integrity_checked_sqlite_snapshot(sessions, tmp_path)
     assert snapshot.stat().st_mode & 0o777 == 0o600
 
 
+def test_application_snapshot_does_not_restore_its_own_job_as_running(sessions, tmp_path):
+    db = sessions()
+    try:
+        config = runtime_config(tmp_path, "copy")
+        config["backup"]["targets"][0]["enabled"] = False
+        queued = enqueue_backup_job(db, "7", config=config)
+        assert claim_next_backup_job(db, "worker-1")
+        application_db = Path(str(db.get_bind().url.database))
+    finally:
+        db.close()
+
+    execute_backup_job(
+        queued.id,
+        "worker-1",
+        client=FakeMinio(complete_objects({"eduassets-input": {"book.pdf": b"pdf"}})),
+        session_factory=sessions,
+        database_paths={"application": application_db},
+    )
+
+    snapshot = tmp_path / "external" / f"luceon-backup-job-{queued.id}" / "databases/application.db"
+    restored = sqlite3.connect(snapshot)
+    try:
+        row = restored.execute(
+            "SELECT status, object_count, copied_count, bytes_copied, lease_expires_at "
+            "FROM backup_jobs WHERE id = ?",
+            (queued.id,),
+        ).fetchone()
+    finally:
+        restored.close()
+    assert row[0:3] == ("succeeded", 1, 1)
+    assert row[3] >= len(b"pdf") + snapshot.stat().st_size
+    assert row[4] is None
+
+
 def test_copy_job_persists_inventory_and_copy_progress(sessions, tmp_path, monkeypatch):
     ticks = iter(range(0, 1000, 11))
     monkeypatch.setattr(backup_jobs.time, "monotonic", lambda: next(ticks))
@@ -350,5 +385,48 @@ def test_missing_current_bucket_fails_instead_of_producing_partial_success(sessi
         failed = db.query(BackupJob).filter(BackupJob.id == queued.id).one()
         assert failed.status == "failed"
         assert failed.alert_level == "critical"
+    finally:
+        db.close()
+
+
+def test_scheduler_skips_recent_success_with_matching_contract(sessions, tmp_path, monkeypatch):
+    now = datetime(2026, 7, 16, 8, 0, 0)
+    config = runtime_config(tmp_path, "copy", max_objects=2000000)
+    config["backup"].update({"enabled": True, "schedule_enabled": True, "interval_hours": 24})
+    monkeypatch.setattr(backup_jobs, "load_runtime_config", lambda **_: config)
+
+    db = sessions()
+    try:
+        completed = enqueue_backup_job(db, "7", config=config)
+        completed.status = "succeeded"
+        completed.finished_at = now - timedelta(hours=1)
+        db.commit()
+        config["backup"]["targets"][1]["label"] = "renamed display label"
+
+        assert backup_jobs.enqueue_scheduled_backup_if_due(db, now) is None
+        assert db.query(BackupJob).count() == 1
+    finally:
+        db.close()
+
+
+def test_scheduler_enqueues_when_matching_success_is_older_than_interval(
+    sessions, tmp_path, monkeypatch
+):
+    now = datetime(2026, 7, 16, 8, 0, 0)
+    config = runtime_config(tmp_path, "copy", max_objects=2000000)
+    config["backup"].update({"enabled": True, "schedule_enabled": True, "interval_hours": 24})
+    monkeypatch.setattr(backup_jobs, "load_runtime_config", lambda **_: config)
+
+    db = sessions()
+    try:
+        completed = enqueue_backup_job(db, "7", config=config)
+        completed.status = "succeeded"
+        completed.finished_at = now - timedelta(hours=25)
+        db.commit()
+
+        scheduled = backup_jobs.enqueue_scheduled_backup_if_due(db, now)
+        assert scheduled is not None
+        assert scheduled.requested_by_user_id == "scheduler"
+        assert db.query(BackupJob).count() == 2
     finally:
         db.close()
