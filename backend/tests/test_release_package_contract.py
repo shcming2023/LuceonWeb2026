@@ -43,6 +43,15 @@ def test_release_requires_explicit_minio_endpoints_and_external_backup_volume():
     assert "LUCEON_EXTERNAL_BACKUP_ROOT: /external-backups" in compose
     assert "backup_task_worker.py" in compose
     assert 'test -w "$external_backup_path"' in preflight
+    assert 'device_id state/backend' in preflight
+    assert 'device_id "$external_backup_path"' in preflight
+
+
+def test_release_preflight_requires_sufficient_docker_vm_memory():
+    preflight = (DEPLOY / "scripts" / "preflight").read_text()
+
+    assert "docker info --format '{{.MemTotal}}'" in preflight
+    assert "15 * 1024 * 1024 * 1024" in preflight
 
 
 def test_compiler_uses_current_overleaf_data_path():

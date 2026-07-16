@@ -12,6 +12,12 @@ esac
 command -v docker >/dev/null
 docker info >/dev/null
 docker compose version >/dev/null
+docker_memory_bytes=$(docker info --format '{{.MemTotal}}')
+minimum_memory_bytes=$((15 * 1024 * 1024 * 1024))
+if [ "$docker_memory_bytes" -lt "$minimum_memory_bytes" ]; then
+  echo "Docker VM memory must be at least 15 GiB; found $docker_memory_bytes bytes" >&2
+  exit 1
+fi
 test -f .env.production
 test "$(stat -f '%Lp' .env.production 2>/dev/null || stat -c '%a' .env.production)" = "600"
 test -f compose.production.arm64.yml
@@ -33,6 +39,15 @@ external_backup_path=$(sed -n 's/^LUCEON_EXTERNAL_BACKUP_PATH=//p' .env.producti
 test -n "$external_backup_path"
 test -d "$external_backup_path"
 test -w "$external_backup_path"
+test -d state/backend
+
+device_id() {
+  stat -f '%d' "$1" 2>/dev/null || stat -c '%d' "$1"
+}
+if [ "$(device_id state/backend)" = "$(device_id "$external_backup_path")" ]; then
+  echo "external backup path must be on a different device from state/backend" >&2
+  exit 1
+fi
 
 python3 - <<'PY'
 from pathlib import Path
@@ -59,4 +74,4 @@ if usage.free < 20 * 1024**3:
 PY
 
 docker compose --env-file .env.production -f compose.production.arm64.yml config --quiet
-echo "preflight passed: arm64, Docker, immutable compose, skill hashes, disk"
+echo "preflight passed: arm64, Docker >=15 GiB, external backup device, immutable compose, skill hashes, disk"
