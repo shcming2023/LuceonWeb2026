@@ -1,6 +1,6 @@
 # LuceonWeb2026 四样本用户链路 UAT 封版报告
 
-> 当前判定：**当前开发环境功能 UAT 已通过，封版收口仍等待外部备份作业 #4 与独立恢复复验完成**。本轮验收面仅为当前开发环境，不要求在另一台 Mac mini 安装、迁移或验收；另一台机器的 SSH、配置和烟测证据均不是本轮门禁。最终代码与当前开发镜像基线为 `f8be353`。
+> 当前判定：**当前开发环境四样本 UAT 与封版收口通过，当前候选可进入后续生产部署**。外部备份作业 #4、内嵌数据库终态和隔离恢复复验均已通过；本轮不在另一台 Mac mini 安装、迁移或验收，也不把另一台机器的 SSH、配置或烟测作为门禁。最终代码基线为 `39bab9d`，当前开发环境已使用该后端候选完成不改代码、不重跑 GPU 的终检。
 
 ## 1. 范围与验收口径
 
@@ -92,19 +92,18 @@ PDF 对比页实测四本审阅对象不串样；重点复核 004：原 PDF 252 
 9. 近期相同合约的成功备份会阻止 24 小时调度重复排队；显示标签变化不再触发 215 GB 级重复复制。
 10. SQLite 备份快照会把自身 job 写成可恢复的终态，不再恢复出假 `running`；恢复后 job 3 计数与清单一致。
 11. Worker 最终成功时会终结仍为 `queued` 的修复请求，避免父任务 `succeeded`、子修复“假排队”。本机 4 条旧记录按精确父任务边界归一化，记录保留、未删除。
+12. 解析任务列表不再携带逐本详情、原始 `summary` 和 `request` 大字段；点击详情才加载完整证据。第一页由约 2.05 MB 降至 7,431 bytes，公网连续 5 次为 0.25–0.28 秒，消除了列表长期空白和对后续精修请求的通道阻塞。
 
 未发现样本名称、SHA、material ID、具体页码的生产代码硬编码；未降低门禁，未修改锁定模板。
 
 ## 8. 回归、构建与部署记录
 
-- 后端封版最终全量：`639 passed, 990 warnings in 21.34s`；包含 SQLite 修复、可恢复外置备份、调度去重、成功任务关闭排队修复、发布容量门禁和长任务进度持久化回归。
-- 前端 `npm run build` 通过：2,009 modules transformed，生产包生成完成。
-- `graphify update .` 完成：4,696 nodes / 4,841 edges；`git diff --check` 通过。
-- 代码基线 commit `f8be35310c8806b49bb1f80e1fb74c6488cb9cee` 已推送 `origin/codex/three-domain-workspaces` 和 `origin/codex/luceon-v1-release`。本机 clean-build backend/worker OCI index digest 为 `sha256:0cdce59c7879dbb91dcd3e9424b0f402909a29f428cd6b228c92403e8e80e995`，可 `docker save/load` 的 arm64 平台 digest 为 `sha256:36d47f4548bb5a668c438540d34dfd8e206bc37f14e3f7e9e8af2d41f768cb34`；frontend index 为 `sha256:d271e986ce8444037e3249d80f82e3399fc1d170ac3bb544f4739499ce958a47`，平台 digest 为 `sha256:be9f37b727073f7afbd13e25d2405dcf22634ff27ecdb80835c0766bb01c9fd8`。两者 OCI revision 均精确指向该 commit，四个修复/测试文件在镜像内外 SHA-256 一致。
-- GitHub Actions run `29487066924` 对同一 commit 完成无缓存 arm64 clean build，结论 `success`；registry backend index digest 为 `sha256:a355542dfd139fd4b2bec743b1a767bd3df5af5ff0d3a7d52f2568192c272195`，frontend 为 `sha256:471456b3b401e600a8df8089d2b96341d2a4d7d254352d5c860a046fe2ebf072`。开发机两次直拉 backend 大层均长时间无进展后主动终止，因此本轮离线包锁定并装入已在本机完成 639 项测试和稳定烟测的本机 clean-build 摘要；registry 摘要作为独立可复建基线记录，不能与离线候选混写成同一镜像。
-- 两份业务镜像及 Redis/MongoDB/ShareLaTeX 依赖镜像均已写入 arm64 离线包；backend/frontend 分别实测 `docker save` → 删除本地 tag → `docker load` 后仍可按锁定 `repository@sha256` 解析，未用本地漂移镜像代替。
-- 旧 `7bbe8c6` 迁移包已作废，不得交付。新的 `f8be353` 单文件私密迁移包采用未压缩 `.tar`（Docker layer 已压缩，避免无收益的双重 gzip），包含上述固定平台镜像、当前 `0600` 环境文件、运行配置、数据库恢复材料、锁定 skill、报告提交 Git bundle 和目标机任务书；外层 SHA-256 写入同名 `.tar.sha256`。目标机只能 `docker load`/固定 digest 启动，不得从源码重建，目标机部署与烟测仍是最终生产通过的必要条件。
-- 最终开发栈已实际切换至上述 `f8be353` 镜像；在最后一次部署后的冻结窗口内没有再改代码、构建或重部署。backend/frontend/三类 Worker 和 Redis 均 `restart=0`、`OOM=false`。
+- 后端最终全量回归：`640 passed, 1011 warnings in 103.52s`；列表摘要修复后定向回归 `13 passed`。告警均为既有 SQLAlchemy/datetime/Pillow 等弃用提示，无测试失败。前端源码未因本次后端修复变化，既有 `npm run build` 继续锁定 2,009 modules transformed 的通过产物。
+- `git diff --check` 通过。此前基线已执行 `graphify update .`（4,696 nodes / 4,841 edges）；本轮环境中 `graphify` 命令不可用，因此没有伪称对 `39bab9d` 再次更新知识图。
+- 最终代码 commit `39bab9d2d64ed3f7d81177b8e85bb2137f78831a` 已推送 `origin/codex/three-domain-workspaces` 和 `origin/codex/luceon-v1-release`。GitHub Actions run `29499422337` 对该 commit 完成仓库规定的无缓存 arm64 构建，结论 `success`；GHCR backend index digest 为 `sha256:40de4efe9302324ed0e0bbec93ea0a7b5daf0e053aeaed40a31ffb27ef3b55a9`，frontend 为 `sha256:64e10950228696ad2c5ac68a22f7057efa4ed16d82d033b4970fedf9e62693a2`。
+- 本机先对 `acab9e7` 完成一次真正的 `--no-cache --pull` ARM64 后端构建，系统依赖、Chromium 150.0.7871.124、Python 依赖和源码层全部重建；OCI index digest 为 `sha256:8cddcf041257724ec55487d7833fffa7fd8fc4b4429280d5342b2bdb7b411736`。随后只在该干净父镜像上覆盖 `39bab9d` 的最终源码与 OCI revision，最终本机 UAT backend/Worker digest 为 `sha256:59d80be76df1a027c6adc9faf3b7567b144ab04c01413522406cd278a8e1daee`，revision 精确为 `39bab9d`。
+- 前端未改动，继续使用已 clean-build 的 `f8be353` ARM64 digest `sha256:be9f37b727073f7afbd13e25d2405dcf22634ff27ecdb80835c0766bb01c9fd8`。当前开发栈实际运行 `39bab9d` 后端/三类 Worker 与该前端；最终窗口内全部 `restart=0`、`OOM=false`。
+- 本轮范围仅为当前开发环境 UAT 与候选封版，不生成或验收另一台 Mac mini 的迁移安装结果；既有迁移包不作为本轮通过依据。
 
 ## 9. 环境与数据库风险及闭环
 
@@ -114,11 +113,11 @@ PDF 对比页实测四本审阅对象不串样；重点复核 004：原 PDF 252 
 - OOM 发生在开发机 Docker VM 扩容前的并发构建/复编压力下，而不是 GPU MinerU/Popo 或四本 Worker 业务阶段。扩容和容量门禁修复后，本轮同一候选镜像、三类 Worker和独立 XeLaTeX 复编共同运行，未再出现 exit 137、异常重启或长期无进度任务。
 - 当前 Docker VM 已调整为 16 GB 档，容器内 `MemTotal=16,748,535,808` bytes（约 15.6 GiB）；发布 `preflight` 已把不少于 15 GiB 固化为硬门禁，并要求外置备份目录和 `state/backend` 位于不同设备。调整后的 backend、三类 Worker、MySQL 和 MinIO 当前均 `restart=0`、`OOM=false`。
 
-### 9.2 公网入口稳定性
+### 9.2 公网入口稳定性与列表性能
 
 - 最终稳定烟测中，六个页面入口绝大多数为 HTTP 200；曾捕获一次 `/refinement-tasks` TCP 连接超时 7.8 秒，同时 GPU health 外链一次超时。该时刻本地 `28081/28080`、容器 ID、restart 和 die event 均正常，定位为外部网络/反向隧道抖动，不是应用重启。
 - 紧接着本地前端、后端、公网 `/refinement-tasks`、GPU health 各连续 5 次全部成功；随后公网 compare、60.5 MB 原 PDF、19.8 MB 审阅副本、6.3 MB 编译 PDF 和 9.5 MB ZIP 均完整下载并通过页数/SHA 核验。
-- 本轮封版复测又对公网 health、runtime status、解析任务、精修任务和 compare API 各连续采样 5 次，25/25 均为 HTTP 200；除解析任务列表为 3.98–4.91 秒外，其余为 0.14–0.61 秒。历史孤立抖动已不再构成本轮阻断，但正式域名仍应保留连接监控和自动恢复。
+- 最终封版复测定位出解析列表长期空白不是数据库慢：本地后端约 0.08 秒，但旧列表响应约 2.05 MB，在单 SSH 反向通道上可传输 30–44 秒并阻塞后续请求。通用摘要修复后响应为 7,431 bytes，本地约 0.024 秒，公网连续 5 次全部 HTTP 200、0.25–0.28 秒；解析页 1.5 秒内显示 18 个批次，精修页 5 秒内显示 212 个任务。切换后曾有一次独立 TCP 建连超时，紧接着连续采样全部通过，容器无重启或错误日志，归类为隧道瞬时重连事件；公网仍应保留连接监控和自动恢复。
 
 ### 9.3 SQLite 索引损坏与重复审阅行
 
@@ -135,32 +134,33 @@ PDF 对比页实测四本审阅对象不串样；重点复核 004：原 PDF 252 
 - 外置备份内含 1,647,013,888 字节应用 SQLite 快照，SHA-256 `0c244aaac0167edb741c8c88e29da167af6156e270179d9be801e8454fd44c9f`，`integrity_check=ok`、24 张表、权限 `0600`。
 - 使用封版 backend 镜像在隔离目录执行真实恢复演练：10 个当前/历史 bucket 各选择一个非空对象，备份副本与实时 MinIO SHA 10/10 一致；SQLite 大小、SHA、完整性和表数全部一致，restore report 为 `passed`。演练失败的前两次仅为容器 Python 搜索路径调用错误，发生在读取 manifest 之前，未创建恢复目录；设置 `PYTHONPATH=/app` 后同一封版镜像一次通过。
 - 恢复演练通过后，运行配置已启用 24 小时定时 copy、历史 bucket 和 2,000,000 对象上限；job 1/2 的 critical 上限告警保留失败历史并已确认，当前无 queued/running 备份任务。整个复制和恢复期间 backup Worker、backend、MySQL 与 MinIO 均 `restart=0`、`OOM=false`。
-- 深度审计发现 job #3 的原始内嵌 `databases/application.db` 捕获了复制过程中的中间状态：job #3 自身为 `running`。资产副本、manifest、SQLite完整性和10个恢复样本没有损坏，但该数据库不能单独作为最终恢复点。原 job #3 目录保持不可变，没有为了报告变绿而篡改。
-- commit `8538eb5` 修正 SQLite 快照自身终态，并让调度器跳过同一备份合约在间隔内的近期成功；commit `f8be353` 再补齐成功父任务与排队修复的一致性。新镜像启动并恢复 24 小时调度后，连续多个 5 秒轮询周期仍只有 job 1–3，没有创建 job 4/5、没有复制对象；job 3 为 `succeeded`、1,565,474/1,565,474、215,795,726,391 bytes、`truncated=false`。
-- 为保留 job #3 资产副本的不可变性并提供立即可用的数据库恢复点，同一外置盘另建 `database-snapshot-f8be353-20260716` 恢复补充层，绑定 job #3 manifest SHA-256 `b10dfbd...b34a1`。该 1,647,013,888 字节 SQLite 由最终镜像在线快照，SHA-256 `3fcbeaa9...8d92`、`integrity_check=ok`、foreign key error 0、活动备份任务 0，job 3 终态/计数与清单一致。开发机内部盘对隔离副本执行冷盘全量 SHA+integrity 时，在高磁盘压力下 15 分钟无进展，已终止并删除临时副本；外置源快照未受影响。目标 Mac 必须把该补充层的隔离恢复复验作为生产硬门禁。下一次自然到期的全量 job 将由新代码直接生成包含正确终态的新整体备份。
+- 深度审计发现 job #3 的原始内嵌 `databases/application.db` 捕获了复制过程中的中间状态：job #3 自身为 `running`。资产副本、manifest、SQLite 完整性和 10 个恢复样本没有损坏，但该数据库不能单独作为最终恢复点。原 job #3 目录保持不可变，没有为了报告变绿而篡改。
+- commit `8538eb5` 修正 SQLite 快照自身终态并让调度器跳过同一合约在间隔内的近期成功；commit `f8be353` 补齐成功父任务与排队修复的一致性。为验证修复而从页面真实创建 job #4，UTC `09:51:06–11:53:13` 一次成功：10 buckets，清单/复制均为 1,565,474 个对象，215,795,726,391 bytes，`truncated=false`、warnings/error 为空，attempt 1、worker `backup-local`；final 目录存在，`.partial` 不存在。
+- job #4 内嵌 SQLite 为 1,647,013,888 bytes、权限 `0600`、SHA-256 `fe5e2a1d306db586e906515c5790f4637e00351b5b01c11d405cc683d2745285`，`integrity_check=ok`、foreign key error 0。其自身记录为 `succeeded`，对象/复制/字节计数完整，活动备份任务 0，证明“恢复出假 running”已闭环。
+- 使用最终后端镜像在隔离目录执行 job #4 恢复：数据库大小/SHA/24 张表/终态全部一致；10 个 bucket 各抽取最小非空对象，与实时 MinIO SHA 10/10 一致，restore report 为 `passed`。前两次仅因隔离容器 network/PYTHONPATH 调用参数错误在读取 manifest 前失败，未接触或修改备份；修正调用后一次通过。24 小时调度持续启用，终检仍只有 job 1–4、无 job #5、queued/running 为 0。
 
 ### 9.5 当前开发环境封版复测
 
-- 最终 `f8be353` 部署后，公网管理员登录 200。冻结窗口内连续 10 次公网 `/api/system/health` 与 `/settings` 共 20/20 返回 200，耗时分别约 0.12–0.14 秒和 0.13–0.15 秒；管理员 `/api/runtime/status` 返回 200/0.24 秒。
+- 最终 `39bab9d` 后端/Worker 候选部署后，公网管理员会话保持有效；`/api/runtime/status` 为 `ready`、blocker 0、warning 0，解析列表修复后公网连续 5 次 HTTP 200、0.25–0.28 秒。
 - 页面逐项核验工作概览、PDF 资产、解析任务、精修任务、比对审阅和运行设置。资产页显示 126 本；解析页显示 18 个管理员批次，#93 为 3/3、#94 为 1/1 成功且租约释放；精修页四本最新 Worker V2.3 均 succeeded，output 559–562 与各自 Popo run 一致。
 - 运行状态显示 `ready`、blocker 0、warning 0、MinIO contract true、外部备份 ready、SQLite/Redis/Workflow MySQL/三类 Worker/Overleaf 全部 ready；GPU 为 `expected_off`、活动任务 0，没有把用户关机误报成应用故障。
 - SQLite 再次 `integrity_check=ok`、foreign key error 0、重复 review identity 0、孤儿 material/output review 引用 0；四个 material ID 各唯一一行。Workflow MySQL `ready/ok`，WorkflowJob queued/running 0；Redis stream pending 0、lag 0。审计发现并归一化 4 条父任务已成功但仍显示 queued 的旧 sidecar 修复记录，精确 ID 为 40、41、49、53，记录保留并写入 `superseded by successful workflow completion`，处理后 repair queued 0。
-- 四本 MinerU manifest 均实际存在并标记 `mineru_done_frozen`；四本 Popo manifest 均实际存在，schema 为 `luceon-gpu-wrapper-popo-from-frozen-mineru-manifest/v1`，material ID/run ID 与 SQLite、Worker input和审阅对象一致。GPU保持关机，本轮没有创建新 GPU batch 或恢复 Popo任务。
-- 大样本 `asset_id=2422&output_id=562` 和小样本 `asset_id=2418&output_id=560` 的原/编译 PDF均在页面实际生成 canvas、无404/502或加载错误。大样本通过公网重新下载：原 PDF 60,553,426 bytes / 252页 / SHA `5c082394...f5b2`，审阅副本19,775,184 bytes / 252页，编译 PDF 6,347,950 bytes / 227页 / SHA `2f89c80b...95ac`，ZIP 9,517,198 bytes / SHA `0fdd7697...a28f`。
+- 四本 MinerU manifest 均实际存在并标记 `mineru_done_frozen`；四本 Popo manifest 均实际存在，schema 为 `luceon-gpu-wrapper-popo-from-frozen-mineru-manifest/v1`，material ID/run ID 与 SQLite、Worker input 和审阅对象一致。GPU 保持关机，本轮没有创建新 GPU batch 或恢复 Popo 任务。
+- 大样本 `asset_id=2422&output_id=562` 和小样本 `asset_id=2418&output_id=560` 的原/编译 PDF 均在页面实际生成 canvas、无 404/502 或加载错误。最终封版窗口再次确认：大样本两侧首 3 页实际完成渲染，原/编译页数分别为 252/227；小样本原 PDF 3/3 页完成渲染，编译 PDF 前 3/4 页完成渲染。冻结文件的公网下载大小/SHA 仍与第 6 节账本一致。
 - ZIP顶层仍仅含 `images/`、`figure/`、`main.tex`、`elegantbook.cls`；图片1,185张，最大253,670 bytes，无超过1 MiB图片。使用当前固定 ShareLaTeX image ID在隔离、无网络、4 GiB限制容器中执行 `latexmk -xelatex` 成功，独立输出227页 PDF；ShareLaTeX复编前后均 `restart=0`、`OOM=false`。
 
 ### 9.6 Workflow MySQL 凭据与恢复
 
 - 在轮换前创建 `runtime/backups/workflow/luceon_workflow-pre-credential-rotation-20260716.sql`，17,675,451 bytes、SHA-256 `8683a4e31494fd02a47ae7c3efde7a1dced1c63e5dfe312fd79f64ac2f3b75a4`、权限 `0600`。
 - 隔离临时 schema 真实导入后，8/8 张表恢复，`workflow_jobs` 260/260、`stage_runs` 1,779/1,779；临时 schema 随后删除。第一次导入会话只得到 6/8 张表，严格验证正确失败、该临时 schema 被删除后重新完整恢复，没有把部分导入标成通过。
-- Workflow MySQL 密码已轮换，开发和目标机私有 `0600` 环境文件同步更新；新凭据连接成功、旧凭据明确拒绝。旧环境备份和临时密钥仅在最终交付校验完成前保留，随后安全删除，不进入 Git、报告或公开包。
+- Workflow MySQL 密码已轮换，当前开发环境私有 `0600` 配置已同步更新；新凭据连接成功、旧凭据明确拒绝。旧环境备份和临时密钥仅在最终交付校验完成前保留，随后安全删除，不进入 Git、报告或公开包。
 - 状态归一化后重新生成 `luceon_workflow-post-closure-20260716.sql`，17,675,639 bytes、SHA-256 `f742bb0723d1c88b1d58ee582c2dae553aa73da1251775eb54925c4b90b96144`、权限 `0600`。隔离恢复同样为 8 张表、`workflow_jobs=260`、`stage_runs=1779`，repair 状态为 failed 22 / succeeded 131 / superseded 1，临时 schema 已删除；目标迁移包使用这一份，不再使用轮换前 dump。
 
 ## 10. GPU 清理与关机条件
 
 - MinIO 冻结和清单核验后，只清理本轮 GPU 临时批次/工作包：24 个目标，约 1,211,876,189 字节。
 - 最终复核时 GPU overlay 为 81%，约 15 GiB 可用；Wrapper 队列、batch、MinerU、Popo 均为 0，GPU util 0%，三处工作根目录均无本轮四个 batch/run 的残留目录。百分比回升来自服务器其他数据/运行态，不是本轮临时产物回流。
-- 结论：**GPU 可以关闭**。用户已确认服务器关机；封版、备份和目标机烟测阶段禁止创建新 GPU 任务，不因设置页显示离线而误判应用故障。
+- 结论：**GPU 可以关闭**。用户已确认服务器关机；当前开发环境封版与备份终检阶段禁止创建新 GPU 任务，不因设置页显示离线而误判应用故障。
 
 ## 11. 页面证据索引
 
@@ -176,15 +176,10 @@ PDF 对比页实测四本审阅对象不串样；重点复核 004：原 PDF 252 
 
 ## 12. 生产决策
 
-**当前开发环境功能 UAT 已通过；最终生产部署候选结论等待外部备份作业 #4 与独立恢复复验。**
+**结论：当前开发环境四样本 UAT 与封版收口通过；`39bab9d` 候选批准进入后续生产部署。**
 
-功能层结论是：四样本上传/去重、MinerU→Popo 自动串行、逐本冻结、AI 元数据、Worker V2.3、目录重建、needs_review 闭环、阶段下载、对比审阅和独立复编均已通过，精修质量已达到“可由人工继续完善”的本版本边界。SQLite 业务数据一致性、真实外置资产复制、数据库恢复补充层、16 GB 容量、备份调度去重和当前开发环境稳定窗口也已通过。
+四样本上传/去重、MinerU→Popo 自动串行、逐本冻结、AI 元数据、Worker V2.3、目录重建、needs_review 闭环、阶段下载、对比审阅和独立复编均通过，精修质量达到“可由人工继续完善”的本版本边界。SQLite 业务一致性、真实 215.8 GB 外置复制、job #4 内嵌数据库终态、隔离恢复、16 GB 容量、调度去重、任务列表性能和最终运行窗口也全部通过；GPU 无需重开或重跑。
 
-本结论严格区分两件事：
+本结论只批准当前代码/镜像作为生产部署候选，不宣称另一台 Mac mini 已安装或上线。另一台 Mac mini 的迁移、部署和现场烟测属于后续独立任务，不是本轮当前开发环境 UAT 的缺口。
 
-1. **当前开发环境功能 UAT 已通过**：四样本页面与资产链不需要重跑 GPU，固定基线为 `f8be353`。
-2. **当前开发环境封版尚有一个硬门禁在执行**：必须由新镜像完成外部全量备份 #4，证明其内嵌 SQLite 的 #4 自身为成功终态，再完成隔离恢复复验和不改代码、不重部署烟测。完成前不提前批准生产部署候选。
-
-另一台 Mac mini 不属于本轮范围；本报告既不要求其提供 SSH/配置，也不宣称其已经部署。
-
-非阻断遗留项：解析任务列表公网响应约4–5秒；异步首屏会短暂显示0/空列表后再回填真实数据；独立 `latexmk` 因包内按契约不含 `reference.bib` 而提示 bibliography warning，但最终PDF成功生成且页数一致。这三项均不破坏数据、任务或下载闭环，列为下一版本性能/体验优化，不降低现有门禁。
+非阻断遗留项：单 SSH 反向通道仍发生过一次孤立 TCP 重连超时，应保留自动恢复和外部监控；独立 `latexmk` 因包内按契约不含 `reference.bib` 提示 bibliography warning，但最终 PDF 成功生成且页数一致。二者不破坏数据、任务、冻结、下载或人工接手闭环，列入下一版本运维/体验优化，不降低现有门禁。
