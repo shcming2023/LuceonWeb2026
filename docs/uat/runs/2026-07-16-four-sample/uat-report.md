@@ -100,10 +100,10 @@ PDF 对比页实测四本审阅对象不串样；重点复核 004：原 PDF 252 
 - 后端封版最终全量：`639 passed, 990 warnings in 21.34s`；包含 SQLite 修复、可恢复外置备份、调度去重、成功任务关闭排队修复、发布容量门禁和长任务进度持久化回归。
 - 前端 `npm run build` 通过：2,009 modules transformed，生产包生成完成。
 - `graphify update .` 完成：4,696 nodes / 4,841 edges；`git diff --check` 通过。
-- 代码基线 commit `f8be35310c8806b49bb1f80e1fb74c6488cb9cee` 已推送 `origin/codex/three-domain-workspaces` 和 `origin/codex/luceon-v1-release`。本机 clean-build backend/worker arm64 digest 为 `sha256:0cdce59c7879dbb91dcd3e9424b0f402909a29f428cd6b228c92403e8e80e995`，frontend arm64 digest 为 `sha256:d271e986ce8444037e3249d80f82e3399fc1d170ac3bb544f4739499ce958a47`；两者 OCI revision 均精确指向该 commit，四个修复/测试文件在镜像内外 SHA-256 一致。
+- 代码基线 commit `f8be35310c8806b49bb1f80e1fb74c6488cb9cee` 已推送 `origin/codex/three-domain-workspaces` 和 `origin/codex/luceon-v1-release`。本机 clean-build backend/worker OCI index digest 为 `sha256:0cdce59c7879dbb91dcd3e9424b0f402909a29f428cd6b228c92403e8e80e995`，可 `docker save/load` 的 arm64 平台 digest 为 `sha256:36d47f4548bb5a668c438540d34dfd8e206bc37f14e3f7e9e8af2d41f768cb34`；frontend index 为 `sha256:d271e986ce8444037e3249d80f82e3399fc1d170ac3bb544f4739499ce958a47`，平台 digest 为 `sha256:be9f37b727073f7afbd13e25d2405dcf22634ff27ecdb80835c0766bb01c9fd8`。两者 OCI revision 均精确指向该 commit，四个修复/测试文件在镜像内外 SHA-256 一致。
 - GitHub Actions run `29487066924` 对同一 commit 完成无缓存 arm64 clean build，结论 `success`；registry backend index digest 为 `sha256:a355542dfd139fd4b2bec743b1a767bd3df5af5ff0d3a7d52f2568192c272195`，frontend 为 `sha256:471456b3b401e600a8df8089d2b96341d2a4d7d254352d5c860a046fe2ebf072`。开发机两次直拉 backend 大层均长时间无进展后主动终止，因此本轮离线包锁定并装入已在本机完成 639 项测试和稳定烟测的本机 clean-build 摘要；registry 摘要作为独立可复建基线记录，不能与离线候选混写成同一镜像。
 - 两份业务镜像及 Redis/MongoDB/ShareLaTeX 依赖镜像均已写入 arm64 离线包；backend/frontend 分别实测 `docker save` → 删除本地 tag → `docker load` 后仍可按锁定 `repository@sha256` 解析，未用本地漂移镜像代替。
-- 旧 `7bbe8c6` 迁移包不再代表最终代码基线；若未来另行安排迁移，应重新以 `f8be353` 固定镜像和届时的私密配置生成。本轮不以目标机迁移包、SSH 或部署结果作为通过条件。
+- 旧 `7bbe8c6` 迁移包已作废，不得交付。新的 `f8be353` 单文件私密迁移包采用未压缩 `.tar`（Docker layer 已压缩，避免无收益的双重 gzip），包含上述固定平台镜像、当前 `0600` 环境文件、运行配置、数据库恢复材料、锁定 skill、报告提交 Git bundle 和目标机任务书；外层 SHA-256 写入同名 `.tar.sha256`。目标机只能 `docker load`/固定 digest 启动，不得从源码重建，目标机部署与烟测仍是最终生产通过的必要条件。
 - 最终开发栈已实际切换至上述 `f8be353` 镜像；在最后一次部署后的冻结窗口内没有再改代码、构建或重部署。backend/frontend/三类 Worker 和 Redis 均 `restart=0`、`OOM=false`。
 
 ## 9. 环境与数据库风险及闭环
