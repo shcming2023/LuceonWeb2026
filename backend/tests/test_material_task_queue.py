@@ -15,7 +15,9 @@ from app.services.material_task_queue import (
     add_pipeline_run_items,
     claim_next_pipeline_run,
     enqueue_metadata_job,
+    list_pipeline_runs,
     material_snapshot,
+    pipeline_run_detail,
     pipeline_idempotency_key,
     project_pipeline_result,
     recover_stale_tasks,
@@ -93,6 +95,22 @@ def test_snapshot_is_explicit_ordered_and_rejects_duplicate_content():
     second.input_sha256 = first.input_sha256
     with pytest.raises(MaterialTaskError, match="重复PDF"):
         material_snapshot(db, "u1", [first.id, second.id])
+
+
+def test_pipeline_run_list_is_summary_only_and_detail_keeps_items():
+    db = make_session()
+    run = add_run(db, [add_material(db, 1), add_material(db, 2)])
+    db.commit()
+
+    page = list_pipeline_runs(db, "u1")
+    detail = pipeline_run_detail(db, run)
+
+    assert page["total"] == 1
+    assert page["runs"][0]["id"] == str(run.id)
+    assert "items" not in page["runs"][0]
+    assert "summary" not in page["runs"][0]
+    assert "request" not in page["runs"][0]
+    assert len(detail["items"]) == 2
 
 
 def test_three_item_result_is_partial_and_preserves_two_frozen_assets():

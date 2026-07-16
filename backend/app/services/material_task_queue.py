@@ -188,11 +188,17 @@ def list_pipeline_runs(
         .limit(page_size)
         .all()
     )
+    summaries = []
+    for row in rows:
+        value = row.to_dict()
+        value.pop("summary", None)
+        value.pop("request", None)
+        summaries.append(value)
     return {
         "total": total,
         "page": page,
         "page_size": page_size,
-        "runs": [pipeline_run_detail(db, row) for row in rows],
+        "runs": summaries,
     }
 
 
