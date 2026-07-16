@@ -1,0 +1,48 @@
+{
+  "schema": "luceon.uat.outline-score/v1",
+  "sample": "004",
+  "truth_source": "source PDF pages 7-8, ledger prepared before Worker output inspection",
+  "worker_job_id": "7c27cde1-403a-4ca9-abde-c870d5ecfd5c",
+  "outline_manifest_sha256": "60a67932902c0647e1a8841af644a090acc160b9c345b0ce99e8749ac1f1434f",
+  "expected_nodes": 50,
+  "actual_nodes": 50,
+  "max_depth": 3,
+  "metrics": {
+    "titles": {
+      "tp": 50,
+      "predicted": 50,
+      "expected": 50,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    "hierarchy": {
+      "tp": 50,
+      "predicted": 50,
+      "expected": 50,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    "order": {
+      "tp": 50,
+      "predicted": 50,
+      "expected": 50,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    "printed_page_mapping": {
+      "tp": 44,
+      "predicted": 44,
+      "expected": 44,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    }
+  },
+  "source_page_offset": 8,
+  "unexpected_titles": [],
+  "missing_titles": [],
+  "gate_passed": true
+}
